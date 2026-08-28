@@ -9,6 +9,7 @@ class Conductor {
         this.licenciaId = licenciaId;
         this.vehiculoId = vehiculoId;
         this.habilitado = "pendiente";
+        this.estado_conexion= "desconectado";
     }
 
     // Getters
@@ -18,6 +19,7 @@ class Conductor {
     getlicenciaId() { return this._licenciaId; }
     getvehiculoId() { return this._vehiculoId; }
     gethabilitado() { return this._habilitado; }
+    getestado_conexion() { return this._estado_conexion; }
 
     // Setters
     setusuarioID(usuarioID) { this._usuarioID = usuarioID; }
@@ -26,6 +28,7 @@ class Conductor {
     setlicenciaId(licenciaId) { this._licenciaId = licenciaId; }
     setvehiculoId(vehiculoId) { this._vehiculoId = vehiculoId; }
     sethabilitado(habilitado) { this._habilitado = habilitado; }
+    setestado_conexion(estado_conexion) { this._estado_conexion = estado_conexion; }
 }
 
 module.exports = Conductor;
