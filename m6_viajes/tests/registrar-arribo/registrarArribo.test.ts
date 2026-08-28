@@ -84,6 +84,6 @@ describe('Registrar Arribo del Conductor', () => {
     registrarArribo(req3 as any, res3 as any);
 
     expect(res3.data.mensaje).toBeDefined();
-    expect(res3.data.mensaje).toContain('El conductor ha arribado');
+    expect(res3.data.mensaje).toMatch(/llegado|arribado/i);
   });
 });

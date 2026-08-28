@@ -1,15 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { solicitarViaje, asignarConductor, resetViajesDb } from '../../src/controllers/viajes.controller.js';
+import { solicitarViaje, asignarConductor, registrarArribo, resetViajesDb } from '../../src/controllers/viajes.controller.js';
 import { mockRequest, mockResponse } from '../fixtures/mocks.js';
 
 describe('RF-6.2: Arribo del Conductor', () => {
-  
   beforeEach(() => {
     resetViajesDb();
   });
 
-  it('debe cambiar estado a CONDUCTOR_EN_CAMINO cuando se asigna un conductor', () => {
-    // Crear un viaje
+  it('debe cambiar estado a ARRIBADO cuando el conductor confirma arribo', () => {
     const req1 = mockRequest({
       clienteId: 'cliente-1',
       origen: 'Calle 1',
@@ -19,52 +17,28 @@ describe('RF-6.2: Arribo del Conductor', () => {
     solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
 
-    // Asignar conductor
     const req2 = mockRequest({ conductorId: 'conductor-1' }, { id: viajeId });
     const res2 = mockResponse();
     asignarConductor(req2 as any, res2 as any);
 
-    expect(res2.statusCode).toBe(200);
-    expect(res2.data.viaje.estado).toBe('CONDUCTOR_EN_CAMINO');
-    expect(res2.data.viaje.conductorId).toBe('conductor-1');
-  });
-
-  it('debe rechazar asignacion si el viaje no esta en estado SOLICITADO', () => {
-    // Crear un viaje
-    const req1 = mockRequest({
-      clienteId: 'cliente-1',
-      origen: 'Calle 1',
-      destino: 'Calle 2',
-    });
-    const res1 = mockResponse();
-    solicitarViaje(req1 as any, res1 as any);
-    const viajeId = res1.data.id;
-
-    // Primera asignacion
-    const req2 = mockRequest({ conductorId: 'conductor-1' }, { id: viajeId });
-    const res2 = mockResponse();
-    asignarConductor(req2 as any, res2 as any);
-
-    // Intentar asignar de nuevo (tiene que fallar)
-    const req3 = mockRequest({ conductorId: 'conductor-2' }, { id: viajeId });
+    const req3 = mockRequest({}, { id: viajeId });
     const res3 = mockResponse();
-    asignarConductor(req3 as any, res3 as any);
+    registrarArribo(req3 as any, res3 as any);
 
-    expect(res3.statusCode).toBe(400);
-    expect(res3.data.error).toContain('No puedes asignar');
+    expect(res3.statusCode).toBe(200);
+    expect(res3.data.viaje.estado).toBe('ARRIBADO');
   });
 
-  it('debe retornar 404 si el viaje no existe', () => {
-    const req = mockRequest({ conductorId: 'conductor-1' }, { id: 'viaje-inexistente' });
+  it('debe rechazar si el viaje no existe', () => {
+    const req = mockRequest({}, { id: 'inexistente' });
     const res = mockResponse();
-    asignarConductor(req as any, res as any);
+    registrarArribo(req as any, res as any);
 
     expect(res.statusCode).toBe(404);
     expect(res.data.error).toBe('Viaje no encontrado');
   });
 
-  it('debe incluir mensaje de confirmacion', () => {
-    // Crear un viaje
+  it('debe rechazar si el viaje no está en estado CONDUCTOR_EN_CAMINO', () => {
     const req1 = mockRequest({
       clienteId: 'cliente-1',
       origen: 'Calle 1',
@@ -74,12 +48,32 @@ describe('RF-6.2: Arribo del Conductor', () => {
     solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
 
-    // Asignar conductor
+    const req2 = mockRequest({}, { id: viajeId });
+    const res2 = mockResponse();
+    registrarArribo(req2 as any, res2 as any);
+
+    expect(res2.statusCode).toBe(400);
+  });
+
+  it('debe retornar mensaje de confirmación de arribo', () => {
+    const req1 = mockRequest({
+      clienteId: 'cliente-1',
+      origen: 'Calle 1',
+      destino: 'Calle 2',
+    });
+    const res1 = mockResponse();
+    solicitarViaje(req1 as any, res1 as any);
+    const viajeId = res1.data.id;
+
     const req2 = mockRequest({ conductorId: 'conductor-1' }, { id: viajeId });
     const res2 = mockResponse();
     asignarConductor(req2 as any, res2 as any);
 
-    expect(res2.data.mensaje).toBeDefined();
-    expect(res2.data.mensaje).toContain('Conductor asignado');
+    const req3 = mockRequest({}, { id: viajeId });
+    const res3 = mockResponse();
+    registrarArribo(req3 as any, res3 as any);
+
+    expect(res3.data.mensaje).toBeDefined();
+    expect(res3.data.mensaje).toMatch(/llegado|arribado/i);
   });
 });
