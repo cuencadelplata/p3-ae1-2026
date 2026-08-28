@@ -6,9 +6,9 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// Enlazamos las rutas del módulo
+// Enlazamos las rutas del modulo
 app.use('/api/viajes', viajesRoutes);
 
 app.listen(PORT, () => {
-    console.log(`Servidor del módulo corriendo en http://localhost:${PORT}`);
+    console.log(`Servidor del modulo corriendo en http://localhost:${PORT}`);
 });

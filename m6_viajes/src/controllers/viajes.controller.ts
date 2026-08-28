@@ -41,7 +41,7 @@ export const registrarArribo = (req: Request, res: Response): any => {
     }
 
     viaje.estado = EstadoViaje.ARRIBADO;
-    return res.json({ mensaje: 'El conductor ha arribado al punto de retiro', viaje });
+    return res.json({ mensaje: 'El conductor ha llegado al punto de retiro', viaje });
 };
 
 // Asignar conductor y cambiar a CONDUCTOR_EN_CAMINO
@@ -56,12 +56,12 @@ export const asignarConductor = (req: Request, res: Response): any => {
     }
     
     if (viaje.estado !== EstadoViaje.SOLICITADO) {
-        return res.status(400).json({ error: `No puedes asignar. Estado actual: ${viaje.estado}` });
+        return res.status(400).json({ error: `Lo siento, no se puede asignar un conductor en este momento. Estado actual: ${viaje.estado}` });
     }
     
     viaje.conductorId = conductorId;
     viaje.estado = EstadoViaje.CONDUCTOR_EN_CAMINO;
-    return res.json({ mensaje: 'Conductor asignado. En camino al punto de retiro', viaje });
+    return res.json({ mensaje: 'Conductor asignado. Su conductor está en camino a su dirección', viaje });
 };
 
 //  Validar cod de verificacion y cambiar a EN_CURSO
@@ -76,13 +76,13 @@ export const iniciarViaje = (req: Request, res: Response): any => {
     }
     
     if (viaje.estado !== EstadoViaje.ARRIBADO) {
-        return res.status(400).json({ error: `No puedes iniciar. Estado actual: ${viaje.estado}` });
+        return res.status(400).json({ error: `Lo siento, no se puede iniciar el viaje en este momento. Estado actual: ${viaje.estado}` });
     }
     
     if (viaje.codigoVerificacion !== codigoVerificacion) {
-        return res.status(401).json({ error: 'Código de verificación inválido' });
+        return res.status(401).json({ error: 'Codigo de verificacion invalido' });
     }
     
     viaje.estado = EstadoViaje.EN_CURSO;
-    return res.json({ mensaje: 'Viaje iniciado. En movimiento', viaje });
+    return res.json({ mensaje: 'Viaje iniciado', viaje });
 };
