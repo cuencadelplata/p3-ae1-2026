@@ -195,6 +195,18 @@ Validar todos los datos externos antes de utilizarlos.
 
 Los errores internos no deben exponer detalles sensibles de implementación.
 
+## Gestor de paquetes
+
+El proyecto utiliza pnpm como único gestor de paquetes.
+
+Utilizar exclusivamente comandos pnpm para instalar dependencias y ejecutar scripts.
+
+No utilizar npm, yarn u otros gestores de paquetes.
+
+No generar ni mantener otros lockfiles además de `pnpm-lock.yaml`.
+
+No modificar dependencias sin una necesidad justificada por el requerimiento actual.
+
 ## Git
 
 No cambiar de branch sin indicación.

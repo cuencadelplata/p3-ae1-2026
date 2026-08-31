@@ -16,6 +16,22 @@ REST será utilizado como estilo arquitectónico para organizar los recursos y o
 
 Express será utilizado para implementar el servidor, las rutas y los endpoints de la API.
 
+## TypeScript
+
+El desarrollo del servicio M8 se realizará utilizando TypeScript sobre Node.js.
+
+TypeScript se utilizará para incorporar tipado estático, mejorar la mantenibilidad y facilitar la evolución e integración posterior de los requerimientos del módulo.
+
+Se utilizará una configuración estricta pero simple, evitando configuraciones o abstracciones que no sean necesarias para el alcance actual.
+
+## Gestor de paquetes
+
+El proyecto utilizará pnpm como gestor de paquetes.
+
+pnpm se utilizará para mantener instalaciones reproducibles mediante su lockfile, una gestión estricta de dependencias y un uso eficiente de paquetes durante la evolución del proyecto.
+
+El proyecto deberá utilizar un único gestor de paquetes y no deberá mantener simultáneamente lockfiles de npm y pnpm.
+
 ## OpenAPI y Swagger UI
 
 La API será especificada utilizando OpenAPI.
