@@ -2,7 +2,8 @@
 
 ## Responsable
 
-Juan Martin Invaldi  
+Juan Martin Invaldi
+
 Grupo 6
 
 ## Branch de trabajo
@@ -83,26 +84,87 @@ Representa que el viaje finalizó.
 
 ## Contrato de API
 
-El contrato REST de RF-8.1 todavía no está definido de manera definitiva.
+El contrato REST de RF-8.1 fue definido siguiendo el enfoque Design-First y se encuentra especificado en:
 
-Como propuesta inicial se habían considerado:
+`docs/api/openapi.yaml`
+
+RF-8.1 expondrá inicialmente un único endpoint:
 
 `POST /notifications`
 
-`GET /notifications`
+Su responsabilidad será recibir información sobre un evento de viaje ya ocurrido y generar la notificación correspondiente.
 
-Estos endpoints deberán ser analizados antes de comenzar a programar.
+No se implementará `GET /notifications` durante AE1, ya que RF-8.1 no requiere una bandeja, historial o consulta de notificaciones.
 
-Se deberá determinar:
+### Datos de entrada
 
-- si ambos endpoints son realmente necesarios;
-- qué información recibirá cada operación;
-- qué respuestas devolverá;
-- qué códigos HTTP utilizará;
-- qué errores deberán contemplarse;
-- cómo se representarán los seis eventos del viaje.
+La operación recibirá:
 
-La definición definitiva se realizará mediante OpenAPI siguiendo el enfoque Design-First.
+- identificador del viaje;
+- identificador del destinatario;
+- tipo de evento;
+- canal solicitado.
+
+El mensaje de la notificación no será recibido desde otros módulos.
+
+M8 deberá generarlo a partir del tipo de evento.
+
+### Eventos soportados
+
+Los eventos definidos son:
+
+- `TRIP_REQUESTED`;
+- `DRIVER_ASSIGNED`;
+- `DRIVER_ARRIVED`;
+- `TRIP_STARTED`;
+- `TRIP_CANCELLED`;
+- `TRIP_COMPLETED`.
+
+### Canal soportado en AE1
+
+Durante AE1 se utilizará únicamente:
+
+`PUSH`
+
+El proveedor externo de PUSH será reemplazado mediante un mock.
+
+EMAIL y SMS quedan previstos como posibles extensiones posteriores.
+
+### Resultado
+
+Cuando el procesamiento sea correcto, M8 deberá devolver información como:
+
+- identificador de la notificación;
+- identificador del viaje;
+- destinatario;
+- evento;
+- canal;
+- mensaje generado;
+- estado;
+- fecha de creación.
+
+El estado `PROCESSED` representa que M8 completó correctamente su procesamiento.
+
+Durante AE1 no representa confirmación de entrega real al dispositivo porque el proveedor PUSH será simulado.
+
+## Manejo de errores
+
+La API deberá mantener un formato uniforme para los errores.
+
+El contrato contempla:
+
+- `201 Created`: procesamiento correcto;
+- `400 Bad Request`: datos de entrada inválidos;
+- `415 Unsupported Media Type`: contenido diferente de `application/json`;
+- `500 Internal Server Error`: error interno de M8.
+
+Los códigos internos de error definidos inicialmente son:
+
+- `VALIDATION_ERROR`;
+- `UNSUPPORTED_MEDIA_TYPE`;
+- `NOTIFICATION_PROCESSING_ERROR`.
+
+Los errores internos no deberán exponer información sensible.
 
 ## Fuera de alcance
 
@@ -119,3 +181,16 @@ RF-8.1 no deberá implementar:
 - procesamiento de pagos.
 
 Estas responsabilidades corresponden a otros requerimientos o módulos.
+
+## Evidencias previstas para RF-8.1
+
+El cumplimiento de RF-8.1 deberá poder demostrarse mediante:
+
+- contrato OpenAPI;
+- pruebas unitarias de la lógica de notificaciones;
+- pruebas de integración del endpoint;
+- pruebas E2E locales contra la solución contenerizada;
+- interfaz de usuario;
+- ejecución mediante contenedores.
+
+Las evidencias concretas y sus ubicaciones se documentarán a medida que sean implementadas.

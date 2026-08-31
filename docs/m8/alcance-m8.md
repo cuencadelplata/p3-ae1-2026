@@ -12,7 +12,9 @@ El Módulo 8 se encarga de las funcionalidades relacionadas con:
 - reenvío de comprobantes;
 - tickets de soporte.
 
-M8 no administra directamente el ciclo de vida del viaje, los usuarios ni los pagos. Recibe información proveniente de otros módulos y realiza las acciones que corresponden a sus propias responsabilidades.
+M8 no administra directamente el ciclo de vida del viaje, los usuarios ni los pagos.
+
+Recibe información proveniente de otros módulos y realiza las acciones que corresponden a sus propias responsabilidades.
 
 ## Organización del Grupo 6
 
@@ -62,3 +64,37 @@ Por lo tanto:
 - RF-8.2 deberá generar y validar realmente el QR, incluyendo vencimiento y control de un solo uso.
 
 No se implementará todavía RabbitMQ como parte del trabajo de nuestro grupo.
+
+## Entrega actual AE1
+
+Para la entrega actual del Grupo 6 se deberá presentar:
+
+- implementación funcional de RF-8.1 y RF-8.2;
+- contrato de API mediante OpenAPI;
+- interfaz de usuario para demostrar las funcionalidades del grupo;
+- ejecución de la solución mediante contenedores;
+- publicación de las imágenes correspondientes en Docker Hub;
+- pruebas E2E ejecutadas localmente contra los contenedores;
+- pruebas unitarias y de integración correspondientes;
+- documentación necesaria para reproducir la ejecución y las pruebas.
+
+No forma parte de esta entrega realizar un despliegue de la solución en infraestructura cloud.
+
+## Requerimientos no funcionales aplicables en AE1
+
+Además de los requerimientos funcionales del grupo, durante el desarrollo deberán contemplarse los requerimientos no funcionales comunes cuyo nivel mínimo comienza en AE1.
+
+Para nuestro trabajo resultan especialmente relevantes:
+
+- libertad tecnológica y justificación de Node.js y Express;
+- arquitectura modular por servicios;
+- contenerización;
+- propiedad clara de los datos;
+- contratos REST bien definidos y documentación OpenAPI;
+- formato consistente de errores;
+- configuración externa;
+- usabilidad y adaptabilidad de la interfaz;
+- pruebas unitarias e integración;
+- versionado, commits trazables y documentación reproducible.
+
+Los requerimientos cuyo nivel mínimo comienza en AE2 o AE4 no deberán adelantarse salvo decisión explícita de la cátedra.

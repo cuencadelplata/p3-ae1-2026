@@ -1,7 +1,9 @@
 # Documentación del proyecto
-Esta carpeta contiene la documentación utilizada para el desarrollo del proyecto.
+
+Esta carpeta contiene la documentación utilizada para el desarrollo del proyecto AE1 de Paradigmas III.
 
 ## Prioridad de documentación
+
 En caso de existir diferencias entre documentos, utilizar el siguiente orden de prioridad:
 
 1. `references/ISI-Paradigmas3-AE1-Escenario-MovilidadUrbana-2026.pdf`
@@ -13,25 +15,53 @@ En caso de existir diferencias entre documentos, utilizar el siguiente orden de 
 3. `m8/alcance-m8.md`
    Define el alcance actual del Módulo 8 y del Grupo 6.
 
-4. `m8/decisiones-tecnicas.md`
+4. `m8/entrega-ae1.md`
+   Define los entregables y evidencias requeridas para la entrega actual.
+
+5. `m8/decisiones-tecnicas.md`
    Registra las decisiones técnicas adoptadas para la implementación.
 
-5. `m8/rf81-notificaciones.md`
-   Define específicamente el alcance de RF-8.1.
+6. `m8/rf81-notificaciones.md`
+   Define específicamente el alcance y contrato de RF-8.1.
 
-Los demás documentos de `references/` se utilizan como material complementario e histórico.
+Los demás documentos ubicados en `references/` se utilizan como material complementario e histórico.
 
-## Trabajo actual
+## Módulo actual
 
-Grupo 6.
+M8 — Notificaciones, Documentos y Soporte.
 
-Responsable de RF-8.1:
-Juan Martin Invaldi.
+Grupo 6:
 
-Branch de trabajo:
+- RF-8.1 — Notificaciones de viaje.
+- RF-8.2 — QR de verificación.
+
+Responsables:
+
+- Juan Martin Invaldi — RF-8.1.
+- Goya Bautista — RF-8.2.
+
+## Branches de trabajo
+
+RF-8.1:
 
 `feature/m8-r81-notifications-grupo6`
 
-El trabajo actual debe limitarse a RF-8.1 — Notificaciones de viaje.
+RF-8.2:
 
-No modificar `main` ni funcionalidades correspondientes a otros módulos o requerimientos.
+`feature/m8-r82-qr-grupo6`
+
+Cada requerimiento deberá desarrollarse únicamente dentro de su branch correspondiente.
+
+No realizar cambios ni commits directamente sobre `main`.
+
+## Forma de trabajo
+
+El desarrollo seguirá un enfoque Design-First / Contract-First.
+
+Primero se definirán y revisarán los contratos de la API mediante OpenAPI.
+
+Luego se realizará la implementación respetando dichos contratos.
+
+Antes de realizar cambios en el proyecto también deberán consultarse las instrucciones definidas en:
+
+`AGENTS.md`

@@ -17,11 +17,39 @@ Grupo 6:
 - RF-8.1 — Notificaciones de viaje.
 - RF-8.2 — QR de verificación.
 
-En la branch `feature/m8-r81-notifications-grupo6` trabajar únicamente sobre RF-8.1.
+En la branch:
+
+`feature/m8-r81-notifications-grupo6`
+
+trabajar únicamente sobre RF-8.1.
+
+En la branch:
+
+`feature/m8-r82-qr-grupo6`
+
+trabajar únicamente sobre RF-8.2.
 
 No modificar funcionalidades correspondientes a otros módulos o grupos.
 
 No realizar cambios ni commits directamente sobre `main`.
+
+## Alcance de la entrega AE1
+
+La entrega actual debe contemplar:
+
+- RF-8.1 y RF-8.2;
+- OpenAPI;
+- interfaz de usuario;
+- contenerización;
+- publicación de imágenes en Docker Hub;
+- pruebas unitarias;
+- pruebas de integración;
+- pruebas E2E locales contra contenedores;
+- documentación reproducible.
+
+No realizar despliegue cloud.
+
+No incorporar tecnologías o infraestructura correspondientes a AE2 o AE4 salvo indicación explícita.
 
 ## Forma de trabajo
 
@@ -93,6 +121,10 @@ Durante esta etapa utilizar mocks únicamente para representar información exte
 
 Los mocks no deben reemplazar la lógica propia de M8.
 
+No consultar directamente tablas pertenecientes a otros servicios.
+
+Mantener explícita la propiedad de los datos correspondientes a M8.
+
 ## Calidad
 
 Todo cambio debe considerar:
@@ -109,23 +141,43 @@ No optimizar prematuramente.
 
 ## Pruebas
 
-Toda lógica de negocio nueva debe tener pruebas cuando corresponda.
+Toda lógica de negocio nueva debe contar con las pruebas correspondientes.
 
-Priorizar:
+La entrega actual requiere:
 
-- pruebas unitarias para lógica de negocio;
-- pruebas de integración para endpoints y componentes relacionados.
+- pruebas unitarias para la lógica de negocio;
+- pruebas de integración para endpoints y componentes relacionados;
+- pruebas E2E ejecutadas localmente contra la solución desplegada mediante contenedores.
 
-Agregar pruebas E2E solamente cuando aporten valor al flujo que se está implementando.
+Las pruebas E2E deberán cubrir los requerimientos correspondientes a la branch y al alcance que se esté implementando.
+
+En `feature/m8-r81-notifications-grupo6` no implementar pruebas ni funcionalidades propias de RF-8.2.
+
+En `feature/m8-r82-qr-grupo6` no implementar pruebas ni funcionalidades propias de RF-8.1.
+
+Una vez integrados RF-8.1 y RF-8.2, la solución conjunta deberá contar con pruebas E2E para ambos flujos.
 
 Antes de considerar una tarea terminada:
 
 - ejecutar las pruebas disponibles;
 - verificar lint si existe;
-- verificar compilación/typecheck si existe;
+- verificar compilación o typecheck si existe;
+- verificar que los contenedores puedan iniciarse correctamente cuando corresponda;
 - informar cualquier prueba que no pueda ejecutarse.
 
-Nunca eliminar o debilitar una prueba únicamente para hacer que el código pase.
+Nunca eliminar, omitir o debilitar una prueba únicamente para hacer que el código pase.
+
+## Interfaz de usuario
+
+Cuando se implemente la UI:
+
+- debe consumir la API definida mediante OpenAPI;
+- no debe duplicar lógica de negocio propia de M8;
+- debe mostrar estados claros de carga, éxito y error;
+- debe ser utilizable de forma responsiva;
+- debe poder ejecutarse junto con la solución contenerizada.
+
+No comenzar la implementación de la UI hasta que sea solicitada explícitamente.
 
 ## Seguridad
 
@@ -141,6 +193,8 @@ No hardcodear secretos.
 
 Validar todos los datos externos antes de utilizarlos.
 
+Los errores internos no deben exponer detalles sensibles de implementación.
+
 ## Git
 
 No cambiar de branch sin indicación.
@@ -154,6 +208,24 @@ No modificar `main`.
 No modificar branches pertenecientes a otros grupos.
 
 Antes de realizar cambios verificar la branch actual.
+
+## Requerimientos por etapa
+
+Antes de incorporar una tecnología, patrón o componente de infraestructura, verificar que corresponda al alcance actual de AE1.
+
+No adelantar automáticamente requisitos de AE2 o AE4 bajo el argumento de aplicar buenas prácticas.
+
+En particular, no incorporar todavía sin autorización explícita:
+
+- RabbitMQ;
+- Redis;
+- Circuit Breaker;
+- observabilidad avanzada;
+- alta disponibilidad;
+- CI/CD;
+- despliegue cloud.
+
+Una buena práctica debe ser proporcional al problema y al alcance actual.
 
 ## Principio general
 
