@@ -11,11 +11,12 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "typecheck:test": "tsc --project tsconfig.test.json",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:unit": "vitest run tests/unit",
-    "test:integration": "vitest run tests/integration",
-    "test:coverage": "vitest run --coverage --coverage.include=src/app.ts --coverage.include=src/notifications/**/*.ts --coverage.include=src/shared/**/*.ts --coverage.exclude=src/server.ts"
+    "test": "vitest run --project unit --project integration",
+    "test:watch": "vitest --project unit --project integration",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:coverage": "vitest run --project unit --project integration --coverage",
+    "test:e2e": "vitest run --project e2e"
   },
   "dependencies": {
     "express": "^5.2.1"
