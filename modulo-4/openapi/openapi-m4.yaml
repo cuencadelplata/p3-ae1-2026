@@ -61,9 +61,26 @@ paths:
         - { in: query, name: longitude, required: true, schema: { type: number } }
         - { in: query, name: vehicleType, required: true, schema: { type: string, enum: [AUTO, MOTO] } }
         - { in: query, name: radiusKm, schema: { type: number, default: 5 } }
-        - { in: query, name: limit, schema: { type: integer, default: 10 } }
+        - { in: query, name: limit, schema: { type: integer, default: 10 }, description: Limite generico conservado por compatibilidad }
+        - { in: query, name: maxCandidates, schema: { type: integer, default: 10 }, description: Cantidad maxima de candidatos solicitada por M5 }
       responses:
-        '200': { description: Conductores vigentes, disponibles y ordenados por distancia }
+        '200':
+          description: Conductores vigentes, disponibles y ordenados por distancia
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [vehicleType, searchRadiusKm, candidatesCount, searchTimestamp, count, drivers]
+                properties:
+                  vehicleType: { type: string, enum: [AUTO, MOTO] }
+                  searchRadiusKm: { type: number }
+                  candidatesCount: { type: integer }
+                  searchTimestamp: { type: string, format: date-time }
+                  count: { type: integer }
+                  drivers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NearbyDriver'
   /geocode:
     post:
       summary: Geocodificar direccion con proveedor simulado (RF-4.4)
@@ -111,3 +128,16 @@ components:
             vehicleType: { type: string, enum: [AUTO, MOTO] }
             available: { type: boolean }
             timestamp: { type: string, format: date-time }
+    NearbyDriver:
+      allOf:
+        - $ref: '#/components/schemas/Coordinates'
+        - type: object
+          required: [driverId, vehicleType, available, updatedAt, expiresAt, distanceKm, estimatedEtaMinutes]
+          properties:
+            driverId: { type: string }
+            vehicleType: { type: string, enum: [AUTO, MOTO] }
+            available: { type: boolean }
+            updatedAt: { type: string, format: date-time }
+            expiresAt: { type: string, format: date-time }
+            distanceKm: { type: number }
+            estimatedEtaMinutes: { type: integer }

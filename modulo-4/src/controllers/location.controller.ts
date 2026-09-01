@@ -49,13 +49,21 @@ export class LocationController {
   public findNearby = (req: Request, res: Response): void => {
     this.handle(res, () => {
       const query = nearbyQuerySchema.parse(req.query);
+      const maxCandidates = query.maxCandidates ?? query.limit ?? 10;
       const drivers = this.service.findNearby(
         { latitude: query.latitude, longitude: query.longitude },
         query.vehicleType,
         query.radiusKm,
-        query.limit
+        maxCandidates
       );
-      return res.status(200).json({ count: drivers.length, drivers });
+      return res.status(200).json({
+        vehicleType: query.vehicleType,
+        searchRadiusKm: query.radiusKm,
+        candidatesCount: drivers.length,
+        searchTimestamp: new Date().toISOString(),
+        count: drivers.length,
+        drivers
+      });
     });
   };
 

@@ -38,4 +38,6 @@ curl -X PUT http://localhost:3004/api/v1/drivers/driver-1/location \
 curl "http://localhost:3004/api/v1/drivers/nearby?latitude=-27.4693&longitude=-58.8307&vehicleType=AUTO&radiusKm=5"
 ```
 
+La busqueda acepta `maxCandidates` (nombre usado por M5) y conserva `limit` como alias compatible.
+
 La especificacion completa esta en `openapi/openapi-m4.yaml`.

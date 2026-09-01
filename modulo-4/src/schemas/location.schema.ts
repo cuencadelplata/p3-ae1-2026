@@ -20,7 +20,8 @@ export const nearbyQuerySchema = z.object({
   longitude: z.coerce.number().min(-180).max(180),
   vehicleType: z.enum(['AUTO', 'MOTO']),
   radiusKm: z.coerce.number().positive().max(50).default(5),
-  limit: z.coerce.number().int().positive().max(50).default(10)
+  limit: z.coerce.number().int().positive().max(50).optional(),
+  maxCandidates: z.coerce.number().int().positive().max(50).optional()
 });
 
 export const geocodeSchema = z.object({
