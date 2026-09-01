@@ -1,0 +1,30 @@
+name: CI - Grupo 05 (Módulo 2 Clientes)
+
+on:
+  push:
+    branches: [ Grupo05 ]
+  pull_request:
+    branches: [ Grupo05 ]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Checkout del código
+        uses: actions/checkout@v4
+
+      - name: 2. Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: 3. Instalar dependencias limpias
+        run: npm ci
+
+      - name: 4. Validar tipos de TypeScript
+        run: npx tsc --noEmit
+
+      - name: 5. Ejecutar tests unitarios (Vitest)
+        run: npm test
