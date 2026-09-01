@@ -1,0 +1,323 @@
+openapi: 3.0.0
+info:
+  title: M6 - Viajes y Ciclo de Vida
+  description: API para solicitar viajes, asignar conductores y validar inicio con QR
+  version: 1.0.0
+  contact:
+    name: Equipo M6
+  license:
+    name: ISC
+
+servers:
+  - url: http://localhost:3000
+    description: Servidor de desarrollo
+  - url: http://localhost:3000
+    description: Servidor Docker
+
+tags:
+  - name: Viajes
+    description: Operaciones relacionadas con viajes
+
+paths:
+  /api/viajes:
+    post:
+      tags:
+        - Viajes
+      summary: "RF-6.1: Solicitar un nuevo viaje"
+      description: Crea una nueva solicitud de viaje con código QR único
+      operationId: solicitarViaje
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitarViajeRequest'
+            examples:
+              ejemplo1:
+                summary: Solicitud básica
+                value:
+                  clienteId: cliente-123
+                  origen: Calle Principal 100
+                  destino: Centro Comercial
+      responses:
+        '201':
+          description: Viaje creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajeResponse'
+              examples:
+                exitoso:
+                  summary: Respuesta exitosa
+                  value:
+                    id: "1725167854321"
+                    clienteId: cliente-123
+                    estado: SOLICITADO
+                    origen: Calle Principal 100
+                    destino: Centro Comercial
+                    codigoVerificacion: "AB3K8F"
+                    qrCode: "data:image/png;base64/iVBORw0KGgo..."
+                    fechaCreacion: "2026-09-01T15:30:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/viajes/{id}/asignar:
+    post:
+      tags:
+        - Viajes
+      summary: "RF-6.2: Asignar conductor a un viaje"
+      description: Asigna un conductor a un viaje en estado SOLICITADO y cambia a CONDUCTOR_EN_CAMINO
+      operationId: asignarConductor
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AsignarConductorRequest'
+            examples:
+              ejemplo1:
+                summary: Asignar conductor
+                value:
+                  conductorId: conductor-001
+      responses:
+        '200':
+          description: Conductor asignado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsignarConductorResponse'
+        '400':
+          description: Error de validación (viaje no en estado SOLICITADO)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/viajes/{id}/arribo:
+    put:
+      tags:
+        - Viajes
+      summary: Registrar arribo del conductor
+      description: Marca que el conductor ha llegado al punto de retiro, cambia a ARRIBADO
+      operationId: registrarArribo
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Arribo registrado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrarArriboResponse'
+        '400':
+          description: Error de validación (viaje no en estado CONDUCTOR_EN_CAMINO)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/viajes/{id}/iniciar:
+    post:
+      tags:
+        - Viajes
+      summary: "RF-6.3: Iniciar viaje con validación de QR"
+      description: Valida el código de verificación (QR) e inicia el viaje cambiando a EN_CURSO
+      operationId: iniciarViaje
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IniciarViajeRequest'
+            examples:
+              exitoso:
+                summary: Código válido
+                value:
+                  codigoVerificacion: "AB3K8F"
+              invalido:
+                summary: Código inválido
+                value:
+                  codigoVerificacion: "INCORRECTO"
+      responses:
+        '200':
+          description: Viaje iniciado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IniciarViajeResponse'
+        '400':
+          description: Error de validación (viaje no en estado ARRIBADO)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Código de verificación inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  schemas:
+    EstadoViaje:
+      type: string
+      enum:
+        - SOLICITADO
+        - ASIGNADO
+        - CONDUCTOR_EN_CAMINO
+        - ARRIBADO
+        - EN_CURSO
+        - COMPLETADO
+        - CANCELADO
+      description: Estados posibles del viaje
+
+    SolicitarViajeRequest:
+      type: object
+      required:
+        - clienteId
+        - origen
+        - destino
+      properties:
+        clienteId:
+          type: string
+          description: Identificador único del cliente
+          example: cliente-123
+        origen:
+          type: string
+          description: Dirección de origen del viaje
+          example: Calle Principal 100
+        destino:
+          type: string
+          description: Dirección de destino del viaje
+          example: Centro Comercial
+
+    ViajeResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Identificador único del viaje basado en timestamp
+          example: "1725167854321"
+        clienteId:
+          type: string
+          description: ID del cliente que solicitó el viaje
+          example: cliente-123
+        conductorId:
+          type: string
+          nullable: true
+          description: ID del conductor asignado (null si no está asignado)
+          example: null
+        estado:
+          $ref: '#/components/schemas/EstadoViaje'
+        origen:
+          type: string
+          example: Calle Principal 100
+        destino:
+          type: string
+          example: Centro Comercial
+        codigoVerificacion:
+          type: string
+          description: Código alfanumérico de 6 caracteres para verificación
+          example: "AB3K8F"
+        qrCode:
+          type: string
+          description: Código QR como data URL (PNG en base64)
+          example: "data:image/png;base64/iVBORw0KGgoAAAANSUhEUgAAAAUA..."
+        fechaCreacion:
+          type: string
+          format: date-time
+          description: Timestamp de creación del viaje
+          example: "2026-09-01T15:30:00Z"
+
+    AsignarConductorRequest:
+      type: object
+      required:
+        - conductorId
+      properties:
+        conductorId:
+          type: string
+          description: Identificador único del conductor a asignar
+          example: conductor-001
+
+    AsignarConductorResponse:
+      type: object
+      properties:
+        mensaje:
+          type: string
+          example: "Conductor asignado. Su conductor está en camino a su dirección"
+        viaje:
+          $ref: '#/components/schemas/ViajeResponse'
+
+    RegistrarArriboResponse:
+      type: object
+      properties:
+        mensaje:
+          type: string
+          example: "El conductor ha arribado"
+        viaje:
+          $ref: '#/components/schemas/ViajeResponse'
+
+    IniciarViajeRequest:
+      type: object
+      required:
+        - codigoVerificacion
+      properties:
+        codigoVerificacion:
+          type: string
+          description: Código extraído del QR para validar
+          example: "AB3K8F"
+
+    IniciarViajeResponse:
+      type: object
+      properties:
+        mensaje:
+          type: string
+          example: "Viaje iniciado"
+        viaje:
+          $ref: '#/components/schemas/ViajeResponse'
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Mensaje de error descriptivo
+          example: "Viaje no encontrado"
+
+  parameters:
+    ViajeId:
+      name: id
+      in: path
+      description: Identificador único del viaje
+      required: true
+      schema:
+        type: string
+      example: "1725167854321"
+
+  responses:
+    BadRequest:
+      description: Solicitud inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Viaje no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Viaje no encontrado"

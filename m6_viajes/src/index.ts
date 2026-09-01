@@ -6,6 +6,11 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
+// Health check endpoint
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // Enlazamos las rutas del modulo
 app.use('/api/viajes', viajesRoutes);
 
