@@ -1,0 +1,113 @@
+openapi: 3.0.3
+info:
+  title: Modulo 4 - Ubicacion y Disponibilidad
+  version: 1.0.0
+  description: API REST simple para ubicaciones temporales, conductores cercanos, geocodificacion y ETA.
+servers:
+  - url: http://localhost:3004/api/v1
+paths:
+  /drivers/{driverId}/location:
+    put:
+      summary: Actualizar ubicacion del conductor (RF-4.1)
+      parameters:
+        - in: path
+          name: driverId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationUpdate'
+      responses:
+        '200': { description: Ubicacion actualizada }
+        '400': { description: Datos invalidos }
+    get:
+      summary: Consultar ubicacion activa
+      parameters:
+        - in: path
+          name: driverId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Ubicacion vigente }
+        '404': { description: No existe o vencio por TTL }
+  /drivers/{driverId}/availability:
+    patch:
+      summary: Cambiar disponibilidad del conductor
+      parameters:
+        - in: path
+          name: driverId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [available]
+              properties:
+                available: { type: boolean }
+      responses:
+        '200': { description: Disponibilidad actualizada }
+        '404': { description: Ubicacion activa no encontrada }
+  /drivers/nearby:
+    get:
+      summary: Buscar conductores cercanos (RF-4.2 y RF-4.3)
+      parameters:
+        - { in: query, name: latitude, required: true, schema: { type: number } }
+        - { in: query, name: longitude, required: true, schema: { type: number } }
+        - { in: query, name: vehicleType, required: true, schema: { type: string, enum: [AUTO, MOTO] } }
+        - { in: query, name: radiusKm, schema: { type: number, default: 5 } }
+        - { in: query, name: limit, schema: { type: integer, default: 10 } }
+      responses:
+        '200': { description: Conductores vigentes, disponibles y ordenados por distancia }
+  /geocode:
+    post:
+      summary: Geocodificar direccion con proveedor simulado (RF-4.4)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address]
+              properties:
+                address: { type: string }
+      responses:
+        '200': { description: Coordenadas encontradas }
+        '404': { description: Direccion no incluida en el simulador }
+  /estimate:
+    post:
+      summary: Estimar distancia y ETA (RF-4.5)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [origin, destination]
+              properties:
+                origin: { $ref: '#/components/schemas/Coordinates' }
+                destination: { $ref: '#/components/schemas/Coordinates' }
+      responses:
+        '200': { description: Distancia y tiempo aproximados }
+components:
+  schemas:
+    Coordinates:
+      type: object
+      required: [latitude, longitude]
+      properties:
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+    LocationUpdate:
+      allOf:
+        - $ref: '#/components/schemas/Coordinates'
+        - type: object
+          required: [vehicleType, available]
+          properties:
+            vehicleType: { type: string, enum: [AUTO, MOTO] }
+            available: { type: boolean }
+            timestamp: { type: string, format: date-time }
