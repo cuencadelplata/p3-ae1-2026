@@ -3,11 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import type { TestProject } from "vitest/node";
 
-declare module "vitest" {
-  interface ProvidedContext {
-    e2eBaseUrl: string;
-  }
-}
+import "./vitest-context";
 
 const imageName = "m8-notifications-service:e2e";
 const containerPort = "3100";

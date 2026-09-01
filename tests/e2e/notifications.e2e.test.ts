@@ -1,5 +1,7 @@
 import { describe, expect, inject, it } from "vitest";
 
+import "./vitest-context";
+
 const baseUrl = inject("e2eBaseUrl");
 
 const validRequest = {
@@ -24,6 +26,10 @@ async function postNotification(body: unknown, contentType = "application/json")
     headers: { "Content-Type": contentType },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
+}
+
+async function getResource(path: string) {
+  return fetch(`${baseUrl}${path}`);
 }
 
 async function expectSafeError(response: Response, code: string) {
@@ -105,5 +111,48 @@ describe("POST /notifications E2E", () => {
 
     expect(response.status).toBe(415);
     await expectSafeError(response, "UNSUPPORTED_MEDIA_TYPE");
+  });
+});
+
+describe("recursos públicos E2E", () => {
+  it("serves the notification UI from Docker", async () => {
+    const response = await getResource("/");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    const body = await response.text();
+    expect(body).toContain("M8 - Notificaciones");
+    expect(body).toContain("/styles.css");
+    expect(body).toContain("/app.js");
+    expect(body).toContain("/openapi.yaml");
+  });
+
+  it("serves the UI stylesheet from Docker", async () => {
+    const response = await getResource("/styles.css");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/css");
+    expect((await response.text()).length).toBeGreaterThan(0);
+  });
+
+  it("serves the UI script from Docker", async () => {
+    const response = await getResource("/app.js");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("javascript");
+    const body = await response.text();
+    expect(body.length).toBeGreaterThan(0);
+    expect(body).toContain("/notifications");
+  });
+
+  it("serves the approved OpenAPI contract from Docker", async () => {
+    const response = await getResource("/openapi.yaml");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("yaml");
+    const body = await response.text();
+    expect(body).toContain("openapi: 3.0.3");
+    expect(body).toContain("/notifications");
+    expect(body).toContain("post:");
   });
 });

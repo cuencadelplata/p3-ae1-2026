@@ -208,3 +208,44 @@ describe("POST /notifications", () => {
     });
   });
 });
+
+describe("recursos públicos", () => {
+  it("serves the notification UI", async () => {
+    const response = await request(app).get("/");
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/html");
+    expect(response.text).toContain("M8 - Notificaciones");
+    expect(response.text).toContain("notification-form");
+    expect(response.text).toContain("/styles.css");
+    expect(response.text).toContain("/app.js");
+    expect(response.text).toContain("/openapi.yaml");
+  });
+
+  it("serves the UI stylesheet", async () => {
+    const response = await request(app).get("/styles.css");
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/css");
+    expect(response.text.length).toBeGreaterThan(0);
+  });
+
+  it("serves the UI script", async () => {
+    const response = await request(app).get("/app.js");
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("javascript");
+    expect(response.text.length).toBeGreaterThan(0);
+    expect(response.text).toContain("/notifications");
+  });
+
+  it("serves the approved OpenAPI contract", async () => {
+    const response = await request(app).get("/openapi.yaml");
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("yaml");
+    expect(response.text).toContain("openapi: 3.0.3");
+    expect(response.text).toContain("/notifications");
+    expect(response.text).toContain("post:");
+  });
+});
