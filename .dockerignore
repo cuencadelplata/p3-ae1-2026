@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+.git
+.env
+.env.*
+!.env.example
+logs
+*.log
+.cache
+.pnpm-store
+.npm
+tests
+tsconfig.test.json
