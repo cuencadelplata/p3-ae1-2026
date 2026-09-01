@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { solicitarViaje, asignarConductor, resetViajesDb } from '../../src/controllers/viajes.controller.js';
+import { solicitarViaje, asignarConductor, registrarArribo, resetViajesDb } from '../../src/controllers/viajes.controller.js';
 import { mockRequest, mockResponse } from '../fixtures/mocks.js';
 
 describe('RF-6.2: Arribo del Conductor', () => {
-  
   beforeEach(() => {
     resetViajesDb();
   });

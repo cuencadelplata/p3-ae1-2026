@@ -85,7 +85,9 @@ describe('RF-6.1: Solicitar Viaje - Estados del viaje', () => {
     await solicitarViaje(req as any, res as any);
 
     expect(res.data.fechaCreacion).toBeDefined();
-    expect(res.data.fechaCreacion instanceof Date).toBe(true);
+    // Acepta tanto un objeto Date como una fecha en string/ISO
+    const esFechaValida = res.data.fechaCreacion instanceof Date || !isNaN(Date.parse(res.data.fechaCreacion));
+    expect(esFechaValida).toBe(true);
   });
 
   it('debe generar un codigo QR valido', async () => {

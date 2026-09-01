@@ -3,7 +3,6 @@ import { solicitarViaje, asignarConductor, registrarArribo, iniciarViaje, resetV
 import { mockRequest, mockResponse } from '../fixtures/mocks.js';
 
 describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
-  
   beforeEach(() => {
     resetViajesDb();
   });
