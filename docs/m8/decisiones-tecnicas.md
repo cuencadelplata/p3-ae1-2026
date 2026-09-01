@@ -1,173 +1,58 @@
-# Decisiones técnicas — M8 Grupo 6
+# Decisiones técnicas - M8 Grupo 6
 
 ## API REST
 
-El Módulo 8 se implementará como un servicio que expondrá una API REST.
+El Módulo 8 se implementa como un servicio que expone una API REST. La misma API podrá incorporar los requerimientos del módulo, aunque esta branch implementa únicamente RF-8.1.
 
-Dentro de la misma API existirán distintas funcionalidades correspondientes a los requerimientos del módulo.
+## Stack
 
-Nuestro grupo desarrollará inicialmente las funcionalidades correspondientes a RF-8.1 y RF-8.2.
+- Node.js 24 LTS.
+- TypeScript con una configuración estricta y simple.
+- Express.
+- pnpm 10.33.0 como único gestor de paquetes y `pnpm-lock.yaml` como único lockfile.
 
-## Node.js y Express
+TypeScript aporta tipado estático, mantenibilidad y una evolución más segura, sin introducir abstracciones no necesarias para el alcance actual.
 
-La API será desarrollada utilizando Node.js y Express.
+## Contract-First y OpenAPI
 
-REST será utilizado como estilo arquitectónico para organizar los recursos y operaciones HTTP.
+OpenAPI es la fuente de verdad del contrato de RF-8.1. El contrato se revisa antes de implementar el endpoint y está definido en `docs/api/openapi.yaml`.
 
-Express será utilizado para implementar el servidor, las rutas y los endpoints de la API.
+También se expone el mismo archivo mediante `GET /openapi.yaml`. No se agregó Swagger UI: el contrato OpenAPI existente es suficiente para AE1 y no se justifican dependencias adicionales únicamente para visualizarlo.
 
-## TypeScript
+## Organización y límites
 
-El desarrollo del servicio M8 se realizará utilizando TypeScript sobre Node.js.
+Se separan HTTP, validación y lógica de notificación. M8 no administra viajes, usuarios ni pagos, ni consulta datos de otros servicios. En AE1 las dependencias externas se representan con mocks, sin reemplazar la lógica propia de M8.
 
-TypeScript se utilizará para incorporar tipado estático, mejorar la mantenibilidad y facilitar la evolución e integración posterior de los requerimientos del módulo.
-
-Se utilizará una configuración estricta pero simple, evitando configuraciones o abstracciones que no sean necesarias para el alcance actual.
-
-## Gestor de paquetes
-
-El proyecto utilizará pnpm como gestor de paquetes.
-
-pnpm se utilizará para mantener instalaciones reproducibles mediante su lockfile, una gestión estricta de dependencias y un uso eficiente de paquetes durante la evolución del proyecto.
-
-El proyecto deberá utilizar un único gestor de paquetes y no deberá mantener simultáneamente lockfiles de npm y pnpm.
-
-## OpenAPI y Swagger UI
-
-La API será especificada utilizando OpenAPI.
-
-OpenAPI permitirá definir el contrato de la API, incluyendo:
-
-- endpoints;
-- métodos HTTP;
-- datos de entrada;
-- respuestas;
-- códigos HTTP;
-- errores;
-- esquemas utilizados.
-
-Swagger UI será utilizado para visualizar y probar la especificación OpenAPI.
-
-## Enfoque Design-First
-
-Se utilizará un enfoque Design-First o Contract-First.
-
-Antes de implementar los endpoints con Express se definirá y revisará el contrato de la API.
-
-El orden de trabajo será:
-
-1. Analizar los requerimientos.
-2. Definir los endpoints necesarios.
-3. Definir datos de entrada, respuestas y errores.
-4. Crear la especificación OpenAPI.
-5. Revisar el contrato.
-6. Implementar la API con Express respetando el contrato definido.
-
-## Uso de mocks
-
-Durante esta etapa las dependencias con otros módulos serán reemplazadas mediante mocks.
-
-Los mocks representarán únicamente información que posteriormente será recibida desde otros servicios.
-
-La lógica propia de M8 no será simulada.
-
-## Organización del código
-
-Se prevé separar las responsabilidades mediante componentes para:
-
-- control de endpoints;
-- lógica de negocio;
-- validación de datos;
-- mocks;
-- pruebas.
-
-La estructura definitiva se determinará al comenzar la implementación, evitando agregar componentes que no sean necesarios.
-
-## Git
-
-El repositorio es compartido con los demás grupos.
-
-Nuestro trabajo se realizará únicamente en las branches correspondientes al Grupo 6.
-
-RF-8.1:
-
-`feature/m8-r81-notifications-grupo6`
-
-RF-8.2:
-
-`feature/m8-r82-qr-grupo6`
-
-No se realizarán commits directamente sobre `main` ni se modificarán branches pertenecientes a otros grupos.
-
-## Canal inicial de notificaciones
-
-RF-8.1 permite utilizar uno o más canales de notificación.
-
-Para AE1 se utilizará PUSH como único canal soportado.
-
-El procesamiento propio de M8 será real, incluyendo:
-
-- validación de la solicitud;
-- reconocimiento del evento;
-- generación del mensaje;
-- creación del identificador de notificación;
-- asignación de fecha y estado;
-- procesamiento mediante el canal configurado.
-
-El proveedor externo encargado de entregar la notificación PUSH será reemplazado temporalmente mediante un mock.
-
-Por lo tanto, el estado `PROCESSED` indica que M8 completó correctamente su procesamiento, pero no confirma una entrega real al dispositivo del destinatario.
-
-La arquitectura deberá permitir incorporar EMAIL y SMS posteriormente sin modificar la lógica central de RF-8.1.
-
-## Propiedad de datos
-
-M8 será propietario únicamente de los datos correspondientes a sus propias responsabilidades, como notificaciones y QR.
-
-M8 no deberá consultar directamente tablas pertenecientes a M1, M5, M6, M7 u otros servicios.
-
-Durante AE1, cualquier información externa necesaria será proporcionada mediante mocks.
-
-La estrategia concreta de persistencia se definirá durante la implementación, manteniendo la propiedad de los datos dentro del límite del servicio M8.
-
-## Estrategia de pruebas
-
-Desde AE1 se deberán incluir pruebas unitarias y de integración.
-
-Además, para la entrega actual se deberán implementar pruebas E2E ejecutadas localmente contra la solución contenerizada.
-
-Las pruebas se incorporarán de acuerdo con la responsabilidad evaluada:
-
-- pruebas unitarias para lógica de negocio;
-- pruebas de integración para API y componentes relacionados;
-- pruebas E2E para verificar el flujo funcional contra el servicio ejecutado mediante contenedores.
-
-Las pruebas no deberán depender de servicios externos reales durante AE1.
-
-Cada branch deberá implementar únicamente las pruebas correspondientes al requerimiento que desarrolla.
-
-Una vez integrados RF-8.1 y RF-8.2, la solución conjunta deberá permitir ejecutar las pruebas E2E de ambos requerimientos.
+Para RF-8.1, `PUSH` es el canal actual. M8 valida, reconoce el evento, genera el mensaje, asigna identificador y fecha y procesa el canal. `MockPushProvider` sustituye solo al proveedor PUSH externo; `PROCESSED` indica procesamiento correcto de M8, no entrega real al dispositivo. La abstracción permite incorporar EMAIL y SMS posteriormente sin alterar la lógica central.
 
 ## Interfaz de usuario
 
-La entrega incluirá una interfaz de usuario para demostrar las funcionalidades de RF-8.1 y RF-8.2.
-
-La UI deberá consumir la API de M8 y no duplicar lógica de negocio correspondiente al servicio.
-
-Para RF-8.1 deberá permitir demostrar el procesamiento de los eventos de notificación y visualizar de forma clara el resultado obtenido.
-
-La interfaz deberá contemplar estados claros de carga, éxito y error.
-
-También deberá ser utilizable de manera responsiva y poder ejecutarse junto con la solución contenerizada.
-
-La tecnología específica utilizada para el frontend se definirá antes de comenzar su implementación.
+Para RF-8.1 se utiliza HTML, CSS y JavaScript vanilla, servidos por el mismo Express. La interfaz es pequeña y demuestra el endpoint real, por lo que un frontend separado agregaría complejidad innecesaria para este alcance: un segundo servidor, configuración CORS, dependencias frontend adicionales y un framework sin necesidad concreta. Esta es una decisión acotada a AE1, no una afirmación general sobre tecnologías frontend.
 
 ## Infraestructura de la entrega
 
-La solución deberá poder ejecutarse localmente mediante contenedores.
+La imagen se construye con un Dockerfile multi-stage basado en `node:24-alpine` y pnpm 10.33.0. El runtime instala dependencias de producción, usa `NODE_ENV=production`, se ejecuta como el usuario no privilegiado `node` y lee un `PORT` configurable.
 
-Las imágenes utilizadas para la entrega deberán publicarse en Docker Hub.
+La imagen incluye `dist/`, `public/` y `docs/api/openapi.yaml`, por lo que sirve API, UI y contrato. No hay despliegue cloud en esta etapa.
 
-No se realizará despliegue cloud en esta etapa.
+## Testing implementado
 
-RabbitMQ, Redis, observabilidad avanzada, alta disponibilidad y demás elementos cuyo nivel mínimo comienza en AE2 o AE4 no deberán incorporarse todavía salvo requerimiento explícito.
+Vitest 4.1.11 define los proyectos `unit`, `integration` y `e2e`. Actualmente hay 53 pruebas unitarias, 38 de integración y 21 E2E Docker, para un total de 112.
+
+- Unit: componentes aislados.
+- Integration: Express y los componentes trabajando juntos.
+- E2E: imagen Docker real consumida mediante HTTP.
+
+Los E2E usan `globalSetup` para construir y ejecutar Docker, fijan `PORT=3100` dentro del contenedor, obtienen un puerto de host dinámico, esperan disponibilidad HTTP y comparten la URL mediante `project.provide` e `inject`. El teardown elimina únicamente el contenedor creado por esa ejecución.
+
+`tests/tsconfig.json` permite que los archivos de pruebas se asocien correctamente al proyecto TypeScript usado para testing y por el editor.
+
+La cobertura de unit e integration es 100% en statements, branches, functions y lines del código ejecutable incluido. `src/server.ts` se valida conductualmente mediante E2E Docker. `public/app.js` se valida mediante integración HTTP, E2E HTTP y revisión manual, no mediante el coverage V8 del backend.
+
+## Alcance diferido
+
+RabbitMQ, Redis, Firebase real, email, SMS, persistencia, observabilidad avanzada, alta disponibilidad, CI/CD de producción y despliegue cloud no se implementan en esta branch ni en AE1 para RF-8.1, salvo requerimiento posterior explícito.
+
+## Git
+
+El trabajo de RF-8.1 se realiza únicamente en `feature/m8-r81-notifications-grupo6`. No se realizan commits directamente sobre `main` ni se modifican branches de otros grupos.

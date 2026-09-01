@@ -65,3 +65,11 @@ Luego se realizará la implementación respetando dichos contratos.
 Antes de realizar cambios en el proyecto también deberán consultarse las instrucciones definidas en:
 
 `AGENTS.md`
+
+## Índice operativo
+
+- [Alcance de M8](m8/alcance-m8.md)
+- [Decisiones técnicas](m8/decisiones-tecnicas.md)
+- [RF-8.1 - Notificaciones](m8/rf81-notificaciones.md)
+- [Guía de entrega AE1](m8/entrega-ae1.md)
+- [Contrato OpenAPI de M8](api/openapi.yaml)
