@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { solicitarViaje, asignarConductor, resetViajesDb } from '../../src/controllers/viajes.controller.js';
-import { mockRequest, mockResponse } from '../fixtures/mocks.js';
+import { mockRequest, mockResponse } from '../datos-prueba/mocks.js';
 
 describe('Concurrencia - Dos conductores intentan aceptar el mismo viaje', () => {
   
