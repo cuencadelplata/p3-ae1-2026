@@ -1,0 +1,16 @@
+services:
+  m9-reservas:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-3000}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_KEY: ${SUPABASE_KEY}
+      M5_URL: ${M5_URL:-}
+      M7_URL: ${M7_URL:-}
+      RESERVATION_JOB_INTERVAL: ${RESERVATION_JOB_INTERVAL:-}
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    restart: unless-stopped
