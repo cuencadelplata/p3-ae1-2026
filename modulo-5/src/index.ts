@@ -23,6 +23,7 @@ app.get('/health', (_req, res) => {
 app.post('/api/v1/ride-requests', rideRequestController.create);
 app.get('/api/v1/ride-requests/:requestId', rideRequestController.getById);
 app.patch('/api/v1/ride-requests/:requestId/cancel', rideRequestController.cancel);
+app.post('/api/v1/ride-requests/:requestId/candidates', rideRequestController.searchCandidates);
 
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {

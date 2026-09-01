@@ -128,6 +128,70 @@ paths:
                 message: "La solicitud ya fue asignada. Para cancelaciones posteriores utilice el Módulo 6."
                 timestamp: "2026-09-01T14:32:00.000Z"
 
+  /ride-requests/{requestId}/candidates:
+    post:
+      summary: Buscar candidatos para la solicitud (RF-5.2)
+      description: Selecciona y ordena conductores disponibles conforme a proximidad (radio configurable) y compatibilidad de vehículo (Auto/Moto).
+      operationId: searchCandidatesForRide
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          description: ID único de la solicitud de viaje (RF-5.1)
+          schema:
+            type: string
+            format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                radiusKm:
+                  type: number
+                  format: float
+                  minimum: 0.1
+                  maximum: 50.0
+                  default: 5.0
+                  description: Radio de búsqueda en kilómetros
+                  example: 5.0
+                maxCandidates:
+                  type: integer
+                  minimum: 1
+                  maximum: 50
+                  default: 5
+                  description: Cantidad máxima de candidatos a retornar
+                  example: 5
+      responses:
+        '200':
+          description: Lista de conductores candidatos ordenados por proximidad.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidateSearchResponseDTO'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          description: Solicitud de viaje no encontrada o sin candidatos disponibles (RF-5.7).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Estado inválido de la solicitud para realizar la búsqueda.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -256,6 +320,63 @@ components:
           type: string
           format: date-time
           example: "2026-09-01T14:33:00.000Z"
+
+    CandidateDriverDTO:
+      type: object
+      required:
+        - driverId
+        - vehicleType
+        - distanceKm
+        - estimatedEtaMinutes
+      properties:
+        driverId:
+          type: string
+          example: "drv_101"
+        vehicleType:
+          $ref: '#/components/schemas/VehicleType'
+        distanceKm:
+          type: number
+          format: float
+          example: 1.2
+        estimatedEtaMinutes:
+          type: integer
+          example: 4
+        rating:
+          type: number
+          format: float
+          example: 4.8
+
+    CandidateSearchResponseDTO:
+      type: object
+      required:
+        - requestId
+        - vehicleType
+        - searchRadiusKm
+        - candidatesCount
+        - candidates
+        - searchTimestamp
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+        vehicleType:
+          $ref: '#/components/schemas/VehicleType'
+        searchRadiusKm:
+          type: number
+          format: float
+          example: 5.0
+        candidatesCount:
+          type: integer
+          example: 2
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/CandidateDriverDTO'
+        searchTimestamp:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:30:05.000Z"
 
     ErrorResponse:
       type: object

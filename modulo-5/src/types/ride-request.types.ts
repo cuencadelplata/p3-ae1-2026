@@ -57,6 +57,31 @@ export interface NearbyDriverStub {
   driverId: string;
   distanceKm: number;
   vehicleType: VehicleType;
+  latitude?: number;
+  longitude?: number;
+  rating?: number;
+}
+
+export interface CandidateDriver {
+  driverId: string;
+  vehicleType: VehicleType;
+  distanceKm: number;
+  estimatedEtaMinutes: number;
+  rating?: number;
+}
+
+export interface SearchCandidatesOptions {
+  radiusKm?: number;
+  maxCandidates?: number;
+}
+
+export interface CandidateSearchResponseDTO {
+  requestId: string;
+  vehicleType: VehicleType;
+  searchRadiusKm: number;
+  candidatesCount: number;
+  candidates: CandidateDriver[];
+  searchTimestamp: string;
 }
 
 export interface ErrorResponseDTO {
@@ -65,3 +90,4 @@ export interface ErrorResponseDTO {
   details?: string[];
   timestamp: string;
 }
+

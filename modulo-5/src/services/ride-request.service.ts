@@ -1,8 +1,11 @@
 import {
+  CandidateDriver,
+  CandidateSearchResponseDTO,
   CreateRideRequestDTO,
   EstimatedFare,
   NearbyDriverStub,
   RideRequest,
+  SearchCandidatesOptions,
   VehicleType
 } from '../types/ride-request.types';
 import { RideRequestValidator } from '../schemas/ride-request.schema';
@@ -192,4 +195,86 @@ export class RideRequestService {
 
     return request;
   }
+
+  /**
+   * Búsqueda de candidatos (RF-5.2)
+   * Filtra conductores disponibles por proximidad y tipo de vehículo compatible.
+   */
+  public async searchCandidatesForRequest(
+    requestId: string,
+    clientId: string,
+    options?: SearchCandidatesOptions
+  ): Promise<CandidateSearchResponseDTO> {
+    // 1. Validar opciones de búsqueda si se proporcionaron
+    const validation = RideRequestValidator.validateSearchCandidatesOptions(options);
+    if (!validation.valid) {
+      throw new ValidationError('Parámetros de búsqueda de candidatos inválidos', validation.errors);
+    }
+
+    const radiusKm = options?.radiusKm ?? 5.0; // Radio configurable por defecto: 5 km
+    const maxCandidates = options?.maxCandidates ?? 5;
+
+    // 2. Obtener y validar la solicitud de viaje existente (RF-5.1)
+    const request = await this.getRideRequestById(requestId, clientId);
+
+    const validSearchStatuses = ['PENDING', 'SEARCHING', 'OFFERED', 'NO_DRIVERS_AVAILABLE'];
+    if (!validSearchStatuses.includes(request.status)) {
+      throw new ConflictError(
+        `No se pueden buscar candidatos para una solicitud en estado ${request.status}`,
+        'INVALID_REQUEST_STATE'
+      );
+    }
+
+    // 3. Consumir conductores cercanos desde M4 (RF-4.2)
+    const nearby = await this.fetchNearbyDriversFromM4(
+      request.origin.latitude,
+      request.origin.longitude,
+      request.vehicleType
+    );
+
+    // 4. Algoritmo de filtrado y ordenamiento:
+    // - Filtro de compatibilidad de vehículo (Auto/Moto)
+    // - Filtro de proximidad (distancia <= radio configurado)
+    // - Ordenamiento ascendente por proximidad (menor distancia / ETA primero)
+    const candidates: CandidateDriver[] = nearby
+      .filter((driver) => driver.vehicleType === request.vehicleType && driver.distanceKm <= radiusKm)
+      .sort((a, b) => a.distanceKm - b.distanceKm)
+      .slice(0, maxCandidates)
+      .map((driver) => ({
+        driverId: driver.driverId,
+        vehicleType: driver.vehicleType,
+        distanceKm: Math.round(driver.distanceKm * 100) / 100,
+        estimatedEtaMinutes: Math.max(1, Math.round(driver.distanceKm * 3)), // ~3 min por km urbano
+        rating: driver.rating ?? 4.8
+      }));
+
+    // 5. Manejo de resultado sin candidatos (RF-5.7)
+    if (candidates.length === 0) {
+      request.status = 'NO_DRIVERS_AVAILABLE';
+      request.updatedAt = new Date().toISOString();
+      this.requests.set(requestId, request);
+
+      throw new NotFoundError(
+        `No se encontraron conductores de tipo ${request.vehicleType} disponibles dentro del radio de ${radiusKm} km`,
+        'NO_DRIVERS_AVAILABLE'
+      );
+    }
+
+    // Si había estado NO_DRIVERS_AVAILABLE y ahora hay candidatos, vuelve a SEARCHING
+    if (request.status === 'NO_DRIVERS_AVAILABLE') {
+      request.status = 'SEARCHING';
+      request.updatedAt = new Date().toISOString();
+      this.requests.set(requestId, request);
+    }
+
+    return {
+      requestId: request.id,
+      vehicleType: request.vehicleType,
+      searchRadiusKm: radiusKm,
+      candidatesCount: candidates.length,
+      candidates,
+      searchTimestamp: new Date().toISOString()
+    };
+  }
 }
+

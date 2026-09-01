@@ -83,4 +83,29 @@ export class RideRequestValidator {
       errors
     };
   }
+
+  /**
+   * Valida opciones de búsqueda de candidatos (RF-5.2)
+   */
+  public static validateSearchCandidatesOptions(options?: { radiusKm?: unknown; maxCandidates?: unknown }): ValidationResult {
+    const errors: string[] = [];
+
+    if (options?.radiusKm !== undefined) {
+      if (typeof options.radiusKm !== 'number' || isNaN(options.radiusKm) || options.radiusKm <= 0 || options.radiusKm > 50) {
+        errors.push('radiusKm: Debe ser un número positivo entre 0.1 y 50 km');
+      }
+    }
+
+    if (options?.maxCandidates !== undefined) {
+      if (typeof options.maxCandidates !== 'number' || !Number.isInteger(options.maxCandidates) || options.maxCandidates <= 0 || options.maxCandidates > 50) {
+        errors.push('maxCandidates: Debe ser un entero positivo entre 1 y 50');
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
 }
+

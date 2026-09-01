@@ -87,6 +87,31 @@ export class RideRequestController {
     }
   };
 
+  /**
+   * POST /api/v1/ride-requests/:requestId/candidates
+   * Búsqueda de candidatos para la solicitud (RF-5.2)
+   */
+  public searchCandidates = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { requestId } = req.params;
+      const clientId = this.extractClientId(req);
+      const { radiusKm, maxCandidates } = req.body || {};
+
+      const candidatesResult = await this.rideRequestService.searchCandidatesForRequest(
+        requestId,
+        clientId,
+        {
+          radiusKm: radiusKm !== undefined ? Number(radiusKm) : undefined,
+          maxCandidates: maxCandidates !== undefined ? Number(maxCandidates) : undefined
+        }
+      );
+
+      res.status(200).json(candidatesResult);
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
   private handleError(res: Response, error: unknown): void {
     const timestamp = new Date().toISOString();
 

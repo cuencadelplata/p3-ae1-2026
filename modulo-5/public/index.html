@@ -352,6 +352,96 @@
       color: var(--text-primary);
     }
 
+    .btn-candidate {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+      box-shadow: 0 4px 15px var(--success-glow);
+    }
+
+    .btn-candidate:hover {
+      background: linear-gradient(135deg, #059669, #047857);
+      transform: translateY(-1px);
+    }
+
+    /* Candidatos Cards (RF-5.2) */
+    .candidates-section {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .candidates-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .candidate-card {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: all 0.2s ease;
+    }
+
+    .candidate-card:hover {
+      border-color: rgba(16, 185, 129, 0.5);
+      background: rgba(16, 185, 129, 0.12);
+    }
+
+    .candidate-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .candidate-avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: rgba(16, 185, 129, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .candidate-details {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .candidate-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      font-size: 13px;
+      color: #6ee7b7;
+    }
+
+    .candidate-meta {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .candidate-stats {
+      text-align: right;
+    }
+
+    .candidate-dist {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--text-primary);
+    }
+
+    .candidate-eta {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
     /* Active Trip Card */
     .status-badge {
       display: inline-flex;
@@ -711,7 +801,33 @@
               🛑 Cancelar Viaje (PATCH)
             </button>
           </div>
+
+          <!-- Búsqueda de Candidatos (RF-5.2) -->
+          <div class="candidates-section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <span style="font-size:13px; font-weight:600; color:var(--text-primary);">🎯 Candidatos Cercanos (RF-5.2)</span>
+              <span id="candidatesCountBadge" style="font-size:11px; background:rgba(16,185,129,0.15); color:#6ee7b7; padding:2px 8px; border-radius:999px; display:none;">0 encontrados</span>
+            </div>
+            
+            <div class="form-row" style="margin-bottom: 10px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label style="font-size:11px;">Radio (km)</label>
+                <input type="number" id="searchRadiusKm" value="5" min="1" max="30" step="0.5" style="padding:8px 12px; font-size:12px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label style="font-size:11px;">Máx. Candidatos</label>
+                <input type="number" id="searchMaxCandidates" value="5" min="1" max="20" style="padding:8px 12px; font-size:12px;">
+              </div>
+            </div>
+
+            <button id="btnSearchCandidates" class="btn btn-candidate" onclick="searchCandidates()">
+              🔍 Buscar Candidatos (POST /candidates)
+            </button>
+
+            <div id="candidatesListContainer" class="candidates-list" style="display: none;"></div>
+          </div>
         </div>
+
 
         <!-- Visor de Respuesta JSON -->
         <div style="margin-top: 24px;">
@@ -863,6 +979,10 @@
       document.getElementById('emptyTripState').style.display = 'none';
       document.getElementById('activeTripDetails').style.display = 'block';
 
+      // Resetear vista de candidatos
+      document.getElementById('candidatesListContainer').style.display = 'none';
+      document.getElementById('candidatesCountBadge').style.display = 'none';
+
       const badge = document.getElementById('tripStatusBadge');
       badge.innerText = trip.status;
       badge.className = `status-badge ${trip.status}`;
@@ -942,6 +1062,76 @@
       }
     }
 
+    async function searchCandidates() {
+      if (!currentRequestId) {
+        showToast('No hay solicitud activa seleccionada', 'error');
+        return;
+      }
+
+      const clientId = document.getElementById('clientId').value.trim();
+      const radiusKm = parseFloat(document.getElementById('searchRadiusKm').value) || 5.0;
+      const maxCandidates = parseInt(document.getElementById('searchMaxCandidates').value) || 5;
+
+      const btn = document.getElementById('btnSearchCandidates');
+      btn.innerText = '⏳ Buscando candidatos en M4...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(`/api/v1/ride-requests/${currentRequestId}/candidates`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': clientId
+          },
+          body: JSON.stringify({ radiusKm, maxCandidates })
+        });
+
+        const data = await res.json();
+        document.getElementById('responseStatus').innerText = `Status: ${res.status} ${res.statusText}`;
+        document.getElementById('jsonOutput').innerText = JSON.stringify(data, null, 2);
+
+        const listContainer = document.getElementById('candidatesListContainer');
+        const badge = document.getElementById('candidatesCountBadge');
+
+        if (res.ok) {
+          showToast(`¡${data.candidatesCount} candidatos encontrados!`, 'success');
+          badge.style.display = 'inline-block';
+          badge.innerText = `${data.candidatesCount} encontrados (<= ${data.searchRadiusKm}km)`;
+
+          listContainer.innerHTML = '';
+          data.candidates.forEach((cand, idx) => {
+            const icon = cand.vehicleType === 'AUTO' ? '🚘' : '🛵';
+            const card = document.createElement('div');
+            card.className = 'candidate-card';
+            card.innerHTML = `
+              <div class="candidate-info">
+                <div class="candidate-avatar">${icon}</div>
+                <div class="candidate-details">
+                  <span class="candidate-id">#${idx + 1} ${cand.driverId}</span>
+                  <span class="candidate-meta">⭐ ${cand.rating || '5.0'} • Tipo: ${cand.vehicleType}</span>
+                </div>
+              </div>
+              <div class="candidate-stats">
+                <div class="candidate-dist">📍 ${cand.distanceKm} km</div>
+                <div class="candidate-eta">⏱️ ~${cand.estimatedEtaMinutes} min ETA</div>
+              </div>
+            `;
+            listContainer.appendChild(card);
+          });
+          listContainer.style.display = 'flex';
+        } else {
+          badge.style.display = 'none';
+          listContainer.style.display = 'none';
+          showToast(data.message || 'Error al buscar candidatos', 'error');
+        }
+      } catch (err) {
+        showToast('Error de conexión al buscar candidatos', 'error');
+      } finally {
+        btn.innerText = '🔍 Buscar Candidatos (POST /candidates)';
+        btn.disabled = false;
+      }
+    }
+
     // Inicialización
     document.getElementById('idempotencyKey').value = generateKey();
     checkHealth();
@@ -949,3 +1139,4 @@
   </script>
 </body>
 </html>
+
