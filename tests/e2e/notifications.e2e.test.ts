@@ -115,13 +115,16 @@ describe("POST /notifications E2E", () => {
 });
 
 describe("recursos públicos E2E", () => {
-  it("serves the notification UI from Docker", async () => {
+  it("serves the integrated RF-8.1 and RF-8.2 demonstration UI from Docker", async () => {
     const response = await getResource("/");
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
     const body = await response.text();
     expect(body).toContain("M8 - Notificaciones");
+    expect(body).toContain("RF-8.2 — Verificación QR");
+    expect(body).toContain("qr-generation-form");
+    expect(body).toContain("validate-qr-button");
     expect(body).toContain("/styles.css");
     expect(body).toContain("/app.js");
     expect(body).toContain("/openapi.yaml");
@@ -143,6 +146,8 @@ describe("recursos públicos E2E", () => {
     const body = await response.text();
     expect(body.length).toBeGreaterThan(0);
     expect(body).toContain("/notifications");
+    expect(body).toContain("/qr");
+    expect(body).toContain("/qr/validate");
   });
 
   it("serves the approved OpenAPI contract from Docker", async () => {

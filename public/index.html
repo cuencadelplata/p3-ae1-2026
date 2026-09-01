@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self';"
+      content="default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'; connect-src 'self';"
     />
-    <title>M8 - Notificaciones</title>
+    <title>M8 - Notificaciones y verificación QR</title>
     <link rel="stylesheet" href="/styles.css" />
     <script src="/app.js" defer></script>
   </head>
@@ -15,71 +15,119 @@
     <main class="page-shell">
       <section class="card" aria-labelledby="page-title">
         <header class="page-header">
-          <p class="eyebrow">Módulo 8</p>
-          <h1 id="page-title">M8 - Notificaciones</h1>
-          <p class="subtitle">Prueba del requerimiento RF8.1 - Envío de notificaciones</p>
+          <p class="eyebrow">Interfaz de demostración del Módulo 8</p>
+          <h1 id="page-title">M8 - Notificaciones y verificación QR</h1>
+          <p class="subtitle">Prueba aislada de RF-8.1 y RF-8.2</p>
           <p>
-            Interfaz de demostración de RF8.1. Permite simular un evento de viaje que, en la integración
-            completa, será enviado automáticamente por otro módulo.
+            Esta pantalla simula las interacciones necesarias para demostrar M8. En el sistema completo, otros módulos
+            gestionan el viaje y las interfaces de pasajeros y conductores.
           </p>
           <p class="contract-link">
             <a href="/openapi.yaml" target="_blank" rel="noopener noreferrer">Ver contrato OpenAPI</a>
           </p>
         </header>
 
-        <div class="workflow-layout">
-          <section class="simulation-panel" aria-labelledby="simulation-title">
-            <h2 id="simulation-title">Evento simulado</h2>
-            <form id="notification-form">
-              <div class="field event-field">
-                <label for="event-type">Evento</label>
-                <select id="event-type" name="eventType" required>
-                  <option value="TRIP_REQUESTED">Solicitud de viaje</option>
-                  <option value="DRIVER_ASSIGNED">Conductor asignado</option>
-                  <option value="DRIVER_ARRIVED">Conductor llegó</option>
-                  <option value="TRIP_STARTED">Viaje iniciado</option>
-                  <option value="TRIP_CANCELLED">Viaje cancelado</option>
-                  <option value="TRIP_COMPLETED">Viaje finalizado</option>
-                </select>
-              </div>
+        <section class="rf-section" aria-labelledby="notifications-title">
+          <div class="section-heading">
+            <h2 id="notifications-title">RF-8.1 — Notificaciones</h2>
+            <p>Demuestra el procesamiento de notificaciones a partir de un evento de viaje recibido por M8.</p>
+          </div>
 
-              <div class="demo-identifiers">
-                <div class="field">
-                  <label for="trip-id">Trip ID</label>
-                  <input id="trip-id" name="tripId" type="text" value="trip-demo-001" placeholder="trip-001" required />
+          <div class="workflow-layout">
+            <section class="simulation-panel" aria-labelledby="simulation-title">
+              <h3 id="simulation-title">Evento simulado</h3>
+              <form id="notification-form">
+                <div class="field event-field">
+                  <label for="event-type">Evento</label>
+                  <select id="event-type" name="eventType" required>
+                    <option value="TRIP_REQUESTED">Solicitud de viaje</option>
+                    <option value="DRIVER_ASSIGNED">Conductor asignado</option>
+                    <option value="DRIVER_ARRIVED">Conductor llegó</option>
+                    <option value="TRIP_STARTED">Viaje iniciado</option>
+                    <option value="TRIP_CANCELLED">Viaje cancelado</option>
+                    <option value="TRIP_COMPLETED">Viaje finalizado</option>
+                  </select>
+                </div>
+
+                <div class="demo-identifiers">
+                  <div class="field">
+                    <label for="trip-id">Trip ID</label>
+                    <input id="trip-id" name="tripId" type="text" value="trip-demo-001" placeholder="trip-001" required />
+                  </div>
+
+                  <div class="field">
+                    <label for="recipient-id">Recipient ID</label>
+                    <input
+                      id="recipient-id"
+                      name="recipientId"
+                      type="text"
+                      value="user-demo-001"
+                      placeholder="user-001"
+                      required
+                    />
+                  </div>
                 </div>
 
                 <div class="field">
-                  <label for="recipient-id">Recipient ID</label>
-                  <input
-                    id="recipient-id"
-                    name="recipientId"
-                    type="text"
-                    value="user-demo-001"
-                    placeholder="user-001"
-                    required
-                  />
+                  <span id="channel-label" class="field-label">Canal</span>
+                  <p class="channel" aria-labelledby="channel-label">
+                    <strong>PUSH</strong>
+                    <span>Proveedor simulado durante AE1.</span>
+                  </p>
                 </div>
-              </div>
 
-              <div class="field">
-                <span id="channel-label" class="field-label">Canal</span>
-                <p class="channel" aria-labelledby="channel-label">
-                  <strong>PUSH</strong>
-                  <span>Proveedor simulado durante AE1.</span>
-                </p>
-              </div>
+                <button id="submit-button" type="submit">Procesar evento en M8</button>
+              </form>
+            </section>
 
-              <button id="submit-button" type="submit">Procesar evento en M8</button>
-            </form>
-          </section>
+            <section class="passenger-panel" aria-labelledby="passenger-title">
+              <h3 id="passenger-title">Vista del pasajero</h3>
+              <p id="preview-empty" class="preview-empty">La vista previa aparecerá después de procesar un evento.</p>
+              <section id="result" class="result" aria-live="polite" aria-atomic="true" hidden></section>
+            </section>
+          </div>
+        </section>
 
-          <section class="passenger-panel" aria-labelledby="passenger-title">
-            <h2 id="passenger-title">Vista del pasajero</h2>
-            <p id="preview-empty" class="preview-empty">La vista previa aparecerá después de procesar un evento.</p>
-            <section id="result" class="result" aria-live="polite" aria-atomic="true" hidden></section>
-          </section>
-        </div>
+        <section class="rf-section qr-section" aria-labelledby="qr-title">
+          <div class="section-heading">
+            <h2 id="qr-title">RF-8.2 — Verificación QR</h2>
+            <p>M8 genera y valida el QR. M6 mantiene la responsabilidad sobre el ciclo de vida del viaje.</p>
+          </div>
+
+          <div class="qr-workflow-layout">
+            <section class="simulation-panel" aria-labelledby="qr-passenger-title">
+              <h3 id="qr-passenger-title">Simulación pasajero</h3>
+              <p class="panel-description">Genera el QR que otro módulo mostraría al pasajero en el sistema completo.</p>
+              <form id="qr-generation-form">
+                <div class="field">
+                  <label for="qr-trip-id">Trip ID</label>
+                  <input id="qr-trip-id" name="tripId" type="text" value="trip-demo-001" placeholder="trip-001" required />
+                </div>
+                <button id="generate-qr-button" type="submit">Generar QR</button>
+              </form>
+
+              <section class="qr-display" aria-labelledby="qr-display-title">
+                <h4 id="qr-display-title">QR temporal</h4>
+                <p id="qr-empty" class="preview-empty">Generá un QR para visualizar la demostración.</p>
+                <img id="qr-image" class="qr-image" alt="Código QR temporal generado por M8" hidden />
+                <dl id="qr-metadata" class="qr-metadata" hidden>
+                  <dt>Expira:</dt>
+                  <dd><time id="qr-expires-at"></time></dd>
+                  <dt>Expira en:</dt>
+                  <dd id="qr-countdown" aria-live="polite">--:--</dd>
+                </dl>
+              </section>
+            </section>
+
+            <section class="passenger-panel" aria-labelledby="qr-driver-title">
+              <h3 id="qr-driver-title">Simulación conductor</h3>
+              <p class="panel-description">Simula el escaneo que una interfaz de conductor realizaría mediante otro módulo.</p>
+              <button id="validate-qr-button" type="button" disabled>Validar QR</button>
+              <button id="reuse-qr-button" class="secondary-button" type="button" hidden>Probar reutilización</button>
+              <section id="qr-result" class="result" aria-live="polite" aria-atomic="true" hidden></section>
+            </section>
+          </div>
+        </section>
       </section>
     </main>
   </body>

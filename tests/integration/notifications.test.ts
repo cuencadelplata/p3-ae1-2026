@@ -210,13 +210,18 @@ describe("POST /notifications", () => {
 });
 
 describe("recursos públicos", () => {
-  it("serves the notification UI", async () => {
+  it("serves the integrated RF-8.1 and RF-8.2 demonstration UI", async () => {
     const response = await request(app).get("/");
 
     expect(response.status).toBe(200);
     expect(response.headers["content-type"]).toContain("text/html");
     expect(response.text).toContain("M8 - Notificaciones");
     expect(response.text).toContain("notification-form");
+    expect(response.text).toContain("RF-8.2 — Verificación QR");
+    expect(response.text).toContain("qr-generation-form");
+    expect(response.text).toContain("qr-image");
+    expect(response.text).toContain("qr-countdown");
+    expect(response.text).toContain("validate-qr-button");
     expect(response.text).toContain("/styles.css");
     expect(response.text).toContain("/app.js");
     expect(response.text).toContain("/openapi.yaml");
@@ -237,6 +242,8 @@ describe("recursos públicos", () => {
     expect(response.headers["content-type"]).toContain("javascript");
     expect(response.text.length).toBeGreaterThan(0);
     expect(response.text).toContain("/notifications");
+    expect(response.text).toContain("/qr");
+    expect(response.text).toContain("/qr/validate");
   });
 
   it("serves the approved OpenAPI contract", async () => {

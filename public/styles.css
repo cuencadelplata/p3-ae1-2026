@@ -72,7 +72,38 @@ h1 {
   outline-offset: 2px;
 }
 
+.rf-section {
+  padding-top: 1.75rem;
+  border-top: 1px solid #d9e0ee;
+}
+
+.rf-section + .rf-section {
+  margin-top: 2rem;
+}
+
+.section-heading {
+  margin-bottom: 1.25rem;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: clamp(1.35rem, 3vw, 1.6rem);
+}
+
+.section-heading p,
+.panel-description {
+  margin: 0.45rem 0 0;
+  color: #4b5870;
+  line-height: 1.5;
+}
+
 .workflow-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 1.5rem;
+}
+
+.qr-workflow-layout {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: 1.5rem;
@@ -95,7 +126,9 @@ h1 {
 }
 
 .simulation-panel h2,
-.passenger-panel h2 {
+.passenger-panel h2,
+.simulation-panel h3,
+.passenger-panel h3 {
   margin: 0 0 1.25rem;
   font-size: 1.25rem;
 }
@@ -183,6 +216,17 @@ button:disabled {
   opacity: 0.7;
 }
 
+.secondary-button {
+  margin-top: 0.75rem;
+  color: #075bb5;
+  background: #ffffff;
+  border-color: #075bb5;
+}
+
+.secondary-button:hover:not(:disabled) {
+  color: #ffffff;
+}
+
 .result {
   margin-top: 1rem;
   padding: 1rem;
@@ -202,9 +246,15 @@ button:disabled {
   border-color: #b43742;
 }
 
-.result h3 {
+.result h3,
+.result h4 {
   margin: 0;
   font-size: 1.1rem;
+}
+
+.result p {
+  margin: 0.65rem 0 0;
+  line-height: 1.5;
 }
 
 .preview-empty {
@@ -264,18 +314,21 @@ button:disabled {
   outline-offset: 2px;
 }
 
-.result dl {
+.result dl,
+.qr-metadata {
   display: grid;
   grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
   gap: 0.55rem 1rem;
   margin: 1rem 0 0;
 }
 
-.result dt {
+.result dt,
+.qr-metadata dt {
   font-weight: 700;
 }
 
-.result dd {
+.result dd,
+.qr-metadata dd {
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
@@ -286,20 +339,50 @@ button:disabled {
   padding-left: 1.25rem;
 }
 
+.qr-display {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #d9e0ee;
+}
+
+.qr-display h4 {
+  margin: 0 0 0.75rem;
+}
+
+.qr-image {
+  display: block;
+  width: min(100%, 16rem);
+  aspect-ratio: 1;
+  margin: 1rem auto;
+  padding: 0.5rem;
+  background: #ffffff;
+  border: 1px solid #8995aa;
+  border-radius: 0.4rem;
+}
+
+.qr-metadata {
+  padding: 0.85rem;
+  background: #ffffff;
+  border: 1px solid #d9e0ee;
+  border-radius: 0.4rem;
+}
+
 @media (max-width: 30rem) {
   .page-shell {
     width: min(100% - 1rem, 44rem);
     padding: 0.5rem 0;
   }
 
-  .result dl {
+  .result dl,
+  .qr-metadata {
     grid-template-columns: 1fr;
     gap: 0.2rem;
   }
 }
 
 @media (max-width: 48rem) {
-  .workflow-layout {
+  .workflow-layout,
+  .qr-workflow-layout {
     grid-template-columns: 1fr;
   }
 }
