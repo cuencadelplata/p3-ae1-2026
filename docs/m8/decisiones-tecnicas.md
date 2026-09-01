@@ -22,6 +22,8 @@ RF-8.2 reutilizará la infraestructura compartida de M8 cuando corresponda:
 
 No reutilizará componentes propios del dominio de notificaciones, como `NotificationService`, `PushProvider` o `MockPushProvider`.
 
+Las rutas de QR se montan mediante `registerQrRoutes(app)` (`qr.controller.ts`), pasado explícitamente a `createApp(registerQrRoutes)` desde `server.ts`, en vez de hardcodear el router dentro de `app.ts`. `createApp` ya expone un parámetro `registerRoutes` pensado exactamente para esto: si RF-8.2 hubiera montado su router directamente en `app.ts`, RF-8.1 habría necesitado tocar la misma línea para montar el suyo, generando un conflicto de merge evitable. `app.ts` queda sin ninguna referencia a QR.
+
 ## Stack
 
 RF-8.2 mantiene la base tecnológica ya adoptada por M8:
@@ -65,13 +67,21 @@ token → tripId
 
 El QR no codificará directamente `tripId`, identificadores de usuarios, datos personales, origen, destino, información financiera, credenciales ni información completa del viaje.
 
-El token se generará mediante mecanismos criptográficamente seguros de `node:crypto`. No se utilizarán `Math.random()`, identificadores secuenciales ni valores construidos con información predecible del viaje.
+El token se genera con `crypto.randomBytes(32)` (256 bits de entropía) codificado en base64url (`Buffer.toString("base64url")`). El tamaño de 32 bytes es una elección conservadora: excede holgadamente lo necesario para un token de un solo uso con vigencia corta (minutos, según `QR_TTL_SECONDS`), y el costo adicional en el tamaño del QR resultante es irrelevante. Se prefirió base64url sobre hex (duplicaría el largo del token sin necesidad) y sobre base64 estándar (usa `+`, `/` y padding `=`, no aptos sin escape en una URL); el resultado son 43 caracteres alfanuméricos más `-`/`_`, sin padding. No se utilizó `Math.random()`, identificadores secuenciales ni valores construidos con información predecible del viaje.
 
 ## Representación QR
 
-RF-8.2 debe producir una representación QR real, no solo un string denominado QR. Es probable que sea necesaria una dependencia pequeña y específica para transformar el token opaco en una imagen o Data URL QR.
+RF-8.2 produce una representación QR real, no solo un string denominado QR. Se agregó `qrcode` (npm) exclusivamente para esta responsabilidad.
 
-La dependencia concreta no se elige ni instala en esta etapa. Antes de incorporarla se evaluarán mantenimiento, compatibilidad con TypeScript, alcance y necesidad real. La generación del token y las reglas de negocio seguirán siendo responsabilidad de M8.
+Se evaluó también `qrcode-generator` como alternativa, más liviana y con tipos de TypeScript propios. No se eligió porque su método de generación de Data URL produce un GIF (`data:image/gif;base64,...`), verificado en el código fuente publicado de la librería, no un PNG — no cumple el pattern `^data:image/png;base64,` que exige el schema `QrDataUrl` del contrato. Adaptarla habría implicado tomar su matriz QR cruda y escribir un encoder PNG propio, lo cual contradice el criterio de usar una dependencia específica y de alcance reducido en lugar de reimplementar lo que ya resuelve una biblioteca madura.
+
+`qrcode` no trae sus propios tipos de TypeScript; se agregó `@types/qrcode` como dependencia de desarrollo. No tiene dependencias nativas ni binarios; sus dependencias transitivas (`pngjs`, `dijkstrajs`, `yargs`) son JavaScript puro.
+
+El nivel de corrección de errores (`errorCorrectionLevel`) se fija explícitamente en `"M"` en la llamada a `qrcode`, en vez de dejarlo implícito en el valor por defecto de la librería, para que la elección quede documentada en el propio código y no dependa de conocer el comportamiento por defecto de una versión particular de la dependencia.
+
+La generación del token y las reglas de negocio siguen siendo responsabilidad de M8; `qrcode` solo transforma el token ya generado en una imagen.
+
+`jsqr` y `pngjs` se agregaron como `devDependencies` exclusivas de test (no entran en la imagen de producción), para verificar por decodificación real que el QR generado contiene únicamente el token opaco.
 
 ## Temporalidad y configuración
 
@@ -90,7 +100,7 @@ El modelo conceptual mínimo de un QR es:
 - `expiresAt`;
 - `usedAt`.
 
-No constituye todavía un esquema de base de datos. Se prefiere conservar `SHA-256(token)`, calculado con `node:crypto`, en lugar del token original cuando resulte razonable. No se agregará una dependencia externa para hashing.
+No constituye todavía un esquema de base de datos. Se conserva `SHA-256(token)` en lugar del token original: `crypto.createHash("sha256").update(token).digest("hex")`, representado como 64 caracteres hexadecimales. No se agregó ninguna dependencia externa para hashing. El `id` del registro se genera con `crypto.randomUUID()`, nativo de Node, sin agregar dependencias.
 
 M8 no deberá persistir innecesariamente el token original en texto plano. Cuando resulte razonable, conservará internamente únicamente su hash.
 
@@ -106,11 +116,19 @@ No se incorporarán PostgreSQL, Redis ni otra base de datos únicamente para RF-
 
 ## Uso único y concurrencia
 
-Una validación exitosa consume el QR. Una segunda validación debe fallar.
+Una validación exitosa consume el QR. Una segunda validación falla.
 
-La comprobación de vigencia, asociación con el viaje, uso previo y marcado como utilizado formarán una única operación lógica. Dos solicitudes concurrentes sobre el mismo QR no pueden terminar ambas exitosamente.
+La comprobación de vigencia, asociación con el viaje, uso previo y marcado como utilizado forman una única operación lógica (`consumeIfValid`, en el store), que evalúa las condiciones en este orden de precedencia porque los casos pueden solaparse:
 
-Para AE1, con una única instancia Node.js y almacenamiento en memoria, se aplicará la solución más simple que preserve esa propiedad. No se diseñará todavía una solución distribuida ni se incorporará Redis para anticipar etapas posteriores.
+`NOT_FOUND` → `TRIP_MISMATCH` → `ALREADY_USED` → `EXPIRED`
+
+Un QR ya utilizado y además vencido se reporta como `ALREADY_USED`, no como `EXPIRED`: el consumo es definitivo y es la causa más precisa. Hacia afuera, `TRIP_MISMATCH` se expone con el mismo código que un token inexistente, `404 QR_NOT_FOUND`, para no revelar que el token existe pero pertenece a otro viaje.
+
+El vencimiento es inclusivo: un QR se considera vencido cuando `now >= expiresAt`, no solo cuando `now > expiresAt`.
+
+Para AE1, con una única instancia Node.js y almacenamiento en memoria, la atomicidad se garantiza por diseño: `consumeIfValid` es completamente síncrona, sin `await` ni callback entre la comprobación de estado y la marca de `usedAt`. Como Node ejecuta JavaScript en un único hilo, una función síncrona corre hasta el final sin que otra solicitud pueda intercalarse en el medio; no existe ventana de carrera posible dentro de esa función. Esta garantía se verificó de forma directa: se rompió deliberadamente la atomicidad de manera temporal (haciendo la función asíncrona con un punto de cesión antes de marcar `usedAt`) y el test de concurrencia HTTP detectó la rotura de inmediato (10 de 10 validaciones concurrentes exitosas en vez de 1 de 10); el cambio se revirtió por completo antes de continuar.
+
+Esta garantía es válida específicamente para este diseño — una sola instancia, estado en memoria, sección crítica sin puntos de cesión — y no se generaliza sola. Si en una etapa posterior el store pasa a una base de datos o el servicio corre en múltiples instancias, la misma propiedad deberá resolverse explícitamente con transacciones o una operación de actualización condicional (por ejemplo, un `UPDATE ... WHERE usedAt IS NULL` o equivalente), no asumirse por herencia del diseño actual de AE1.
 
 ## Errores y validación
 
@@ -126,7 +144,15 @@ RF-8.2 reutilizará `ApiError`, `errorHandler` y el formato de error de M8:
 }
 ```
 
-El contrato definirá categorías para entrada inválida, contenido no soportado, QR inexistente, asociación incorrecta, vencimiento, uso previo y error interno. Los códigos HTTP y el catálogo final se cerrarán en la especificación funcional y OpenAPI.
+El contrato define categorías para entrada inválida, contenido no soportado, QR inexistente, asociación incorrecta, vencimiento, uso previo y error interno, cerradas en `docs/api/openapi.yaml`.
+
+### Capas y manejo de errores
+
+El store (`qr.store.ts`) devuelve únicamente valores de dominio neutros (`NOT_FOUND`, `TRIP_MISMATCH`, `ALREADY_USED`, `EXPIRED`, `OK`), sin ningún conocimiento de HTTP. El service (`qr.service.ts`) traduce esos valores directamente a `ApiError` y los lanza; no hay una capa intermedia de resultado neutro entre el service y el controller. El store necesita mantenerse desacoplado de HTTP porque no es su responsabilidad, pero el service es exactamente la capa cuyo trabajo es traducir dominio a contrato HTTP: agregar ahí un tercer tipo de resultado, solo para que el controller lo vuelva a traducir a `ApiError`, habría sido la capa adicional que este mismo documento pide evitar cuando no resuelve un problema real.
+
+### Desajuste conocido con el errorHandler compartido
+
+`errorHandler` (compartido con RF-8.1) devuelve `INTERNAL_SERVER_ERROR` para cualquier error no controlado que no sea `ApiError` ni un JSON malformado — código que no forma parte del enum `ErrorCode` de `docs/api/openapi.yaml`, el cual solo define `QR_PROCESSING_ERROR` (y `NOTIFICATION_PROCESSING_ERROR` para RF-8.1) para el caso 500. RF-8.2 evita depender de ese fallback genérico: el único punto real de fallo inesperado en la generación (la llamada a `qrcode`) se envuelve explícitamente en `ApiError(500, "QR_PROCESSING_ERROR", ...)`. El desajuste en sí — que `errorHandler` no sepa producir un código del enum ante un error verdaderamente no anticipado — no se resolvió en este bloque porque `errorHandler` es un archivo compartido con RF-8.1; queda pendiente para resolverse en conjunto al integrar ambos requerimientos.
 
 ## Testing
 
