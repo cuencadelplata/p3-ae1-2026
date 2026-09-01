@@ -1,4 +1,4 @@
-import { VehiculoParaInsertar } from "./vehiculo.js";
+import { type VehiculoParaInsertar } from "./vehiculo.js";
 
 // Fila tal como la espera la tabla 'vehiculos' de Supabase (columnas snake_case)
 export interface VehiculoRow {
