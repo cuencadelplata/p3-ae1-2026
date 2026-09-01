@@ -115,14 +115,19 @@ export class Viaje {
       throw new Error('No se puede cancelar un viaje ya finalizado');
     }
 
+    if (!data.motivo || data.motivo.trim().length === 0) {
+      throw new Error('El motivo de cancelación es obligatorio');
+    }
+
+    const motivo = data.motivo.trim();
     const estadoAnterior = this.estado;
     this.estado = 'cancelado';
-    this.motivoCancelacion = data.motivo;
+    this.motivoCancelacion = motivo;
     this.cargoCancelacion = data.cargo ?? 0;
     this.registrarTransicion(
       estadoAnterior,
       this.estado,
-      `Cancelación por cliente: ${data.motivo}`,
+      `Cancelación por cliente: ${motivo}`,
     );
   }
 }
