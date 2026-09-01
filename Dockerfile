@@ -23,6 +23,8 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --prod --frozen-lockfile
 
 COPY --chown=node:node --from=build /app/dist ./dist
+COPY --chown=node:node public ./public
+COPY --chown=node:node docs/api/openapi.yaml ./docs/api/openapi.yaml
 
 EXPOSE 3000
 
