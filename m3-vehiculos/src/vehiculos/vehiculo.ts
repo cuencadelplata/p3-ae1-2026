@@ -67,9 +67,12 @@ export function validarVehiculo(datos: VehiculoDatos): void {
   }
 }
 
-// instanciar vehículo
-export function crearVehiculo(datos: VehiculoDatos): Vehiculo {
+// ex crearvehiculo ahora si -> listo para insertar en supabase (valida antes)
+export function prepararVehiculoParaInsertar(
+  datos: VehiculoDatos,
+): VehiculoParaInsertar {
   validarVehiculo(datos);
+
 
   return {
     id: `veh-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
