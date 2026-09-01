@@ -1,9 +1,8 @@
 import type { ErrorRequestHandler, Response } from "express";
 
-import type { ErrorResponse } from "../notifications/notification.types";
-import { ApiError } from "./api-error";
+import { ApiError, type ErrorResponse } from "./api-error";
 
-function isMalformedJsonError(error: unknown): boolean {
+export function isMalformedJsonError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) {
     return false;
   }
@@ -16,11 +15,7 @@ function isMalformedJsonError(error: unknown): boolean {
   );
 }
 
-function sendError(
-  response: Response,
-  status: number,
-  body: ErrorResponse,
-): void {
+function sendError(response: Response, status: number, body: ErrorResponse): void {
   response.status(status).json(body);
 }
 
@@ -49,8 +44,8 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
 
   sendError(response, 500, {
     error: {
-      code: "NOTIFICATION_PROCESSING_ERROR",
-      message: "No fue posible procesar la notificación.",
+      code: "INTERNAL_SERVER_ERROR",
+      message: "No fue posible procesar la solicitud.",
     },
   });
 };

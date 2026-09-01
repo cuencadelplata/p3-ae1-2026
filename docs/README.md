@@ -1,75 +1,27 @@
 # Documentación del proyecto
 
-Esta carpeta contiene la documentación utilizada para el desarrollo del proyecto AE1 de Paradigmas III.
+Esta carpeta contiene la documentación del servicio M8 del Grupo 6 para AE1 de Paradigmas III.
 
-## Prioridad de documentación
+## Prioridad documental
 
-En caso de existir diferencias entre documentos, utilizar el siguiente orden de prioridad:
+Ante contradicciones, prevalece el material oficial de la cátedra:
 
-1. `references/ISI-Paradigmas3-AE1-Escenario-MovilidadUrbana-2026.pdf`
-   Documento oficial de la cátedra y principal fuente de requerimientos.
+1. [Escenario oficial](references/ISI-Paradigmas3-AE1-Escenario-MovilidadUrbana-2026.pdf)
+2. [Sprint 1](references/Sprint1-AE1-30_08.pdf)
+3. [Alcance M8](m8/alcance-m8.md)
+4. [Decisiones técnicas](m8/decisiones-tecnicas.md)
+5. Especificaciones funcionales RF-8.1 y RF-8.2
+6. [Contrato OpenAPI](api/openapi.yaml)
 
-2. `references/Sprint1-AE1-30_08.pdf`
-   Contiene las decisiones actuales tomadas para el desarrollo del Módulo 8.
+## M8 integrado — Grupo 6
 
-3. `m8/alcance-m8.md`
-   Define el alcance actual del Módulo 8 y del Grupo 6.
+- [Alcance M8](m8/alcance-m8.md): responsabilidades, límites y alcance AE1 del servicio integrado.
+- [Decisiones técnicas](m8/decisiones-tecnicas.md): arquitectura, configuración, pruebas y Docker.
+- [RF-8.1 — Notificaciones de viaje](m8/rf81-notificaciones.md).
+- [RF-8.2 — QR de verificación](m8/rf82-qr.md).
+- [OpenAPI](api/openapi.yaml): fuente de verdad del contrato HTTP de `POST /notifications`, `POST /qr` y `POST /qr/validate`.
+- [Guía de entrega AE1](m8/entrega-ae1.md): comandos reproducibles y evidencias verificadas.
 
-4. `m8/entrega-ae1.md`
-   Define los entregables y evidencias requeridas para la entrega actual.
+## Referencias
 
-5. `m8/decisiones-tecnicas.md`
-   Registra las decisiones técnicas adoptadas para la implementación.
-
-6. `m8/rf81-notificaciones.md`
-   Define específicamente el alcance y contrato de RF-8.1.
-
-Los demás documentos ubicados en `references/` se utilizan como material complementario e histórico.
-
-## Módulo actual
-
-M8 — Notificaciones, Documentos y Soporte.
-
-Grupo 6:
-
-- RF-8.1 — Notificaciones de viaje.
-- RF-8.2 — QR de verificación.
-
-Responsables:
-
-- Juan Martin Invaldi — RF-8.1.
-- Goya Bautista — RF-8.2.
-
-## Branches de trabajo
-
-RF-8.1:
-
-`feature/m8-r81-notifications-grupo6`
-
-RF-8.2:
-
-`feature/m8-r82-qr-grupo6`
-
-Cada requerimiento deberá desarrollarse únicamente dentro de su branch correspondiente.
-
-No realizar cambios ni commits directamente sobre `main`.
-
-## Forma de trabajo
-
-El desarrollo seguirá un enfoque Design-First / Contract-First.
-
-Primero se definirán y revisarán los contratos de la API mediante OpenAPI.
-
-Luego se realizará la implementación respetando dichos contratos.
-
-Antes de realizar cambios en el proyecto también deberán consultarse las instrucciones definidas en:
-
-`AGENTS.md`
-
-## Índice operativo
-
-- [Alcance de M8](m8/alcance-m8.md)
-- [Decisiones técnicas](m8/decisiones-tecnicas.md)
-- [RF-8.1 - Notificaciones](m8/rf81-notificaciones.md)
-- [Guía de entrega AE1](m8/entrega-ae1.md)
-- [Contrato OpenAPI de M8](api/openapi.yaml)
+El directorio [references](references) conserva las consignas y el material complementario utilizado para el desarrollo.

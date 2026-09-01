@@ -1,58 +1,64 @@
-# Decisiones técnicas - M8 Grupo 6
+# Decisiones técnicas — M8 integrado
 
-## API REST
+## Propósito
 
-El Módulo 8 se implementa como un servicio que expone una API REST. La misma API podrá incorporar los requerimientos del módulo, aunque esta branch implementa únicamente RF-8.1.
+Este documento registra la arquitectura efectiva del servicio M8 integrado del Grupo 6. El contrato HTTP aprobado se encuentra en `docs/api/openapi.yaml`.
 
-## Stack
+## Servicio único
 
-- Node.js 24 LTS.
-- TypeScript con una configuración estricta y simple.
-- Express.
-- pnpm 10.33.0 como único gestor de paquetes y `pnpm-lock.yaml` como único lockfile.
+M8 es una única aplicación Node.js 24 con TypeScript y Express. `src/app.ts` compone los endpoints, los recursos públicos de RF-8.1 y el manejo común de errores; `src/server.ts` es el único punto de arranque HTTP y obtiene `PORT` desde el entorno.
 
-TypeScript aporta tipado estático, mantenibilidad y una evolución más segura, sin introducir abstracciones no necesarias para el alcance actual.
+La estructura relevante es:
 
-## Contract-First y OpenAPI
+```text
+src/
+├── notifications/  # RF-8.1
+├── qr/             # RF-8.2
+├── shared/         # errores HTTP compartidos
+├── app.ts
+└── server.ts
+```
 
-OpenAPI es la fuente de verdad del contrato de RF-8.1. El contrato se revisa antes de implementar el endpoint y está definido en `docs/api/openapi.yaml`.
+No se crean servicios independientes para QR o notificaciones.
 
-También se expone el mismo archivo mediante `GET /openapi.yaml`. No se agregó Swagger UI: el contrato OpenAPI existente es suficiente para AE1 y no se justifican dependencias adicionales únicamente para visualizarlo.
+## RF-8.1
 
-## Organización y límites
+`src/notifications/**` contiene validación, generación del mensaje, procesamiento y el contrato `PushProvider`. La composición usa `MockPushProvider` durante AE1; ese mock reemplaza solamente al proveedor externo, no la lógica de M8.
 
-Se separan HTTP, validación y lógica de notificación. M8 no administra viajes, usuarios ni pagos, ni consulta datos de otros servicios. En AE1 las dependencias externas se representan con mocks, sin reemplazar la lógica propia de M8.
+La UI estática de demostración se sirve desde `public/`. `GET /openapi.yaml` expone el contrato para revisión local.
 
-Para RF-8.1, `PUSH` es el canal actual. M8 valida, reconoce el evento, genera el mensaje, asigna identificador y fecha y procesa el canal. `MockPushProvider` sustituye solo al proveedor PUSH externo; `PROCESSED` indica procesamiento correcto de M8, no entrega real al dispositivo. La abstracción permite incorporar EMAIL y SMS posteriormente sin alterar la lógica central.
+## RF-8.2
 
-## Interfaz de usuario
+`src/qr/**` separa validación, configuración, generación, store, service y controller. El token se genera con mecanismos criptográficamente seguros de Node.js y su relación interna se conserva mediante SHA-256 (`tokenHash`). La librería `qrcode` genera una Data URL PNG que codifica únicamente el token opaco.
 
-Para RF-8.1 se utiliza HTML, CSS y JavaScript vanilla, servidos por el mismo Express. La interfaz es pequeña y demuestra el endpoint real, por lo que un frontend separado agregaría complejidad innecesaria para este alcance: un segundo servidor, configuración CORS, dependencias frontend adicionales y un framework sin necesidad concreta. Esta es una decisión acotada a AE1, no una afirmación general sobre tecnologías frontend.
+El store en memoria usa la información mínima propia de M8: identificador, `tripId`, hash, creación, vencimiento y uso. No sustituye una persistencia futura y se pierde al reiniciar. En la única instancia Node de AE1, el consumo se realiza sin operaciones asíncronas entre comprobar y marcar el QR, preservando el uso único para solicitudes concurrentes.
 
-## Infraestructura de la entrega
+`QR_TTL_SECONDS` configura externamente la vigencia; el valor por defecto de desarrollo es 300 segundos. La configuración se valida al componer las rutas QR.
 
-La imagen se construye con un Dockerfile multi-stage basado en `node:24-alpine` y pnpm 10.33.0. El runtime instala dependencias de producción, usa `NODE_ENV=production`, se ejecuta como el usuario no privilegiado `node` y lee un `PORT` configurable.
+## Errores y contratos
 
-La imagen incluye `dist/`, `public/` y `docs/api/openapi.yaml`, por lo que sirve API, UI y contrato. No hay despliegue cloud en esta etapa.
+`src/shared/api-error.ts` define `ApiError`, `ErrorDetail` y `ErrorResponse` neutrales. `src/shared/error-handler.ts` conserva el formato uniforme, transforma JSON malformado en `VALIDATION_ERROR`, respeta errores de dominio y mantiene un fallback 500 seguro.
 
-## Testing implementado
+Cada dominio clasifica sus fallas de procesamiento: RF-8.1 usa `NOTIFICATION_PROCESSING_ERROR` y RF-8.2 usa `QR_PROCESSING_ERROR`. El fallback `INTERNAL_SERVER_ERROR` es una salvaguarda interna y no amplía el contrato OpenAPI.
 
-Vitest 4.1.11 define los proyectos `unit`, `integration` y `e2e`. Actualmente hay 53 pruebas unitarias, 38 de integración y 21 E2E Docker, para un total de 112.
+## Dependencias y herramientas
 
-- Unit: componentes aislados.
-- Integration: Express y los componentes trabajando juntos.
-- E2E: imagen Docker real consumida mediante HTTP.
+El proyecto usa pnpm 10.33.0 como único gestor. Las dependencias de ejecución son Express y `qrcode`; TypeScript, Vitest, Supertest, `jsqr`, `pngjs` y sus tipos se usan en desarrollo y pruebas.
 
-Los E2E usan `globalSetup` para construir y ejecutar Docker, fijan `PORT=3100` dentro del contenedor, obtienen un puerto de host dinámico, esperan disponibilidad HTTP y comparten la URL mediante `project.provide` e `inject`. El teardown elimina únicamente el contenedor creado por esa ejecución.
+No se agregan Redis, RabbitMQ, ORM ni base de datos para AE1.
 
-`tests/tsconfig.json` permite que los archivos de pruebas se asocien correctamente al proyecto TypeScript usado para testing y por el editor.
+## Pruebas
 
-La cobertura de unit e integration es 100% en statements, branches, functions y lines del código ejecutable incluido. `src/server.ts` se valida conductualmente mediante E2E Docker. `public/app.js` se valida mediante integración HTTP, E2E HTTP y revisión manual, no mediante el coverage V8 del backend.
+Vitest organiza los proyectos `unit`, `integration` y `e2e`. Supertest cubre los endpoints en integración. La cobertura se calcula sobre el código integrado.
 
-## Alcance diferido
+Las E2E comparten un único `globalSetup`: construye una única imagen Docker, crea un único contenedor temporal con puerto host dinámico, provee `e2eBaseUrl` y lo elimina al finalizar. Ambos RF realizan HTTP real contra ese mismo servicio; el contenedor recibe `QR_TTL_SECONDS=120` para verificar configuración QR.
 
-RabbitMQ, Redis, Firebase real, email, SMS, persistencia, observabilidad avanzada, alta disponibilidad, CI/CD de producción y despliegue cloud no se implementan en esta branch ni en AE1 para RF-8.1, salvo requerimiento posterior explícito.
+## Docker
 
-## Git
+El Dockerfile multi-stage usa Node.js 24 Alpine y pnpm 10.33.0. Instala con `--frozen-lockfile`, compila TypeScript y ejecuta en runtime solamente con dependencias de producción, `NODE_ENV=production`, usuario `node` y `node dist/server.js`.
 
-El trabajo de RF-8.1 se realiza únicamente en `feature/m8-r81-notifications-grupo6`. No se realizan commits directamente sobre `main` ni se modifican branches de otros grupos.
+La imagen copia `public/` y `docs/api/openapi.yaml`, por lo que puede servir la UI y el contrato además de los tres endpoints.
+
+## Límites
+
+M8 no integra M6 directamente ni modifica estados de viaje. No se adelantan CI/CD, despliegue cloud, observabilidad avanzada, RabbitMQ, Redis ni persistencia distribuida propios de etapas posteriores.

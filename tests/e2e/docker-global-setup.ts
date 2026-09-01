@@ -5,8 +5,9 @@ import type { TestProject } from "vitest/node";
 
 import "./vitest-context";
 
-const imageName = "m8-notifications-service:e2e";
+const imageName = "m8-service:e2e";
 const containerPort = "3100";
+const qrTtlSeconds = "120";
 const projectRoot = fileURLToPath(new URL("../../", import.meta.url));
 
 function runCommand(command: string, args: string[], stdio: "inherit" | "pipe" = "inherit") {
@@ -95,6 +96,8 @@ export default async function setup(project: TestProject) {
         containerName,
         "-e",
         `PORT=${containerPort}`,
+        "-e",
+        `QR_TTL_SECONDS=${qrTtlSeconds}`,
         "-p",
         `127.0.0.1::${containerPort}`,
         imageName,

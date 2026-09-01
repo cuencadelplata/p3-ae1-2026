@@ -1,30 +1,48 @@
-# Entrega AE1 - Grupo 6
+# Entrega AE1 — M8 integrado, Grupo 6
 
-Esta guía permite reproducir localmente la entrega de RF-8.1. RF-8.2 se desarrolla en su branch específica y no se documenta como implementado aquí.
+## Alcance entregado
 
-## Requisitos
+La entrega integra RF-8.1 — Notificaciones de viaje — y RF-8.2 — QR de verificación en un único servicio M8.
 
-- Una versión de Node.js compatible con el proyecto (el runtime de la imagen es Node.js 24 LTS).
-- pnpm 10.33.0.
-- Docker Desktop o Docker Engine para ejecutar Docker y las pruebas E2E.
+- RF-8.1: `POST /notifications`, generación de mensajes, PUSH mock y UI de demostración.
+- RF-8.2: `POST /qr`, `POST /qr/validate`, token opaco criptográfico, QR PNG real, TTL, hash SHA-256, asociación con `tripId` y uso único.
 
-## Instalación
+M8 no modifica el viaje a `EN_CURSO`; esa decisión sigue siendo responsabilidad de M6.
+
+El contrato completo y sus ejemplos están en `docs/api/openapi.yaml`.
+
+## Verificaciones ejecutadas
+
+| Verificación | Resultado |
+| --- | --- |
+| Unit | `122/122` |
+| Integration | `52/52` |
+| Unit + Integration | `174/174` |
+| E2E Docker | `22/22` |
+| Total automatizado | `196` |
+| Typecheck | OK |
+| Typecheck de tests | OK |
+| Build | OK |
+| Docker build | OK |
+
+Cobertura integrada:
+
+| Métrica | Resultado |
+| --- | --- |
+| Statements | `99.50% (199/200)` |
+| Branches | `99.02% (102/103)` |
+| Functions | `100% (38/38)` |
+| Lines | `99.50% (199/200)` |
+
+La diferencia respecto de 100% corresponde al fallback genérico seguro de `error-handler`, separado de los errores de dominio de notificaciones y QR.
+
+## Ejecución reproducible
 
 ```powershell
 pnpm install --frozen-lockfile
-```
-
-## Verificación técnica
-
-```powershell
 pnpm typecheck
 pnpm typecheck:test
 pnpm build
-```
-
-## Pruebas
-
-```powershell
 pnpm test
 pnpm test:unit
 pnpm test:integration
@@ -32,124 +50,23 @@ pnpm test:coverage
 pnpm test:e2e
 ```
 
-Resultados actuales:
+`pnpm test:e2e` construye una imagen M8, inicia un único contenedor temporal con puerto host dinámico y lo elimina al finalizar. Los flujos E2E verifican notificaciones, UI, recursos públicos, OpenAPI y el ciclo QR generar → validar → reutilizar.
 
-| Suite | Resultado |
-| --- | --- |
-| Unit | 53/53 |
-| Integration | 38/38 |
-| Unit + Integration | 91/91 |
-| E2E Docker | 21/21 |
-| Total automatizado | 112 |
-| Coverage (unit + integration) | 100% |
+## Docker integrado
 
-## Ejecución local
+La imagen única incluye el backend, la UI de RF-8.1 y el contrato OpenAPI.
 
 ```powershell
-pnpm dev
+docker build -t m8-service:local .
+docker run --rm -e PORT=3000 -e QR_TTL_SECONDS=300 -p 3010:3000 m8-service:local
 ```
 
-El puerto predeterminado es `3000`. Recursos locales:
+`PORT` y `QR_TTL_SECONDS` se configuran externamente. Para E2E, el contenedor recibe `QR_TTL_SECONDS=120` y un puerto host dinámico.
 
-- UI: <http://127.0.0.1:3000/>
-- OpenAPI: <http://127.0.0.1:3000/openapi.yaml>
-- API: `POST http://127.0.0.1:3000/notifications`
+## Límites declarados
 
-El puerto se configura externamente mediante `PORT`. En Windows PowerShell:
-
-```powershell
-$env:PORT=3001
-pnpm dev
-Remove-Item Env:PORT
-```
-
-Ejemplo de cuerpo para `POST /notifications`:
-
-```json
-{
-  "tripId": "trip-001",
-  "recipientId": "user-001",
-  "eventType": "DRIVER_ASSIGNED",
-  "channels": ["PUSH"]
-}
-```
-
-El cliente no envía `message`: M8 lo genera a partir del evento.
-
-## Docker local
-
-```powershell
-docker build -t m8-notifications-service:local .
-docker run --rm -e PORT=3000 -p 3010:3000 m8-notifications-service:local
-```
-
-Con ese ejemplo, los recursos están disponibles en:
-
-- UI: <http://127.0.0.1:3010/>
-- OpenAPI: <http://127.0.0.1:3010/openapi.yaml>
-- API: `POST http://127.0.0.1:3010/notifications`
-
-`3010` es solo un puerto de host de ejemplo; puede reemplazarse por cualquier puerto libre.
-
-## E2E Docker
-
-`pnpm test:e2e` realiza automáticamente estos pasos:
-
-1. construye la imagen E2E;
-2. crea un contenedor;
-3. configura `PORT=3100` dentro del contenedor;
-4. obtiene un puerto de host dinámico;
-5. espera la disponibilidad HTTP;
-6. ejecuta pruebas black-box mediante HTTP;
-7. elimina el contenedor creado por esa ejecución.
-
-## Test Explorer
-
-Los proyectos Vitest `unit`, `integration` y `e2e` también pueden ejecutarse desde una IDE compatible con Vitest/Test Explorer. Al elegir un E2E, el `globalSetup` levanta Docker y el teardown realiza la limpieza. Los comandos `pnpm` son la referencia reproducible independiente de la IDE.
-
-## Estado actual de entrega
-
-| Elemento | Estado |
-| --- | --- |
-| Contrato OpenAPI | Completado |
-| POST /notifications | Completado |
-| UI GET / | Completado |
-| OpenAPI GET /openapi.yaml | Completado |
-| Mock PUSH | Completado |
-| Unit tests | 53/53 |
-| Integration tests | 38/38 |
-| E2E Docker | 21/21 |
-| Total automatizado | 112 |
-| Coverage U+I | 100% |
-| Docker local | Validado |
-| Test Explorer | Validado |
-| Docker Hub | Pendiente |
-
-## Publicación Docker Hub
-
-Estado: pendiente de la publicación final.
-
-Después de los commits definitivos se deberá:
-
-1. confirmar el usuario y repositorio de Docker Hub;
-2. ejecutar `docker login`;
-3. etiquetar la imagen definitiva;
-4. ejecutar `docker push`;
-5. verificar la publicación;
-6. registrar el tag y digest como evidencia.
-
-No se ejecutan hoy `docker login`, etiquetado de publicación ni `docker push`.
-
-## Evidencia Git existente
-
-Los commits existentes vinculados con RF-8.1 son:
-
-- `dec819d` docs(m8): add project context and RF-8.1 guidelines
-- `666383f` docs(m8): finalize RF-8.1 contract and AE1 scope
-- `a7a1e17` chore(m8): initialize TypeScript Express service
-- `e679e39` feat(m8): add RF-8.1 notification types and validation
-- `3ae328e` feat(m8): implement RF-8.1 notification service
-- `2fe463c` feat(m8): expose RF-8.1 notifications endpoint
-- `c937e0d` test(m8): add RF-8.1 unit and integration tests
-- `70f512c` build(m8): containerize RF-8.1 service
-- `91c37f6` test(m8): integrate Docker E2E with Vitest projects
+- No hay integración real con M6; `tripId` es la referencia externa mínima.
+- PUSH usa un proveedor simulado en AE1; no confirma entrega en un dispositivo.
+- El almacenamiento QR es temporal en memoria; no existe base de datos, Redis ni RabbitMQ.
+- No se implementan EMAIL, SMS, historial de notificaciones, autenticación propia, pagos, usuarios ni otros RF de M8.
+- GitHub Actions CI y publicación en Docker Hub todavía no fueron realizadas.

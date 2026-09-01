@@ -1,6 +1,7 @@
 import type { RequestHandler } from "express";
 
 import { ApiError } from "../shared/api-error";
+import { isMalformedJsonError } from "../shared/error-handler";
 import { processNotification } from "./notification.service";
 import { validateNotificationRequest } from "./notification.validator";
 import type { PushProvider } from "./push-provider";
@@ -28,7 +29,21 @@ export function createProcessNotificationController(
       );
     }
 
-    const notification = await processNotification(validation.data, pushProvider);
+    let notification;
+
+    try {
+      notification = await processNotification(validation.data, pushProvider);
+    } catch (error) {
+      if (isMalformedJsonError(error)) {
+        throw error;
+      }
+
+      throw new ApiError(
+        500,
+        "NOTIFICATION_PROCESSING_ERROR",
+        "No fue posible procesar la notificación.",
+      );
+    }
 
     response.status(201).json(notification);
   };
