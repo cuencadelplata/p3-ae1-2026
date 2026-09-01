@@ -1,0 +1,10 @@
+services:
+  m4-location:
+    build: .
+    image: segocodee/p3-m4-ubicacion:latest
+    ports:
+      - "3004:3004"
+    environment:
+      PORT: 3004
+      LOCATION_TTL_SECONDS: 60
+    restart: unless-stopped

@@ -28,6 +28,23 @@ npm test
 
 El TTL predeterminado es de 60 segundos y se puede cambiar con `LOCATION_TTL_SECONDS`.
 
+## Docker
+
+Construir y ejecutar directamente:
+
+```bash
+docker build -t p3-m4-ubicacion .
+docker run --rm -p 3004:3004 p3-m4-ubicacion
+```
+
+También se puede iniciar con Compose:
+
+```bash
+docker compose up --build
+```
+
+La imagen incluye un healthcheck que consulta `GET /health`. La versión publicada se encuentra en `segocodee/p3-m4-ubicacion`.
+
 ## Ejemplo rapido
 
 ```bash
