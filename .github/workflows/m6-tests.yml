@@ -1,0 +1,36 @@
+name: M6 Viajes - Tests
+
+on:
+  push:
+    branches: [ M6-Viajes, main ]
+    paths:
+      - 'm6_viajes/**'
+      - '.github/workflows/m6-tests.yml'
+  pull_request:
+    branches: [ M6-Viajes, main ]
+    paths:
+      - 'm6_viajes/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+
+    - name: Install dependencies
+      working-directory: m6_viajes
+      run: npm ci
+
+    - name: Run unit tests
+      working-directory: m6_viajes
+      run: npm test
+
+    - name: Run E2E tests (Docker)
+      working-directory: m6_viajes
+      run: npm run test:e2e
