@@ -1,0 +1,34 @@
+{
+  "name": "p3-ae1-2026",
+  "version": "1.0.0",
+  "description": "Paradigmas 3 AE1 2026",
+  "main": "index.js",
+  "scripts": {
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "build": "tsc && node scripts/copy-assets.mjs",
+    "check": "tsc --noEmit",
+    "start": "node dist/src/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cuencadelplata/p3-ae1-2026.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/cuencadelplata/p3-ae1-2026/issues"
+  },
+  "homepage": "https://github.com/cuencadelplata/p3-ae1-2026#readme",
+  "dependencies": {
+    "express": "^5.2.1",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.13.3",
+    "@types/swagger-ui-express": "^4.1.8",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,38 @@
+services:
+  clientes:
+    build:
+      context: .
+      target: ejecucion
+
+    ports:
+      - "3000:3000"
+
+    environment:
+      PORT: "3000"
+      CLIENTE_SIMULADO: cliente-1
+      DB_PATH: /app/data/customer.sqlite
+
+    volumes:
+      - datos-clientes:/app/data
+
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/salud').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  pruebas:
+    build:
+      context: .
+      target: pruebas
+
+    profiles:
+      - pruebas
+
+volumes:
+  datos-clientes:
