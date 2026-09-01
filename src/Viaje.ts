@@ -28,6 +28,13 @@ export interface CrearViajeInput {
   distanciaKm?: number;
   metodoPago?: string;
   total?: number;
+  motivoCancelacion?: string;
+  cargoCancelacion?: number;
+}
+
+export interface CancelarPorClienteInput {
+  motivo: string;
+  cargo?: number;
 }
 
 export class Viaje {
@@ -44,6 +51,8 @@ export class Viaje {
   distanciaKm?: number;
   metodoPago?: string;
   total?: number;
+  motivoCancelacion?: string;
+  cargoCancelacion?: number;
   historialTransiciones: ViajeTransicion[];
 
   constructor(data: CrearViajeInput) {
@@ -60,6 +69,8 @@ export class Viaje {
     this.distanciaKm = data.distanciaKm;
     this.metodoPago = data.metodoPago;
     this.total = data.total;
+    this.motivoCancelacion = data.motivoCancelacion;
+    this.cargoCancelacion = data.cargoCancelacion;
     this.historialTransiciones = [];
   }
 
@@ -93,5 +104,25 @@ export class Viaje {
     const estadoAnterior = this.estado;
     this.estado = 'finalizado';
     this.registrarTransicion(estadoAnterior, this.estado, 'Finalización del viaje');
+  }
+
+  cancelarPorCliente(data: CancelarPorClienteInput): void {
+    if (this.estado === 'cancelado') {
+      throw new Error('No se puede cancelar un viaje ya cancelado');
+    }
+
+    if (this.estado === 'finalizado') {
+      throw new Error('No se puede cancelar un viaje ya finalizado');
+    }
+
+    const estadoAnterior = this.estado;
+    this.estado = 'cancelado';
+    this.motivoCancelacion = data.motivo;
+    this.cargoCancelacion = data.cargo ?? 0;
+    this.registrarTransicion(
+      estadoAnterior,
+      this.estado,
+      `Cancelación por cliente: ${data.motivo}`,
+    );
   }
 }
