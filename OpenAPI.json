@@ -1,0 +1,164 @@
+{
+
+    "openapi": "3.0.4",
+    "info": {
+        "title": "Conductores API",
+        "version": "1.0.0",
+        "description": "Esta API se utilizará para la comunicación con los conductores y los vehículos."
+    },
+"servers": [
+    {
+      "url": "http://localhost:3000/api",
+      "description": "Servidor local para realizar tests de la API"
+    }
+  ],
+  "paths": {
+    "/conductores": {
+      "get": {
+        "summary": "Listado de conductores",
+        "responses": {
+          "200": {
+            "description": "Pedir la lista completa de conductores registrados en la base de datos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conductores/{id}": {
+      "get": {
+        "summary": "Obtener un conductor por ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID del conductor a obtener",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conductor encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/conductores/{id}"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conductor no encontrado"
+          }
+        }
+      }
+    },
+     "/conductores/create": {
+      "post": {
+        "summary": "Crear un nuevo conductor",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/conductores"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Conductor creado exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/conductores"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida"
+          }
+        }
+      }
+    },
+    "/conductor/valoraciones": {
+      "get": {
+        "summary": "Obtener las valoraciones de un conductor",
+        "parameters": [
+          {
+            "name": "usuarioId",
+            "in": "query",
+            "required": true,
+            "description": "ID del conductor para obtener sus valoraciones",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "valoraciones del conductor obtenidas correctamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/valoraciones"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conductor no encontrado"
+          }
+        }
+      },
+      "post": {
+        "summary": "Registrar la valoracion de un conductor",
+        "parameters": [
+          {
+            "name": "usuarioId",
+            "in": "query",
+            "required": true,
+            "description": "ID del conductor para registrar su valoracion",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/valoraciones"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "valoracion registrada correctamente"
+          },
+          "400": {
+            "description": "Solicitud inválida"
+          }
+        }
+      }
+    }
+  }
+
+
+
+}
