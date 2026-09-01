@@ -16,6 +16,7 @@ app.get('/health', (_req, res) => {
 
 app.put('/api/v1/drivers/:driverId/location', controller.updateLocation);
 app.get('/api/v1/drivers/:driverId/location', controller.getLocation);
+app.delete('/api/v1/drivers/:driverId/location', controller.removeLocation);
 app.patch('/api/v1/drivers/:driverId/availability', controller.updateAvailability);
 app.get('/api/v1/drivers/nearby', controller.findNearby);
 app.post('/api/v1/geocode', controller.geocode);

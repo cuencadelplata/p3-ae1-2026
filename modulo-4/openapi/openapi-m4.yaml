@@ -33,6 +33,16 @@ paths:
       responses:
         '200': { description: Ubicacion vigente }
         '404': { description: No existe o vencio por TTL }
+    delete:
+      summary: Eliminar ubicacion del conductor (ej. cierre de sesion)
+      parameters:
+        - in: path
+          name: driverId
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Ubicacion eliminada }
+        '404': { description: No existe o ya vencio por TTL }
   /drivers/{driverId}/availability:
     patch:
       summary: Cambiar disponibilidad del conductor

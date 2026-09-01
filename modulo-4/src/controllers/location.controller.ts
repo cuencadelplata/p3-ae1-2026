@@ -46,6 +46,13 @@ export class LocationController {
     );
   };
 
+  public removeLocation = (req: Request, res: Response): void => {
+    this.handle(res, () => {
+      this.service.removeLocation(String(req.params.driverId));
+      return res.status(204).send();
+    });
+  };
+
   public findNearby = (req: Request, res: Response): void => {
     this.handle(res, () => {
       const query = nearbyQuerySchema.parse(req.query);

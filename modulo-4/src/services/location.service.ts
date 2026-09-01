@@ -67,6 +67,11 @@ export class LocationService {
     return location;
   }
 
+  public removeLocation(driverId: string): void {
+    this.getActiveLocation(driverId);
+    this.locations.delete(driverId);
+  }
+
   public findNearby(
     origin: Coordinates,
     vehicleType: VehicleType,
