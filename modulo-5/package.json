@@ -1,0 +1,31 @@
+{
+  "name": "p3-ae1-m5-dispatch-service",
+  "version": "1.0.0",
+  "description": "Módulo 5: Solicitud y Despacho - Plataforma de Movilidad Urbana",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "keywords": [
+    "microservices",
+    "mobility",
+    "dispatch",
+    "typescript",
+    "rest",
+    "openapi"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.19.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.9",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.2"
+  }
+}

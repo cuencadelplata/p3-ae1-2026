@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>M5: Solicitud y Despacho - Simulador de Viajes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0b0f19;
+      --bg-secondary: #131b2e;
+      --bg-card: rgba(23, 32, 54, 0.7);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --accent-primary: #3b82f6;
+      --accent-hover: #2563eb;
+      --accent-glow: rgba(59, 130, 246, 0.25);
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.2);
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --danger-glow: rgba(239, 68, 68, 0.2);
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      background-image: 
+        radial-gradient(circle at 10% 15%, rgba(59, 130, 246, 0.12) 0%, transparent 40%),
+        radial-gradient(circle at 90% 85%, rgba(139, 92, 246, 0.1) 0%, transparent 40%);
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 4px 15px var(--accent-glow);
+    }
+
+    .brand h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand p {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .health-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--success);
+    }
+
+    .health-badge.offline {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: var(--danger);
+    }
+
+    .health-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--success);
+      box-shadow: 0 0 10px var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    .health-badge.offline .health-dot {
+      background-color: var(--danger);
+      box-shadow: 0 0 10px var(--danger);
+      animation: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.85); }
+    }
+
+    /* Grid Layout */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Card */
+    .card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Preset Buttons */
+    .presets-container {
+      margin-bottom: 20px;
+    }
+
+    .presets-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .presets-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .preset-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+
+    .preset-btn:hover {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: var(--accent-primary);
+      color: var(--text-primary);
+      transform: translateY(-1px);
+    }
+
+    /* Forms */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 10px 14px;
+      background: rgba(11, 15, 25, 0.7);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-size: 14px;
+      font-family: inherit;
+      transition: all 0.2s ease;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .geo-section {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+
+    .geo-section-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+    }
+
+    /* Vehicle Selector */
+    .vehicle-selector {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .vehicle-option {
+      background: rgba(11, 15, 25, 0.7);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+
+    .vehicle-option.selected {
+      border-color: var(--accent-primary);
+      background: rgba(59, 130, 246, 0.12);
+      box-shadow: 0 0 15px var(--accent-glow);
+    }
+
+    .vehicle-option .icon {
+      font-size: 24px;
+      margin-bottom: 4px;
+    }
+
+    .vehicle-option .title {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .vehicle-option .desc {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Buttons */
+    .btn {
+      width: 100%;
+      padding: 12px 18px;
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      border: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: white;
+      box-shadow: 0 4px 15px var(--accent-glow);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      transform: translateY(-1px);
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: var(--danger);
+    }
+
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.25);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-primary);
+    }
+
+    /* Active Trip Card */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .status-badge.SEARCHING {
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      color: #60a5fa;
+    }
+
+    .status-badge.CANCELLED_BY_CLIENT {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #f87171;
+    }
+
+    .status-badge.NO_DRIVERS_AVAILABLE {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fbbf24;
+    }
+
+    .fare-card {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin: 16px 0;
+    }
+
+    .fare-amount {
+      font-size: 28px;
+      font-weight: 700;
+      color: #60a5fa;
+      margin-bottom: 4px;
+    }
+
+    .fare-details {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .fare-stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .fare-stat-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    /* Meta Details */
+    .meta-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin: 16px 0;
+      font-size: 13px;
+    }
+
+    .meta-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: var(--radius-sm);
+    }
+
+    .meta-item .label {
+      color: var(--text-secondary);
+    }
+
+    .meta-item .value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text-primary);
+      max-width: 60%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* JSON Box */
+    .json-box {
+      background: #060911;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #93c5fd;
+      max-height: 250px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .actions-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+    }
+
+    .empty-state-icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+      opacity: 0.5;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      font-weight: 500;
+      background: #1e293b;
+      color: white;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 999;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast.error {
+      background: #450a0a;
+      border-color: rgba(239, 68, 68, 0.5);
+      color: #fca5a5;
+    }
+
+    .toast.success {
+      background: #022c22;
+      border-color: rgba(16, 185, 129, 0.5);
+      color: #6ee7b7;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <div class="brand-icon">🚗</div>
+        <div>
+          <h1>Módulo 5: Solicitud y Despacho</h1>
+          <p>Simulador y Monitor de Microservicio de Movilidad Urbana</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div id="healthBadge" class="health-badge">
+          <div class="health-dot"></div>
+          <span id="healthText">Conectando...</span>
+        </div>
+        <a href="/openapi/openapi-m5.yaml" target="_blank" class="preset-btn" style="text-decoration: none;">
+          📖 Ver OpenAPI YAML
+        </a>
+      </div>
+    </header>
+
+    <!-- Main Grid -->
+    <div class="dashboard-grid">
+      
+      <!-- Panel de Solicitud -->
+      <div class="card">
+        <div class="card-title">
+          <span>✨</span>
+          <span>Crear Nueva Solicitud de Viaje</span>
+        </div>
+
+        <!-- Preajustes -->
+        <div class="presets-container">
+          <div class="presets-label">Rutas de demostración rápida</div>
+          <div class="presets-row">
+            <button class="preset-btn" onclick="applyPreset('obelisco_recoleta')">📍 Obelisco ➔ Recoleta (~2.3km)</button>
+            <button class="preset-btn" onclick="applyPreset('palermo_puerto_madero')">📍 Palermo ➔ Pto. Madero (~7.1km)</button>
+            <button class="preset-btn" onclick="applyPreset('belgrano_centro')">📍 Belgrano ➔ Centro (~8.5km)</button>
+          </div>
+        </div>
+
+        <!-- Tipo de Vehículo -->
+        <label>Tipo de Vehículo</label>
+        <div class="vehicle-selector">
+          <div id="vehAuto" class="vehicle-option selected" onclick="selectVehicle('AUTO')">
+            <div class="icon">🚘</div>
+            <div class="title">Automóvil</div>
+            <div class="desc">Base $1500 + $500/km</div>
+          </div>
+          <div id="vehMoto" class="vehicle-option" onclick="selectVehicle('MOTO')">
+            <div class="icon">🛵</div>
+            <div class="title">Moto</div>
+            <div class="desc">Base $900 + $300/km</div>
+          </div>
+        </div>
+
+        <!-- Origen -->
+        <div class="geo-section">
+          <div class="geo-section-header">
+            <span>🟢</span> Origen de partida
+          </div>
+          <div class="form-group">
+            <label>Dirección</label>
+            <input type="text" id="originAddress" value="Av. 9 de Julio y Corrientes (Obelisco)">
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="margin-bottom:0;">
+              <label>Latitud</label>
+              <input type="number" step="0.0001" id="originLat" value="-34.6037">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label>Longitud</label>
+              <input type="number" step="0.0001" id="originLng" value="-58.3816">
+            </div>
+          </div>
+        </div>
+
+        <!-- Destino -->
+        <div class="geo-section">
+          <div class="geo-section-header">
+            <span>🔴</span> Destino de llegada
+          </div>
+          <div class="form-group">
+            <label>Dirección</label>
+            <input type="text" id="destAddress" value="Av. Alvear 1891 (Recoleta)">
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="margin-bottom:0;">
+              <label>Latitud</label>
+              <input type="number" step="0.0001" id="destLat" value="-34.5885">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label>Longitud</label>
+              <input type="number" step="0.0001" id="destLng" value="-58.3974">
+            </div>
+          </div>
+        </div>
+
+        <!-- Cliente & Idempotency Key -->
+        <div class="form-row">
+          <div class="form-group">
+            <label>ID de Cliente (x-user-id)</label>
+            <input type="text" id="clientId" value="client_demo_1">
+          </div>
+          <div class="form-group">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <label style="margin:0;">Idempotency-Key</label>
+              <a href="#" onclick="generateNewKey(event)" style="font-size:11px; color:var(--accent-primary); text-decoration:none;">Nueva Clave</a>
+            </div>
+            <input type="text" id="idempotencyKey">
+          </div>
+        </div>
+
+        <button id="btnSubmit" class="btn btn-primary" onclick="createRideRequest()">
+          🚀 Solicitar Viaje (POST /api/v1/ride-requests)
+        </button>
+      </div>
+
+      <!-- Panel de Estado y Resultados -->
+      <div class="card">
+        <div class="card-title">
+          <span>📡</span>
+          <span>Estado del Viaje Activo</span>
+        </div>
+
+        <div id="emptyTripState" class="empty-state">
+          <div class="empty-state-icon">📋</div>
+          <p>No hay ninguna solicitud activa en este momento.</p>
+          <p style="font-size: 12px; margin-top: 6px;">Crea una solicitud desde el panel izquierdo para ver el despacho y cálculo tarifario en tiempo real.</p>
+        </div>
+
+        <div id="activeTripDetails" style="display: none;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size: 12px; color: var(--text-muted);">Estado Actual:</span>
+            <span id="tripStatusBadge" class="status-badge SEARCHING">SEARCHING</span>
+          </div>
+
+          <!-- Tarifa Estimada Card -->
+          <div class="fare-card">
+            <div style="font-size:12px; color:var(--text-secondary); margin-bottom:2px;">Tarifa Estimada (M7 Stub)</div>
+            <div class="fare-amount" id="fareAmount">$0 ARS</div>
+            <div class="fare-details">
+              <div>
+                <div class="fare-stat-label">Distancia</div>
+                <div class="fare-stat-value" id="fareDist">0 km</div>
+              </div>
+              <div>
+                <div class="fare-stat-label">Duración</div>
+                <div class="fare-stat-value" id="fareDur">0 min</div>
+              </div>
+              <div>
+                <div class="fare-stat-label">Vehículo</div>
+                <div class="fare-stat-value" id="fareVeh">AUTO</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Metadatos de la Solicitud -->
+          <div class="meta-list">
+            <div class="meta-item">
+              <span class="label">ID de Solicitud</span>
+              <span class="value" id="metaRequestId">-</span>
+            </div>
+            <div class="meta-item">
+              <span class="label">Cliente</span>
+              <span class="value" id="metaClientId">-</span>
+            </div>
+            <div class="meta-item">
+              <span class="label">Expiración (TTL 3m)</span>
+              <span class="value" id="metaExpiresAt">-</span>
+            </div>
+            <div class="meta-item">
+              <span class="label">Fare Token</span>
+              <span class="value" id="metaFareToken">-</span>
+            </div>
+          </div>
+
+          <!-- Botones de Acción -->
+          <div class="actions-grid">
+            <button class="btn btn-secondary" onclick="refreshCurrentTrip()">
+              🔄 Consultar Estado (GET)
+            </button>
+            <button id="btnCancelTrip" class="btn btn-danger" onclick="cancelCurrentTrip()">
+              🛑 Cancelar Viaje (PATCH)
+            </button>
+          </div>
+        </div>
+
+        <!-- Visor de Respuesta JSON -->
+        <div style="margin-top: 24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div class="presets-label" style="margin:0;">Respuesta JSON del Servidor</div>
+            <span id="responseStatus" style="font-size:11px; font-family:'JetBrains Mono'; color:var(--text-muted);">Status: -</span>
+          </div>
+          <div class="json-box" id="jsonOutput">// Las respuestas de la API aparecerán aquí...</div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <div id="toast" class="toast">Mensaje</div>
+
+  <script>
+    let currentVehicle = 'AUTO';
+    let currentRequestId = null;
+
+    const presets = {
+      obelisco_recoleta: {
+        origin: { lat: -34.6037, lng: -58.3816, address: 'Av. 9 de Julio y Corrientes (Obelisco)' },
+        destination: { lat: -34.5885, lng: -58.3974, address: 'Av. Alvear 1891 (Recoleta)' }
+      },
+      palermo_puerto_madero: {
+        origin: { lat: -34.5772, lng: -58.4265, address: 'Plaza Italia, Palermo' },
+        destination: { lat: -34.6118, lng: -58.3635, address: 'Dique 3, Puerto Madero' }
+      },
+      belgrano_centro: {
+        origin: { lat: -34.5621, lng: -58.4563, address: 'Cabildo y Juramento, Belgrano' },
+        destination: { lat: -34.6084, lng: -58.3732, address: 'Plaza de Mayo, Centro' }
+      }
+    };
+
+    function showToast(message, type = 'info') {
+      const toast = document.getElementById('toast');
+      toast.className = `toast show ${type}`;
+      toast.innerText = message;
+      setTimeout(() => {
+        toast.className = 'toast';
+      }, 3500);
+    }
+
+    function generateKey() {
+      return 'req_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString().slice(-4);
+    }
+
+    function generateNewKey(e) {
+      if (e) e.preventDefault();
+      document.getElementById('idempotencyKey').value = generateKey();
+    }
+
+    function selectVehicle(type) {
+      currentVehicle = type;
+      document.getElementById('vehAuto').classList.toggle('selected', type === 'AUTO');
+      document.getElementById('vehMoto').classList.toggle('selected', type === 'MOTO');
+    }
+
+    function applyPreset(key) {
+      const preset = presets[key];
+      if (!preset) return;
+      document.getElementById('originAddress').value = preset.origin.address;
+      document.getElementById('originLat').value = preset.origin.lat;
+      document.getElementById('originLng').value = preset.origin.lng;
+
+      document.getElementById('destAddress').value = preset.destination.address;
+      document.getElementById('destLat').value = preset.destination.lat;
+      document.getElementById('destLng').value = preset.destination.lng;
+
+      showToast('Ruta de demostración cargada', 'success');
+    }
+
+    async function checkHealth() {
+      const badge = document.getElementById('healthBadge');
+      const text = document.getElementById('healthText');
+      try {
+        const res = await fetch('/health');
+        if (res.ok) {
+          badge.classList.remove('offline');
+          text.innerText = 'Servicio ONLINE (3005)';
+        } else {
+          throw new Error();
+        }
+      } catch (err) {
+        badge.classList.add('offline');
+        text.innerText = 'Desconectado';
+      }
+    }
+
+    async function createRideRequest() {
+      const clientId = document.getElementById('clientId').value.trim();
+      const idempotencyKey = document.getElementById('idempotencyKey').value.trim();
+
+      const origin = {
+        latitude: parseFloat(document.getElementById('originLat').value),
+        longitude: parseFloat(document.getElementById('originLng').value),
+        address: document.getElementById('originAddress').value.trim()
+      };
+
+      const destination = {
+        latitude: parseFloat(document.getElementById('destLat').value),
+        longitude: parseFloat(document.getElementById('destLng').value),
+        address: document.getElementById('destAddress').value.trim()
+      };
+
+      const payload = {
+        origin,
+        destination,
+        vehicleType: currentVehicle
+      };
+
+      const btn = document.getElementById('btnSubmit');
+      btn.innerText = '⏳ Procesando despacho...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/v1/ride-requests', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': idempotencyKey,
+            'x-user-id': clientId
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        document.getElementById('responseStatus').innerText = `Status: ${res.status} ${res.statusText}`;
+        document.getElementById('jsonOutput').innerText = JSON.stringify(data, null, 2);
+
+        if (res.ok) {
+          showToast('¡Solicitud de viaje creada exitosamente!', 'success');
+          currentRequestId = data.id;
+          renderTripDetails(data);
+        } else {
+          showToast(data.message || 'Error al procesar solicitud', 'error');
+        }
+      } catch (err) {
+        showToast('Error de conexión con el servidor', 'error');
+      } finally {
+        btn.innerText = '🚀 Solicitar Viaje (POST /api/v1/ride-requests)';
+        btn.disabled = false;
+      }
+    }
+
+    function renderTripDetails(trip) {
+      document.getElementById('emptyTripState').style.display = 'none';
+      document.getElementById('activeTripDetails').style.display = 'block';
+
+      const badge = document.getElementById('tripStatusBadge');
+      badge.innerText = trip.status;
+      badge.className = `status-badge ${trip.status}`;
+
+      if (trip.estimatedFare) {
+        document.getElementById('fareAmount').innerText = `$${trip.estimatedFare.amount.toLocaleString()} ${trip.estimatedFare.currency}`;
+        document.getElementById('fareDist').innerText = `${trip.estimatedFare.estimatedDistanceKm} km`;
+        document.getElementById('fareDur').innerText = `${trip.estimatedFare.estimatedDurationMin} min`;
+        document.getElementById('fareVeh').innerText = trip.vehicleType;
+        document.getElementById('metaFareToken').innerText = trip.estimatedFare.fareToken || 'N/A';
+      }
+
+      document.getElementById('metaRequestId').innerText = trip.id;
+      document.getElementById('metaClientId').innerText = trip.clientId;
+      document.getElementById('metaExpiresAt').innerText = trip.expiresAt ? new Date(trip.expiresAt).toLocaleTimeString() : 'N/A';
+
+      const btnCancel = document.getElementById('btnCancelTrip');
+      if (trip.status === 'CANCELLED_BY_CLIENT' || trip.status === 'NO_DRIVERS_AVAILABLE') {
+        btnCancel.disabled = true;
+        btnCancel.style.opacity = '0.5';
+      } else {
+        btnCancel.disabled = false;
+        btnCancel.style.opacity = '1';
+      }
+    }
+
+    async function refreshCurrentTrip() {
+      if (!currentRequestId) return;
+      const clientId = document.getElementById('clientId').value.trim();
+
+      try {
+        const res = await fetch(`/api/v1/ride-requests/${currentRequestId}`, {
+          headers: {
+            'x-user-id': clientId
+          }
+        });
+        const data = await res.json();
+        document.getElementById('responseStatus').innerText = `Status: ${res.status} ${res.statusText}`;
+        document.getElementById('jsonOutput').innerText = JSON.stringify(data, null, 2);
+
+        if (res.ok) {
+          showToast('Estado actualizado', 'success');
+          renderTripDetails(data);
+        } else {
+          showToast(data.message || 'Error al obtener estado', 'error');
+        }
+      } catch (err) {
+        showToast('Error de red', 'error');
+      }
+    }
+
+    async function cancelCurrentTrip() {
+      if (!currentRequestId) return;
+      const clientId = document.getElementById('clientId').value.trim();
+
+      try {
+        const res = await fetch(`/api/v1/ride-requests/${currentRequestId}/cancel`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': clientId
+          },
+          body: JSON.stringify({ reason: 'Cancelado por el usuario desde la UI de prueba' })
+        });
+        const data = await res.json();
+        document.getElementById('responseStatus').innerText = `Status: ${res.status} ${res.statusText}`;
+        document.getElementById('jsonOutput').innerText = JSON.stringify(data, null, 2);
+
+        if (res.ok) {
+          showToast('Solicitud cancelada', 'success');
+          renderTripDetails(data);
+        } else {
+          showToast(data.message || 'No se pudo cancelar el viaje', 'error');
+        }
+      } catch (err) {
+        showToast('Error de red', 'error');
+      }
+    }
+
+    // Inicialización
+    document.getElementById('idempotencyKey').value = generateKey();
+    checkHealth();
+    setInterval(checkHealth, 10000);
+  </script>
+</body>
+</html>

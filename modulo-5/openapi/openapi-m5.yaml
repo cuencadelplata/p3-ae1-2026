@@ -1,0 +1,307 @@
+openapi: 3.0.3
+info:
+  title: Módulo 5 - Servicio de Solicitud y Despacho
+  description: API REST para la gestión del requerimiento RF-5.1 (Solicitud de Viaje) y flujo de asignación del sistema de movilidad urbana.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3005/api/v1
+    description: Entorno de Desarrollo Local
+paths:
+  /ride-requests:
+    post:
+      summary: Crear solicitud de viaje (RF-5.1)
+      description: Registra la solicitud del cliente indicando origen, destino y tipo de vehículo (Auto/Moto). Inicia el ciclo de búsqueda y despacho.
+      operationId: createRideRequest
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Clave de idempotencia para evitar dobles solicitudes por reintentos de red o doble click.
+          schema:
+            type: string
+            format: uuid
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRideRequestDTO'
+      responses:
+        '201':
+          description: Solicitud creada con éxito y en estado de búsqueda.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideRequestResponseDTO'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '409':
+          description: Conflicto - El cliente ya tiene una solicitud activa o se detectó colisión de idempotencia.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "ACTIVE_REQUEST_EXISTS"
+                message: "Ya existe una solicitud de viaje en curso para este cliente."
+                timestamp: "2026-09-01T14:30:00.000Z"
+        '422':
+          description: Error semántico en los datos (ej. origen idéntico a destino).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /ride-requests/{requestId}:
+    get:
+      summary: Consultar estado de solicitud de viaje
+      description: Obtiene el estado actual de la solicitud (PENDING, SEARCHING, OFFERED, ASSIGNED, CANCELLED_BY_CLIENT, EXPIRED, NO_DRIVERS_AVAILABLE).
+      operationId: getRideRequestById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+      responses:
+        '200':
+          description: Información detallada de la solicitud de viaje.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideRequestResponseDTO'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
+  /ride-requests/{requestId}/cancel:
+    patch:
+      summary: Cancelar solicitud previa a la asignación (RF-5.6)
+      description: Permite al cliente cancelar la solicitud si aún se encuentra en búsqueda o con oferta pendiente.
+      operationId: cancelRideRequest
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  example: "Demora en encontrar conductor cercano"
+      responses:
+        '200':
+          description: Solicitud cancelada correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideRequestResponseDTO'
+        '409':
+          description: Conflicto - La solicitud ya fue asignada a un conductor o completada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "CANNOT_CANCEL_ASSIGNED"
+                message: "La solicitud ya fue asignada. Para cancelaciones posteriores utilice el Módulo 6."
+                timestamp: "2026-09-01T14:32:00.000Z"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    GeoLocation:
+      type: object
+      required:
+        - latitude
+        - longitude
+        - address
+      properties:
+        latitude:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+          example: -34.603722
+        longitude:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+          example: -58.381592
+        address:
+          type: string
+          example: "Av. Corrientes 1234, CABA"
+
+    VehicleType:
+      type: string
+      enum: [AUTO, MOTO]
+      example: "AUTO"
+
+    CreateRideRequestDTO:
+      type: object
+      required:
+        - origin
+        - destination
+        - vehicleType
+      properties:
+        origin:
+          $ref: '#/components/schemas/GeoLocation'
+        destination:
+          $ref: '#/components/schemas/GeoLocation'
+        vehicleType:
+          $ref: '#/components/schemas/VehicleType'
+
+    EstimatedFare:
+      type: object
+      required:
+        - amount
+        - currency
+        - estimatedDistanceKm
+        - estimatedDurationMin
+      properties:
+        amount:
+          type: number
+          format: float
+          example: 4200.00
+        currency:
+          type: string
+          example: "ARS"
+        estimatedDistanceKm:
+          type: number
+          format: float
+          example: 6.5
+        estimatedDurationMin:
+          type: integer
+          example: 18
+
+    RideRequestResponseDTO:
+      type: object
+      required:
+        - id
+        - clientId
+        - origin
+        - destination
+        - vehicleType
+        - status
+        - estimatedFare
+        - createdAt
+        - expiresAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+        clientId:
+          type: string
+          example: "client_98124"
+        origin:
+          $ref: '#/components/schemas/GeoLocation'
+        destination:
+          $ref: '#/components/schemas/GeoLocation'
+        vehicleType:
+          $ref: '#/components/schemas/VehicleType'
+        status:
+          type: string
+          enum:
+            - PENDING
+            - SEARCHING
+            - OFFERED
+            - ASSIGNED
+            - CANCELLED_BY_CLIENT
+            - EXPIRED
+            - NO_DRIVERS_AVAILABLE
+          example: "SEARCHING"
+        estimatedFare:
+          $ref: '#/components/schemas/EstimatedFare'
+        assignedDriverId:
+          type: string
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:30:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:30:02.000Z"
+        expiresAt:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:33:00.000Z"
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+        - timestamp
+      properties:
+        code:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Error en los datos suministrados"
+        details:
+          type: array
+          items:
+            type: string
+          example: ["destination: El origen y el destino no pueden ser idénticos."]
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:30:00.000Z"
+
+  responses:
+    400BadRequest:
+      description: Parámetros inválidos en la solicitud.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    401Unauthorized:
+      description: Token de autenticación ausente o inválido.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    403Forbidden:
+      description: Acceso no autorizado para el rol o recurso solicitado.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    404NotFound:
+      description: Solicitud de viaje no encontrada.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
