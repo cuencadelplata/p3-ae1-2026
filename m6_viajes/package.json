@@ -13,11 +13,13 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^26.4.0",
+    "@types/qrcode": "^1.5.6",
     "@vitest/ui": "^4.1.11",
     "tsx": "^4.23.12",
     "typescript": "^5.0.0",

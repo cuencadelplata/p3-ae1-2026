@@ -8,7 +8,7 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
     resetViajesDb();
   });
 
-  it('debe cambiar estado a EN_CURSO si el codigo es valido', () => {
+  it('debe cambiar estado a EN_CURSO si el codigo es valido', async () => {
     // Crear un viaje
     const req1 = mockRequest({
       clienteId: 'cliente-1',
@@ -16,7 +16,7 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
       destino: 'Calle 2',
     });
     const res1 = mockResponse();
-    solicitarViaje(req1 as any, res1 as any);
+    await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
     const codigoValido = res1.data.codigoVerificacion;
 
@@ -39,7 +39,7 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
     expect(res4.data.viaje.estado).toBe('EN_CURSO');
   });
 
-  it('debe rechazar si el codigo de verificacion es inválido', () => {
+  it('debe rechazar si el codigo de verificacion es inválido', async () => {
     // Crear un viaje
     const req1 = mockRequest({
       clienteId: 'cliente-1',
@@ -47,7 +47,7 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
       destino: 'Calle 2',
     });
     const res1 = mockResponse();
-    solicitarViaje(req1 as any, res1 as any);
+    await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
 
     // Asignar conductor
@@ -69,7 +69,7 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
     expect(res4.data.error).toBe('Código de verificación inválido');
   });
 
-  it('debe rechazar si el viaje no está en estado ARRIBADO', () => {
+  it('debe rechazar si el viaje no está en estado ARRIBADO', async () => {
     // Crear un viaje sin asignar
     const req1 = mockRequest({
       clienteId: 'cliente-1',
@@ -77,7 +77,7 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
       destino: 'Calle 2',
     });
     const res1 = mockResponse();
-    solicitarViaje(req1 as any, res1 as any);
+    await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
     const codigoValido = res1.data.codigoVerificacion;
 
@@ -102,7 +102,7 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
     expect(res.data.error).toBe('Viaje no encontrado');
   });
 
-  it('debe validar codigo de forma case-sensitive', () => {
+  it('debe validar codigo de forma case-sensitive', async () => {
     // Crear un viaje
     const req1 = mockRequest({
       clienteId: 'cliente-1',
@@ -110,7 +110,7 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
       destino: 'Calle 2',
     });
     const res1 = mockResponse();
-    solicitarViaje(req1 as any, res1 as any);
+    await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
     const codigoValido = res1.data.codigoVerificacion;
 
@@ -131,6 +131,6 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
     iniciarViaje(req4 as any, res4 as any);
 
     expect(res4.statusCode).toBe(401);
-    expect(res4.data.error).toBe('Codigo de verificación invalido');
+    expect(res4.data.error).toBe('Código de verificación inválido');
   });
 });

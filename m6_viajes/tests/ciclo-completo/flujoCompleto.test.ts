@@ -8,7 +8,7 @@ describe('Ciclo Completo del Viaje', () => {
     resetViajesDb();
   });
 
-  it('debe completar el flujo: Solicitar → Asignar → Arribo → Iniciar', () => {
+  it('debe completar el flujo: Solicitar → Asignar → Arribo → Iniciar', async () => {
     // 1. Solicitar viaje
     const req1 = mockRequest({
       clienteId: 'cliente-1',
@@ -16,7 +16,7 @@ describe('Ciclo Completo del Viaje', () => {
       destino: 'Calle 2',
     });
     const res1 = mockResponse();
-    solicitarViaje(req1 as any, res1 as any);
+    await solicitarViaje(req1 as any, res1 as any);
 
     expect(res1.statusCode).toBe(201);
     expect(res1.data.estado).toBe('SOLICITADO');
@@ -49,7 +49,7 @@ describe('Ciclo Completo del Viaje', () => {
     expect(res4.data.viaje.estado).toBe('EN_CURSO');
   });
 
-  it('debe mantener datos del cliente a lo largo del ciclo', () => {
+  it('debe mantener datos del cliente a lo largo del ciclo', async () => {
     const clienteId = 'cliente-premium-123';
     const origen = 'Avenida Principal 100';
     const destino = 'Centro Comercial';
@@ -61,7 +61,7 @@ describe('Ciclo Completo del Viaje', () => {
       destino,
     });
     const res1 = mockResponse();
-    solicitarViaje(req1 as any, res1 as any);
+    await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
     const codigoValido = res1.data.codigoVerificacion;
 
@@ -94,7 +94,7 @@ describe('Ciclo Completo del Viaje', () => {
     expect(res4.data.viaje.conductorId).toBe('conductor-1');
   });
 
-  it('debe rechazar cualquier paso fuera de secuencia', () => {
+  it('debe rechazar cualquier paso fuera de secuencia', async () => {
     // 1. Solicitar viaje
     const req1 = mockRequest({
       clienteId: 'cliente-1',
@@ -102,7 +102,7 @@ describe('Ciclo Completo del Viaje', () => {
       destino: 'Calle 2',
     });
     const res1 = mockResponse();
-    solicitarViaje(req1 as any, res1 as any);
+    await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
     const codigoValido = res1.data.codigoVerificacion;
 
@@ -115,7 +115,7 @@ describe('Ciclo Completo del Viaje', () => {
     expect(res2.statusCode).toBe(400);
   });
 
-  it('debe permitir múltiples viajes simultáneamente', () => {
+  it('debe permitir múltiples viajes simultáneamente', async () => {
     // Viaje 1
     const req1 = mockRequest({
       clienteId: 'cliente-1',
@@ -123,7 +123,7 @@ describe('Ciclo Completo del Viaje', () => {
       destino: 'Calle 2',
     });
     const res1 = mockResponse();
-    solicitarViaje(req1 as any, res1 as any);
+    await solicitarViaje(req1 as any, res1 as any);
     const viajeId1 = res1.data.id;
 
     // Pequeña pausa para que Date.now() sea diferente
@@ -137,7 +137,7 @@ describe('Ciclo Completo del Viaje', () => {
       destino: 'Calle 4',
     });
     const res2 = mockResponse();
-    solicitarViaje(req2 as any, res2 as any);
+    await solicitarViaje(req2 as any, res2 as any);
     const viajeId2 = res2.data.id;
 
     // Asignar conductor a viaje 1

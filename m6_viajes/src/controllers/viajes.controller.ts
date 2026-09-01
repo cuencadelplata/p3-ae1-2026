@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import type { Viaje } from '../models/viaje.model.js';
 import { EstadoViaje } from '../models/viaje.model.js';
+import QRCode from 'qrcode';
 
 let viajesDb: Viaje[] = [];
 
@@ -9,8 +10,13 @@ export const resetViajesDb = () => {
     viajesDb = [];
 };
 
-export const solicitarViaje = (req: Request, res: Response): any => {
+export const solicitarViaje = async (req: Request, res: Response): Promise<any> => {
     const { clienteId, origen, destino } = req.body;
+    
+    const codigoVerificacion = Math.random().toString(36).substring(2, 8).toUpperCase();
+    
+    // Generar QR que seria el codigo de verificiacion
+    const qrCode = await QRCode.toDataURL(codigoVerificacion);
     
     const nuevoViaje: Viaje = {
         id: Date.now().toString(),
@@ -18,7 +24,8 @@ export const solicitarViaje = (req: Request, res: Response): any => {
         estado: EstadoViaje.SOLICITADO,
         origen,
         destino,
-        codigoVerificacion: Math.random().toString(36).substring(2, 8).toUpperCase(),
+        codigoVerificacion,
+        qrCode,
         fechaCreacion: new Date()
     };
 
@@ -41,7 +48,7 @@ export const registrarArribo = (req: Request, res: Response): any => {
     }
 
     viaje.estado = EstadoViaje.ARRIBADO;
-    return res.json({ mensaje: 'El conductor ha llegado al punto de retiro', viaje });
+    return res.json({ mensaje: 'El conductor ha arribado', viaje });
 };
 
 // Asignar conductor y cambiar a CONDUCTOR_EN_CAMINO
@@ -56,7 +63,7 @@ export const asignarConductor = (req: Request, res: Response): any => {
     }
     
     if (viaje.estado !== EstadoViaje.SOLICITADO) {
-        return res.status(400).json({ error: `Lo siento, no se puede asignar un conductor en este momento. Estado actual: ${viaje.estado}` });
+        return res.status(400).json({ error: `No puedes asignar un conductor en este momento. Estado actual: ${viaje.estado}` });
     }
     
     viaje.conductorId = conductorId;
@@ -76,11 +83,11 @@ export const iniciarViaje = (req: Request, res: Response): any => {
     }
     
     if (viaje.estado !== EstadoViaje.ARRIBADO) {
-        return res.status(400).json({ error: `Lo siento, no se puede iniciar el viaje en este momento. Estado actual: ${viaje.estado}` });
+        return res.status(400).json({ error: `No puedes iniciar el viaje en este momento. Estado actual: ${viaje.estado}` });
     }
     
     if (viaje.codigoVerificacion !== codigoVerificacion) {
-        return res.status(401).json({ error: 'Codigo de verificacion invalido' });
+        return res.status(401).json({ error: 'Código de verificación inválido' });
     }
     
     viaje.estado = EstadoViaje.EN_CURSO;

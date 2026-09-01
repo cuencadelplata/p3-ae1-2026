@@ -8,7 +8,7 @@ describe('Registrar Arribo del Conductor', () => {
     resetViajesDb();
   });
 
-  it('debe cambiar estado a ARRIBADO cuando el conductor llega', () => {
+  it('debe cambiar estado a ARRIBADO cuando el conductor llega', async () => {
     // Crear viaje
     const req1 = mockRequest({
       clienteId: 'cliente-1',
@@ -16,7 +16,7 @@ describe('Registrar Arribo del Conductor', () => {
       destino: 'Calle 2',
     });
     const res1 = mockResponse();
-    solicitarViaje(req1 as any, res1 as any);
+    await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
 
     // Asignar conductor
@@ -33,7 +33,7 @@ describe('Registrar Arribo del Conductor', () => {
     expect(res3.data.viaje.estado).toBe('ARRIBADO');
   });
 
-  it('debe rechazar si no está en estado CONDUCTOR_EN_CAMINO', () => {
+  it('debe rechazar si no está en estado CONDUCTOR_EN_CAMINO', async () => {
     // Crear viaje
     const req1 = mockRequest({
       clienteId: 'cliente-1',
@@ -41,7 +41,7 @@ describe('Registrar Arribo del Conductor', () => {
       destino: 'Calle 2',
     });
     const res1 = mockResponse();
-    solicitarViaje(req1 as any, res1 as any);
+    await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
 
     // Intentar registrar arribo sin asignar (viaje sigue en SOLICITADO)
@@ -62,7 +62,7 @@ describe('Registrar Arribo del Conductor', () => {
     expect(res.data.error).toBe('Viaje no encontrado');
   });
 
-  it('debe incluir mensaje de confirmación', () => {
+  it('debe incluir mensaje de confirmación', async () => {
     // Crear viaje
     const req1 = mockRequest({
       clienteId: 'cliente-1',
@@ -70,7 +70,7 @@ describe('Registrar Arribo del Conductor', () => {
       destino: 'Calle 2',
     });
     const res1 = mockResponse();
-    solicitarViaje(req1 as any, res1 as any);
+    await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
 
     // Asignar conductor
