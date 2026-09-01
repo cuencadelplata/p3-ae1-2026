@@ -33,7 +33,7 @@ export interface Documento {
   createdAt: Date;
 }
 
-// Validación de reglas de Documentación
+// validación de reglas de Documentación
 export function validarDocumento(datos: DocumentoDatos): void {
   if (
     !datos.driverId ||
@@ -71,7 +71,7 @@ export function validarDocumento(datos: DocumentoDatos): void {
     throw new Error("La URL del archivo es obligatoria.");
   }
 
-  // No se pueden registrar documentos vencidos
+  // no se pueden registrar documentos vencidos
   const fechaExp = new Date(datos.fechaVencimiento);
   if (isNaN(fechaExp.getTime()) || fechaExp <= new Date()) {
     throw new Error(

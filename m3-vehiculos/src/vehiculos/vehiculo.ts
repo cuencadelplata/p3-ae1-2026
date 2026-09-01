@@ -24,7 +24,7 @@ export interface Vehiculo {
   createdAt: Date;
 }
 
-// Validación de reglas de vehículo
+// validación de reglas de vehículo
 export function validarVehiculo(datos: VehiculoDatos): void {
   if (
     !datos.driverId ||
@@ -63,7 +63,7 @@ export function validarVehiculo(datos: VehiculoDatos): void {
   }
 }
 
-// Instanciar vehículo
+// instanciar vehículo
 export function crearVehiculo(datos: VehiculoDatos): Vehiculo {
   validarVehiculo(datos);
 

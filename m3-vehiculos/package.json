@@ -4,7 +4,10 @@
   "description": "Paradigmas 3 AE1 2026",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "jest"
   },
   "repository": {
     "type": "git",
@@ -32,7 +35,7 @@
     "jest": "^30.5.0",
     "nodemon": "^3.1.14",
     "supertest": "^7.2.2",
-    "ts-node-dev": "^2.0.0",
+    "tsx": "^4.23.13",
     "typescript": "^7.0.2"
   }
 }
