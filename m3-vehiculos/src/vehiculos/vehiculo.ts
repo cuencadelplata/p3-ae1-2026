@@ -3,6 +3,8 @@ export enum TipoServicio {
   MOTO = "MOTO",
 }
 
+const PATENTE_REGEX = /^([A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/;
+
 export interface VehiculoDatos {
   driverId: string;
   patente: string;
@@ -16,13 +18,15 @@ export interface Vehiculo {
   id: string;
   driverId: string;
   patente: string;
-  marca: string;
-  modelo: string;
+  marca: string | null;
+  modelo: string | null;
   anio: number;
   tipoServicio: TipoServicio;
   activo: boolean;
   createdAt: Date;
 }
+
+
 
 // validación de reglas de vehículo
 export function validarVehiculo(datos: VehiculoDatos): void {
