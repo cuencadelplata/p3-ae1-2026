@@ -1,0 +1,35 @@
+services:
+  m1-identidad-acceso:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: m1-identidad-acceso
+
+    ports:
+      - "3001:3001"
+
+    environment:
+      PORT: 3001
+      JWT_SECRET: ${JWT_SECRET:-clave-desarrollo-m1}
+
+    volumes:
+      - identity_data:/app/data
+
+    restart: unless-stopped
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3001/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  identity_data:
