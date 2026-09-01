@@ -1,7 +1,6 @@
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { errorHandler } from "./middlewares/errorHandler.js";
 
 dotenv.config();
 
@@ -24,8 +23,8 @@ app.get("/health", (_req: Request, res: Response) => {
 // app.use("/api/v1/drivers/:driverId/vehicles", vehiculoRouter);
 // app.use("/api/v1/drivers/:driverId/documents", documentoRouter);
 
-// Debe ir SIEMPRE al final, después de todas las rutas
-app.use(errorHandler);
+// no usamos errorhandler al final (osi?)
+//app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`🚀 m3-drivers corriendo en http://localhost:${PORT}`);
