@@ -1,5 +1,6 @@
 services:
   m9-reservas:
+    image: ${DOCKER_IMAGE:-m9-reservas-programadas:local}
     build:
       context: .
       dockerfile: Dockerfile
@@ -8,8 +9,8 @@ services:
       PORT: ${PORT:-3000}
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_KEY: ${SUPABASE_KEY}
-      M5_URL: ${M5_URL:-http://m5-stub:3001}
-      M7_URL: ${M7_URL:-http://m7-stub:3002}
+      M5_URL: http://m5-stub:3001
+      M7_URL: http://m7-stub:3002
       RESERVATION_JOB_INTERVAL: ${RESERVATION_JOB_INTERVAL:-*/30 * * * * *}
     ports:
       - "${PORT:-3000}:${PORT:-3000}"

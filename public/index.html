@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Interfaz de M9 para crear y administrar reservas programadas."
+    />
+    <title>M9 Reservas</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Ir al inicio de M9 Reservas">M9 Reservas</a>
+      <button class="menu-button" id="menu-button" type="button" aria-expanded="false" aria-controls="header-nav">
+        <span></span><span></span><span></span>
+        <span class="sr-only">Abrir navegación</span>
+      </button>
+      <nav class="header-nav" id="header-nav" aria-label="Navegación principal">
+        <a href="/docs/" target="_blank" rel="noreferrer">API Docs</a>
+        <a href="/health" target="_blank" rel="noreferrer">Estado del servicio</a>
+      </nav>
+    </header>
+
+    <main class="page-shell">
+      <div class="toast" id="toast" role="status" aria-live="polite" hidden>
+        <span class="toast-icon" aria-hidden="true">✓</span>
+        <p id="toast-message"></p>
+        <button id="toast-close" class="toast-close" type="button" aria-label="Cerrar notificación">×</button>
+      </div>
+
+      <div class="workspace">
+        <section class="form-panel" aria-labelledby="form-title">
+          <h1 id="form-title">Nueva reserva</h1>
+          <form id="reserva-form" novalidate>
+            <div class="field">
+              <label for="cliente-id">Cliente ID</label>
+              <input
+                id="cliente-id"
+                name="clienteId"
+                type="text"
+                autocomplete="off"
+                placeholder="UUID del cliente"
+                required
+              />
+            </div>
+
+            <div class="field">
+              <label for="origen">Origen</label>
+              <input id="origen" name="origen" type="text" placeholder="Ej. Campus Central" maxlength="500" required />
+            </div>
+
+            <div class="field">
+              <label for="destino">Destino</label>
+              <input
+                id="destino"
+                name="destino"
+                type="text"
+                placeholder="Ej. Aeropuerto Internacional"
+                maxlength="500"
+                required
+              />
+            </div>
+
+            <fieldset class="vehicle-field">
+              <legend>Vehículo</legend>
+              <label><input type="radio" name="vehiculo" value="AUTO" checked /> Auto</label>
+              <label><input type="radio" name="vehiculo" value="MOTO" /> Moto</label>
+            </fieldset>
+
+            <div class="field">
+              <label for="fecha-hora">Fecha y hora</label>
+              <input id="fecha-hora" name="fechaHoraProgramada" type="datetime-local" required />
+            </div>
+
+            <div class="form-actions">
+              <button class="primary-button" id="submit-button" type="submit">Programar reserva</button>
+              <button class="secondary-button" id="cancel-edit-button" type="button" hidden>Cancelar edición</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="reservations-panel" aria-labelledby="reservations-title">
+          <div class="list-heading">
+            <h2 id="reservations-title">Próximas reservas</h2>
+            <div class="list-controls">
+              <label for="estado-filter">Estado</label>
+              <select id="estado-filter">
+                <option value="TODOS">Todos</option>
+                <option value="PROGRAMADA">Programada</option>
+                <option value="ACTIVANDO">Activando</option>
+                <option value="ACTIVADA">Activada</option>
+                <option value="CANCELADA">Cancelada</option>
+                <option value="FALLIDA">Fallida</option>
+              </select>
+              <button class="refresh-button" id="refresh-button" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20 6v5h-5M4 18v-5h5M18.5 9A7 7 0 0 0 6.2 6.2L4 8m16 8-2.2 1.8A7 7 0 0 1 5.5 15" />
+                </svg>
+                Actualizar
+              </button>
+            </div>
+          </div>
+
+          <div class="table-frame" id="table-frame" aria-live="polite">
+            <table>
+              <thead>
+                <tr>
+                  <th>Viaje</th>
+                  <th>Fecha</th>
+                  <th>Vehículo</th>
+                  <th>Estado</th>
+                  <th>Tarifa</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="reservas-body"></tbody>
+            </table>
+          </div>
+
+          <div class="empty-state" id="empty-state" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="16" rx="2" />
+              <path d="M16 3v4M8 3v4M3 10h18" />
+            </svg>
+            <h3>No hay reservas que mostrar.</h3>
+            <p>Ajustá el filtro o creá una nueva reserva.</p>
+          </div>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

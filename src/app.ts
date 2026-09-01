@@ -1,6 +1,7 @@
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
+import path from 'node:path';
 import swaggerUi from 'swagger-ui-express';
 
 import { openApiDocument } from './docs/openapi.js';
@@ -32,6 +33,7 @@ export const createApp = ({ reservaService }: AppDependencies = {}) => {
   );
   application.use(cors());
   application.use(express.json());
+  application.use(express.static(path.resolve('public')));
 
   application.use('/health', healthRouter);
   application.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
