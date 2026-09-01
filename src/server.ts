@@ -1,6 +1,7 @@
 import { createApp } from "./app";
+import { registerQrRoutes } from "./qr/qr.controller";
 
-const app = createApp();
+const app = createApp(registerQrRoutes);
 const defaultPort = 3000;
 const configuredPort = Number(process.env.PORT);
 const port =
