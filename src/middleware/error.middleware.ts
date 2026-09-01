@@ -11,8 +11,8 @@ export const errorHandler: ErrorRequestHandler = (
   if (error instanceof AppError) {
     response.status(error.statusCode).json({
       error: {
-        code: error.code,
-        message: error.message,
+        codigo: error.code,
+        mensaje: error.message,
       },
     });
     return;
@@ -20,8 +20,8 @@ export const errorHandler: ErrorRequestHandler = (
 
   response.status(500).json({
     error: {
-      code: 'INTERNAL_SERVER_ERROR',
-      message: 'Ocurrió un error interno.',
+      codigo: 'ERROR_PERSISTENCIA',
+      mensaje: 'Ocurrió un error interno.',
     },
   });
 };

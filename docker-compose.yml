@@ -8,9 +8,54 @@ services:
       PORT: ${PORT:-3000}
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_KEY: ${SUPABASE_KEY}
-      M5_URL: ${M5_URL:-}
-      M7_URL: ${M7_URL:-}
-      RESERVATION_JOB_INTERVAL: ${RESERVATION_JOB_INTERVAL:-}
+      M5_URL: ${M5_URL:-http://m5-stub:3001}
+      M7_URL: ${M7_URL:-http://m7-stub:3002}
+      RESERVATION_JOB_INTERVAL: ${RESERVATION_JOB_INTERVAL:-*/30 * * * * *}
     ports:
       - "${PORT:-3000}:${PORT:-3000}"
+    depends_on:
+      m5-stub:
+        condition: service_healthy
+      m7-stub:
+        condition: service_healthy
+    networks:
+      - reservas-network
     restart: unless-stopped
+
+  m5-stub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "dist/stubs/m5/server.js"]
+    environment:
+      PORT: 3001
+    expose:
+      - "3001"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - reservas-network
+
+  m7-stub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "dist/stubs/m7/server.js"]
+    environment:
+      PORT: 3002
+    expose:
+      - "3002"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3002/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - reservas-network
+
+networks:
+  reservas-network:
+    driver: bridge

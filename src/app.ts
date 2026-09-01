@@ -7,27 +7,42 @@ import { openApiDocument } from './docs/openapi.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { notFoundHandler } from './middleware/not-found.middleware.js';
 import { healthRouter } from './routes/health.routes.js';
+import { createReservaRouter } from './routes/reserva.routes.js';
+import type { ReservaService } from './services/reserva.service.js';
 
-export const app = express();
+export interface AppDependencies {
+  reservaService?: ReservaService;
+}
 
-app.disable('x-powered-by');
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        imgSrc: ["'self'", 'data:'],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+export const createApp = ({ reservaService }: AppDependencies = {}) => {
+  const application = express();
+
+  application.disable('x-powered-by');
+  application.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          imgSrc: ["'self'", 'data:'],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+        },
       },
-    },
-  }),
-);
-app.use(cors());
-app.use(express.json());
+    }),
+  );
+  application.use(cors());
+  application.use(express.json());
 
-app.use('/health', healthRouter);
-app.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
+  application.use('/health', healthRouter);
+  application.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
+  if (reservaService !== undefined) {
+    application.use('/reservas', createReservaRouter(reservaService));
+  }
 
-app.use(notFoundHandler);
-app.use(errorHandler);
+  application.use(notFoundHandler);
+  application.use(errorHandler);
+
+  return application;
+};
+
+export const app = createApp();

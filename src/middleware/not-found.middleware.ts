@@ -6,7 +6,7 @@ export const notFoundHandler: RequestHandler = (request, _response, next) => {
   next(
     new AppError(
       404,
-      'ROUTE_NOT_FOUND',
+      'RUTA_NO_ENCONTRADA',
       `No existe la ruta ${request.method} ${request.originalUrl}.`,
     ),
   );
