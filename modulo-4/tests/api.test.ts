@@ -74,6 +74,23 @@ describe('API M4', () => {
     expect(response.body.code).toBe('LOCATION_VALIDATION_ERROR');
   });
 
+  it('elimina la ubicacion de un conductor', async () => {
+    await request(app).put('/api/v1/drivers/driver-1/location').send({
+      latitude: -27.4692,
+      longitude: -58.8306,
+      vehicleType: 'AUTO',
+      available: true
+    }).expect(200);
+
+    await request(app).delete('/api/v1/drivers/driver-1/location').expect(204);
+
+    await request(app).get('/api/v1/drivers/driver-1/location').expect(404);
+  });
+
+  it('devuelve 404 al eliminar un conductor sin ubicacion registrada', async () => {
+    await request(app).delete('/api/v1/drivers/driver-x/location').expect(404);
+  });
+
   it('geocodifica una direccion conocida con el proveedor simulado', async () => {
     const response = await request(app)
       .post('/api/v1/geocode')

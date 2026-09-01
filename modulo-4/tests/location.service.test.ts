@@ -62,6 +62,21 @@ describe('LocationService', () => {
     ).toThrow(LocationValidationError);
   });
 
+  it('elimina una ubicacion activa', () => {
+    const service = new LocationService(60, () => 1_000);
+    service.updateLocation('driver-1', { latitude: -27.4692, longitude: -58.8306 }, 'AUTO', true);
+
+    service.removeLocation('driver-1');
+
+    expect(() => service.getActiveLocation('driver-1')).toThrow(NotFoundError);
+  });
+
+  it('rechaza eliminar una ubicacion inexistente o vencida', () => {
+    const service = new LocationService(60, () => 1_000);
+
+    expect(() => service.removeLocation('driver-x')).toThrow(NotFoundError);
+  });
+
   it('calcula distancia y ETA', () => {
     const service = new LocationService();
     const result = service.estimate(
