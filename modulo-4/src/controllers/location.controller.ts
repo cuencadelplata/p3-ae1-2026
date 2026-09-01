@@ -7,7 +7,11 @@ import {
   updateAvailabilitySchema,
   updateLocationSchema
 } from '../schemas/location.schema.js';
-import { LocationService, NotFoundError } from '../services/location.service.js';
+import {
+  LocationService,
+  LocationValidationError,
+  NotFoundError
+} from '../services/location.service.js';
 
 export class LocationController {
   public constructor(private readonly service: LocationService) {}
@@ -79,6 +83,10 @@ export class LocationController {
           message: 'Datos invalidos',
           details: error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`)
         });
+        return;
+      }
+      if (error instanceof LocationValidationError) {
+        res.status(400).json({ code: 'LOCATION_VALIDATION_ERROR', message: error.message });
         return;
       }
       if (error instanceof NotFoundError) {

@@ -7,6 +7,7 @@ import type {
 } from '../types/location.types.js';
 
 export class NotFoundError extends Error {}
+export class LocationValidationError extends Error {}
 
 export class LocationService {
   private readonly locations = new Map<string, DriverLocation>();
@@ -14,7 +15,11 @@ export class LocationService {
   public constructor(
     private readonly ttlSeconds = 60,
     private readonly now: () => number = Date.now
-  ) {}
+  ) {
+    if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
+      throw new LocationValidationError('LOCATION_TTL_SECONDS debe ser un numero mayor a cero');
+    }
+  }
 
   public updateLocation(
     driverId: string,
@@ -24,6 +29,14 @@ export class LocationService {
     timestamp?: string
   ): DriverLocation {
     const updatedAtMs = timestamp ? Date.parse(timestamp) : this.now();
+    const maximumClockSkewMs = 30_000;
+
+    if (updatedAtMs > this.now() + maximumClockSkewMs) {
+      throw new LocationValidationError(
+        'La marca temporal de la ubicacion no puede estar mas de 30 segundos en el futuro'
+      );
+    }
+
     const updatedAt = new Date(updatedAtMs).toISOString();
     const location: DriverLocation = {
       driverId,

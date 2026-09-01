@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { LocationService, NotFoundError } from '../src/services/location.service.js';
+import {
+  LocationService,
+  LocationValidationError,
+  NotFoundError
+} from '../src/services/location.service.js';
 
 describe('LocationService', () => {
   it('actualiza una ubicacion y la recupera mientras sigue vigente', () => {
@@ -37,6 +41,25 @@ describe('LocationService', () => {
     now = 11_001;
 
     expect(() => service.getActiveLocation('driver-1')).toThrow(NotFoundError);
+  });
+
+  it('rechaza una configuracion de TTL invalida', () => {
+    expect(() => new LocationService(0)).toThrow(LocationValidationError);
+    expect(() => new LocationService(Number.NaN)).toThrow(LocationValidationError);
+  });
+
+  it('rechaza marcas temporales demasiado adelantadas al reloj del servidor', () => {
+    const service = new LocationService(60, () => 1_000);
+
+    expect(() =>
+      service.updateLocation(
+        'driver-1',
+        { latitude: -27.4692, longitude: -58.8306 },
+        'AUTO',
+        true,
+        new Date(31_001).toISOString()
+      )
+    ).toThrow(LocationValidationError);
   });
 
   it('calcula distancia y ETA', () => {

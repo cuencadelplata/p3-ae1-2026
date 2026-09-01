@@ -33,6 +33,19 @@ describe('API M4', () => {
     expect(response.body.code).toBe('VALIDATION_ERROR');
   });
 
+  it('rechaza una ubicacion con marca temporal futura', async () => {
+    const futureTimestamp = new Date(Date.now() + 60_000).toISOString();
+    const response = await request(app).put('/api/v1/drivers/driver-1/location').send({
+      latitude: -27.4692,
+      longitude: -58.8306,
+      vehicleType: 'AUTO',
+      available: true,
+      timestamp: futureTimestamp
+    }).expect(400);
+
+    expect(response.body.code).toBe('LOCATION_VALIDATION_ERROR');
+  });
+
   it('geocodifica una direccion conocida con el proveedor simulado', async () => {
     const response = await request(app)
       .post('/api/v1/geocode')
