@@ -185,6 +185,55 @@ describe("POST /qr/validate", () => {
   });
 });
 
+describe("concurrencia — uso único vía HTTP", () => {
+  it("dos validaciones concurrentes del mismo QR: exactamente una 200 y la otra 409", async () => {
+    const app = buildApp();
+    const generateResponse = await request(app).post("/qr").send({ tripId: "trip-demo-001" });
+    const token = generateResponse.body.token as string;
+
+    const [first, second] = await Promise.all([
+      request(app).post("/qr/validate").send({ tripId: "trip-demo-001", token }),
+      request(app).post("/qr/validate").send({ tripId: "trip-demo-001", token }),
+    ]);
+
+    const statuses = [first.status, second.status].sort((a, b) => a - b);
+    expect(statuses).toEqual([200, 409]);
+
+    const successResponse = first.status === 200 ? first : second;
+    const conflictResponse = first.status === 200 ? second : first;
+
+    expect(successResponse.body).toEqual({ valid: true });
+    expect(conflictResponse.body).toEqual({
+      error: { code: "QR_ALREADY_USED", message: "El QR ya fue utilizado." },
+    });
+  });
+
+  it("N=10 validaciones concurrentes del mismo QR: exactamente una 200 y el resto 409", async () => {
+    const app = buildApp();
+    const generateResponse = await request(app).post("/qr").send({ tripId: "trip-demo-001" });
+    const token = generateResponse.body.token as string;
+
+    const CONCURRENT_REQUESTS = 10;
+    const responses = await Promise.all(
+      Array.from({ length: CONCURRENT_REQUESTS }, () =>
+        request(app).post("/qr/validate").send({ tripId: "trip-demo-001", token }),
+      ),
+    );
+
+    const successResponses = responses.filter((response) => response.status === 200);
+    const conflictResponses = responses.filter((response) => response.status === 409);
+
+    expect(successResponses).toHaveLength(1);
+    expect(conflictResponses).toHaveLength(CONCURRENT_REQUESTS - 1);
+    expect(successResponses[0].body).toEqual({ valid: true });
+    for (const response of conflictResponses) {
+      expect(response.body).toEqual({
+        error: { code: "QR_ALREADY_USED", message: "El QR ya fue utilizado." },
+      });
+    }
+  });
+});
+
 describe("flujo completo de uso único vía HTTP", () => {
   it("generar -> validar con éxito -> revalidar y obtener 409", async () => {
     const app = buildApp();
