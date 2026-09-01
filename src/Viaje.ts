@@ -1,4 +1,4 @@
-export type ViajeEstado = 'pendiente' | 'en_curso' | 'finalizado' | 'cancelado';
+export type ViajeEstado = 'solicitado' | 'asignado' | 'en curso' | 'completado' | 'cancelado';
 
 export interface ViajeTransicion {
   from: ViajeEstado;
@@ -12,6 +12,7 @@ export interface FinalizarViajeInput {
   distanciaKm: number;
   horaFin: Date;
   metodoPago: string;
+  total: number;
 }
 
 export interface CrearViajeInput {
@@ -87,11 +88,11 @@ export class Viaje {
   }
 
   finalizar(data: FinalizarViajeInput): void {
-    if (this.estado === 'finalizado') {
+    if (this.estado === 'completado') {
       throw new Error('No se puede finalizar un viaje ya finalizado');
     }
 
-    if (this.estado !== 'en_curso' && this.estado !== 'pendiente') {
+    if (this.estado !== 'en curso' && this.estado !== 'asignado') {
       throw new Error(`No se puede finalizar un viaje en estado ${this.estado}`);
     }
 
@@ -99,10 +100,10 @@ export class Viaje {
     this.distanciaKm = data.distanciaKm;
     this.horaFin = data.horaFin;
     this.metodoPago = data.metodoPago;
-    this.total = this.tarifaBase + this.distanciaKm * this.tarifaPorKm + this.tiempoMinutos * this.tarifaPorMinuto;
+    this.total = data.total;
 
     const estadoAnterior = this.estado;
-    this.estado = 'finalizado';
+    this.estado = 'completado';
     this.registrarTransicion(estadoAnterior, this.estado, 'Finalización del viaje');
   }
 
@@ -111,7 +112,7 @@ export class Viaje {
       throw new Error('No se puede cancelar un viaje ya cancelado');
     }
 
-    if (this.estado === 'finalizado') {
+    if (this.estado === 'completado') {
       throw new Error('No se puede cancelar un viaje ya finalizado');
     }
 

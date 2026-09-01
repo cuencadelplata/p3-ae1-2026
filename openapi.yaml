@@ -1,0 +1,46 @@
+openapi: 3.0.3
+info:
+  title: API M6 - Viajes
+  version: 1.0.0
+paths:
+  /api/viajes/{viajeId}/finalizacion:
+    post:
+      summary: Finaliza un viaje y captura su pago
+      parameters:
+        - { name: viajeId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FinalizarViaje' }
+      responses:
+        '200': { description: Viaje finalizado }
+        '400': { description: Transición inválida }
+  /api/viajes/{viajeId}/cancelacion-cliente:
+    post:
+      summary: Cancela un viaje por solicitud del cliente
+      parameters:
+        - { name: viajeId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CancelarCliente' }
+      responses:
+        '200': { description: Viaje cancelado }
+        '400': { description: Cancelación inválida }
+components:
+  schemas:
+    FinalizarViaje:
+      type: object
+      required: [tiempoMinutos, distanciaKm, horaFin, metodoPago]
+      properties:
+        tiempoMinutos: { type: number, minimum: 0 }
+        distanciaKm: { type: number, minimum: 0 }
+        horaFin: { type: string, format: date-time }
+        metodoPago: { type: string }
+    CancelarCliente:
+      type: object
+      required: [motivo]
+      properties:
+        motivo: { type: string, minLength: 1 }

@@ -1,0 +1,20 @@
+services:
+  src:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: p3-ae1-2026_g10-m6:1.0
+    ports: ["3000:3000"]
+    environment:
+      SIMULATOR_URL: http://simulador:3001
+    depends_on:
+      - simulador
+    container_name: src-container
+
+  simulador:
+    build:
+      context: .
+      dockerfile: Dockerfile.simulator
+    image: p3-ae1-2026_g10-m6-dependencies:1.0
+    expose: ["3001"]
+    container_name: simulador-container

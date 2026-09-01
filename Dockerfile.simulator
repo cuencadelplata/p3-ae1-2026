@@ -1,0 +1,8 @@
+FROM node:22-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY simulator ./simulator
+RUN npx tsc simulator/server.ts --outDir dist --lib es2022 --module NodeNext --moduleResolution NodeNext
+EXPOSE 3001
+CMD ["node", "dist/server.js"]
