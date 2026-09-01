@@ -15,7 +15,8 @@
     "test:watch": "vitest --project unit --project integration",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
-    "test:coverage": "vitest run --project unit --project integration --coverage"
+    "test:coverage": "vitest run --project unit --project integration --coverage",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {
     "express": "^5.2.1",
