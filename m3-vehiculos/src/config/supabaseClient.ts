@@ -12,5 +12,5 @@ if (!supabaseUrl || !supabaseKey) {
   );
 }
 
-export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
-export default supabase;
+const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
+export { supabase };
