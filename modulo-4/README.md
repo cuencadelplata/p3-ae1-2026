@@ -2,6 +2,8 @@
 
 Microservicio REST de AE1 implementado con Node.js, TypeScript y Express. Mantiene ubicaciones en memoria para evitar agregar infraestructura innecesaria en esta etapa. Redis queda previsto para AE2, cuando pasa a ser obligatorio.
 
+Version actual: `1.1.0`.
+
 ## Requisitos cubiertos
 
 - RF-4.1: actualizacion de ubicacion con marca temporal.

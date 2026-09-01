@@ -1,6 +1,6 @@
 {
   "name": "p3-ae1-m4-location-service",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Modulo 4: Ubicacion y Disponibilidad - Plataforma de Movilidad Urbana",
   "main": "dist/index.js",
   "scripts": {
