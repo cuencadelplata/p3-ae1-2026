@@ -5,6 +5,7 @@ export interface ExternalApisClient {
   estimateFare(input: { viajeId: string; distanciaKm: number; tiempoMinutos: number }): Promise<number>;
   capturePayment(input: { viajeId: string; amount: number; metodoPago: string }): Promise<string>;
   cancellationCharge(input: { viajeId: string; estado: string }): Promise<number>;
+  returnClientToDispatch(input: { viajeId: string; conductorId: string }): Promise<{ reabrirDespacho: boolean; clienteRetornado: boolean }>;
 }
 
 export class HttpExternalApisClient implements ExternalApisClient {
@@ -34,6 +35,11 @@ export class HttpExternalApisClient implements ExternalApisClient {
     const result = await this.post<{ cargo: number }>('/api/tarifas/cargo-cancelacion', input);
     return result.cargo;
   }
+
+  async returnClientToDispatch(input: { viajeId: string; conductorId: string }): Promise<{ reabrirDespacho: boolean; clienteRetornado: boolean }> {
+    const result = await this.post<{ reabrirDespacho: boolean; clienteRetornado: boolean }>('/api/despacho/reabrir', input);
+    return result;
+  }
 }
 
 export interface ViajeApiOptions {
@@ -46,7 +52,7 @@ export function createViajeApi(options: ViajeApiOptions): Server {
 
   return createServer(async (request, response) => {
     try {
-      const match = request.url?.match(/^\/api\/viajes\/([^/]+)\/(finalizacion|cancelacion-cliente)$/);
+      const match = request.url?.match(/^\/api\/viajes\/([^/]+)\/(finalizacion|cancelacion-cliente|cancelacion-conductor)$/);
       if (request.method !== 'POST' || !match) return send(response, 404, { error: 'Ruta no encontrada' });
 
       const viaje = viajes.get(match[1]);
@@ -75,10 +81,21 @@ export function createViajeApi(options: ViajeApiOptions): Server {
         return send(response, 200, { viaje, paymentId });
       }
 
+      if (match[2] === 'cancelacion-cliente') {
+        const motivo = String((input as { motivo?: string }).motivo ?? '');
+        const cargo = await options.externalApis.cancellationCharge({ viajeId: viaje.id, estado: viaje.estado });
+        viaje.cancelarPorCliente({ motivo, cargo });
+        return send(response, 200, { viaje });
+      }
+
       const motivo = String((input as { motivo?: string }).motivo ?? '');
-      const cargo = await options.externalApis.cancellationCharge({ viajeId: viaje.id, estado: viaje.estado });
-      viaje.cancelarPorCliente({ motivo, cargo });
-      return send(response, 200, { viaje });
+      const retornoDespacho = await options.externalApis.returnClientToDispatch({
+        viajeId: viaje.id,
+        conductorId: viaje.conductorId,
+      });
+      viaje.cancelarPorConductor({ motivo });
+      viaje.retornoDespacho = retornoDespacho;
+      return send(response, 200, { viaje, retornoDespacho });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Solicitud inválida';
       return send(response, 400, { error: message });

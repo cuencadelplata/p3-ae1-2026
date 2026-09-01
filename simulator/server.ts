@@ -13,6 +13,13 @@ export function createSimulator(): Server {
     result = { cargo: input.estado === 'asignado' ? 200 : 0 };
   } else if (request.url === '/api/pagos/captura') {
     result = { paymentId: `PAY-${input.viajeId}` };
+  } else if (request.url === '/api/despacho/reabrir') {
+    result = {
+      reabrirDespacho: true,
+      clienteRetornado: true,
+      viajeId: String(input.viajeId ?? ''),
+      conductorId: String(input.conductorId ?? ''),
+    };
   } else {
     response.writeHead(404).end();
     return;

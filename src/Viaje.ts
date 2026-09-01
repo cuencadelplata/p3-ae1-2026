@@ -38,6 +38,15 @@ export interface CancelarPorClienteInput {
   cargo?: number;
 }
 
+export interface CancelarPorConductorInput {
+  motivo: string;
+}
+
+export interface RetornoDespacho {
+  reabrirDespacho: boolean;
+  clienteRetornado: boolean;
+}
+
 export class Viaje {
   id: string;
   clienteId: string;
@@ -54,6 +63,8 @@ export class Viaje {
   total?: number;
   motivoCancelacion?: string;
   cargoCancelacion?: number;
+  motivoCancelacionConductor?: string;
+  retornoDespacho?: RetornoDespacho;
   historialTransiciones: ViajeTransicion[];
 
   constructor(data: CrearViajeInput) {
@@ -129,6 +140,31 @@ export class Viaje {
       estadoAnterior,
       this.estado,
       `Cancelación por cliente: ${motivo}`,
+    );
+  }
+
+  cancelarPorConductor(data: CancelarPorConductorInput): void {
+    if (this.estado === 'cancelado') {
+      throw new Error('No se puede cancelar un viaje ya cancelado');
+    }
+
+    if (this.estado === 'completado') {
+      throw new Error('No se puede cancelar un viaje ya finalizado');
+    }
+
+    if (!data.motivo || data.motivo.trim().length === 0) {
+      throw new Error('El motivo de cancelación es obligatorio');
+    }
+
+    const motivo = data.motivo.trim();
+    const estadoAnterior = this.estado;
+    this.estado = 'cancelado';
+    this.motivoCancelacionConductor = motivo;
+    this.retornoDespacho = { reabrirDespacho: true, clienteRetornado: true };
+    this.registrarTransicion(
+      estadoAnterior,
+      this.estado,
+      `Cancelación por conductor: ${motivo}`,
     );
   }
 }
