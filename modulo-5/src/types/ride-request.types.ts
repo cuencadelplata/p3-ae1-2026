@@ -91,3 +91,35 @@ export interface ErrorResponseDTO {
   timestamp: string;
 }
 
+/**
+ * Tipos para RF-5.3: Oferta con vencimiento
+ */
+export type RideOfferStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED';
+
+export interface RideOffer {
+  id: string;
+  requestId: string;
+  driverId: string;
+  status: RideOfferStatus;
+  estimatedFare: EstimatedFare;
+  origin: GeoLocation;
+  destination: GeoLocation;
+  vehicleType: VehicleType;
+  ttlSeconds: number;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface SendOffersDTO {
+  driverIds?: string[]; // Si no se envían, toma los mejores candidatos encontrados
+  ttlSeconds?: number;  // Tiempo de expiración de la oferta (ej. 15 a 60 seg, default 30 seg)
+}
+
+export interface SendOffersResponseDTO {
+  requestId: string;
+  offersSentCount: number;
+  offers: RideOffer[];
+  message: string;
+}
+
+

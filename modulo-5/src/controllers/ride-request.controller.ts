@@ -112,6 +112,47 @@ export class RideRequestController {
     }
   };
 
+  /**
+   * POST /api/v1/ride-requests/:requestId/offers
+   * Enviar oferta con vencimiento (RF-5.3)
+   */
+  public sendOffers = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { requestId } = req.params;
+      const clientId = this.extractClientId(req);
+      const { driverIds, ttlSeconds } = req.body || {};
+
+      const result = await this.rideRequestService.sendOffersForRequest(
+        requestId,
+        clientId,
+        {
+          driverIds: Array.isArray(driverIds) ? driverIds : undefined,
+          ttlSeconds: ttlSeconds !== undefined ? Number(ttlSeconds) : undefined
+        }
+      );
+
+      res.status(201).json(result);
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  /**
+   * GET /api/v1/ride-requests/:requestId/offers
+   * Consultar ofertas emitidas para la solicitud
+   */
+  public getOffers = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { requestId } = req.params;
+      const clientId = this.extractClientId(req);
+
+      const offers = await this.rideRequestService.getOffersByRequestId(requestId, clientId);
+      res.status(200).json({ requestId, offersCount: offers.length, offers });
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
   private handleError(res: Response, error: unknown): void {
     const timestamp = new Date().toISOString();
 

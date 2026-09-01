@@ -192,6 +192,106 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /ride-requests/{requestId}/offers:
+    post:
+      summary: Enviar oferta a conductores con vencimiento (RF-5.3)
+      description: Envía una oferta de viaje a uno o varios conductores destinatarios con un tiempo máximo de respuesta (TTL) en segundos. Transiciona la solicitud a OFFERED.
+      operationId: sendOffersForRide
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          description: ID único de la solicitud de viaje (RF-5.1)
+          schema:
+            type: string
+            format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                driverIds:
+                  type: array
+                  items:
+                    type: string
+                  description: Lista explícita de conductores destinatarios. Si se omite, se envían automáticamente a los mejores candidatos cercanos.
+                  example: ["drv_101", "drv_102"]
+                ttlSeconds:
+                  type: integer
+                  minimum: 5
+                  maximum: 180
+                  default: 30
+                  description: Tiempo de expiración de la oferta en segundos (TTL).
+                  example: 30
+      responses:
+        '201':
+          description: Oferta(s) creada(s) y despachada(s) exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendOffersResponseDTO'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          description: Solicitud no encontrada o no hay conductores disponibles para ofertar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflicto - La solicitud no se encuentra en un estado elegible para emitir ofertas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      summary: Consultar ofertas activas e históricas de la solicitud
+      description: Retorna el listado de ofertas despachadas asociadas a la solicitud, reflejando su estado actual (PENDING, ACCEPTED, REJECTED, EXPIRED).
+      operationId: getOffersByRequestId
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+      responses:
+        '200':
+          description: Listado de ofertas asociadas a la solicitud.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId:
+                    type: string
+                    format: uuid
+                  offersCount:
+                    type: integer
+                  offers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RideOfferDTO'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -377,6 +477,78 @@ components:
           type: string
           format: date-time
           example: "2026-09-01T14:30:05.000Z"
+
+    RideOfferDTO:
+      type: object
+      required:
+        - id
+        - requestId
+        - driverId
+        - status
+        - estimatedFare
+        - origin
+        - destination
+        - vehicleType
+        - ttlSeconds
+        - createdAt
+        - expiresAt
+      properties:
+        id:
+          type: string
+          example: "off_7c9e6679-7425-40de-944b-e07fc1f90ae7"
+        requestId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+        driverId:
+          type: string
+          example: "drv_101"
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, REJECTED, EXPIRED]
+          example: "PENDING"
+        estimatedFare:
+          $ref: '#/components/schemas/EstimatedFare'
+        origin:
+          $ref: '#/components/schemas/GeoLocation'
+        destination:
+          $ref: '#/components/schemas/GeoLocation'
+        vehicleType:
+          $ref: '#/components/schemas/VehicleType'
+        ttlSeconds:
+          type: integer
+          example: 30
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:30:10.000Z"
+        expiresAt:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:30:40.000Z"
+
+    SendOffersResponseDTO:
+      type: object
+      required:
+        - requestId
+        - offersSentCount
+        - offers
+        - message
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+        offersSentCount:
+          type: integer
+          example: 2
+        offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/RideOfferDTO'
+        message:
+          type: string
+          example: "Oferta enviada exitosamente a 2 conductor(es) con TTL de 30s."
 
     ErrorResponse:
       type: object

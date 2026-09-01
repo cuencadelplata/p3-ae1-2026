@@ -461,6 +461,12 @@
       color: #60a5fa;
     }
 
+    .status-badge.OFFERED {
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      color: #c084fc;
+    }
+
     .status-badge.CANCELLED_BY_CLIENT {
       background: rgba(239, 68, 68, 0.15);
       border: 1px solid rgba(239, 68, 68, 0.4);
@@ -471,6 +477,64 @@
       background: rgba(245, 158, 11, 0.15);
       border: 1px solid rgba(245, 158, 11, 0.4);
       color: #fbbf24;
+    }
+
+    .btn-offer {
+      background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+      color: white;
+      box-shadow: 0 4px 15px rgba(139, 92, 246, 0.25);
+    }
+
+    .btn-offer:hover {
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      transform: translateY(-1px);
+    }
+
+    /* Offers Section & Cards (RF-5.3) */
+    .offers-section {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .offer-card {
+      background: rgba(139, 92, 246, 0.08);
+      border: 1px solid rgba(139, 92, 246, 0.25);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      margin-top: 10px;
+    }
+
+    .offer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .offer-driver {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      font-size: 13px;
+      color: #c4b5fd;
+    }
+
+    .offer-status {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .offer-status.PENDING {
+      background: rgba(139, 92, 246, 0.2);
+      color: #d8b4fe;
+    }
+
+    .offer-status.EXPIRED {
+      background: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
     }
 
     .fare-card {
@@ -826,7 +890,29 @@
 
             <div id="candidatesListContainer" class="candidates-list" style="display: none;"></div>
           </div>
+
+          <!-- Ofertas con Vencimiento (RF-5.3) -->
+          <div class="offers-section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <span style="font-size:13px; font-weight:600; color:var(--text-primary);">📨 Despachar Oferta a Conductores (RF-5.3)</span>
+              <span id="offersCountBadge" style="font-size:11px; background:rgba(139,92,246,0.15); color:#c4b5fd; padding:2px 8px; border-radius:999px; display:none;">0 activas</span>
+            </div>
+
+            <div class="form-row" style="margin-bottom: 10px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label style="font-size:11px;">Tiempo Máximo de Respuesta (TTL en seg)</label>
+                <input type="number" id="offerTtlSeconds" value="30" min="5" max="180" style="padding:8px 12px; font-size:12px;">
+              </div>
+            </div>
+
+            <button id="btnSendOffers" class="btn btn-offer" onclick="sendOffers()">
+              ⚡ Enviar Oferta con TTL (POST /offers)
+            </button>
+
+            <div id="offersListContainer" style="display: none; margin-top: 10px;"></div>
+          </div>
         </div>
+
 
 
         <!-- Visor de Respuesta JSON -->
@@ -983,6 +1069,10 @@
       document.getElementById('candidatesListContainer').style.display = 'none';
       document.getElementById('candidatesCountBadge').style.display = 'none';
 
+      // Resetear vista de ofertas
+      document.getElementById('offersListContainer').style.display = 'none';
+      document.getElementById('offersCountBadge').style.display = 'none';
+
       const badge = document.getElementById('tripStatusBadge');
       badge.innerText = trip.status;
       badge.className = `status-badge ${trip.status}`;
@@ -1132,6 +1222,74 @@
       }
     }
 
+    async function sendOffers() {
+      if (!currentRequestId) {
+        showToast('No hay solicitud activa seleccionada', 'error');
+        return;
+      }
+
+      const clientId = document.getElementById('clientId').value.trim();
+      const ttlSeconds = parseInt(document.getElementById('offerTtlSeconds').value) || 30;
+
+      const btn = document.getElementById('btnSendOffers');
+      btn.innerText = '⏳ Emitiendo ofertas a conductores...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(`/api/v1/ride-requests/${currentRequestId}/offers`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': clientId
+          },
+          body: JSON.stringify({ ttlSeconds })
+        });
+
+        const data = await res.json();
+        document.getElementById('responseStatus').innerText = `Status: ${res.status} ${res.statusText}`;
+        document.getElementById('jsonOutput').innerText = JSON.stringify(data, null, 2);
+
+        const listContainer = document.getElementById('offersListContainer');
+        const badge = document.getElementById('offersCountBadge');
+
+        if (res.ok) {
+          showToast(data.message || '¡Ofertas enviadas exitosamente!', 'success');
+          badge.style.display = 'inline-block';
+          badge.innerText = `${data.offersSentCount} enviadas (TTL ${ttlSeconds}s)`;
+
+          // Actualizar estado de viaje en UI
+          const tripBadge = document.getElementById('tripStatusBadge');
+          tripBadge.innerText = 'OFFERED';
+          tripBadge.className = 'status-badge OFFERED';
+
+          listContainer.innerHTML = '';
+          data.offers.forEach((offer) => {
+            const card = document.createElement('div');
+            card.className = 'offer-card';
+            card.innerHTML = `
+              <div class="offer-header">
+                <span class="offer-driver">🎯 ${offer.driverId}</span>
+                <span class="offer-status ${offer.status}">${offer.status}</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); display:flex; justify-content:space-between;">
+                <span>ID: ${offer.id.substring(0, 16)}...</span>
+                <span>Expira: ${new Date(offer.expiresAt).toLocaleTimeString()} (${offer.ttlSeconds}s)</span>
+              </div>
+            `;
+            listContainer.appendChild(card);
+          });
+          listContainer.style.display = 'block';
+        } else {
+          showToast(data.message || 'Error al enviar ofertas', 'error');
+        }
+      } catch (err) {
+        showToast('Error de conexión al enviar ofertas', 'error');
+      } finally {
+        btn.innerText = '⚡ Enviar Oferta con TTL (POST /offers)';
+        btn.disabled = false;
+      }
+    }
+
     // Inicialización
     document.getElementById('idempotencyKey').value = generateKey();
     checkHealth();
@@ -1139,4 +1297,5 @@
   </script>
 </body>
 </html>
+
 

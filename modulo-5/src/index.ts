@@ -24,6 +24,8 @@ app.post('/api/v1/ride-requests', rideRequestController.create);
 app.get('/api/v1/ride-requests/:requestId', rideRequestController.getById);
 app.patch('/api/v1/ride-requests/:requestId/cancel', rideRequestController.cancel);
 app.post('/api/v1/ride-requests/:requestId/candidates', rideRequestController.searchCandidates);
+app.post('/api/v1/ride-requests/:requestId/offers', rideRequestController.sendOffers);
+app.get('/api/v1/ride-requests/:requestId/offers', rideRequestController.getOffers);
 
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {

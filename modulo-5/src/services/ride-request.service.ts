@@ -4,8 +4,11 @@ import {
   CreateRideRequestDTO,
   EstimatedFare,
   NearbyDriverStub,
+  RideOffer,
   RideRequest,
   SearchCandidatesOptions,
+  SendOffersDTO,
+  SendOffersResponseDTO,
   VehicleType
 } from '../types/ride-request.types';
 import { RideRequestValidator } from '../schemas/ride-request.schema';
@@ -47,6 +50,8 @@ export class RideRequestService {
   // Almacén en memoria simulando la persistencia de DispatchDB / MobilityDB (AE1)
   private requests: Map<string, RideRequest> = new Map();
   private idempotencyStore: Map<string, RideRequest> = new Map();
+  private offers: Map<string, RideOffer> = new Map();
+
 
   /**
    * Stub de integración con M7: Estimación de Tarifa (RF-7.1)
@@ -276,5 +281,109 @@ export class RideRequestService {
       searchTimestamp: new Date().toISOString()
     };
   }
+
+  /**
+   * RF-5.3: Oferta con vencimiento
+   * Envía una oferta a uno o más conductores con tiempo máximo de respuesta (TTL).
+   */
+  public async sendOffersForRequest(
+    requestId: string,
+    clientId: string,
+    dto?: SendOffersDTO
+  ): Promise<SendOffersResponseDTO> {
+    // 1. Validar DTO
+    const validation = RideRequestValidator.validateSendOffersDTO(dto);
+    if (!validation.valid) {
+      throw new ValidationError('Parámetros de envío de ofertas inválidos', validation.errors);
+    }
+
+    const ttlSeconds = dto?.ttlSeconds ?? 30; // Tiempo por defecto: 30 segundos
+
+    // 2. Obtener solicitud de viaje y verificar estado
+    const request = await this.getRideRequestById(requestId, clientId);
+
+    const validOfferStatuses = ['PENDING', 'SEARCHING', 'OFFERED', 'NO_DRIVERS_AVAILABLE'];
+    if (!validOfferStatuses.includes(request.status)) {
+      throw new ConflictError(
+        `No se pueden enviar ofertas para una solicitud en estado ${request.status}`,
+        'INVALID_REQUEST_STATE'
+      );
+    }
+
+    // 3. Determinar lista de conductores destinatarios
+    let targetDriverIds = dto?.driverIds;
+    if (!targetDriverIds || targetDriverIds.length === 0) {
+      // Si no se pasaron IDs explícitos, busca los mejores candidatos automáticamente (RF-5.2)
+      const candidatesResult = await this.searchCandidatesForRequest(requestId, clientId, {
+        radiusKm: 5.0,
+        maxCandidates: 3
+      });
+      targetDriverIds = candidatesResult.candidates.map((c) => c.driverId);
+    }
+
+    if (targetDriverIds.length === 0) {
+      throw new NotFoundError(
+        'No se encontraron conductores candidatos para despachar la oferta',
+        'NO_DRIVERS_AVAILABLE'
+      );
+    }
+
+    // 4. Crear las ofertas con TTL
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
+    const createdOffers: RideOffer[] = [];
+
+    for (const driverId of targetDriverIds) {
+      const offer: RideOffer = {
+        id: `off_${randomUUID()}`,
+        requestId: request.id,
+        driverId,
+        status: 'PENDING',
+        estimatedFare: request.estimatedFare,
+        origin: request.origin,
+        destination: request.destination,
+        vehicleType: request.vehicleType,
+        ttlSeconds,
+        createdAt: now.toISOString(),
+        expiresAt: expiresAt.toISOString()
+      };
+
+      this.offers.set(offer.id, offer);
+      createdOffers.push(offer);
+    }
+
+    // 5. Transicionar estado de la solicitud a OFFERED
+    request.status = 'OFFERED';
+    request.updatedAt = now.toISOString();
+    this.requests.set(requestId, request);
+
+    return {
+      requestId: request.id,
+      offersSentCount: createdOffers.length,
+      offers: createdOffers,
+      message: `Oferta enviada exitosamente a ${createdOffers.length} conductor(es) con TTL de ${ttlSeconds}s.`
+    };
+  }
+
+  /**
+   * Consulta las ofertas activas o históricas asociadas a una solicitud
+   */
+  public async getOffersByRequestId(requestId: string, clientId: string): Promise<RideOffer[]> {
+    await this.getRideRequestById(requestId, clientId); // Valida existencia y permisos
+
+    const now = new Date().getTime();
+    const requestOffers = Array.from(this.offers.values())
+      .filter((offer) => offer.requestId === requestId)
+      .map((offer) => {
+        // Expirar ofertas pasadas de TTL de forma dinámica si aún figuraban PENDING
+        if (offer.status === 'PENDING' && new Date(offer.expiresAt).getTime() < now) {
+          offer.status = 'EXPIRED';
+        }
+        return offer;
+      });
+
+    return requestOffers;
+  }
 }
+
 

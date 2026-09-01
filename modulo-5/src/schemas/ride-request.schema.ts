@@ -107,5 +107,36 @@ export class RideRequestValidator {
       errors
     };
   }
+
+  /**
+   * Valida opciones de envío de ofertas con vencimiento (RF-5.3)
+   */
+  public static validateSendOffersDTO(dto?: { driverIds?: unknown; ttlSeconds?: unknown }): ValidationResult {
+    const errors: string[] = [];
+
+    if (dto?.driverIds !== undefined) {
+      if (!Array.isArray(dto.driverIds) || dto.driverIds.length === 0) {
+        errors.push('driverIds: Si se especifica, debe ser un arreglo con al menos un ID de conductor');
+      } else {
+        dto.driverIds.forEach((id, idx) => {
+          if (typeof id !== 'string' || id.trim().length === 0) {
+            errors.push(`driverIds[${idx}]: Debe ser una cadena de texto válida`);
+          }
+        });
+      }
+    }
+
+    if (dto?.ttlSeconds !== undefined) {
+      if (typeof dto.ttlSeconds !== 'number' || isNaN(dto.ttlSeconds) || !Number.isInteger(dto.ttlSeconds) || dto.ttlSeconds < 5 || dto.ttlSeconds > 180) {
+        errors.push('ttlSeconds: El tiempo máximo de respuesta debe ser un entero entre 5 y 180 segundos');
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
 }
+
 
