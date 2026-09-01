@@ -26,7 +26,16 @@ export interface Vehiculo {
   createdAt: Date;
 }
 
-
+// Lo que se manda a Supabase al insertar- con el uuid que coincide en supabs
+export interface VehiculoParaInsertar {
+  driverId: string;
+  patente: string;
+  marca: string | null;
+  modelo: string | null;
+  anio: number;
+  tipoServicio: TipoServicio;
+  activo: boolean;
+}
 
 // validación de reglas de vehículo
 export function validarVehiculo(datos: VehiculoDatos): void {
@@ -73,16 +82,13 @@ export function prepararVehiculoParaInsertar(
 ): VehiculoParaInsertar {
   validarVehiculo(datos);
 
-
   return {
-    id: `veh-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     driverId: datos.driverId.trim(),
     patente: datos.patente.trim().toUpperCase(),
-    marca: datos.marca?.trim() || "",
-    modelo: datos.modelo?.trim() || "",
+    marca: datos.marca?.trim() || null,
+    modelo: datos.modelo?.trim() || null,
     anio: datos.anio,
-    tipoServicio: datos.tipoServicio.toUpperCase() as TipoServicio,
+    tipoServicio: datos.tipoServicio.toString().toUpperCase() as TipoServicio,
     activo: false,
-    createdAt: new Date(),
   };
 }
