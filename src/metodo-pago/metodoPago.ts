@@ -1,4 +1,4 @@
-export type TipoPago= "efectivo" | "tarjeta"|"transferencia"; 
+export type TipoPago= "efectivo" | "tarjeta"| "transferencia"; 
 
 export interface MetodoPago{
     pagoId: string;
