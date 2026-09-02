@@ -31,20 +31,25 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin }: Registe
     setLoading(true)
 
     try {
-      const response = await axios.post('http://localhost:3001/auth/registrar-usuario', {
+      await axios.post('http://localhost:3001/auth/registrar-usuario', {
         nombre: name,
         email,
         password,
         rol: role,
       })
 
-      const { token } = response.data
+      const loginResponse = await axios.post('http://localhost:3001/auth/iniciar-sesion', {
+        email,
+        password,
+      })
+
+      const { token } = loginResponse.data
       const parts = token.split('.')
       const decoded = JSON.parse(atob(parts[1]))
 
       onRegisterSuccess(token, decoded)
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Error al registrarse')
+      setError(err.response?.data?.error || err.response?.data?.message || 'Error al registrarse')
     } finally {
       setLoading(false)
     }
