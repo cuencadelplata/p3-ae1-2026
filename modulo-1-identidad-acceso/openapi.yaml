@@ -1,388 +1,249 @@
 openapi: 3.0.3
-
 info:
   title: M1 - Identidad y Acceso
   version: 1.0.0
-  description: |
-    API responsable del registro, la autenticacion y la validacion
-    de identidad y rol de clientes, conductores y operadores.
-
+  description: API de registro, autenticacion, recuperacion de acceso e integracion OAuth2.
 servers:
   - url: http://localhost:3001
     description: Ejecucion local
-
 tags:
   - name: Salud
-    description: Verificacion del estado del modulo
   - name: Identidad y acceso
-    description: Registro, autenticacion y validacion de identidad
-
+  - name: Recuperacion
+  - name: OAuth2
 paths:
   /health:
     get:
-      tags:
-        - Salud
-      summary: Comprobar el estado del modulo
-      operationId: comprobarEstado
+      tags: [Salud]
+      summary: Comprobar estado del modulo
       responses:
-        "200":
-          description: El modulo se encuentra funcionando
+        '200':
+          description: Modulo funcionando
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthResponse"
-              example:
-                status: OK
-                modulo: M1 - Identidad y Acceso
-
+                type: object
+                properties:
+                  status: { type: string, example: OK }
+                  modulo: { type: string, example: M1 - Identidad y Acceso }
   /auth/registrar-usuario:
     post:
-      tags:
-        - Identidad y acceso
-      summary: Registrar un usuario
-      description: |
-        Registra una nueva identidad con rol CLIENTE, CONDUCTOR u OPERADOR.
-        El email debe ser unico y la contrasena debe contener al menos
-        seis caracteres.
-      operationId: registrarUsuario
+      tags: [Identidad y acceso]
+      summary: Registrar usuario
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RegisterRequest"
-            examples:
-              cliente:
-                summary: Registrar un cliente
-                value:
-                  email: cliente@example.com
-                  password: "123456"
-                  rol: CLIENTE
-              conductor:
-                summary: Registrar un conductor
-                value:
-                  email: conductor@example.com
-                  password: "123456"
-                  rol: CONDUCTOR
-              operador:
-                summary: Registrar un operador
-                value:
-                  email: operador@example.com
-                  password: "123456"
-                  rol: OPERADOR
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              nombre: Juan
+              apellido: Perez
+              dni: '12345678'
+              telefono: '11 1234 5678'
+              email: juan.perez@example.com
+              password: '123456'
+              rol: CLIENTE
       responses:
-        "201":
-          description: Usuario registrado correctamente
+        '201':
+          description: Usuario registrado
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserResponse"
-              example:
-                id: 1
-                email: cliente@example.com
-                rol: CLIENTE
-                estado: ACTIVO
-        "400":
-          description: Datos incompletos o invalidos
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email ya registrado
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              examples:
-                datosObligatorios:
-                  value:
-                    error: Email, password y rol son obligatorios
-                passwordInvalida:
-                  value:
-                    error: La contrasena debe tener al menos 6 caracteres
-                rolInvalido:
-                  value:
-                    error: El rol debe ser CLIENTE, CONDUCTOR u OPERADOR
-        "409":
-          description: El email ya se encuentra registrado
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              example:
-                error: Ya existe un usuario con ese email
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-
+                $ref: '#/components/schemas/ErrorResponse'
   /auth/iniciar-sesion:
     post:
-      tags:
-        - Identidad y acceso
+      tags: [Identidad y acceso]
       summary: Iniciar sesion
-      description: |
-        Valida las credenciales y entrega un token JWT Bearer con
-        una duracion de una hora.
-      operationId: iniciarSesion
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/LoginRequest"
-            example:
-              email: cliente@example.com
-              password: "123456"
+              $ref: '#/components/schemas/LoginRequest'
       responses:
-        "200":
-          description: Sesion iniciada correctamente
+        '200':
+          description: Sesion iniciada y token JWT generado
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LoginResponse"
-              example:
-                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-                tokenType: Bearer
-                expiresIn: 1h
-                usuario:
-                  id: 1
-                  email: cliente@example.com
-                  rol: CLIENTE
-                  estado: ACTIVO
-        "400":
-          description: Email o password ausentes
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Usuario bloqueado
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              example:
-                error: Email y password son obligatorios
-        "401":
-          description: Credenciales incorrectas
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              example:
-                error: Credenciales incorrectas
-        "403":
-          description: El usuario se encuentra bloqueado
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              example:
-                error: Usuario bloqueado
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-
+                $ref: '#/components/schemas/ErrorResponse'
   /auth/validar-identidad-y-rol:
     get:
-      tags:
-        - Identidad y acceso
+      tags: [Identidad y acceso]
       summary: Validar identidad y rol
-      description: |
-        Verifica un token JWT enviado mediante Authorization Bearer y
-        devuelve el identificador y el rol incluidos en la credencial.
-      operationId: validarIdentidadYRol
-      security:
-        - bearerAuth: []
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
+        '200':
           description: Token valido
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TokenValidationResponse"
-              example:
-                valid: true
-                userId: 1
-                role: CLIENTE
-        "401":
-          description: Token ausente, invalido, mal formado o expirado
+                type: object
+                properties:
+                  valid: { type: boolean, example: true }
+                  userId: { type: integer, example: 1 }
+                  role: { $ref: '#/components/schemas/UserRole' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/solicitar-recuperacion:
+    post:
+      tags: [Recuperacion]
+      summary: Solicitar recuperacion de contraseña
+      description: Genera un token temporal y lo envía al email del usuario mediante el servicio SMTP configurado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email, example: cliente@example.com }
+      responses:
+        '200':
+          description: Solicitud procesada sin revelar si el email existe
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthErrorResponse"
-              examples:
-                tokenAusente:
-                  value:
-                    valid: false
-                    error: Token requerido
-                tokenInvalido:
-                  value:
-                    valid: false
-                    error: Token invalido
-                tokenExpirado:
-                  value:
-                    valid: false
-                    error: Token expirado
-        "500":
-          description: JWT_SECRET no esta configurado
+                type: object
+                properties:
+                  message: { type: string }
+                  email: { type: string, format: email }
+                  expiresInMinutes: { type: integer, example: 30 }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /auth/resetear-contrasena:
+    post:
+      tags: [Recuperacion]
+      summary: Restablecer contraseña
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string }
+                newPassword: { type: string, minLength: 6, format: password }
+      responses:
+        '200':
+          description: Contraseña actualizada y token de recuperacion invalidado
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthErrorResponse"
-              example:
-                valid: false
-                error: JWT_SECRET no esta configurado
-
+                type: object
+                properties:
+                  message: { type: string, example: Contraseña actualizada exitosamente }
+                  email: { type: string, format: email }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/oauth2/authorize:
+    get:
+      tags: [OAuth2]
+      summary: Iniciar autorizacion OAuth2
+      parameters:
+        - { name: provider, in: query, required: true, schema: { type: string, enum: [GOOGLE, GITHUB, MICROSOFT, CUSTOM] } }
+        - { name: redirect_uri, in: query, required: true, schema: { type: string, format: uri } }
+        - { name: scopes, in: query, required: false, schema: { type: string } }
+      responses:
+        '501':
+          description: Stub pendiente de implementacion real
+  /auth/oauth2/callback:
+    get:
+      tags: [OAuth2]
+      summary: Callback OAuth2
+      parameters:
+        - { name: provider, in: query, required: true, schema: { type: string } }
+        - { name: code, in: query, required: true, schema: { type: string } }
+        - { name: state, in: query, required: false, schema: { type: string } }
+      responses:
+        '501':
+          description: Stub pendiente de implementacion real
+  /auth/oauth2/link:
+    post:
+      tags: [OAuth2]
+      summary: Vincular cuenta OAuth2
+      security: [{ bearerAuth: [] }]
+      responses:
+        '501':
+          description: Stub pendiente de implementacion real
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-
-  responses:
-    InternalServerError:
-      description: Error interno del servidor
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorResponse"
-          example:
-            error: Error interno del servidor
-
   schemas:
     UserRole:
       type: string
-      enum:
-        - CLIENTE
-        - CONDUCTOR
-        - OPERADOR
-      example: CLIENTE
-
-    UserStatus:
-      type: string
-      enum:
-        - ACTIVO
-        - BLOQUEADO
-      example: ACTIVO
-
+      enum: [CLIENTE, CONDUCTOR, OPERADOR]
     RegisterRequest:
       type: object
-      additionalProperties: false
-      required:
-        - email
-        - password
-        - rol
+      required: [nombre, apellido, dni, telefono, email, password, rol]
       properties:
-        email:
-          type: string
-          format: email
-          example: cliente@example.com
-        password:
-          type: string
-          format: password
-          minLength: 6
-          example: "123456"
-        rol:
-          $ref: "#/components/schemas/UserRole"
-
+        nombre: { type: string, example: Juan }
+        apellido: { type: string, example: Perez }
+        dni: { type: string, example: '12345678' }
+        telefono: { type: string, example: '11 1234 5678' }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 6, format: password }
+        rol: { $ref: '#/components/schemas/UserRole' }
     LoginRequest:
       type: object
-      additionalProperties: false
-      required:
-        - email
-        - password
+      required: [email, password]
       properties:
-        email:
-          type: string
-          format: email
-          example: cliente@example.com
-        password:
-          type: string
-          format: password
-          minLength: 6
-          example: "123456"
-
+        email: { type: string, format: email }
+        password: { type: string, format: password }
     UserResponse:
       type: object
-      required:
-        - id
-        - email
-        - rol
-        - estado
       properties:
-        id:
-          type: integer
-          minimum: 1
-          example: 1
-        email:
-          type: string
-          format: email
-          example: cliente@example.com
-        rol:
-          $ref: "#/components/schemas/UserRole"
-        estado:
-          $ref: "#/components/schemas/UserStatus"
-
+        id: { type: integer }
+        nombre: { type: string }
+        apellido: { type: string }
+        dni: { type: string }
+        telefono: { type: string }
+        email: { type: string, format: email }
+        rol: { $ref: '#/components/schemas/UserRole' }
+        estado: { type: string, enum: [ACTIVO, BLOQUEADO] }
     LoginResponse:
       type: object
-      required:
-        - token
-        - tokenType
-        - expiresIn
-        - usuario
       properties:
-        token:
-          type: string
-          description: Token JWT firmado
-        tokenType:
-          type: string
-          enum:
-            - Bearer
-        expiresIn:
-          type: string
-          enum:
-            - 1h
-        usuario:
-          $ref: "#/components/schemas/UserResponse"
-
-    TokenValidationResponse:
-      type: object
-      required:
-        - valid
-        - userId
-        - role
-      properties:
-        valid:
-          type: boolean
-          enum:
-            - true
-        userId:
-          type: integer
-          minimum: 1
-        role:
-          $ref: "#/components/schemas/UserRole"
-
-    HealthResponse:
-      type: object
-      required:
-        - status
-        - modulo
-      properties:
-        status:
-          type: string
-          enum:
-            - OK
-        modulo:
-          type: string
-          enum:
-            - M1 - Identidad y Acceso
-
+        token: { type: string }
+        tokenType: { type: string, example: Bearer }
+        expiresIn: { type: string, example: 1h }
+        usuario: { $ref: '#/components/schemas/UserResponse' }
     ErrorResponse:
       type: object
-      required:
-        - error
       properties:
-        error:
-          type: string
-
-    AuthErrorResponse:
-      type: object
-      required:
-        - valid
-        - error
-      properties:
-        valid:
-          type: boolean
-          enum:
-            - false
-        error:
-          type: string
+        error: { type: string }
+  responses:
+    BadRequest:
+      description: Datos invalidos o incompletos
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Credenciales o token invalidos
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

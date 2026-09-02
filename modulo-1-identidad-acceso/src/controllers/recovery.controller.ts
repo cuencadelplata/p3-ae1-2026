@@ -40,10 +40,10 @@ function handleError(
  * RF-1.4: POST /auth/solicitar-recuperacion
  * Solicita un token para recuperar la contraseña
  */
-export function requestRecovery(
+export async function requestRecovery(
     req: Request,
     res: Response
-): void {
+): Promise<void> {
     try {
         const { email } = req.body;
 
@@ -54,8 +54,7 @@ export function requestRecovery(
             return;
         }
 
-        const resultado =
-            requestPasswordRecovery(email);
+        const resultado = await requestPasswordRecovery(email);
 
         res.status(200).json(resultado);
     } catch (error) {

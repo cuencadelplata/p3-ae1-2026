@@ -79,6 +79,10 @@ async function registrarUsuario(
         {
             method: "POST",
             body: {
+                nombre: "Usuario",
+                apellido: "Prueba",
+                dni: "30123456",
+                telefono: "11 5555 1234",
                 email,
                 password,
                 rol

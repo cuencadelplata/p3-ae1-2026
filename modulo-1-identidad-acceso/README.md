@@ -1,373 +1,137 @@
-M1 - Identidad y Acceso
+# Módulo 1: Identidad y Acceso
 
-Servicio responsable del registro, la autenticacion y la validacion de identidad y rol de los usuarios de la plataforma distribuida de movilidad urbana bajo demanda.
+Esta carpeta contiene la implementación consolidada del Módulo 1 y todos sus requerimientos, desde RF-1.1 hasta RF-1.5.
 
-Enlaces
+## Funcionalidades
 
-Repositorio: https://github.com/cuencadelplata/p3-ae1-2026
+### Registro y autenticación
 
-Branch de M1: https://github.com/cuencadelplata/p3-ae1-2026/tree/M1-Identidad-Acceso
+- Registro de usuarios con nombre, apellido, DNI, teléfono, email, contraseña y rol.
+- Roles disponibles: `CLIENTE`, `CONDUCTOR` y `OPERADOR`.
+- Inicio de sesión mediante email y contraseña.
+- Generación de tokens JWT con una duración de una hora.
+- Validación protegida de identidad y rol.
+- Bloqueo de usuarios.
 
-Imagen publica: https://hub.docker.com/r/francok10/m1-identidad-acceso
+### Recuperación de acceso (RF-1.4)
 
-Alcance asignado para AE1
+- Solicitud de recuperación mediante email.
+- Generación de tokens únicos con una duración de 30 minutos.
+- Restablecimiento de contraseña con token válido.
+- Invalidación del token después de utilizarlo.
+- Contraseñas protegidas mediante bcrypt.
 
-RF-1.1 - Registro de identidad
+Actualmente el proyecto no envía correos reales. El token se registra en la salida del servidor para facilitar las pruebas locales.
 
-Permite registrar identidades con los roles:
+### Integración OAuth2/OpenID Connect (RF-1.5)
 
-CLIENTE
+El requerimiento está implementado como un stub funcional. Se incluyen las rutas, validaciones, contratos y persistencia necesarios para una futura integración con proveedores externos. Las rutas OAuth2 responden `501 Not Implemented` porque todavía no realizan el flujo real de autenticación.
 
-CONDUCTOR
+## API
 
-OPERADOR
+Las rutas principales son:
 
-El email debe ser unico y la contrasena debe contener al menos seis caracteres. Las contrasenas se almacenan protegidas mediante bcrypt y nunca se devuelven en las respuestas de la API.
-
-RF-1.2 - Autenticacion
-
-Permite iniciar sesion utilizando email y contrasena. Cuando las credenciales son correctas, entrega un token JWT Bearer con una duracion de una hora.
-
-RF-1.3 - Roles y permisos
-
-El rol del usuario se incorpora a la credencial JWT y puede consultarse mediante el endpoint protegido de validacion de identidad y rol.
-
-Los requerimientos RF-1.4 y RF-1.5 no forman parte del alcance asignado a este modulo para la presente entrega.
-
-Versiones de la imagen
-
-Version
-
-Contenido
-
-francok10/m1-identidad-acceso:1
-
-Primera version funcional con registro, autenticacion, roles, Docker y pruebas iniciales.
-
-francok10/m1-identidad-acceso:2
-
-Version recomendada para la evaluacion. Incorpora OpenAPI, Swagger UI, pruebas unitarias, pruebas de integracion y E2E contra contenedores.
-
-No se depende exclusivamente de la etiqueta latest.
-
-Requisitos previos
-
-Para ejecutar la solucion mediante la imagen publicada se necesita:
-
-Docker Desktop o Docker Engine.
-
-Docker Compose v2.
-
-Puerto 3001 disponible.
-
-Node.js 24 y npm solamente son necesarios para ejecutar o desarrollar el modulo fuera de Docker y para las pruebas unitarias y de integracion.
-
-Ejecucion con la imagen publicada
-
-Descargar la version recomendada:
-
-docker pull francok10/m1-identidad-acceso:2
-
-Iniciar el servicio sin construirlo nuevamente:
-
-docker compose up -d --no-build
-
-Comprobar el estado:
-
-docker compose ps
-
-El contenedor debe aparecer con estado healthy.
-
-Verificacion y acceso
-
-Recurso
-
-Direccion
-
-API
-
-http://localhost:3001
-
-Health check
-
-http://localhost:3001/health
-
-Documentacion interactiva
-
-http://localhost:3001/docs
-
-Especificacion OpenAPI
-
-http://localhost:3001/openapi.yaml
-
-Respuesta esperada del health check:
-
-{
-  "status": "OK",
-  "modulo": "M1 - Identidad y Acceso"
-}
-
-Ejecucion de los E2E contra contenedores
-
-Con M1 iniciado y saludable, ejecutar:
-
-docker compose --profile test run --rm e2e-tests
-
-El contenedor de pruebas utiliza node:24-alpine, se comunica con M1 mediante HTTP y no accede directamente a IdentityDB.
-
-Resultado esperado:
-
-tests 10
-pass 10
-fail 0
-
-Detencion y limpieza
-
-Detener y eliminar los contenedores y la red local:
-
-docker compose down
-
-La base de datos permanece almacenada en el volumen identity_data.
-
-Para eliminar tambien los datos persistidos:
-
-docker compose down -v
-
-Este ultimo comando elimina el volumen y todos los usuarios registrados.
-
-Construccion local de la imagen
-
-Construir e iniciar M1 desde el codigo fuente:
-
-docker compose up -d --build
-
-La imagen resultante queda etiquetada como:
-
-francok10/m1-identidad-acceso:2
-
-Ejecucion local sin Docker
-
-Crear un archivo .env utilizando .env.example como referencia:
-
-PORT=3001
-JWT_SECRET=reemplazar-por-una-clave-segura
-
-Instalar dependencias:
-
-npm ci
-
-Compilar TypeScript:
-
-npm run build
-
-Iniciar en modo desarrollo:
-
-npm run dev
-
-En PowerShell puede utilizarse npm.cmd cuando la politica de ejecucion impide invocar directamente npm:
-
-npm.cmd run dev
-
-Endpoints
-
-Metodo
-
-Ruta
-
-Proposito
-
-Autenticacion
-
-GET
-
-/health
-
-Comprobar el estado del modulo
-
-No
-
-POST
-
-/auth/registrar-usuario
-
-Registrar una identidad
-
-No
-
-POST
-
-/auth/iniciar-sesion
-
-Iniciar sesion y obtener un JWT
-
-No
-
-GET
-
-/auth/validar-identidad-y-rol
-
-Validar el JWT y consultar identidad y rol
-
-Bearer JWT
-
-La definicion completa de cuerpos, validaciones, respuestas, errores y ejemplos se encuentra en openapi.yaml y puede consultarse en Swagger UI mediante /docs.
-
-Ejemplo de registro
-
-Solicitud:
-
+```text
+GET  /health
 POST /auth/registrar-usuario
-Content-Type: application/json
-
-{
-  "email": "cliente@example.com",
-  "password": "123456",
-  "rol": "CLIENTE"
-}
-
-Respuesta correcta:
-
-{
-  "id": 1,
-  "email": "cliente@example.com",
-  "rol": "CLIENTE",
-  "estado": "ACTIVO"
-}
-
-Ejemplo de autenticacion
-
-Solicitud:
-
 POST /auth/iniciar-sesion
-Content-Type: application/json
+GET  /auth/validar-identidad-y-rol
+POST /auth/solicitar-recuperacion
+POST /auth/resetear-contrasena
+GET  /auth/oauth2/authorize
+GET  /auth/oauth2/callback
+POST /auth/oauth2/link
+```
 
-{
-  "email": "cliente@example.com",
-  "password": "123456"
-}
+La especificación completa está en `openapi.yaml`.
 
-La respuesta incluye un token JWT Bearer, su duracion y los datos publicos de la identidad autenticada.
+## Requisitos
 
-Pruebas automatizadas
+- Node.js 22 o superior.
+- npm.
 
-Pruebas unitarias
+En Windows, si `better-sqlite3` no puede compilarse por falta de herramientas de C++, instalar las dependencias con:
 
-Comprueban de manera aislada:
+```bash
+npm install --ignore-scripts
+```
 
-Normalizacion de email.
+## Configuración
 
-Formato de email.
+Crear un archivo `.env` en esta carpeta:
 
-Longitud minima de contrasena.
+```env
+PORT=3001
+JWT_SECRET=clave-local-desarrollo
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=tu-cuenta@gmail.com
+SMTP_PASSWORD=contraseña-de-aplicación
+SMTP_FROM=tu-cuenta@gmail.com
+```
 
-Roles CLIENTE, CONDUCTOR y OPERADOR.
+La variable `JWT_SECRET` es necesaria para generar y validar tokens JWT.
+Las variables `SMTP_*` son necesarias para enviar correos reales. Con Gmail se debe utilizar una contraseña de aplicación, no la contraseña habitual de la cuenta.
 
-Ejecutar:
+## Ejecución
 
-npm run test:unit
+Instalar dependencias y levantar el servidor:
 
-Resultado esperado: 4 passed.
+```bash
+npm install --ignore-scripts
+npm start
+```
 
-Pruebas de integracion
+El servicio queda disponible en `http://localhost:3001`.
 
-Comprueban la integracion entre rutas, controladores, servicios, repositorios, JWT y SQLite.
+## Pruebas
 
-npm run test:integration
+La suite E2E se ejecuta con:
 
-Resultado esperado: 7 passed.
-
-Pruebas locales completas
-
+```bash
 npm test
+```
 
-Ejecuta las pruebas unitarias y de integracion. Resultado esperado: 11 passed.
+Resultado validado actualmente:
 
-Pruebas End-to-End
+```text
+Test Files  1 passed
+Tests       47 passed
+Tests       0 failed
+```
 
-Los E2E se ejecutan contra la interfaz HTTP publica del contenedor y comprueban:
+Las pruebas cubren registro, autenticación, validación de tokens, bloqueo de usuarios, recuperación de contraseña, OAuth2 y casos de validación.
 
-Salud del contenedor.
+## Persistencia
 
-Disponibilidad de OpenAPI.
+La aplicación utiliza SQLite local. La base de datos se almacena en:
 
-Registro de cliente.
+```text
+data/identity.db
+```
 
-Registro de conductor.
+Las tablas principales son:
 
-Registro de operador.
+- `usuarios`
+- `password_recovery_tokens`
+- `oauth2_providers`
 
-Rechazo de email repetido.
+Las columnas personales agregadas al registro se incorporan mediante una migración automática al iniciar el servidor.
 
-Inicio de sesion.
+## Documentación adicional
 
-Rechazo de credenciales incorrectas.
+- `openapi.yaml`: contrato de la API.
+- `IMPLEMENTATION_RF14_RF15.md`: detalle técnico de RF-1.4 y RF-1.5.
+- `SUMMARY_RF14_RF15.md`: resumen de la implementación.
+- `../ESTRUCTURA.md`: descripción de la estructura del proyecto.
 
-Validacion de identidad y rol.
+## Estado de implementación
 
-Rechazo de solicitudes sin token.
-
-Persistencia y propiedad de datos
-
-M1 posee una base SQLite independiente denominada IdentityDB. El archivo se almacena en /app/data/identity.db dentro del volumen Docker identity_data.
-
-La tabla usuarios administra exclusivamente datos de identidad:
-
-id
-
-email
-
-password_hash
-
-rol
-
-estado
-
-created_at
-
-Los perfiles de negocio de clientes y conductores pertenecen a otros modulos y no se almacenan en M1.
-
-Configuracion y seguridad
-
-PORT: puerto HTTP del servicio. Valor predeterminado: 3001.
-
-JWT_SECRET: clave utilizada para firmar y verificar los tokens JWT.
-
-.env esta excluido del repositorio.
-
-Las contrasenas se protegen mediante bcrypt.
-
-Los tokens tienen una duracion de una hora.
-
-El contenedor de produccion se ejecuta con un usuario sin privilegios.
-
-Estructura principal
-
-modulo-1-identidad-acceso/
-|-- src/
-|   |-- config/
-|   |-- controllers/
-|   |-- middleware/
-|   |-- repositories/
-|   |-- routes/
-|   |-- services/
-|   |-- types/
-|   `-- utils/
-|-- tests/
-|   |-- unit/
-|   |-- integration/
-|   `-- e2e/
-|-- openapi.yaml
-|-- Dockerfile
-|-- docker-compose.yml
-|-- package.json
-`-- tsconfig.json
-
-Limitaciones y evolucion
-
-RF-1.4 Recuperacion y revocacion no forma parte del alcance asignado para esta entrega.
-
-RF-1.5 OAuth2/OpenID Connect no forma parte del alcance asignado para esta entrega.
-
-La creacion de perfiles de cliente y conductor corresponde respectivamente a M2 y M3.
-
-La integracion entre modulos se realizara dentro de la vertical funcional definida por el equipo.
+| Requerimiento | Estado |
+|---|---|
+| RF-1.1: Registro | Completo |
+| RF-1.2: Autenticación | Completo |
+| RF-1.3: Identidad y rol | Completo |
+| RF-1.4: Recuperación de acceso | Completo, sin envío real de emails |
+| RF-1.5: OAuth2/OpenID Connect | Stub funcional, pendiente de integración real |

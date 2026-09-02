@@ -11,6 +11,22 @@ import db from "../../src/config/database";
 const email = `usuario-${Date.now()}@test.com`;
 const password = "123456";
 
+function registrationData(
+    userEmail: string,
+    userPassword: string,
+    role: string
+) {
+    return {
+        nombre: "Usuario",
+        apellido: "Prueba",
+        dni: "30123456",
+        telefono: "11 5555 1234",
+        email: userEmail,
+        password: userPassword,
+        rol: role
+    };
+}
+
 let token = "";
 
 describe.sequential(
@@ -19,11 +35,7 @@ describe.sequential(
         it("Registrar un usuario", async () => {
             const response = await request(app)
                 .post("/auth/registrar-usuario")
-                .send({
-                    email,
-                    password,
-                    rol: "CLIENTE"
-                });
+                .send(registrationData(email, password, "CLIENTE"));
 
             expect(response.status).toBe(201);
             expect(response.body.email).toBe(email);
@@ -39,11 +51,7 @@ describe.sequential(
             async () => {
                 const response = await request(app)
                     .post("/auth/registrar-usuario")
-                    .send({
-                        email,
-                        password,
-                        rol: "CLIENTE"
-                    });
+                    .send(registrationData(email, password, "CLIENTE"));
 
                 expect(response.status).toBe(409);
                 expect(response.body.error).toBe(
@@ -123,11 +131,7 @@ describe.sequential(
                 const registerResponse =
                     await request(app)
                         .post("/auth/registrar-usuario")
-                        .send({
-                            email: blockedEmail,
-                            password,
-                            rol: "CONDUCTOR"
-                        });
+                        .send(registrationData(blockedEmail, password, "CONDUCTOR"));
 
                 expect(
                     registerResponse.status

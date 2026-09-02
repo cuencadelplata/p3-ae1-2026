@@ -6,16 +6,7 @@ Proyecto académico de la materia Paradigmas y Lenguajes de Programación III. E
 
 ### `modulo-1-identidad-acceso`
 
-Versión original del backend. Incluye los requerimientos RF-1.1 a RF-1.3:
-
-- Registro de usuarios.
-- Inicio de sesión.
-- Validación de identidad y rol mediante JWT.
-- Bloqueo de usuarios.
-
-### `modulo-1-identidad-acceso-rf14-rf15`
-
-Versión extendida y recomendada para la entrega. Incluye los requerimientos RF-1.1 a RF-1.5:
+Backend único y consolidado del Módulo 1. Incluye los requerimientos RF-1.1 a RF-1.5:
 
 - Registro con nombre, apellido, DNI, teléfono, email, contraseña y rol.
 - Autenticación mediante email y contraseña.
@@ -52,10 +43,10 @@ Se necesitan dos terminales.
 
 ### Backend
 
-Usar la versión extendida para disponer de RF-1.4 y RF-1.5:
+Usar el backend consolidado:
 
 ```bash
-cd modulo-1-identidad-acceso-rf14-rf15
+cd modulo-1-identidad-acceso
 npm install --ignore-scripts
 npm start
 ```
@@ -81,12 +72,18 @@ El backend extendido utiliza un archivo `.env` con la siguiente configuración m
 ```env
 PORT=3001
 JWT_SECRET=clave-local-desarrollo
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=tu-cuenta@gmail.com
+SMTP_PASSWORD=contraseña-de-aplicación
+SMTP_FROM=tu-cuenta@gmail.com
 ```
 
 La base de datos utilizada es SQLite y se guarda en:
 
 ```text
-modulo-1-identidad-acceso-rf14-rf15/data/identity.db
+modulo-1-identidad-acceso/data/identity.db
 ```
 
 ## API y documentación
@@ -94,7 +91,7 @@ modulo-1-identidad-acceso-rf14-rf15/data/identity.db
 La especificación OpenAPI completa está en:
 
 ```text
-modulo-1-identidad-acceso-rf14-rf15/openapi.yaml
+modulo-1-identidad-acceso/openapi.yaml
 ```
 
 Principales rutas:
@@ -116,7 +113,7 @@ POST /auth/oauth2/link
 Las pruebas E2E de la versión extendida se ejecutan con:
 
 ```bash
-cd modulo-1-identidad-acceso-rf14-rf15
+cd modulo-1-identidad-acceso
 npm test
 ```
 
@@ -133,7 +130,7 @@ Las pruebas cubren registro, autenticación, roles, validación de tokens, bloqu
 ## Documentación adicional
 
 - `ESTRUCTURA.md`: descripción de las carpetas del repositorio.
-- `modulo-1-identidad-acceso-rf14-rf15/README.md`: documentación específica del backend extendido.
-- `modulo-1-identidad-acceso-rf14-rf15/IMPLEMENTATION_RF14_RF15.md`: detalle técnico de RF-1.4 y RF-1.5.
-- `modulo-1-identidad-acceso-rf14-rf15/openapi.yaml`: contrato de la API.
+- `modulo-1-identidad-acceso/README.md`: documentación del backend.
+- `modulo-1-identidad-acceso/IMPLEMENTATION_RF14_RF15.md`: detalle técnico de RF-1.4 y RF-1.5.
+- `modulo-1-identidad-acceso/openapi.yaml`: contrato de la API.
 - `modulo-1-identidad-acceso-ui/README.md`: documentación de la interfaz web.

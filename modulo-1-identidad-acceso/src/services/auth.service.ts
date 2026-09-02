@@ -1,17 +1,16 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-
 import {
     createUser,
     findUserByEmail
 } from "../repositories/user.repository";
+import { UserRole } from "../types/user.types";
 
-import {
-    esEmailValido,
-    esPasswordValida,
-    esRolValido,
-    normalizarEmail
-} from "../utils/auth.validators";
+const ROLES_VALIDOS: UserRole[] = [
+    "CLIENTE",
+    "CONDUCTOR",
+    "OPERADOR"
+];
 
 export class AuthError extends Error {
     constructor(
@@ -23,6 +22,10 @@ export class AuthError extends Error {
 }
 
 interface RegisterInput {
+    nombre: unknown;
+    apellido: unknown;
+    dni: unknown;
+    telefono: unknown;
     email: unknown;
     password: unknown;
     rol: unknown;
@@ -36,37 +39,49 @@ interface LoginInput {
 export async function registerUser(
     input: RegisterInput
 ) {
-    const { email, password, rol } = input;
+    const { nombre, apellido, dni, telefono, email, password, rol } = input;
 
     if (
+        typeof nombre !== "string" ||
+        typeof apellido !== "string" ||
+        typeof dni !== "string" ||
+        typeof telefono !== "string" ||
         typeof email !== "string" ||
         typeof password !== "string" ||
         typeof rol !== "string"
     ) {
         throw new AuthError(
             400,
-            "Email, password y rol son obligatorios"
+            "Nombre, apellido, DNI, telefono, email, password y rol son obligatorios"
         );
     }
 
-    const emailNormalizado =
-        normalizarEmail(email);
+    if (!nombre.trim() || !apellido.trim() || !dni.trim() || !telefono.trim()) {
+        throw new AuthError(
+            400,
+            "Nombre, apellido, DNI y telefono son obligatorios"
+        );
+    }
 
-    if (!esEmailValido(emailNormalizado)) {
+    const emailNormalizado = email
+        .trim()
+        .toLowerCase();
+
+    if (!emailNormalizado.includes("@")) {
         throw new AuthError(
             400,
             "El email no es válido"
         );
     }
 
-    if (!esPasswordValida(password)) {
+    if (password.length < 6) {
         throw new AuthError(
             400,
             "La contraseña debe tener al menos 6 caracteres"
         );
     }
 
-    if (!esRolValido(rol)) {
+    if (!ROLES_VALIDOS.includes(rol as UserRole)) {
         throw new AuthError(
             400,
             "El rol debe ser CLIENTE, CONDUCTOR u OPERADOR"
@@ -89,13 +104,21 @@ export async function registerUser(
     );
 
     const id = createUser(
+        nombre.trim(),
+        apellido.trim(),
+        dni.trim(),
+        telefono.trim(),
         emailNormalizado,
         passwordHash,
-        rol
+        rol as UserRole
     );
 
     return {
         id,
+        nombre: nombre.trim(),
+        apellido: apellido.trim(),
+        dni: dni.trim(),
+        telefono: telefono.trim(),
         email: emailNormalizado,
         rol,
         estado: "ACTIVO"
@@ -117,8 +140,9 @@ export async function loginUser(
         );
     }
 
-    const emailNormalizado =
-        normalizarEmail(email);
+    const emailNormalizado = email
+        .trim()
+        .toLowerCase();
 
     const usuario =
         findUserByEmail(emailNormalizado);
@@ -137,11 +161,10 @@ export async function loginUser(
         );
     }
 
-    const passwordCorrecto =
-        await bcrypt.compare(
-            password,
-            usuario.password_hash
-        );
+    const passwordCorrecto = await bcrypt.compare(
+        password,
+        usuario.password_hash
+    );
 
     if (!passwordCorrecto) {
         throw new AuthError(
@@ -175,6 +198,10 @@ export async function loginUser(
         expiresIn: "1h",
         usuario: {
             id: usuario.id,
+            nombre: usuario.nombre,
+            apellido: usuario.apellido,
+            dni: usuario.dni,
+            telefono: usuario.telefono,
             email: usuario.email,
             rol: usuario.rol,
             estado: usuario.estado

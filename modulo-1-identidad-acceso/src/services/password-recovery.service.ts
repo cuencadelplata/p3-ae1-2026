@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
+import nodemailer from "nodemailer";
 import {
     findUserByEmail,
     findUserById,
@@ -13,18 +14,58 @@ import { AuthError } from "./auth.service";
 const TOKEN_EXPIRATION_MINUTES = 30;
 const TOKEN_LENGTH = 32;
 
+async function sendRecoveryEmail(
+    email: string,
+    token: string
+): Promise<void> {
+    if (process.env.NODE_ENV === "test") {
+        console.log(
+            `Test recovery email for ${email}: ${token}`
+        );
+        return;
+    }
+
+    const host = process.env.SMTP_HOST;
+    const port = Number(process.env.SMTP_PORT || 587);
+    const user = process.env.SMTP_USER;
+    const password = process.env.SMTP_PASSWORD;
+    const from = process.env.SMTP_FROM || user;
+
+    if (!host || !user || !password || !from) {
+        throw new AuthError(
+            503,
+            "El servicio de correo no está configurado"
+        );
+    }
+
+    const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure: process.env.SMTP_SECURE === "true",
+        auth: { user, pass: password }
+    });
+
+    await transporter.sendMail({
+        from,
+        to: email,
+        subject: "Recuperación de contraseña",
+        text: `Solicitaste recuperar tu contraseña. Tu token es: ${token}\n\nEste token vence en ${TOKEN_EXPIRATION_MINUTES} minutos y solo puede utilizarse una vez. Si no realizaste esta solicitud, ignora este correo.`,
+        html: `<p>Solicitaste recuperar tu contraseña.</p><p>Tu token de recuperación es:</p><p><strong>${token}</strong></p><p>Este token vence en ${TOKEN_EXPIRATION_MINUTES} minutos y solo puede utilizarse una vez.</p><p>Si no realizaste esta solicitud, ignora este correo.</p>`
+    });
+}
+
 /**
  * RF-1.4: Recuperación y Permiso
  * Genera un token de recuperación de contraseña para un usuario
  * El token es válido por 30 minutos
  */
-export function requestPasswordRecovery(
+export async function requestPasswordRecovery(
     email: string
-): {
+): Promise<{
     message: string;
     email: string;
     expiresInMinutes: number;
-} {
+}> {
     const emailNormalizado = email
         .trim()
         .toLowerCase();
@@ -62,10 +103,9 @@ export function requestPasswordRecovery(
         expiresAtMs
     );
 
-    // En producción, esto enviaría un email
-    // con el token de recuperación
-    console.log(
-        `Recovery token for ${emailNormalizado}: ${recoveryToken} (expires in ${TOKEN_EXPIRATION_MINUTES} minutes)`
+    await sendRecoveryEmail(
+        emailNormalizado,
+        recoveryToken
     );
 
     return {
