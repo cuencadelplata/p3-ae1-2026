@@ -8,7 +8,14 @@ import * as repository from "../src/vehiculos/vehiculo-repository.js";
 import { AppError } from "../src/errors/AppError.js";
 import { TipoServicio } from "../src/vehiculos/vehiculo-model.js";
 
-jest.mock("../src/vehiculos/vehiculo-repository.js");
+jest.mock("../src/vehiculos/vehiculo-repository.js", () => ({
+  existePatente: jest.fn(),
+  insertarVehiculo: jest.fn(),
+  listarVehiculosPorConductor: jest.fn(),
+  buscarVehiculoDeConductor: jest.fn(),
+  activarVehiculoEnBD: jest.fn(),
+}));
+
 
 describe("Vehiculo Service Tests", () => {
   const driverId = "driver-abc-123";
