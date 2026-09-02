@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY tsconfig.json ./
+COPY openapi.yaml ./
 COPY src ./src
 COPY simulate ./simulate
 RUN npm run build
@@ -16,6 +17,7 @@ ENV PORT=3007
 COPY package*.json ./
 RUN npm install --omit=dev
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/openapi.yaml ./openapi.yaml
 
 EXPOSE 3007
 

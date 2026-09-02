@@ -1,21 +1,26 @@
 {
   "name": "m7-cargo-cancelacion",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "M7 - Tarifas, Pagos y Liquidaciones | RF-7.4 Cargo de cancelacion - AE1 Movilidad Urbana",
   "main": "dist/src/server.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/src/server.js",
     "dev": "ts-node src/server.ts",
-    "simulate": "node dist/simulate/simulate.js"
+    "simulate": "node dist/simulate/simulate.js",
+    "test": "playwright test",
+    "test:e2e": "node scripts/run-e2e.js"
   },
   "dependencies": {
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "swagger-ui-express": "^5.0.1",
+    "yaml": "^2.5.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.47.0",
     "@types/express": "^4.17.21",
     "@types/node": "^20.14.9",
+    "@types/swagger-ui-express": "^4.1.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.3"
   }
