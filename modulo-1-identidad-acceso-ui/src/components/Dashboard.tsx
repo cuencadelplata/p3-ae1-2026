@@ -18,6 +18,9 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   const initials = (value: string) =>
     (value || '?').replace(/@.*/, '').slice(0, 2).toUpperCase()
 
+  const email = user.email || user.sub || ''
+  const role = user.rol || user.role || ''
+
   return (
     <div className="w-full max-w-3xl">
       <div className="glass rounded-[1.75rem] p-9 md:p-12">
@@ -38,16 +41,16 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         {/* Identidad */}
         <div className="flex items-center gap-5">
           <div className="h-16 w-16 rounded-full border border-[rgba(201,169,97,0.45)] flex items-center justify-center display text-xl text-[var(--gold)]">
-            {initials(user.sub)}
+            {initials(email)}
           </div>
           <div className="min-w-0">
-            <p className="display text-2xl truncate">{user.sub}</p>
+            <p className="display text-2xl truncate">{email}</p>
             <div className="mt-2 flex items-center gap-2 text-[11px] tracking-[0.22em] uppercase text-[var(--text-dim)]">
               <span className="inline-flex items-center gap-1.5 text-[var(--gold)]">
                 <Check className="w-3.5 h-3.5" /> Sesión activa
               </span>
               <span>·</span>
-              <span>{roleLabel(user.rol)}</span>
+              <span>{roleLabel(role)}</span>
             </div>
           </div>
         </div>
@@ -59,7 +62,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
               <Mail className="w-4 h-4 text-[var(--gold)]" />
               <span className="field-label !mb-0">Email</span>
             </div>
-            <p className="font-mono text-sm break-all text-[var(--text)]">{user.sub}</p>
+            <p className="font-mono text-sm break-all text-[var(--text)]">{email}</p>
           </div>
 
           <div className="detail-card">
@@ -67,7 +70,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
               <Shield className="w-4 h-4 text-[var(--gold)]" />
               <span className="field-label !mb-0">Rol</span>
             </div>
-            <p className="text-sm tracking-[0.14em] uppercase">{user.rol}</p>
+            <p className="text-sm tracking-[0.14em] uppercase">{roleLabel(role)}</p>
           </div>
 
           <div className="detail-card">
@@ -105,12 +108,6 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
               </li>
             ))}
           </ul>
-        </div>
-
-        {/* Acciones */}
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <button className="btn-primary">Editar perfil</button>
-          <button className="btn-secondary">Ver documentación</button>
         </div>
 
         <div className="hairline mt-10 mb-5" />

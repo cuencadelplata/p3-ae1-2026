@@ -47,7 +47,7 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin }: Registe
       const parts = token.split('.')
       const decoded = JSON.parse(atob(parts[1]))
 
-      onRegisterSuccess(token, decoded)
+      onRegisterSuccess(token, { ...decoded, ...loginResponse.data.usuario })
     } catch (err: any) {
       setError(err.response?.data?.error || err.response?.data?.message || 'Error al registrarse')
     } finally {

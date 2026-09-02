@@ -209,6 +209,14 @@ body {
   border: 1px solid rgba(224, 104, 95, 0.35);
 }
 
+.alert-success {
+  border-radius: 0.85rem;
+  padding: 0.9rem 1.1rem;
+  color: var(--gold-soft);
+  background: rgba(201, 169, 97, 0.09);
+  border: 1px solid rgba(201, 169, 97, 0.35);
+}
+
 /* Animaciones ------------------------------------------------ */
 @keyframes riseIn {
   from {

@@ -1,0 +1,233 @@
+openapi: 3.0.3
+info:
+  title: M1 - Identidad y Acceso
+  version: 1.0.0
+  description: API de registro, autenticacion, recuperacion de acceso e integracion OAuth2.
+servers:
+  - url: http://localhost:3001
+    description: Ejecucion local
+tags:
+  - name: Salud
+  - name: Identidad y acceso
+  - name: Recuperacion
+  - name: OAuth2
+paths:
+  /health:
+    get:
+      tags: [Salud]
+      summary: Comprobar estado del modulo
+      responses:
+        '200':
+          description: Modulo funcionando
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: OK }
+                  modulo: { type: string, example: M1 - Identidad y Acceso }
+  /auth/registrar-usuario:
+    post:
+      tags: [Identidad y acceso]
+      summary: Registrar usuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Usuario registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email ya registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/iniciar-sesion:
+    post:
+      tags: [Identidad y acceso]
+      summary: Iniciar sesion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Sesion iniciada y token JWT generado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Usuario bloqueado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/validar-identidad-y-rol:
+    get:
+      tags: [Identidad y acceso]
+      summary: Validar identidad y rol
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Token valido
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid: { type: boolean, example: true }
+                  userId: { type: integer, example: 1 }
+                  role: { $ref: '#/components/schemas/UserRole' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/solicitar-recuperacion:
+    post:
+      tags: [Recuperacion]
+      summary: Solicitar recuperacion de contraseña
+      description: Genera un token temporal. La implementacion actual imprime el token en la consola del backend.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email, example: cliente@example.com }
+      responses:
+        '200':
+          description: Solicitud procesada sin revelar si el email existe
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  email: { type: string, format: email }
+                  expiresInMinutes: { type: integer, example: 30 }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /auth/resetear-contrasena:
+    post:
+      tags: [Recuperacion]
+      summary: Restablecer contraseña
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string }
+                newPassword: { type: string, minLength: 6, format: password }
+      responses:
+        '200':
+          description: Contraseña actualizada y token de recuperacion invalidado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: Contraseña actualizada exitosamente }
+                  email: { type: string, format: email }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/oauth2/authorize:
+    get:
+      tags: [OAuth2]
+      summary: Iniciar autorizacion OAuth2
+      parameters:
+        - { name: provider, in: query, required: true, schema: { type: string, enum: [GOOGLE, GITHUB, MICROSOFT, CUSTOM] } }
+        - { name: redirect_uri, in: query, required: true, schema: { type: string, format: uri } }
+        - { name: scopes, in: query, required: false, schema: { type: string } }
+      responses:
+        '501':
+          description: Stub pendiente de implementacion real
+  /auth/oauth2/callback:
+    get:
+      tags: [OAuth2]
+      summary: Callback OAuth2
+      parameters:
+        - { name: provider, in: query, required: true, schema: { type: string } }
+        - { name: code, in: query, required: true, schema: { type: string } }
+        - { name: state, in: query, required: false, schema: { type: string } }
+      responses:
+        '501':
+          description: Stub pendiente de implementacion real
+  /auth/oauth2/link:
+    post:
+      tags: [OAuth2]
+      summary: Vincular cuenta OAuth2
+      security: [{ bearerAuth: [] }]
+      responses:
+        '501':
+          description: Stub pendiente de implementacion real
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    UserRole:
+      type: string
+      enum: [CLIENTE, CONDUCTOR, OPERADOR]
+    RegisterRequest:
+      type: object
+      required: [email, password, rol]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 6, format: password }
+        rol: { $ref: '#/components/schemas/UserRole' }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+    UserResponse:
+      type: object
+      properties:
+        id: { type: integer }
+        email: { type: string, format: email }
+        rol: { $ref: '#/components/schemas/UserRole' }
+        estado: { type: string, enum: [ACTIVO, BLOQUEADO] }
+    LoginResponse:
+      type: object
+      properties:
+        token: { type: string }
+        tokenType: { type: string, example: Bearer }
+        expiresIn: { type: string, example: 1h }
+        usuario: { $ref: '#/components/schemas/UserResponse' }
+    ErrorResponse:
+      type: object
+      properties:
+        error: { type: string }
+  responses:
+    BadRequest:
+      description: Datos invalidos o incompletos
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Credenciales o token invalidos
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

@@ -5,9 +5,10 @@ import axios from 'axios'
 interface LoginProps {
   onLoginSuccess: (token: string, user: any) => void
   onSwitchToRegister: () => void
+  onSwitchToRecovery: () => void
 }
 
-export default function Login({ onLoginSuccess, onSwitchToRegister }: LoginProps) {
+export default function Login({ onLoginSuccess, onSwitchToRegister, onSwitchToRecovery }: LoginProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -29,9 +30,9 @@ export default function Login({ onLoginSuccess, onSwitchToRegister }: LoginProps
       const parts = token.split('.')
       const decoded = JSON.parse(atob(parts[1]))
 
-      onLoginSuccess(token, decoded)
+      onLoginSuccess(token, { ...decoded, ...response.data.usuario })
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Error al iniciar sesión')
+      setError(err.response?.data?.error || err.response?.data?.message || 'Error al iniciar sesión')
     } finally {
       setLoading(false)
     }
@@ -95,10 +96,17 @@ export default function Login({ onLoginSuccess, onSwitchToRegister }: LoginProps
           </button>
         </form>
 
+        <button
+          type="button"
+          onClick={onSwitchToRecovery}
+          className="mt-5 w-full text-xs tracking-[0.12em] text-[var(--text-soft)] hover:text-[var(--gold)] transition-colors"
+        >
+          ¿Olvidaste tu contraseña?
+        </button>
+
         <div className="relative my-9">
           <div className="hairline" />
           <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 px-3 text-[10px] tracking-[0.3em] uppercase text-[var(--text-dim)] bg-[#111722]">
-            o
           </span>
         </div>
 
