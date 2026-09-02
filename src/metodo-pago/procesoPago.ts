@@ -6,7 +6,7 @@ function generarId():string{
     return Math.random().toString();
 }
 
-function registrarMetodoPago(clienteId:string, viajeId: string, tipo: TipoPago): MetodoPago{
+export function registrarMetodoPago(clienteId:string, viajeId: string, tipo: TipoPago): MetodoPago{
 
     if (clienteId==""||viajeId==""){
         throw new Error("clienteId y viajeId debe existir"); 
