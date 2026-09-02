@@ -1,0 +1,29 @@
+openapi: 3.0.3
+info:
+  title: Historial Financiero API
+  version: 1.0.0
+
+paths:
+  /operations:
+    get:
+      summary: Consultar el historial de operaciones
+      responses:
+        "200":
+          description: Lista de operaciones
+    post:
+      summary: Registrar una nueva operación
+      responses:
+        "201":
+          description: Operación creada
+        "400":
+          description: Datos inválidos (amount o type incorrectos)
+  /operations/{id}/status:
+    patch:
+      summary: Actualizar el estado de una operación
+      responses:
+        "200":
+          description: Estado actualizado
+        "400":
+          description: El nuevo estado no es válido
+        "404":
+          description: Operación no encontrada
