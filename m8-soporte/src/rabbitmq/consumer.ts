@@ -15,28 +15,28 @@ export class RabbitMQConsumer {
       console.log(`[RabbitMQ] Conectando a ${url}...`);
       this.connection = await amqp.connect(url);
       this.channel = await this.connection.createChannel();
-      
+
       // Aseguramos que el exchange y la cola existan (arquitectura resiliente)
       await this.channel!.assertExchange(this.EXCHANGE_NAME, 'topic', { durable: true });
       await this.channel!.assertQueue(this.QUEUE_NAME, { durable: true });
-      
+
       // Escuchamos eventos clave (ej. viaje completado, conductor asignado)
       await this.channel!.bindQueue(this.QUEUE_NAME, this.EXCHANGE_NAME, 'viaje.*');
 
       console.log(`[RabbitMQ] Conectado exitosamente. Esperando mensajes en la cola: ${this.QUEUE_NAME}`);
-      
+
       this.startConsuming();
     } catch (error) {
       console.error('[RabbitMQ] Error de conexión:', error);
       // En un entorno productivo usaríamos reintentos exponenciales
-      setTimeout(() => this.connect(url), 5000); 
+      setTimeout(() => this.connect(url), 5000);
     }
   }
 
   private static async startConsuming() {
     if (!this.channel) return;
 
-    this.channel.consume(this.QUEUE_NAME, async (msg) => {
+    this.channel.consume(this.QUEUE_NAME, async (msg: any) => {
       if (!msg) return;
 
       try {
@@ -51,7 +51,7 @@ export class RabbitMQConsumer {
             // Ej: Alguien del M5 asignó el viaje. Notificamos al cliente.
             await NotificationServiceMock.sendNotification(payload.viajeId, 'PUSH', 'Tu conductor está en camino');
             break;
-            
+
           case 'viaje.iniciado':
             // Ej: El M6 marca el viaje como iniciado. Generamos QR.
             await DocumentServiceMock.generateQR(payload.viajeId);
@@ -61,13 +61,13 @@ export class RabbitMQConsumer {
             // Viaje finalizado (M6/M7). Generamos PDF de comprobante y notificamos.
             const pdfUrl = await DocumentServiceMock.generatePDF(payload.viajeId, payload.importe || 0);
             await NotificationServiceMock.sendNotification(payload.viajeId, 'EMAIL', `Tu comprobante está listo: ${pdfUrl}`);
-            
+
             // Si el cliente había abierto un ticket para este viaje, podríamos cambiarle el estado o avisar
             // Aquí hay lógica cruzada entre nuestro 8.5 y 8.6
             const tickets = ticketRepository.listarTodos().filter(t => t.viajeId === payload.viajeId);
             if (tickets.length > 0) {
-                console.log(`[RabbitMQ] El viaje completado tiene ${tickets.length} tickets asociados. Actualizando estados...`);
-                // En un escenario real, podríamos resolverlos o disparar una alerta a soporte.
+              console.log(`[RabbitMQ] El viaje completado tiene ${tickets.length} tickets asociados. Actualizando estados...`);
+              // En un escenario real, podríamos resolverlos o disparar una alerta a soporte.
             }
             break;
 
@@ -81,7 +81,7 @@ export class RabbitMQConsumer {
         console.error('[RabbitMQ] Error procesando mensaje:', error);
         // Si hay error temporal, podríamos no hacer ack para que se reencole (NACK). 
         // En AE4 se pedirán reintentos, por ahora lo descartamos o logueamos.
-        this.channel!.ack(msg); 
+        this.channel!.ack(msg);
       }
     });
   }
