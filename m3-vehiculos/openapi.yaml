@@ -1,0 +1,220 @@
+openapi: 3.0.0
+info:
+  title: M3 - Conductores y Vehículos (m3-drivers)
+  version: 1.0.0
+  description: RF-3.2 (Vehículos) y RF-3.4 (Documentación)
+servers:
+  - url: http://localhost:8083
+
+paths:
+  /api/v1/drivers/{driverId}/vehicles:
+    post:
+      summary: Registrar un vehículo
+      parameters:
+        - $ref: "#/components/parameters/driverId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VehiculoRequest"
+      responses:
+        "201":
+          description: Vehículo creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VehiculoResponse"
+        "400":
+          description: Datos inválidos (patente con formato incorrecto, tipo inválido, año inválido)
+        "409":
+          description: Ya existe un vehículo con esa patente
+    get:
+      summary: Listar los vehículos de un conductor
+      parameters:
+        - $ref: "#/components/parameters/driverId"
+      responses:
+        "200":
+          description: Lista de vehículos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehiculoResponse"
+
+  /api/v1/drivers/{driverId}/vehicles/{vehicleId}:
+    get:
+      summary: Consultar un vehículo puntual
+      parameters:
+        - $ref: "#/components/parameters/driverId"
+        - $ref: "#/components/parameters/vehicleId"
+      responses:
+        "200":
+          description: Vehículo encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VehiculoResponse"
+        "404":
+          description: Vehículo no encontrado
+
+  /api/v1/drivers/{driverId}/vehicles/{vehicleId}/activate:
+    patch:
+      summary: Activar un vehículo para la jornada (desactiva los demás del conductor)
+      parameters:
+        - $ref: "#/components/parameters/driverId"
+        - $ref: "#/components/parameters/vehicleId"
+      responses:
+        "200":
+          description: Vehículo activado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VehiculoResponse"
+        "404":
+          description: Vehículo no encontrado
+
+  /api/v1/drivers/{driverId}/documents:
+    post:
+      summary: Registrar un documento (licencia, seguro o cédula verde)
+      parameters:
+        - $ref: "#/components/parameters/driverId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentoRequest"
+      responses:
+        "201":
+          description: Documento creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoResponse"
+        "400":
+          description: Datos inválidos (fecha no futura, vehicleId faltante o inválido según tipo)
+    get:
+      summary: Listar documentos de un conductor
+      parameters:
+        - $ref: "#/components/parameters/driverId"
+      responses:
+        "200":
+          description: Lista de documentos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DocumentoResponse"
+
+  /api/v1/drivers/{driverId}/documents/{documentId}:
+    get:
+      summary: Consultar un documento puntual
+      parameters:
+        - $ref: "#/components/parameters/driverId"
+        - $ref: "#/components/parameters/documentId"
+      responses:
+        "200":
+          description: Documento encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoResponse"
+        "404":
+          description: Documento no encontrado
+
+components:
+  parameters:
+    driverId:
+      in: path
+      name: driverId
+      required: true
+      schema:
+        type: string
+    vehicleId:
+      in: path
+      name: vehicleId
+      required: true
+      schema:
+        type: string
+    documentId:
+      in: path
+      name: documentId
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    VehiculoRequest:
+      type: object
+      required: [patente, tipoServicio, anio]
+      properties:
+        patente:
+          type: string
+          example: AB123CD
+        marca:
+          type: string
+          example: Toyota
+        modelo:
+          type: string
+          example: Corolla
+        anio:
+          type: integer
+          example: 2020
+        tipoServicio:
+          type: string
+          enum: [AUTO, MOTO]
+
+    VehiculoResponse:
+      allOf:
+        - $ref: "#/components/schemas/VehiculoRequest"
+        - type: object
+          properties:
+            id:
+              type: string
+            driverId:
+              type: string
+            activo:
+              type: boolean
+            createdAt:
+              type: string
+              format: date-time
+
+    DocumentoRequest:
+      type: object
+      required: [tipoDocumento, numeroDocumento, fechaVencimiento, archivoUrl]
+      properties:
+        tipoDocumento:
+          type: string
+          enum: [LICENCIA_CONDUCIR, SEGURO_VEHICULO, CEDULA_VEHICULO]
+        vehicleId:
+          type: string
+          description: Obligatorio para SEGURO_VEHICULO y CEDULA_VEHICULO
+        numeroDocumento:
+          type: string
+          example: POL-2027-001
+        fechaVencimiento:
+          type: string
+          format: date
+          example: "2027-03-15"
+        archivoUrl:
+          type: string
+          example: https://ejemplo.com/doc.pdf
+
+    DocumentoResponse:
+      allOf:
+        - $ref: "#/components/schemas/DocumentoRequest"
+        - type: object
+          properties:
+            id:
+              type: string
+            driverId:
+              type: string
+            estado:
+              type: string
+              enum: [PENDIENTE, APROBADO, RECHAZADO]
+            createdAt:
+              type: string
+              format: date-time
