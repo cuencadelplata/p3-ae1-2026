@@ -1,9 +1,19 @@
 import { supabase } from "../config/supabaseClient.js";
-import {
-  TipoServicio,
-  type Vehiculo,
-  type VehiculoParaInsertar,
-} from "./vehiculo.js";
+import { type VehiculoParaInsertar } from "./vehiculo.js";
+
+type TipoServicio = string;
+
+type Vehiculo = {
+  id: string;
+  driverId: string;
+  patente: string;
+  marca: string | null;
+  modelo: string | null;
+  anio: number;
+  tipoServicio: TipoServicio;
+  activo: boolean;
+  createdAt: Date;
+};
 
 // Fila cruda tal como la devuelve Supabase (snake_case)
 interface VehiculoFila {
