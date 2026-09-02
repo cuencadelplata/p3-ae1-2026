@@ -1,9 +1,309 @@
-openapi: 3.0.3
+openapi: 3.0.0
 info:
-  title: Historial Financiero API
-  version: 1.0.0
+  title: M7 - Tarifas, Pagos y Liquidaciones
+  description: >
+    API del módulo M7, correspondiente a los requerimientos RF-7.2
+    (Método de pago), RF-7.3 (Autorización/captura), RF-7.5 (Reintegro)
+    y RF-7.6 (Idempotencia de pago).
+  version: 3.0
 
 paths:
+  /reintegro:
+    post:
+      summary: Calcula el reintegro correspondiente a una cancelación
+      description: >
+        RF-7.5. Recibe el monto que se cobró como cargo de cancelación
+        y devuelve el monto que corresponde reintegrar al cliente,
+        aplicando un porcentaje fijo del 95%.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - montoCancelacion
+                - viajeId
+              properties:
+                montoCancelacion:
+                  type: number
+                  description: Monto que se cobró por la cancelación del viaje
+                  example: 1000
+                viajeId:
+                  type: string
+                  description: Identificador del viaje cancelado
+                  example: "v1"
+      responses:
+        '200':
+          description: Reintegro calculado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  monto:
+                    type: number
+                    description: Monto calculado a reintegrar (95% del monto de cancelación)
+                    example: 950
+                  viajeId:
+                    type: string
+                    example: "v1"
+        '400':
+          description: Datos inválidos o faltantes en la solicitud
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "montoCancelacion y viajeId son requeridos"
+
+  /pagos/{idOrden}/duplicado:
+    get:
+      summary: Verifica si una orden de pago ya fue procesada
+      description: >
+        RF-7.6 (Idempotencia). Permite consultar si una orden ya tiene
+        un pago registrado, para evitar cobros duplicados. En el flujo
+        real, esta verificación se usa internamente antes de capturar
+        un cobro (RF-7.3); este endpoint se expone además para poder
+        consultarlo y probarlo de forma independiente.
+      parameters:
+        - name: idOrden
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Identificador de la orden de pago a verificar
+          example: "o1"
+      responses:
+        '200':
+          description: Resultado de la verificación
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  idOrden:
+                    type: string
+                    example: "o1"
+                  esDuplicado:
+                    type: boolean
+                    description: true si la orden ya fue procesada antes
+                    example: true
+
+  /metodo-pago:
+    post:
+      summary: Registra un método de pago asociado a un viaje
+      description: >
+        RF-7.2. Registra un método de pago para un viaje, quedando en
+        estado inicial "pendiente".
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - clienteId
+                - viajeId
+                - tipo
+              properties:
+                clienteId:
+                  type: string
+                  example: "cliente1"
+                viajeId:
+                  type: string
+                  example: "v1"
+                tipo:
+                  type: string
+                  enum: [efectivo, tarjeta, transferencia]
+                  example: "efectivo"
+      responses:
+        '201':
+          description: Método de pago registrado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pagoId:
+                    type: string
+                    example: "0.123456789"
+                  clienteId:
+                    type: string
+                    example: "cliente1"
+                  viajeId:
+                    type: string
+                    example: "v1"
+                  tipo:
+                    type: string
+                    enum: [efectivo, tarjeta, transferencia]
+                    example: "efectivo"
+                  detalle:
+                    type: string
+                    example: ""
+                  fecha:
+                    type: string
+                    example: "2/9/2026"
+                  estado:
+                    type: string
+                    enum: [pendiente, autorizado, rechazado]
+                    example: "pendiente"
+        '400':
+          description: No se pudo registrar el método de pago (datos inválidos)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje:
+                    type: string
+                    example: "No se pudo registrar el método de pago"
+
+  /metodo-pago/{viajeId}:
+    get:
+      summary: Consulta el método de pago asociado a un viaje
+      description: RF-7.2. Busca el método de pago registrado para un viaje puntual.
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "v1"
+      responses:
+        '200':
+          description: Método de pago encontrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pagoId:
+                    type: string
+                    example: "0.123456789"
+                  clienteId:
+                    type: string
+                    example: "cliente1"
+                  viajeId:
+                    type: string
+                    example: "v1"
+                  tipo:
+                    type: string
+                    enum: [efectivo, tarjeta, transferencia]
+                    example: "efectivo"
+                  detalle:
+                    type: string
+                    example: ""
+                  fecha:
+                    type: string
+                    example: "2/9/2026"
+                  estado:
+                    type: string
+                    enum: [pendiente, autorizado, rechazado]
+                    example: "pendiente"
+        '404':
+          description: No se encontró un pago para ese viaje
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje:
+                    type: string
+                    example: "No se encontró un pago para ese viaje"
+
+  /metodo-pago/{viajeId}/autorizar:
+    post:
+      summary: Autoriza el cobro de un método de pago pendiente
+      description: RF-7.3. Cambia el estado de un método de pago de "pendiente" a "autorizado".
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "v1"
+      responses:
+        '200':
+          description: Pago autorizado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pagoId:
+                    type: string
+                    example: "0.123456789"
+                  clienteId:
+                    type: string
+                    example: "cliente1"
+                  viajeId:
+                    type: string
+                    example: "v1"
+                  tipo:
+                    type: string
+                    enum: [efectivo, tarjeta, transferencia]
+                    example: "efectivo"
+                  detalle:
+                    type: string
+                    example: ""
+                  fecha:
+                    type: string
+                    example: "2/9/2026"
+                  estado:
+                    type: string
+                    enum: [pendiente, autorizado, rechazado]
+                    example: "autorizado"
+        '400':
+          description: No se pudo autorizar (no existe, o no está en estado "pendiente")
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje:
+                    type: string
+                    example: "No se pudo autorizar el pago"
+
+  /metodo-pago/{viajeId}/rechazar:
+    post:
+      summary: Rechaza un método de pago pendiente
+      description: RF-7.3. Cambia el estado de un método de pago de "pendiente" a "rechazado".
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "v1"
+      responses:
+        '200':
+          description: Pago rechazado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pagoId:
+                    type: string
+                    example: "0.123456789"
+                  clienteId:
+                    type: string
+                    example: "cliente1"
+                  viajeId:
+                    type: string
+                    example: "v1"
+                  tipo:
+                    type: string
+                    enum: [efectivo, tarjeta, transferencia]
+                    example: "efectivo"
+                  detalle:
+                    type: string
+                    example: ""
+                  fecha:
+                    type: string
   /operations:
     get:
       summary: Consultar el historial de operaciones
@@ -17,6 +317,7 @@ paths:
           description: Operación creada
         "400":
           description: Datos inválidos (amount o type incorrectos)
+
   /operations/{id}/status:
     patch:
       summary: Actualizar el estado de una operación
