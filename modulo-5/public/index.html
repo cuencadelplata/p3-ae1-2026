@@ -1445,7 +1445,7 @@
       }
     }
 
-    const API_BASE = window.location.protocol === 'file:' ? 'http://localhost:3005' : (window.location.port === '3005' ? '' : 'http://localhost:3005');
+    const API_BASE = window.location.protocol === 'file:' ? 'http://localhost:3005' : '';
 
     function resetNewTrip() {
       currentRequestId = null;
