@@ -38,13 +38,15 @@ export async function registrarVehiculo(
   const existe = await existePatente(patente);
   if (existe) throw new AppError("Ya existe un vehículo con esa patente", 409);
 
+  const tipoServicio = tipo as TipoServicio;
+
   const payload: VehiculoParaInsertar = {
     driverId,
     patente,
     marca: datos.marca?.trim() || null,
     modelo: datos.modelo?.trim() || null,
     anio: datos.anio,
-    tipoServicio: tipo as TipoServicio,
+    tipoServicio,
     activo: false,
   };
 

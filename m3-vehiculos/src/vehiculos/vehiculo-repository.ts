@@ -1,19 +1,6 @@
 import { supabase } from "../config/supabaseClient.js";
 import { type VehiculoParaInsertar } from "./vehiculo-dto.js";
-
-type TipoServicio = string;
-
-type Vehiculo = {
-  id: string;
-  driverId: string;
-  patente: string;
-  marca: string | null;
-  modelo: string | null;
-  anio: number;
-  tipoServicio: TipoServicio;
-  activo: boolean;
-  createdAt: Date;
-};
+import { type Vehiculo, type TipoServicio } from "./vehiculo-model.js";
 
 // Fila cruda tal como la devuelve Supabase (snake_case)
 interface VehiculoFila {
