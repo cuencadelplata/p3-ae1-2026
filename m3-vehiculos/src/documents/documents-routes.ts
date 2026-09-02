@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from "express";
+import { Routes, type Request, type Response } from "express";
 
 import {
   registrarDocumento,
@@ -6,11 +6,11 @@ import {
   obtenerDocumento,
 } from "./documents-service.js";
 
-export const documentoRouter = Router({ mergeParams: true });
+export const documentoRoutes = Routes({ mergeParams: true });
 
 // POST /api/v1/drivers/:driverId/documents
 // RF-3.4: registrar documentación
-documentoRouter.post("/", async (req: Request, res: Response) => {
+documentoRoutes.post("/", async (req: Request, res: Response) => {
   const documento = await registrarDocumento(
     req.params.driverId as string,
     req.body,
@@ -21,7 +21,7 @@ documentoRouter.post("/", async (req: Request, res: Response) => {
 
 // GET /api/v1/drivers/:driverId/documents
 // RF-3.4: listar documentación del conductor
-documentoRouter.get("/", async (req: Request, res: Response) => {
+documentoRoutes.get("/", async (req: Request, res: Response) => {
   const documentos = await listarDocumentos(
     req.params.driverId as string,
   );
@@ -31,7 +31,7 @@ documentoRouter.get("/", async (req: Request, res: Response) => {
 
 // GET /api/v1/drivers/:driverId/documents/:documentId
 // RF-3.4: obtener documentación específica
-documentoRouter.get(
+documentoRoutes.get(
   "/:documentId",
   async (req: Request, res: Response) => {
     const documento = await obtenerDocumento(

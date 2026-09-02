@@ -2,8 +2,8 @@ import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { errorHandler } from "./middlewares/errorHandler.js";
-import { vehiculoRouter } from "./vehiculos/vehiculo-router.js";
-import { documentoRouter } from "./documents/documents-router.js";
+import { vehiculoRoutes } from "./vehiculos/vehiculo-routes.js";
+import { documentoRoutes } from "./documents/documents-routes.js";
 
 dotenv.config();
 
@@ -21,8 +21,8 @@ app.get("/health", (_req: Request, res: Response) => {
   });
 });
 
-app.use("/api/v1/drivers/:driverId/vehicles", vehiculoRouter);
-app.use("/api/v1/drivers/:driverId/documents", documentoRouter);
+app.use("/api/v1/drivers/:driverId/vehicles", vehiculoRoutes);
+app.use("/api/v1/drivers/:driverId/documents", documentoRoutes);
 
 // Siempre al final, después de todas las rutas
 app.use(errorHandler);
@@ -32,9 +32,8 @@ app.listen(PORT, () => {
   console.log(`   Health check: http://localhost:${PORT}/health`);
 });
 
-
-// TODO: montar acá los routers cuando existan
-// app.use("/api/v1/drivers/:driverId/vehicles", vehiculoRouter);
+// TODO: montar acá los Routess cuando existan
+// app.use("/api/v1/drivers/:driverId/vehicles", vehiculoroutes);
 // app.use("/api/v1/drivers/:driverId/documents", documentoRouter);
 
 // no usamos errorhandler al final (osi?)
