@@ -76,10 +76,15 @@ export const downloadReceipt: RequestHandler = async (req, res, next) => {
     res.setHeader('Content-Disposition', `attachment; filename="comprobante-${receipt.receiptNumber}.pdf"`);
 
     const stream = fs.createReadStream(resolvedPath);
-    stream.on('error', (err) => {
-      if (!res.headersSent) {
-        next(err);
+    stream.on('error', (streamError) => {
+      // Si el archivo falla antes de la primera escritura todavia se puede
+      // responder con el formato de error del servicio; si ya empezo a enviarse
+      // el PDF hay que cortar la conexion para no dejarla colgada.
+      if (res.headersSent) {
+        res.destroy(streamError);
+        return;
       }
+      next(streamError);
     });
     stream.pipe(res);
   } catch (error) {

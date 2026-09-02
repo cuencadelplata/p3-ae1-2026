@@ -3,18 +3,18 @@
 * **Estado:** Aceptado
 * **Fecha:** 2026-09-01
 * **Autores:** Juan Gualtieri, Lucas Cremaschi, Meza Santiago (Grupo 14)
-* **Requerimientos:** RF-8.3, RF-8.4, RNF-01, RNF-03, RNF-04, RNF-05, RNF-08, RNF-12, RNF-17
+* **Requerimientos:** RF-8.3, RF-8.4, RNF-01, RNF-03, RNF-04, RNF-05, RNF-08, RNF-09, RNF-11, RNF-17
 
 ---
 
 ## Contexto
 
-El Módulo 8 (Notificaciones, Documentos y Soporte) debe proveer en la entrega AE1 la capacidad de generar comprobantes oficiales en PDF ante la finalización de un viaje y permitir su consulta, descarga y reenvío. El sistema debe operar en una arquitectura modular de servicios distribuidos, con contratos OpenAPI formales, ejecución contenerizada en Docker, tolerancia a solicitudes concurrentes e idempotencia estricta.
+El Módulo 8 (Notificaciones, Documentos y Soporte) debe proveer en la entrega AE1 la capacidad de generar comprobantes de viaje en PDF ante la finalización de un viaje y permitir su consulta, descarga y reenvío. El sistema debe operar en una arquitectura modular de servicios distribuidos, con contratos OpenAPI formales, ejecución contenerizada en Docker, tolerancia a solicitudes concurrentes e idempotencia estricta.
 
 ## Decisiones Adoptadas
 
 ### 1. Plataforma y Lenguaje (RNF-01)
-* Se adopta **Node.js (v24 LTS) con TypeScript**.
+* Se adopta **Node.js 22 LTS con TypeScript**.
 * **Justificación:** Tipado estático riguroso para los modelos de datos compartidos, rendimiento asíncrono no bloqueante y madurez de librerías para generación documental y APIs REST con Express.
 
 ### 2. Motor de Generación de PDF (RF-8.3)
@@ -37,14 +37,14 @@ El Módulo 8 (Notificaciones, Documentos y Soporte) debe proveer en la entrega A
 
 ### 6. Estrategia de Testing (RNF-17)
 * Se utiliza el ejecutor de pruebas nativo `node:test` y `node:assert/strict` de Node.js ejecutado vía `tsx --test`.
-* **Justificación:** No requiere dependencias adicionales como Jest/Mocha, ejecuta en menos de 1 segundo y cubre tanto validaciones unitarias como integración HTTP completa de punta a punta.
+* **Justificación:** No requiere dependencias adicionales como Jest/Mocha y cubre tanto las validaciones unitarias como la integración HTTP de punta a punta.
 
 ## Consecuencias
 
 * **Positivas:**
   - Microservicio 100% autónomo, ligero y portable.
-  - Tiempos de respuesta de generación de comprobantes inferiores a 100ms.
-  - Cobertura completa de tests unitarios y de integración.
+  - Generación del PDF en 3,3 ms de mediana y 6,3 ms en el percentil 95 (30 muestras).
+  - 22 pruebas automatizadas entre unitarias e integración HTTP, que corren en alrededor de un segundo.
   - Documentación interactiva disponible sin herramientas externas.
 * **A considerar para AE2:**
   - Reemplazar el almacenamiento en disco por PostgreSQL (`CommunicationsDB`) y S3/MinIO.

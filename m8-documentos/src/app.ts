@@ -3,11 +3,15 @@ import express, { type Express } from 'express';
 
 import { env } from './config/env';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
-import { pdfDirectory } from './repositories/receipt.repository';
+import { ensureStorageSync, pdfDirectory } from './repositories/receipt.repository';
 import { apiRouter } from './routes';
 import { healthRouter } from './routes/health.routes';
 
 export function createApp(): Express {
+  // La aplicacion se hace cargo de su propio almacenamiento: asi /health responde
+  // correctamente aunque se la levante sin pasar por el arranque del proceso.
+  ensureStorageSync();
+
   const app = express();
 
   app.disable('x-powered-by');

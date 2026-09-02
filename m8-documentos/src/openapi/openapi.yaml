@@ -5,13 +5,13 @@ info:
     Microservicio de la **Plataforma Distribuida de Movilidad Urbana (ISI - Paradigmas 3 - AE1)**.
     Responsable de la **emisión, consulta, descarga y reenvío de comprobantes de viaje en PDF**.
 
-    **Alcance asignado (Grupo 6 - Juan Gualtieri, Lucas Cremarchi, Meza Santiago):**
+    **Alcance asignado (Grupo 14 - Juan Gualtieri, Lucas Cremaschi, Meza Santiago):**
     - **RF-8.3:** Generación de comprobante PDF posterior a la finalización/pago con datos del viaje, importe, identificadores y fecha.
-    - **RF-8.4:** Reenvío de comprobante (solicitud de enlace o entrega simulada por email/SMS).
+    - **RF-8.4:** Reenvío de comprobante (solicitud de enlace o entrega simulada por email, SMS o push).
     - **Idempotencia:** La emisión por `tripId` es estrictamente idempotente para evitar comprobantes duplicados o condiciones de carrera.
   version: 1.0.0
   contact:
-    name: Grupo 6 - M8 Comprobantes
+    name: Grupo 14 - M8 Comprobantes
 servers:
   - url: http://localhost:3008/api/v1
     description: Servidor Local de Desarrollo
@@ -180,7 +180,7 @@ paths:
         - Comprobantes (RF-8.3 / RF-8.4)
       summary: Reenvío de comprobante de viaje (RF-8.4)
       description: |
-        Vuelve a solicitar el envío del comprobante por correo electrónico o SMS.
+        Vuelve a solicitar el envío del comprobante por correo electrónico, SMS o notificación push.
         Si no se indica destino en el cuerpo, utiliza el email registrado del cliente.
       operationId: resendReceipt
       parameters:
@@ -227,6 +227,11 @@ paths:
                 $ref: '#/components/schemas/ValidationErrorResponse'
 
   /health:
+    servers:
+      - url: http://localhost:3008
+        description: El health check se expone en la raiz, fuera del prefijo /api/v1
+      - url: /
+        description: Servidor relativo
     get:
       tags:
         - Salud
@@ -385,7 +390,8 @@ components:
           example: 5920
         timeAmount:
           type: number
-          minimum: 1550
+          minimum: 0
+          example: 1550
         surcharges:
           type: number
           minimum: 0
@@ -426,12 +432,14 @@ components:
     Receipt:
       type: object
       properties:
-        id:
+        receiptId:
           type: string
-          example: "rec-b235eef2-d278-4395-8857-41a6b0cfa74d"
+          format: uuid
+          example: "cee84adf-d510-495c-b2be-6def62b11409"
         receiptNumber:
           type: string
-          example: "REC-20260828-000123"
+          description: Numero legible del comprobante, con el formato CMP-<anio>-<referencia>.
+          example: "CMP-2026-CEE84ADFD5"
         tripId:
           type: string
           example: "trip-2026-000123"
@@ -465,31 +473,33 @@ components:
 
     DeliveryRecord:
       type: object
+      description: |
+        Constancia de una entrega del comprobante. En AE1 el envio se simula: se
+        registra el pedido y se devuelve el enlace de descarga.
+      required:
+        - channel
+        - destination
+        - sentAt
       properties:
-        id:
-          type: string
-          example: "del-8f2c3d9a"
         channel:
           type: string
-          enum: [EMAIL, SMS, WHATSAPP, SYSTEM]
+          enum: [EMAIL, SMS, PUSH]
           example: "EMAIL"
-        destinationMasked:
+        destination:
           type: string
-          example: "l***z@example.com"
-        requestedAt:
+          description: Destino al que se solicito la entrega. En los logs del servicio se enmascara.
+          example: "lucia.fernandez@example.com"
+        sentAt:
           type: string
           format: date-time
-        status:
-          type: string
-          enum: [SENT, SIMULATED, FAILED]
-          example: "SIMULATED"
+          example: "2026-08-28T10:50:40.449Z"
 
     ResendRequest:
       type: object
       properties:
         channel:
           type: string
-          enum: [EMAIL, SMS, WHATSAPP]
+          enum: [EMAIL, SMS, PUSH]
           default: "EMAIL"
           example: "EMAIL"
         destination:
@@ -517,13 +527,22 @@ components:
           required:
             - code
             - message
+            - path
+            - timestamp
           properties:
             code:
               type: string
               example: "RECEIPT_NOT_FOUND"
             message:
               type: string
-              example: "No existe un comprobante para el viaje trip-2026-000123"
+              example: "No existe un comprobante emitido para el viaje trip-2026-000123"
+            path:
+              type: string
+              example: "/api/v1/receipts/trip-2026-000123"
+            timestamp:
+              type: string
+              format: date-time
+              example: "2026-08-28T10:55:36.653Z"
 
     ValidationErrorResponse:
       type: object
@@ -535,6 +554,8 @@ components:
           required:
             - code
             - message
+            - path
+            - timestamp
             - details
           properties:
             code:
@@ -543,14 +564,18 @@ components:
             message:
               type: string
               example: "La solicitud contiene datos invalidos"
+            path:
+              type: string
+              example: "/api/v1/receipts"
+            timestamp:
+              type: string
+              format: date-time
+              example: "2026-08-28T10:55:36.731Z"
             details:
               type: array
+              description: Lista de los campos que no cumplen el contrato, uno por mensaje.
               items:
-                type: object
-                properties:
-                  path:
-                    type: string
-                    example: "fare.total"
-                  message:
-                    type: string
-                    example: "El importe total debe coincidir con la suma del desglose"
+                type: string
+              example:
+                - "customer.fullName es obligatorio"
+                - "fare.total (100) no coincide con el desglose informado (50)"

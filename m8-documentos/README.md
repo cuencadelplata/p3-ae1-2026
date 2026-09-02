@@ -1,6 +1,6 @@
 # M8 - Notificaciones, Documentos y Soporte (Comprobantes PDF)
 
-**Grupo 6:** Juan Gualtieri, Lucas Cremarchi, Meza Santiago  
+**Grupo 14:** Juan Gualtieri, Lucas Cremaschi, Meza Santiago  
 **Materia:** ISI - Paradigmas de Programación 3 (2026)  
 **Alcance Asignado:** RF-8.3 (Comprobante PDF) y RF-8.4 (Reenvío de Comprobante)  
 
@@ -10,8 +10,8 @@ Alcance implementado en AE1:
 
 | RF | Titulo | Responsables | Estado |
 | --- | --- | --- | --- |
-| **RF-8.3** | **Comprobante PDF** | **Juan Gualtieri, Lucas Cremarchi, Meza Santiago** | **Implementado y Probado** |
-| **RF-8.4** | **Reenvio de comprobante** | **Juan Gualtieri, Lucas Cremarchi, Meza Santiago** | **Implementado y Probado** |
+| **RF-8.3** | **Comprobante PDF** | **Juan Gualtieri, Lucas Cremaschi, Meza Santiago** | **Implementado y Probado** |
+| **RF-8.4** | **Reenvio de comprobante** | **Juan Gualtieri, Lucas Cremaschi, Meza Santiago** | **Implementado y Probado** |
 | RF-8.1 | Notificaciones de viaje | Grupo 6 (Subgrupo Notificaciones) | Rama `feature/m8-r81-notifications-grupo6` |
 | RF-8.2 | QR de verificacion | Grupo 6 (Subgrupo QR) | Rama `feature/m8-r82-qr-grupo6` |
 | RF-8.5 | Soporte asociado a viaje | Módulo M8 | Previsto para AE2 |
@@ -63,13 +63,16 @@ versiona en el repositorio (RNF-11). El detalle completo esta en `.env.example`.
 
 | Variable | Valor por defecto | Descripcion |
 | --- | --- | --- |
+| `NODE_ENV` | `development` | Entorno de ejecucion |
 | `PORT` | `3008` | Puerto HTTP del servicio |
+| `SERVICE_VERSION` | `1.0.0` | Version reportada por `/health` |
 | `API_PREFIX` | `/api/v1` | Prefijo de la API REST |
 | `STATIC_PREFIX` | `/files/receipts` | Ruta publica de descarga directa de PDF |
 | `PUBLIC_BASE_URL` | `http://localhost:3008` | URL base usada para construir los enlaces |
 | `CORS_ORIGIN` | `*` | Origenes permitidos, o lista separada por comas |
 | `STORAGE_DIR` | `storage/receipts` | Directorio de persistencia |
 | `RECEIPT_ISSUER_NAME` | `Plataforma de Movilidad Urbana` | Encabezado del comprobante |
+| `RECEIPT_ISSUER_TEAM` | `Grupo 14 - Modulo 8` | Subtitulo impreso en el PDF |
 | `RECEIPT_TIMEZONE` | `America/Argentina/Buenos_Aires` | Zona horaria de las fechas del PDF |
 | `RECEIPT_LOCALE` | `es-AR` | Formato de importes y fechas |
 
@@ -152,6 +155,10 @@ en RabbitMQ hacia el canal de notificaciones.
 Estado del servicio y de su almacenamiento. Devuelve `503` cuando el directorio
 de persistencia no esta disponible.
 
+Es el unico endpoint que **no** cuelga del prefijo `/api/v1`: se expone en la
+raiz (`http://localhost:3008/health`) para que el `HEALTHCHECK` del contenedor y
+un eventual balanceador no dependan de la version de la API.
+
 ### Descarga estatica
 
 Los PDF tambien se publican como archivos estaticos en
@@ -215,8 +222,21 @@ src/
 ├── middlewares/             manejo de errores y rutas inexistentes
 ├── routes/                  definicion de endpoints
 ├── errors/                  error de aplicacion con codigo y estado HTTP
+├── openapi/openapi.yaml     contrato REST publicado en Swagger UI
 └── utils/                   formato, identificadores y candado por clave
+
+tests/
+├── unit/                    servicio de emision y validador
+└── integration/             API HTTP de punta a punta
+
+docs/
+├── adr/                     registro de decisiones de arquitectura
+└── arquitectura/            diagramas de componentes y secuencia
 ```
+
+El `build` copia `src/openapi/openapi.yaml` dentro de `dist/`, de modo que el
+directorio compilado es autocontenido y la imagen del contenedor no necesita
+llevar tambien el codigo fuente.
 
 ## Propiedad de datos (RNF-04)
 

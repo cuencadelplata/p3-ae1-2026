@@ -1,6 +1,6 @@
 ﻿# Arquitectura y Diagrama de Componentes - Módulo 8 (Comprobantes PDF)
 
-**Grupo 6:** Juan Gualtieri, Lucas Cremarchi, Meza Santiago  
+**Grupo 14:** Juan Gualtieri, Lucas Cremaschi, Meza Santiago  
 **Módulo:** M8 - Notificaciones, Documentos y Soporte  
 **Alcance Asignado:** RF-8.3 (Comprobante PDF) y RF-8.4 (Reenvío de Comprobante)  
 **Instancia:** AE1 (Base funcional e inmersión)
@@ -11,42 +11,42 @@
 
 ```mermaid
 graph TD
-    subgraph Clientes Externos
-        M6[M6 - Viajes y Ciclo de Vida]
-        M7[M7 - Tarifas y Pagos]
-        DOC[Docente / Alumno / Swagger UI]
+    subgraph EXT["Clientes Externos"]
+        M6["M6 - Viajes y Ciclo de Vida"]
+        M7["M7 - Tarifas y Pagos"]
+        DOC["Docente / Alumno / Swagger UI"]
     end
 
-    subgraph M8 Microservicio de Comprobantes [m8-documentos :3008]
-        HTTP[HTTP Express Router /api/v1]
-        
-        subgraph Capa de Rutas y Documentacion
-            R_REC[/receipts : Routes]
-            R_DOC[/docs : Swagger UI OpenAPI]
-            R_HLT[/health : HealthCheck]
+    subgraph M8["M8 - Microservicio de Comprobantes (m8-documentos :3008)"]
+        HTTP["Express App"]
+
+        subgraph RUTAS["Capa de Rutas y Documentacion"]
+            R_REC["/api/v1/receipts - Routes"]
+            R_DOC["/api/v1/docs - Swagger UI (OpenAPI)"]
+            R_HLT["/health - HealthCheck"]
         end
 
-        subgraph Capa de Controladores y Validadores
-            CTRL[Receipt Controller]
-            VAL[Receipt Validator]
+        subgraph CTRLS["Capa de Controladores y Validadores"]
+            CTRL["Receipt Controller"]
+            VAL["Receipt Validator"]
         end
 
-        subgraph Capa de Servicios y Logica de Negocio
-            SRV[Receipt Service]
-            LOCK[In-Memory Trip Lock]
-            PDF_SRV[PDFKit Render Service]
+        subgraph SRVS["Capa de Servicios y Logica de Negocio"]
+            SRV["Receipt Service"]
+            LOCK["Candado en memoria por tripId"]
+            PDF_SRV["PDF Service (PDFKit)"]
         end
 
-        subgraph Capa de Persistencia e Infraestructura
-            REPO[Receipt Repository]
-            FS_META[(storage/receipts/metadata/*.json)]
-            FS_PDF[(storage/receipts/pdf/*.pdf)]
+        subgraph PERS["Capa de Persistencia"]
+            REPO["Receipt Repository"]
+            FS_META[("storage/receipts/metadata/*.json")]
+            FS_PDF[("storage/receipts/pdf/*.pdf")]
         end
     end
 
-    M6 -->|POST /receipts viaje finalizado| HTTP
-    M7 -->|Datos de tarifa y pago| HTTP
-    DOC -->|GET /docs / GET /receipts/:tripId/pdf| HTTP
+    M6 -->|"POST /receipts con el viaje finalizado"| HTTP
+    M7 -->|"Datos de tarifa y pago"| HTTP
+    DOC -->|"Consulta y descarga del comprobante"| HTTP
 
     HTTP --> R_REC
     HTTP --> R_DOC
@@ -59,6 +59,8 @@ graph TD
     SRV --> LOCK
     SRV --> PDF_SRV
     SRV --> REPO
+
+    R_HLT --> REPO
 
     REPO --> FS_META
     REPO --> FS_PDF
@@ -131,4 +133,4 @@ sequenceDiagram
 * **Naturaleza del Módulo 8:** M8 es un microservicio backend de procesamiento y generación de documentos. La interacción de usuario final (solicitar viaje, aceptar, ver estado) es responsabilidad de las interfaces de cliente (M2), conductor (M3) y despacho (M5/M6).
 * **Evidencias interactivas de M8:** Para evaluación, demostración y pruebas, M8 provee:
   1. **Swagger UI interactivo (`/api/v1/docs`):** Permite emitir, consultar, reenviar y descargar comprobantes en vivo desde cualquier navegador web responsivo.
-  2. **Descarga y visualización directa de PDF:** El PDF generado es responsive y se visualiza nativamente en cualquier visor de PDF móvil o de escritorio.
+  2. **Descarga y visualización directa de PDF:** El comprobante es un documento A4 de tamaño fijo, que se visualiza nativamente en cualquier visor de PDF de escritorio o móvil sin requerir la aplicación.

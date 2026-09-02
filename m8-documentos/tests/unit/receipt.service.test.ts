@@ -9,7 +9,7 @@ const sampleRequest: ReceiptRequest = {
   tripId: testTripId,
   customer: {
     id: 'cli-0099',
-    fullName: 'Lucas Cremarchi',
+    fullName: 'Lucas Cremaschi',
     email: 'lucas@example.com',
   },
   driver: {
@@ -44,7 +44,7 @@ describe('Receipt Service (Unit)', () => {
     assert.equal(result.created, true);
     assert.equal(result.receipt.tripId, testTripId);
     assert.ok(result.receipt.receiptNumber.startsWith('CMP-'));
-    assert.equal(result.receipt.customer.fullName, 'Lucas Cremarchi');
+    assert.equal(result.receipt.customer.fullName, 'Lucas Cremaschi');
     assert.equal(result.receipt.fare.total, 3500);
   });
 

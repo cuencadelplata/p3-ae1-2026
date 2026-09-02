@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs';
+import { mkdirSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 
 import { env } from '../config/env';
@@ -50,6 +50,17 @@ function errorCode(error: unknown): string | undefined {
 export async function ensureStorage(): Promise<void> {
   await fs.mkdir(metadataDirectory, { recursive: true });
   await fs.mkdir(pdfDirectory, { recursive: true });
+}
+
+/**
+ * Variante sincronica para usar durante la construccion de la aplicacion, donde
+ * todavia no hay contexto asincronico. Garantiza que /health y la publicacion de
+ * archivos estaticos encuentren los directorios aunque nadie haya emitido un
+ * comprobante todavia.
+ */
+export function ensureStorageSync(): void {
+  mkdirSync(metadataDirectory, { recursive: true });
+  mkdirSync(pdfDirectory, { recursive: true });
 }
 
 export async function isStorageWritable(): Promise<boolean> {
@@ -109,9 +120,22 @@ export async function create(receipt: Receipt, pdf: Buffer): Promise<void> {
   await fs.rename(temporaryPdfPath, finalPdfPath);
 }
 
-/** Actualiza los metadatos de un comprobante ya emitido (por ejemplo, sus reenvios). */
+/**
+ * Actualiza los metadatos de un comprobante ya emitido (por ejemplo, sus
+ * reenvios). Se escribe primero un archivo temporal y despues se renombra, para
+ * que una interrupcion a mitad de la escritura no deje el comprobante corrupto.
+ */
 export async function update(receipt: Receipt): Promise<void> {
-  await fs.writeFile(metadataPath(receipt.tripId), serialize(receipt), 'utf8');
+  const finalPath = metadataPath(receipt.tripId);
+  const temporaryPath = `${finalPath}.${process.pid}.${Date.now()}.tmp`;
+
+  await fs.writeFile(temporaryPath, serialize(receipt), 'utf8');
+  try {
+    await fs.rename(temporaryPath, finalPath);
+  } catch (error) {
+    await fs.rm(temporaryPath, { force: true });
+    throw error;
+  }
 }
 
 function serialize(receipt: Receipt): string {
