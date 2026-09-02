@@ -22,6 +22,7 @@ export function createApp(): Express {
   app.use(express.json({ limit: '256kb' }));
 
   app.use('/health', healthRouter);
+  app.get('/docs', (_req, res) => res.redirect(`${env.apiPrefix}/docs`));
 
   // Solo se publica el directorio de PDF. Los metadatos viven en otra carpeta
   // para que nunca queden expuestos como archivos estaticos.

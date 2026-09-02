@@ -1,0 +1,556 @@
+﻿openapi: 3.0.3
+info:
+  title: M8 - Notificaciones, Documentos y Soporte (Comprobantes PDF)
+  description: |
+    Microservicio de la **Plataforma Distribuida de Movilidad Urbana (ISI - Paradigmas 3 - AE1)**.
+    Responsable de la **emisión, consulta, descarga y reenvío de comprobantes de viaje en PDF**.
+
+    **Alcance asignado (Grupo 6 - Juan Gualtieri, Lucas Cremarchi, Meza Santiago):**
+    - **RF-8.3:** Generación de comprobante PDF posterior a la finalización/pago con datos del viaje, importe, identificadores y fecha.
+    - **RF-8.4:** Reenvío de comprobante (solicitud de enlace o entrega simulada por email/SMS).
+    - **Idempotencia:** La emisión por `tripId` es estrictamente idempotente para evitar comprobantes duplicados o condiciones de carrera.
+  version: 1.0.0
+  contact:
+    name: Grupo 6 - M8 Comprobantes
+servers:
+  - url: http://localhost:3008/api/v1
+    description: Servidor Local de Desarrollo
+  - url: /api/v1
+    description: Servidor relativo
+
+tags:
+  - name: Comprobantes (RF-8.3 / RF-8.4)
+    description: Emisión, consulta, descarga y reenvío de comprobantes PDF
+  - name: Salud
+    description: Healthchecks y estado del microservicio
+
+paths:
+  /receipts:
+    post:
+      tags:
+        - Comprobantes (RF-8.3 / RF-8.4)
+      summary: Emite el comprobante PDF de un viaje finalizado (RF-8.3)
+      description: |
+        Recibe los datos del viaje completado (M6) y del pago liquidado (M7) y genera el archivo PDF correspondiente.
+        
+        **Idempotencia (RNF-08):** Si ya existe un comprobante para el `tripId` enviado, la API responde `200 OK`
+        con los datos del comprobante vigente en lugar de duplicar el archivo. Si es nuevo responde `201 Created`.
+      operationId: createReceipt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReceiptRequest'
+            example:
+              tripId: "trip-2026-000123"
+              customer:
+                id: "cli-0091"
+                fullName: "Lucia Fernandez"
+                email: "lucia.fernandez@example.com"
+                documentId: "38.442.019"
+              driver:
+                id: "cnd-0457"
+                fullName: "Martin Rodriguez"
+                vehicle:
+                  type: "AUTO"
+                  plate: "AB123CD"
+                  model: "Toyota Etios 2021"
+              trip:
+                origin: "Av. Colon 1250, Cordoba"
+                destination: "Aeropuerto Ambrosio Taravella"
+                startedAt: "2026-08-28T13:05:00.000Z"
+                finishedAt: "2026-08-28T13:36:00.000Z"
+                distanceKm: 14.8
+                durationMin: 31
+              fare:
+                currency: "ARS"
+                baseFare: 1200
+                distanceAmount: 5920
+                timeAmount: 1550
+                surcharges: 430
+                discounts: 600
+                total: 8500
+              payment:
+                method: "TARJETA"
+                status: "APROBADO"
+                authorizationCode: "AUTH-77321"
+      responses:
+        '201':
+          description: Comprobante emitido exitosamente (nuevo)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptEnvelope'
+        '200':
+          description: Comprobante ya emitido previamente (idempotencia)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptEnvelope'
+        '400':
+          description: Identificador de viaje o formato inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Error de validación en los campos del comprobante
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Error interno del servidor
+
+  /receipts/{tripId}:
+    get:
+      tags:
+        - Comprobantes (RF-8.3 / RF-8.4)
+      summary: Consulta los metadatos y enlaces de descarga del comprobante
+      description: Devuelve la información detallada del comprobante emitido, su historial de entregas y los enlaces de descarga.
+      operationId: getReceipt
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          description: Identificador único del viaje
+          schema:
+            type: string
+            example: "trip-2026-000123"
+      responses:
+        '200':
+          description: Metadatos del comprobante encontrados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptEnvelope'
+        '400':
+          description: Formato de tripId inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No existe un comprobante para el tripId indicado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /receipts/{tripId}/pdf:
+    get:
+      tags:
+        - Comprobantes (RF-8.3 / RF-8.4)
+      summary: Descarga directa del archivo PDF del comprobante (RF-8.3)
+      description: Retorna el flujo binario del archivo PDF generado, con encabezado `Content-Disposition: attachment`.
+      operationId: downloadReceiptPdf
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          description: Identificador único del viaje
+          schema:
+            type: string
+            example: "trip-2026-000123"
+      responses:
+        '200':
+          description: Archivo PDF del comprobante
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Formato de tripId inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Comprobante no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /receipts/{tripId}/resend:
+    post:
+      tags:
+        - Comprobantes (RF-8.3 / RF-8.4)
+      summary: Reenvío de comprobante de viaje (RF-8.4)
+      description: |
+        Vuelve a solicitar el envío del comprobante por correo electrónico o SMS.
+        Si no se indica destino en el cuerpo, utiliza el email registrado del cliente.
+      operationId: resendReceipt
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          description: Identificador único del viaje
+          schema:
+            type: string
+            example: "trip-2026-000123"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendRequest'
+            example:
+              channel: "EMAIL"
+              destination: "lucia.fernandez@example.com"
+      responses:
+        '202':
+          description: Reenvío aceptado y registrado en el historial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResendEnvelope'
+        '400':
+          description: Formato de tripId inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Comprobante no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Destino o canal de envío inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+
+  /health:
+    get:
+      tags:
+        - Salud
+      summary: Health check del microservicio
+      description: Devuelve el estado operativo del servicio, timestamp y uptime.
+      operationId: getHealth
+      responses:
+        '200':
+          description: Servicio saludable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  timestamp:
+                    type: string
+                    format: date-time
+                  uptimeSeconds:
+                    type: number
+                    example: 12.4
+
+components:
+  schemas:
+    ReceiptRequest:
+      type: object
+      required:
+        - tripId
+        - customer
+        - driver
+        - trip
+        - fare
+        - payment
+      properties:
+        tripId:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{1,64}$'
+          example: "trip-2026-000123"
+        customer:
+          $ref: '#/components/schemas/Customer'
+        driver:
+          $ref: '#/components/schemas/Driver'
+        trip:
+          $ref: '#/components/schemas/TripDetails'
+        fare:
+          $ref: '#/components/schemas/FareDetails'
+        payment:
+          $ref: '#/components/schemas/PaymentDetails'
+
+    Customer:
+      type: object
+      required:
+        - id
+        - fullName
+      properties:
+        id:
+          type: string
+          example: "cli-0091"
+        fullName:
+          type: string
+          example: "Lucia Fernandez"
+        email:
+          type: string
+          format: email
+          example: "lucia.fernandez@example.com"
+        phone:
+          type: string
+          example: "+54 9 351 555-0199"
+        documentId:
+          type: string
+          example: "38.442.019"
+
+    Driver:
+      type: object
+      required:
+        - id
+        - fullName
+        - vehicle
+      properties:
+        id:
+          type: string
+          example: "cnd-0457"
+        fullName:
+          type: string
+          example: "Martin Rodriguez"
+        vehicle:
+          $ref: '#/components/schemas/Vehicle'
+
+    Vehicle:
+      type: object
+      required:
+        - type
+        - plate
+      properties:
+        type:
+          type: string
+          enum: [AUTO, MOTO]
+          example: "AUTO"
+        plate:
+          type: string
+          example: "AB123CD"
+        model:
+          type: string
+          example: "Toyota Etios 2021"
+
+    TripDetails:
+      type: object
+      required:
+        - origin
+        - destination
+        - startedAt
+        - finishedAt
+        - distanceKm
+      properties:
+        origin:
+          type: string
+          example: "Av. Colon 1250, Cordoba"
+        destination:
+          type: string
+          example: "Aeropuerto Ambrosio Taravella"
+        startedAt:
+          type: string
+          format: date-time
+          example: "2026-08-28T13:05:00.000Z"
+        finishedAt:
+          type: string
+          format: date-time
+          example: "2026-08-28T13:36:00.000Z"
+        distanceKm:
+          type: number
+          minimum: 0
+          example: 14.8
+        durationMin:
+          type: integer
+          minimum: 0
+          example: 31
+
+    FareDetails:
+      type: object
+      required:
+        - total
+      properties:
+        currency:
+          type: string
+          default: "ARS"
+          example: "ARS"
+        baseFare:
+          type: number
+          minimum: 0
+          example: 1200
+        distanceAmount:
+          type: number
+          minimum: 0
+          example: 5920
+        timeAmount:
+          type: number
+          minimum: 1550
+        surcharges:
+          type: number
+          minimum: 0
+          example: 430
+        discounts:
+          type: number
+          minimum: 0
+          example: 600
+        total:
+          type: number
+          minimum: 0
+          example: 8500
+
+    PaymentDetails:
+      type: object
+      required:
+        - method
+        - status
+      properties:
+        method:
+          type: string
+          enum: [EFECTIVO, TARJETA, BILLETERA]
+          example: "TARJETA"
+        status:
+          type: string
+          enum: [APROBADO, PENDIENTE, RECHAZADO]
+          example: "APROBADO"
+        authorizationCode:
+          type: string
+          example: "AUTH-77321"
+
+    ReceiptEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Receipt'
+
+    Receipt:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "rec-b235eef2-d278-4395-8857-41a6b0cfa74d"
+        receiptNumber:
+          type: string
+          example: "REC-20260828-000123"
+        tripId:
+          type: string
+          example: "trip-2026-000123"
+        issuedAt:
+          type: string
+          format: date-time
+          example: "2026-08-28T13:37:00.000Z"
+        customer:
+          $ref: '#/components/schemas/Customer'
+        driver:
+          $ref: '#/components/schemas/Driver'
+        trip:
+          $ref: '#/components/schemas/TripDetails'
+        fare:
+          $ref: '#/components/schemas/FareDetails'
+        payment:
+          $ref: '#/components/schemas/PaymentDetails'
+        deliveries:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryRecord'
+        pdf:
+          type: object
+          properties:
+            downloadUrl:
+              type: string
+              example: "http://localhost:3008/api/v1/receipts/trip-2026-000123/pdf"
+            staticUrl:
+              type: string
+              example: "http://localhost:3008/files/receipts/trip-2026-000123.pdf"
+
+    DeliveryRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "del-8f2c3d9a"
+        channel:
+          type: string
+          enum: [EMAIL, SMS, WHATSAPP, SYSTEM]
+          example: "EMAIL"
+        destinationMasked:
+          type: string
+          example: "l***z@example.com"
+        requestedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [SENT, SIMULATED, FAILED]
+          example: "SIMULATED"
+
+    ResendRequest:
+      type: object
+      properties:
+        channel:
+          type: string
+          enum: [EMAIL, SMS, WHATSAPP]
+          default: "EMAIL"
+          example: "EMAIL"
+        destination:
+          type: string
+          example: "lucia.fernandez@example.com"
+
+    ResendEnvelope:
+      type: object
+      properties:
+        data:
+          allOf:
+            - $ref: '#/components/schemas/Receipt'
+            - type: object
+              properties:
+                lastDelivery:
+                  $ref: '#/components/schemas/DeliveryRecord'
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              example: "RECEIPT_NOT_FOUND"
+            message:
+              type: string
+              example: "No existe un comprobante para el viaje trip-2026-000123"
+
+    ValidationErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - details
+          properties:
+            code:
+              type: string
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "La solicitud contiene datos invalidos"
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  path:
+                    type: string
+                    example: "fare.total"
+                  message:
+                    type: string
+                    example: "El importe total debe coincidir con la suma del desglose"

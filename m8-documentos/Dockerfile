@@ -28,6 +28,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/src/openapi ./src/openapi
 
 RUN mkdir -p /app/storage/receipts/metadata /app/storage/receipts/pdf \
     && chown -R node:node /app/storage

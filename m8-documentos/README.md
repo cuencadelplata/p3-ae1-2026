@@ -1,21 +1,25 @@
-# M8 - Notificaciones, Documentos y Soporte
+# M8 - Notificaciones, Documentos y Soporte (Comprobantes PDF)
 
-Microservicio responsable de la emision, consulta y reenvio del comprobante de viaje en PDF.
+**Grupo 6:** Juan Gualtieri, Lucas Cremarchi, Meza Santiago  
+**Materia:** ISI - Paradigmas de Programación 3 (2026)  
+**Alcance Asignado:** RF-8.3 (Comprobante PDF) y RF-8.4 (Reenvío de Comprobante)  
+
+Microservicio responsable de la emisión, consulta, descarga y reenvío del comprobante de viaje en PDF con soporte de concurrencia e idempotencia.
 
 Alcance implementado en AE1:
 
-| RF | Titulo | Estado |
-| --- | --- | --- |
-| RF-8.3 | Comprobante PDF | Implementado |
-| RF-8.4 | Reenvio de comprobante | Implementado (entrega simulada) |
-| RF-8.1 | Notificaciones de viaje | Fuera de alcance en AE1 |
-| RF-8.2 | QR de verificacion | Fuera de alcance en AE1 |
-| RF-8.5 | Soporte asociado a viaje | Fuera de alcance en AE1 |
-| RF-8.6 | Consumo asincrono (RabbitMQ) | Previsto para AE2 |
+| RF | Titulo | Responsables | Estado |
+| --- | --- | --- | --- |
+| **RF-8.3** | **Comprobante PDF** | **Juan Gualtieri, Lucas Cremarchi, Meza Santiago** | **Implementado y Probado** |
+| **RF-8.4** | **Reenvio de comprobante** | **Juan Gualtieri, Lucas Cremarchi, Meza Santiago** | **Implementado y Probado** |
+| RF-8.1 | Notificaciones de viaje | Grupo 6 (Subgrupo Notificaciones) | Rama `feature/m8-r81-notifications-grupo6` |
+| RF-8.2 | QR de verificacion | Grupo 6 (Subgrupo QR) | Rama `feature/m8-r82-qr-grupo6` |
+| RF-8.5 | Soporte asociado a viaje | Módulo M8 | Previsto para AE2 |
+| RF-8.6 | Consumo asincrono (RabbitMQ) | Módulo M8 | Previsto para AE2 |
 
 ## Requisitos
 
-- Node.js 22 o superior
+- Node.js 22 o superior (LTS)
 - npm 10 o superior
 
 ## Puesta en marcha
@@ -29,15 +33,28 @@ npm run dev
 
 El servicio queda escuchando en `http://localhost:3008`.
 
-### Scripts
+### Documentación Interactiva OpenAPI (Swagger UI)
+
+Una vez levantado el servidor, se puede acceder a la consola interactiva Swagger UI desde cualquier navegador web en:
+- **Swagger UI:** `http://localhost:3008/api/v1/docs` (o acceso directo en `http://localhost:3008/docs`)
+- **OpenAPI JSON:** `http://localhost:3008/api/v1/docs/openapi.json`
+- **OpenAPI YAML:** `http://localhost:3008/api/v1/docs/openapi.yaml`
+
+### Scripts Disponibles
 
 | Script | Descripcion |
 | --- | --- |
 | `npm run dev` | Ejecuta el servicio en modo desarrollo con recarga automatica |
+| `npm test` | Ejecuta la suite de 22 tests automatizados (unitarios y de integración con `node:test`) |
 | `npm run build` | Compila TypeScript a `dist/` |
-| `npm start` | Ejecuta el servicio ya compilado |
-| `npm run typecheck` | Verifica tipos sin generar salida |
+| `npm start` | Ejecuta el servicio ya compilado para producción |
+| `npm run typecheck` | Verifica tipos estáticos con TypeScript sin generar salida |
 | `npm run clean` | Elimina el directorio `dist/` |
+
+### Documentación de Arquitectura
+
+- **Diagramas de Componentes y Secuencia (Mermaid):** [`docs/arquitectura/componentes-m8.md`](docs/arquitectura/componentes-m8.md)
+- **Registro de Decisiones de Arquitectura (ADR):** [`docs/adr/ADR-001-m8-comprobantes-ae1.md`](docs/adr/ADR-001-m8-comprobantes-ae1.md)
 
 ## Configuracion
 

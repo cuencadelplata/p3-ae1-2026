@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { RequestHandler } from 'express';
 
 import { env } from '../config/env';
@@ -69,12 +71,17 @@ export const downloadReceipt: RequestHandler = async (req, res, next) => {
     const tripId = readTripId(req.params['tripId']);
     const { receipt, filePath } = await receiptService.getReceiptPdfPath(tripId);
 
-    res.type('application/pdf');
-    res.download(filePath, `comprobante-${receipt.receiptNumber}.pdf`, (error) => {
-      if (error && !res.headersSent) {
-        next(error);
+    const resolvedPath = path.resolve(filePath);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="comprobante-${receipt.receiptNumber}.pdf"`);
+
+    const stream = fs.createReadStream(resolvedPath);
+    stream.on('error', (err) => {
+      if (!res.headersSent) {
+        next(err);
       }
     });
+    stream.pipe(res);
   } catch (error) {
     next(error);
   }

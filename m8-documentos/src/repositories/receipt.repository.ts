@@ -90,6 +90,7 @@ export async function pdfExists(tripId: string): Promise<boolean> {
  * un archivo temporal, para que nunca quede un PDF sin metadato asociado.
  */
 export async function create(receipt: Receipt, pdf: Buffer): Promise<void> {
+  await ensureStorage();
   const finalPdfPath = pdfPath(receipt.tripId);
   const temporaryPdfPath = `${finalPdfPath}.${process.pid}.${Date.now()}.tmp`;
 
