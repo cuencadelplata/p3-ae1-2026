@@ -1,9 +1,20 @@
 import express from 'express';
+import swaggerUi from 'swagger-ui-express';
+import fs from 'node:fs';
+import path from 'node:path';
+import YAML from 'yaml';
 import { SupportController } from './controllers/support.controller.js';
 import { RabbitMQConsumer } from './rabbitmq/consumer.js';
 
 const app = express();
 app.use(express.json());
+
+// Configuración de Swagger (OpenAPI)
+const openapiPath = path.resolve(process.cwd(), 'openapi.yaml');
+const fileContent = fs.readFileSync(openapiPath, 'utf8');
+const swaggerDocument = YAML.parse(fileContent);
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // Endpoints RF-8.5 (Gestión de tickets de Soporte)
 app.post('/tickets', SupportController.crearTicket);

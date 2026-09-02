@@ -1,0 +1,122 @@
+openapi: 3.0.3
+info:
+  title: API de Soporte M8
+  description: Módulo 8 - Notificaciones, Documentos y Soporte. Gestión de tickets de soporte para la plataforma de movilidad.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+    description: Servidor de desarrollo local
+
+paths:
+  /tickets:
+    post:
+      summary: Crea un nuevo ticket de soporte asociado a un viaje
+      operationId: crearTicket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - viajeId
+                - motivo
+              properties:
+                viajeId:
+                  type: string
+                  description: Identificador del viaje asociado
+                  example: "viaje-12345"
+                motivo:
+                  type: string
+                  description: Motivo de la apertura del ticket
+                  example: "El conductor nunca llegó"
+      responses:
+        '201':
+          description: Ticket creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '400':
+          description: Faltan campos requeridos
+
+  /tickets/{id}:
+    get:
+      summary: Obtiene los detalles de un ticket de soporte por su ID
+      operationId: obtenerTicket
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID único del ticket
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detalles del ticket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '404':
+          description: Ticket no encontrado
+
+  /tickets/{id}/estado:
+    patch:
+      summary: Actualiza el estado de un ticket
+      operationId: actualizarEstado
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID único del ticket
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - estado
+              properties:
+                estado:
+                  type: string
+                  enum: [ABIERTO, EN_PROCESO, RESUELTO]
+                  example: "EN_PROCESO"
+      responses:
+        '200':
+          description: Estado del ticket actualizado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '400':
+          description: Estado inválido
+        '404':
+          description: Ticket no encontrado
+
+components:
+  schemas:
+    Ticket:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: ID único del ticket
+        viajeId:
+          type: string
+          description: ID del viaje asociado al ticket
+        motivo:
+          type: string
+          description: Razón de la consulta o queja
+        estado:
+          type: string
+          enum: [ABIERTO, EN_PROCESO, RESUELTO]
+          description: Estado actual del ticket
+        fechaCreacion:
+          type: string
+          format: date-time
+          description: Fecha y hora de apertura del ticket
