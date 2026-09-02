@@ -1,4 +1,4 @@
-import { Routes, type Request, type Response } from "express";
+import { Router, type Request, type Response } from "express";
 
 import {
   registrarDocumento,
@@ -6,7 +6,7 @@ import {
   obtenerDocumento,
 } from "./documents-service.js";
 
-export const documentoRoutes = Routes({ mergeParams: true });
+export const documentoRoutes = Router({ mergeParams: true });
 
 // POST /api/v1/drivers/:driverId/documents
 // RF-3.4: registrar documentación
