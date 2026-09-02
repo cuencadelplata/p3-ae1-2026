@@ -1,0 +1,35 @@
+services:
+  # Servidor Redis en memoria para mocks y caché
+  redis:
+    image: redis:7-alpine
+    container_name: p3-m3-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  # Backend Node.js - Módulo 3 (Conductores & Valoraciones)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: p3-m3-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis_data:
