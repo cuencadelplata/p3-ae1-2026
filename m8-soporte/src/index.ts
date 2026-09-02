@@ -16,6 +16,21 @@ const swaggerDocument = YAML.parse(fileContent);
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
+// Ruta raíz (Estado del servicio)
+app.get('/', (req, res) => {
+  res.json({
+    servicio: 'M8 - Soporte, Notificaciones y RabbitMQ',
+    estado: 'ACTIVO',
+    documentacion: '/api-docs',
+    endpoints: [
+      'POST /tickets',
+      'GET /tickets',
+      'GET /tickets/:id',
+      'PATCH /tickets/:id/estado'
+    ]
+  });
+});
+
 // Endpoints RF-8.5 (Gestión de tickets de Soporte)
 app.post('/tickets', SupportController.crearTicket);
 app.get('/tickets/:id', SupportController.obtenerTicket);
