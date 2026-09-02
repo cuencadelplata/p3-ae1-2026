@@ -194,25 +194,33 @@ Luego verificar `http://localhost:3000/health`, abrir `http://localhost:3000/doc
 
 ## Imágenes Docker y registry
 
-La composición actual construye una única imagen multirol para M9 y los stubs M5/M7:
+La solución utiliza una única imagen multirol para M9 y los stubs M5/M7. La imagen de la entrega está publicada de forma pública en Docker Hub:
 
 ```text
-m9-reservas-programadas:local
+ignacioparra1902/m9-reservas-programadas:v1.0.0
 ```
 
-No existe una registry configurada ni una imagen pública verificada todavía. El remoto GitHub pertenece a `cuencadelplata`, por lo que GitHub Container Registry es el destino previsto para la entrega:
+Enlace público: [Docker Hub – M9 Reservas Programadas](https://hub.docker.com/r/ignacioparra1902/m9-reservas-programadas)
 
-```text
-ghcr.io/cuencadelplata/p3-ae1-2026:v1.0.0
-```
-
-Estado: **publicación pendiente de autenticación en registry**. No ejecutar este comando hasta que el equipo publique y verifique la imagen:
+Descargar la versión exacta de la entrega:
 
 ```bash
-docker pull ghcr.io/cuencadelplata/p3-ae1-2026:v1.0.0
+docker pull ignacioparra1902/m9-reservas-programadas:v1.0.0
 ```
 
-Al publicarla, se deberá registrar en esta sección el enlace público de GHCR, confirmar el tag `v1.0.0` y verificar el pull desde un entorno sin credenciales.
+Después de descargarla, iniciar la solución completa sin reconstruir el código:
+
+```bash
+docker compose up -d
+```
+
+Compose utiliza la imagen publicada como valor predeterminado para los tres contenedores. El comando `npm run local:up` mantiene la alternativa de construirla desde el código fuente mediante `--build`.
+
+La etiqueta `v1.0.0` fue verificada públicamente y corresponde al digest:
+
+```text
+sha256:040ba2505836eb2c0d47c3a2f739127a77a26a946ddf2112848f7ab267409ff4
+```
 
 ## Detención y limpieza
 

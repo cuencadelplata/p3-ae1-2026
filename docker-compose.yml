@@ -1,6 +1,6 @@
 services:
   m9-reservas:
-    image: ${DOCKER_IMAGE:-m9-reservas-programadas:local}
+    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v1.0.0}
     build:
       context: .
       dockerfile: Dockerfile
@@ -27,8 +27,7 @@ services:
     restart: unless-stopped
 
   m5-stub:
-    image: ${DOCKER_IMAGE:-m9-reservas-programadas:local}
-    pull_policy: never
+    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v1.0.0}
     command: ['node', 'dist/stubs/m5/server.js']
     environment:
       PORT: 3001
@@ -43,8 +42,7 @@ services:
       - reservas-network
 
   m7-stub:
-    image: ${DOCKER_IMAGE:-m9-reservas-programadas:local}
-    pull_policy: never
+    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v1.0.0}
     command: ['node', 'dist/stubs/m7/server.js']
     environment:
       PORT: 3002
