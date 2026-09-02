@@ -1,4 +1,3 @@
-// Aylen
 // registro de que se devolvió dinero a un cliente despues de cobrar un cargo de cancelacion
 
 export interface IReintegro {
