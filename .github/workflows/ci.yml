@@ -3,7 +3,7 @@ name: M8 Integrated CI
 on:
   push:
     branches:
-      - integration/m8-r81-r82-grupo6
+      - M8-Notificaciones-QR
   workflow_dispatch:
 
 permissions:

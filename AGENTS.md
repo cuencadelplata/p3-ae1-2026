@@ -20,9 +20,9 @@ Orden de prioridad documental:
 
 El trabajo corresponde al **Módulo 8 — Notificaciones, Documentos y Soporte**, Grupo 6.
 
-La branch de integración es:
+La branch final de trabajo es:
 
-`integration/m8-r81-r82-grupo6`
+`M8-Notificaciones-QR`
 
 Contiene:
 
