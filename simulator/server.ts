@@ -5,7 +5,7 @@ export function createSimulator(): Server {
   let body = '';
   for await (const chunk of request) body += chunk;
   const input = body ? JSON.parse(body) as Record<string, number | string> : {};
-  let result: Record<string, number | string>;
+  let result: Record<string, boolean | number | string>;
 
   if (request.url === '/api/tarifas/estimacion') {
     result = { total: 150 + Number(input.distanciaKm) * 80 + Number(input.tiempoMinutos) * 25 };

@@ -6,7 +6,10 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts tests-e2e",
+    "docker:e2e:up": "docker compose up -d --build",
+    "docker:e2e:down": "docker compose down"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -52,6 +52,12 @@ export function createViajeApi(options: ViajeApiOptions): Server {
 
   return createServer(async (request, response) => {
     try {
+      if (request.method === 'POST' && request.url === '/api/viajes') {
+        const viaje = crearViaje(await readJson(request) as unknown as CrearViajeInput);
+        viajes.set(viaje.id, viaje);
+        return send(response, 201, { viaje });
+      }
+
       const match = request.url?.match(/^\/api\/viajes\/([^/]+)\/(finalizacion|cancelacion-cliente|cancelacion-conductor|historial-transiciones)$/);
       if (!match) return send(response, 404, { error: 'Ruta no encontrada' });
 

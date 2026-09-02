@@ -3,6 +3,17 @@ info:
   title: API M6 - Viajes
   version: 1.0.0
 paths:
+  /api/viajes:
+    post:
+      summary: Crea un viaje para iniciar su ciclo de vida
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CrearViaje' }
+      responses:
+        '201': { description: Viaje creado }
+        '400': { description: Datos inválidos }
   /api/viajes/{viajeId}/finalizacion:
     post:
       summary: Finaliza un viaje y captura su pago
@@ -62,6 +73,18 @@ paths:
         '404': { description: Viaje no encontrado }
 components:
   schemas:
+    CrearViaje:
+      type: object
+      required: [id, clienteId, conductorId, estado, tarifaBase, tarifaPorKm, tarifaPorMinuto, inicio]
+      properties:
+        id: { type: string }
+        clienteId: { type: string }
+        conductorId: { type: string }
+        estado: { type: string, enum: [solicitado, asignado, en curso, completado, cancelado] }
+        tarifaBase: { type: number }
+        tarifaPorKm: { type: number }
+        tarifaPorMinuto: { type: number }
+        inicio: { type: string, format: date-time }
     FinalizarViaje:
       type: object
       required: [tiempoMinutos, distanciaKm, horaFin, metodoPago]
