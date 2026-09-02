@@ -1,0 +1,5 @@
+services:
+  m7-tarifas:
+    image: aylen0/m7-tarifas:4.0
+    ports:
+      - "3000:3000"

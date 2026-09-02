@@ -28,10 +28,12 @@ Rama: M7--Tarifas,-Pagos-y-Liquidaciones
     Escribir el comando en la terminal:     docker pull aylen0/m7-tarifas:4.0
 
 ### Paso 3: levantar el contenedor
-    Nuevamente en la terminal colocar:      docker run -d -p 3000:3000 --name m7-tarifas aylen0/m7-tarifas:4.0
+    Nuevamente en la terminal colocar:      docker compose up -d    
+    
+   Alternativa:     docker run -d -p 3000:3000 --name m7-tarifas aylen0/m7-tarifas:4.0   
 
 ### Paso 4: verificar que está vivo
-    En misma terminal:      curl -X POST http://localhost:3000/metodo-pago -H "Content-Type: application/json" -d "{\"clienteId\": \"cliente1\", \"viajeId\": \"v99\", \"tipo\": \"efectivo\"}"
+    En misma terminal:      curl -X POST http://localhost:3000/reintegro -H "Content-Type: application/json" -d "{\"montoCancelacion\": 1000, \"viajeId\": \"v1\"}"
 
 
 # Si en PowerShell da error este ùltimo comando intentar con: curl -X POST http://localhost:3000/reintegro -H "Content-Type: application/json" -d '{\"montoCancelacion\": 1000, \"viajeId\": \"v1\"}'
