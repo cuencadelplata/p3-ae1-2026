@@ -493,6 +493,12 @@
       color: #cbd5e1;
     }
 
+    .status-badge.CANCELLED {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #f87171;
+    }
+
     /* Fare Card */
     .fare-card {
       background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
@@ -1108,6 +1114,16 @@
               </div>
             </div>
 
+            <!-- Banner Solicitud Cancelada (RF-5.6) -->
+            <div id="cancelledBanner" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 14px;">
+              <div style="font-size: 13px; font-weight: 700; color: #f87171; display:flex; align-items:center; gap: 8px;">
+                <span>❌</span> Solicitud Cancelada por el Cliente (RF-5.6)
+              </div>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                Motivo: <strong id="cancelledReasonText" style="color: #fca5a5;">Cancelación previa solicitada</strong>
+              </div>
+            </div>
+
             <!-- Tarifa Estimada -->
             <div class="fare-card">
               <div style="font-size:12px; color:var(--text-secondary); margin-bottom:2px;">Tarifa Estimada (M7 Stub)</div>
@@ -1149,9 +1165,12 @@
             </div>
 
             <!-- Botones de Acción -->
-            <div>
-              <button class="btn btn-secondary" style="width: 100%;" onclick="refreshCurrentTrip()">
-                🔄 Consultar Estado (GET)
+            <div style="display: flex; gap: 10px;">
+              <button class="btn btn-secondary" style="flex: 1;" onclick="refreshCurrentTrip()">
+                🔄 Consultar Estado
+              </button>
+              <button id="btnCancelTrip" class="btn btn-danger" style="flex: 1;" onclick="promptCancelTrip()">
+                ❌ Cancelar Solicitud (RF-5.6)
               </button>
             </div>
 
@@ -1541,6 +1560,11 @@
       const assignedVal = document.getElementById('metaAssignedDriver');
       const assignedName = document.getElementById('assignedDriverName');
 
+      const cancelledBanner = document.getElementById('cancelledBanner');
+      const cancelledReasonText = document.getElementById('cancelledReasonText');
+      const btnCancelTrip = document.getElementById('btnCancelTrip');
+      const btnSearchCandidates = document.getElementById('btnSearchCandidates');
+
       if (trip.status === 'ASSIGNED' || trip.assignedDriverId) {
         assignedBanner.style.display = 'block';
         assignedRow.style.display = 'flex';
@@ -1555,6 +1579,91 @@
       } else {
         assignedBanner.style.display = 'none';
         assignedRow.style.display = 'none';
+      }
+
+      if (trip.status === 'CANCELLED') {
+        if (cancelledBanner) cancelledBanner.style.display = 'block';
+        if (cancelledReasonText) cancelledReasonText.innerText = trip.cancellationReason || 'Cancelación previa solicitada';
+        if (btnCancelTrip) {
+          btnCancelTrip.disabled = true;
+          btnCancelTrip.innerText = '❌ Cancelado';
+        }
+        if (btnSearchCandidates) btnSearchCandidates.disabled = true;
+      } else {
+        if (cancelledBanner) cancelledBanner.style.display = 'none';
+        if (btnCancelTrip) {
+          if (trip.status === 'ASSIGNED') {
+            btnCancelTrip.disabled = true;
+            btnCancelTrip.innerText = '🔒 Asignado (No cancelable)';
+          } else if (trip.status === 'EXPIRED') {
+            btnCancelTrip.disabled = true;
+            btnCancelTrip.innerText = '⌛ Expirado';
+          } else {
+            btnCancelTrip.disabled = false;
+            btnCancelTrip.innerText = '❌ Cancelar Solicitud (RF-5.6)';
+          }
+        }
+        if (btnSearchCandidates) {
+          btnSearchCandidates.disabled = trip.status === 'ASSIGNED' || trip.status === 'EXPIRED';
+        }
+      }
+    }
+
+    async function promptCancelTrip() {
+      if (!currentRequestId) {
+        showToast('No hay ninguna solicitud activa para cancelar', 'error');
+        return;
+      }
+      const reason = prompt('Ingrese el motivo de cancelación (opcional):', 'Cambio de planes');
+      if (reason === null) return; // Usuario canceló diálogo
+      await cancelCurrentTrip(reason);
+    }
+
+    async function cancelCurrentTrip(reason = '') {
+      if (!currentRequestId) return;
+      const clientId = document.getElementById('clientId').value.trim();
+      const btn = document.getElementById('btnCancelTrip');
+      if (btn) {
+        btn.innerText = '⏳ Cancelando...';
+        btn.disabled = true;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/ride-requests/${currentRequestId}/cancel`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': clientId
+          },
+          body: JSON.stringify({ reason: reason || undefined })
+        });
+
+        const data = await res.json();
+        document.getElementById('responseStatus').innerText = `Status: ${res.status} ${res.statusText}`;
+        document.getElementById('jsonOutput').innerText = JSON.stringify(data, null, 2);
+
+        if (res.ok) {
+          showToast('❌ Solicitud cancelada exitosamente', 'info');
+
+          // Expirar ofertas en memoria del simulador
+          if (latestDispatchedOffers) {
+            latestDispatchedOffers.forEach(o => o.status = 'EXPIRED');
+          }
+          currentActiveOffer = null;
+          setDriverPhoneState('IDLE');
+
+          // Actualizar estado en vista del cliente
+          await refreshCurrentTrip();
+        } else {
+          showToast(data.message || 'Error al cancelar la solicitud', 'error');
+        }
+      } catch (err) {
+        showToast('Error de conexión al cancelar la solicitud', 'error');
+      } finally {
+        if (btn && btn.innerText === '⏳ Cancelando...') {
+          btn.innerText = '❌ Cancelar Solicitud (RF-5.6)';
+          btn.disabled = false;
+        }
       }
     }
 

@@ -1,6 +1,8 @@
 import {
   CandidateDriver,
   CandidateSearchResponseDTO,
+  CancelRideRequestDTO,
+  CancelRideRequestResponseDTO,
   CreateRideRequestDTO,
   EstimatedFare,
   NearbyDriverStub,
@@ -480,6 +482,15 @@ export class RideRequestService {
       );
     }
 
+    if (request.status === 'CANCELLED') {
+      offer.status = 'EXPIRED';
+      this.offers.set(offerId, offer);
+      throw new ConflictError(
+        'La solicitud de viaje fue cancelada por el cliente y ya no se encuentra disponible',
+        'REQUEST_CANCELLED'
+      );
+    }
+
     if (request.status === 'EXPIRED') {
       offer.status = 'EXPIRED';
       this.offers.set(offerId, offer);
@@ -520,6 +531,74 @@ export class RideRequestService {
   }
 
   /**
+   * RF-5.6: Cancelación previa de solicitud
+   * Permite al cliente cancelar una solicitud de viaje antes de su asignación a un conductor.
+   */
+  public async cancelRideRequest(
+    requestId: string,
+    clientId: string,
+    dto?: CancelRideRequestDTO
+  ): Promise<CancelRideRequestResponseDTO> {
+    // 1. Validar DTO
+    const validation = RideRequestValidator.validateCancelRequestDTO(dto);
+    if (!validation.valid) {
+      throw new ValidationError('Parámetros de cancelación inválidos', validation.errors);
+    }
+
+    // 2. Obtener y verificar la solicitud existente y pertenencia de cliente
+    const request = await this.getRideRequestById(requestId, clientId);
+
+    // 3. Validar reglas de negocio para cancelación previa
+    if (request.status === 'ASSIGNED') {
+      throw new ConflictError(
+        'No es posible realizar una cancelación previa: la solicitud ya ha sido asignada a un conductor',
+        'REQUEST_ALREADY_ASSIGNED'
+      );
+    }
+
+    if (request.status === 'CANCELLED') {
+      throw new ConflictError(
+        'La solicitud de viaje ya se encuentra cancelada',
+        'REQUEST_ALREADY_CANCELLED'
+      );
+    }
+
+    if (request.status === 'EXPIRED') {
+      throw new ConflictError(
+        'La solicitud de viaje ha expirado y no puede ser cancelada',
+        'REQUEST_EXPIRED'
+      );
+    }
+
+    // 4. Actualizar estado de la solicitud a CANCELLED
+    const now = new Date();
+    request.status = 'CANCELLED';
+    request.updatedAt = now.toISOString();
+    request.cancelledAt = now.toISOString();
+    if (dto?.reason && dto.reason.trim().length > 0) {
+      request.cancellationReason = dto.reason.trim();
+    }
+    this.requests.set(request.id, request);
+
+    // 5. Invalidar/expirar inmediatamente todas las ofertas asociadas que sigan pendientes
+    Array.from(this.offers.values())
+      .filter((o) => o.requestId === request.id && o.status === 'PENDING')
+      .forEach((pendingOffer) => {
+        pendingOffer.status = 'EXPIRED';
+        this.offers.set(pendingOffer.id, pendingOffer);
+      });
+
+    return {
+      requestId: request.id,
+      clientId: request.clientId,
+      status: 'CANCELLED',
+      reason: request.cancellationReason,
+      cancelledAt: request.cancelledAt,
+      message: 'Solicitud de viaje cancelada exitosamente por el cliente.'
+    };
+  }
+
+  /**
    * Obtiene una oferta por su ID
    */
   public async getOfferById(offerId: string): Promise<RideOffer> {
@@ -545,7 +624,7 @@ export class RideRequestService {
       .map((offer) => {
         const req = this.requests.get(offer.requestId);
         const isAssignedToOther = req && req.status === 'ASSIGNED' && req.assignedDriverId !== driverId;
-        const isReqClosed = req && (req.status === 'EXPIRED' || req.status === 'NO_DRIVERS_AVAILABLE');
+        const isReqClosed = req && (req.status === 'EXPIRED' || req.status === 'NO_DRIVERS_AVAILABLE' || req.status === 'CANCELLED');
         const isTimeExpired = new Date(offer.expiresAt).getTime() < now;
 
         if (offer.status === 'PENDING' && (isTimeExpired || isAssignedToOther || isReqClosed)) {
@@ -566,7 +645,7 @@ export class RideRequestService {
       .map((offer) => {
         const req = this.requests.get(offer.requestId);
         const isAssigned = req && req.status === 'ASSIGNED';
-        const isReqClosed = req && req.status === 'EXPIRED';
+        const isReqClosed = req && (req.status === 'EXPIRED' || req.status === 'CANCELLED');
         const isTimeExpired = new Date(offer.expiresAt).getTime() < now;
 
         if (offer.status === 'PENDING' && (isTimeExpired || isAssigned || isReqClosed)) {
@@ -578,6 +657,7 @@ export class RideRequestService {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 }
+
 
 
 

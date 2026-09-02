@@ -159,7 +159,28 @@ export class RideRequestValidator {
       errors
     };
   }
+
+  /**
+   * Valida cancelación previa de solicitud de viaje (RF-5.6)
+   */
+  public static validateCancelRequestDTO(dto?: { reason?: unknown }): ValidationResult {
+    const errors: string[] = [];
+
+    if (dto && dto.reason !== undefined && dto.reason !== null) {
+      if (typeof dto.reason !== 'string') {
+        errors.push('reason: El motivo de cancelación debe ser un texto');
+      } else if (dto.reason.length > 255) {
+        errors.push('reason: El motivo de cancelación no puede exceder 255 caracteres');
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
 }
+
 
 
 

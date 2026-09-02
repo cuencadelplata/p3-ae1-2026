@@ -60,7 +60,7 @@ paths:
   /ride-requests/{requestId}:
     get:
       summary: Consultar estado de solicitud de viaje
-      description: Obtiene el estado actual de la solicitud (PENDING, SEARCHING, OFFERED, ASSIGNED, EXPIRED, NO_DRIVERS_AVAILABLE).
+      description: Obtiene el estado actual de la solicitud (PENDING, SEARCHING, OFFERED, ASSIGNED, EXPIRED, NO_DRIVERS_AVAILABLE, CANCELLED).
       operationId: getRideRequestById
       security:
         - BearerAuth: []
@@ -85,6 +85,54 @@ paths:
           $ref: '#/components/responses/403Forbidden'
         '404':
           $ref: '#/components/responses/404NotFound'
+
+  /ride-requests/{requestId}/cancel:
+    post:
+      summary: Cancelación previa de la solicitud de viaje (RF-5.6)
+      description: Permite al cliente cancelar una solicitud de viaje antes de que sea asignada a un conductor. Invalida de forma automática todas las ofertas emitidas a conductores que se encuentren en estado pendiente.
+      operationId: cancelRideRequest
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          description: ID único de la solicitud de viaje a cancelar (RF-5.1)
+          schema:
+            type: string
+            format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelRideRequestDTO'
+      responses:
+        '200':
+          description: Solicitud de viaje cancelada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelRideRequestResponseDTO'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '409':
+          description: Conflicto - La solicitud ya fue asignada a un conductor, ya está cancelada o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "REQUEST_ALREADY_ASSIGNED"
+                message: "No es posible realizar una cancelación previa: la solicitud ya ha sido asignada a un conductor"
+                timestamp: "2026-09-01T14:31:00.000Z"
 
   /ride-requests/{requestId}/candidates:
     post:
@@ -488,6 +536,7 @@ components:
             - ASSIGNED
             - EXPIRED
             - NO_DRIVERS_AVAILABLE
+            - CANCELLED
           example: "SEARCHING"
         estimatedFare:
           $ref: '#/components/schemas/EstimatedFare'
@@ -507,6 +556,15 @@ components:
           type: string
           format: date-time
           example: "2026-09-01T14:33:00.000Z"
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-09-01T14:30:15.000Z"
+        cancellationReason:
+          type: string
+          nullable: true
+          example: "El usuario decidió esperar otro medio de transporte"
 
     CandidateDriverDTO:
       type: object
@@ -696,6 +754,47 @@ components:
           type: string
           format: date-time
           example: "2026-09-01T14:30:25.000Z"
+
+    CancelRideRequestDTO:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 255
+          description: Motivo opcional de la cancelación de la solicitud
+          example: "Cambio de planes del pasajero"
+
+    CancelRideRequestResponseDTO:
+      type: object
+      required:
+        - requestId
+        - clientId
+        - status
+        - cancelledAt
+        - message
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+        clientId:
+          type: string
+          example: "client_demo_1"
+        status:
+          type: string
+          enum: [CANCELLED]
+          example: "CANCELLED"
+        reason:
+          type: string
+          nullable: true
+          example: "Cambio de planes del pasajero"
+        cancelledAt:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:30:15.000Z"
+        message:
+          type: string
+          example: "Solicitud de viaje cancelada exitosamente por el cliente."
 
     ErrorResponse:
       type: object

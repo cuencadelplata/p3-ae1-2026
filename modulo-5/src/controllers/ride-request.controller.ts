@@ -5,7 +5,7 @@ import {
   NotFoundError,
   ValidationError
 } from '../services/ride-request.service';
-import { CreateRideRequestDTO } from '../types/ride-request.types';
+import { CreateRideRequestDTO, CancelRideRequestDTO } from '../types/ride-request.types';
 
 export class RideRequestController {
   constructor(private readonly rideRequestService: RideRequestService) {}
@@ -46,6 +46,23 @@ export class RideRequestController {
       );
 
       res.status(201).json(rideRequest);
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  /**
+   * POST /api/v1/ride-requests/:requestId/cancel
+   * Cancelación previa de solicitud por el cliente (RF-5.6)
+   */
+  public cancel = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { requestId } = req.params;
+      const clientId = this.extractClientId(req);
+      const dto: CancelRideRequestDTO = req.body || {};
+
+      const result = await this.rideRequestService.cancelRideRequest(requestId, clientId, dto);
+      res.status(200).json(result);
     } catch (error) {
       this.handleError(res, error);
     }

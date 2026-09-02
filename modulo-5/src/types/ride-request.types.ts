@@ -11,7 +11,8 @@ export type RideRequestStatus =
   | 'OFFERED'
   | 'ASSIGNED'
   | 'EXPIRED'
-  | 'NO_DRIVERS_AVAILABLE';
+  | 'NO_DRIVERS_AVAILABLE'
+  | 'CANCELLED';
 
 export interface GeoLocation {
   latitude: number;
@@ -40,6 +41,8 @@ export interface RideRequest {
   createdAt: string;
   updatedAt: string;
   expiresAt: string;
+  cancelledAt?: string;
+  cancellationReason?: string;
 }
 
 export interface CreateRideRequestDTO {
@@ -138,6 +141,23 @@ export interface RespondOfferResponseDTO {
   message: string;
   respondedAt: string;
 }
+
+/**
+ * Tipos para RF-5.6: Cancelación previa de solicitud
+ */
+export interface CancelRideRequestDTO {
+  reason?: string;
+}
+
+export interface CancelRideRequestResponseDTO {
+  requestId: string;
+  clientId: string;
+  status: RideRequestStatus;
+  reason?: string;
+  cancelledAt: string;
+  message: string;
+}
+
 
 
 
