@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createApp } from '../../src/app.js';
 import type { TarifaClient } from '../../src/clients/tarifa.client.js';
+import { InMemoryReservaRepository } from '../../src/repositories/in-memory-reserva.repository.js';
 import { ReservaService } from '../../src/services/reserva.service.js';
-import { InMemoryReservaRepository } from '../support/in-memory-reserva.repository.js';
 
 const tarifaClient: TarifaClient = {
   estimar: async () => ({ tarifaEstimada: 3_250, moneda: 'ARS' }),

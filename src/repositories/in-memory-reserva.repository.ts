@@ -6,8 +6,8 @@ import type {
   CrearReserva,
   EstadoReserva,
   Reserva,
-} from '../../src/domain/reserva.js';
-import type { ReservaRepository } from '../../src/repositories/reserva.repository.js';
+} from '../domain/reserva.js';
+import type { ReservaRepository } from './reserva.repository.js';
 
 const clone = (reserva: Reserva): Reserva => ({ ...reserva });
 
@@ -31,6 +31,7 @@ export class InMemoryReservaRepository implements ReservaRepository {
       creadoEn: now,
       actualizadoEn: now,
     };
+
     this.reservas.set(reserva.id, reserva);
     return clone(reserva);
   }
@@ -52,6 +53,7 @@ export class InMemoryReservaRepository implements ReservaRepository {
   ): Promise<Reserva | null> {
     const reserva = this.reservas.get(id);
     if (reserva === undefined || reserva.estado !== 'PROGRAMADA') return null;
+
     Object.assign(reserva, input, { actualizadoEn: new Date().toISOString() });
     return clone(reserva);
   }
@@ -80,6 +82,7 @@ export class InMemoryReservaRepository implements ReservaRepository {
   ): Promise<Reserva | null> {
     const reserva = this.reservas.get(id);
     if (reserva === undefined || reserva.estado !== estadoEsperado) return null;
+
     reserva.estado = nuevoEstado;
     reserva.actualizadoEn = new Date().toISOString();
     if (cambio.idSolicitud !== undefined) reserva.idSolicitud = cambio.idSolicitud;

@@ -2,7 +2,11 @@ openapi: 3.0.3
 info:
   title: M9 – Reservas Programadas
   version: 1.0.0
-  description: API REST para administrar y activar reservas programadas.
+  description: >
+    API REST para administrar y activar reservas programadas. En AE1 M9 no
+    implementa autenticación propia: la autenticación pertenece a M1 – Identidad
+    y Acceso y su integración queda fuera del alcance actual del módulo.
+security: []
 tags:
   - name: Salud
   - name: Reservas
@@ -18,6 +22,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/HealthResponse' }
+              examples:
+                disponible: { $ref: '#/components/examples/HealthOk' }
   /reservas:
     post:
       tags: [Reservas]
@@ -28,12 +34,16 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/CrearReservaRequest' }
+            examples:
+              reservaValida: { $ref: '#/components/examples/CrearReservaValida' }
       responses:
         '201':
           description: Reserva creada.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Reserva' }
+              examples:
+                creada: { $ref: '#/components/examples/ReservaProgramada' }
         '400': { $ref: '#/components/responses/SolicitudInvalida' }
         '500': { $ref: '#/components/responses/ErrorPersistencia' }
     get:
@@ -52,6 +62,8 @@ paths:
                   reservas:
                     type: array
                     items: { $ref: '#/components/schemas/Reserva' }
+              examples:
+                listado: { $ref: '#/components/examples/ListadoReservas' }
         '500': { $ref: '#/components/responses/ErrorPersistencia' }
   /reservas/{id}:
     parameters:
@@ -59,6 +71,7 @@ paths:
         in: path
         required: true
         schema: { type: string, format: uuid }
+        example: '10000000-0000-4000-8000-000000000001'
     get:
       tags: [Reservas]
       summary: Obtener una reserva
@@ -69,6 +82,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Reserva' }
+              examples:
+                encontrada: { $ref: '#/components/examples/ReservaProgramada' }
         '400': { $ref: '#/components/responses/SolicitudInvalida' }
         '404': { $ref: '#/components/responses/ReservaNoEncontrada' }
         '500': { $ref: '#/components/responses/ErrorPersistencia' }
@@ -81,12 +96,16 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/ActualizarReservaRequest' }
+            examples:
+              modificacionValida: { $ref: '#/components/examples/ActualizarReservaValida' }
       responses:
         '200':
           description: Reserva actualizada.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Reserva' }
+              examples:
+                actualizada: { $ref: '#/components/examples/ReservaModificada' }
         '400': { $ref: '#/components/responses/SolicitudInvalida' }
         '404': { $ref: '#/components/responses/ReservaNoEncontrada' }
         '409': { $ref: '#/components/responses/ConflictoEstado' }
@@ -101,9 +120,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Reserva' }
+              examples:
+                cancelada: { $ref: '#/components/examples/ReservaCancelada' }
         '400': { $ref: '#/components/responses/SolicitudInvalida' }
         '404': { $ref: '#/components/responses/ReservaNoEncontrada' }
-        '409': { $ref: '#/components/responses/ConflictoEstado' }
+        '409': { $ref: '#/components/responses/ReservaNoCancelable' }
         '500': { $ref: '#/components/responses/ErrorPersistencia' }
 components:
   responses:
@@ -112,21 +133,131 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            fechaInvalida: { $ref: '#/components/examples/ErrorValidacion' }
     ReservaNoEncontrada:
       description: Reserva no encontrada.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            inexistente: { $ref: '#/components/examples/ErrorNoEncontrada' }
     ConflictoEstado:
       description: La reserva no se puede modificar o cancelar en su estado actual.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            noModificable: { $ref: '#/components/examples/ErrorNoModificable' }
+    ReservaNoCancelable:
+      description: La reserva no se puede cancelar en su estado actual.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            noCancelable: { $ref: '#/components/examples/ErrorNoCancelable' }
     ErrorPersistencia:
       description: Error de persistencia.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            interno: { $ref: '#/components/examples/ErrorInterno' }
+  examples:
+    HealthOk:
+      summary: Servicio disponible
+      value: { service: m9-reservas-programadas, status: ok }
+    CrearReservaValida:
+      summary: Solicitud válida de reserva futura
+      value:
+        clienteId: '20000000-0000-4000-8000-000000000001'
+        origen: Terminal de Ómnibus
+        destino: Aeropuerto
+        vehiculo: AUTO
+        fechaHoraProgramada: '2099-01-01T14:30:00-03:00'
+    ActualizarReservaValida:
+      summary: Cambio de destino de una reserva programada
+      value: { destino: Puerto de Buenos Aires }
+    ReservaProgramada:
+      summary: Reserva creada o consultada
+      value:
+        id: '10000000-0000-4000-8000-000000000001'
+        clienteId: '20000000-0000-4000-8000-000000000001'
+        origen: Terminal de Ómnibus
+        destino: Aeropuerto
+        vehiculo: AUTO
+        fechaHoraProgramada: '2099-01-01T17:30:00.000Z'
+        estado: PROGRAMADA
+        tarifaEstimada: 2500
+        moneda: ARS
+        criterioAsignacion: MEJOR_CALIFICACION
+        idSolicitud: null
+        creadoEn: '2099-01-01T14:00:00.000Z'
+        actualizadoEn: '2099-01-01T14:00:00.000Z'
+    ReservaModificada:
+      summary: Reserva modificada correctamente
+      value:
+        id: '10000000-0000-4000-8000-000000000001'
+        clienteId: '20000000-0000-4000-8000-000000000001'
+        origen: Terminal de Ómnibus
+        destino: Puerto de Buenos Aires
+        vehiculo: AUTO
+        fechaHoraProgramada: '2099-01-01T17:30:00.000Z'
+        estado: PROGRAMADA
+        tarifaEstimada: 2500
+        moneda: ARS
+        criterioAsignacion: MEJOR_CALIFICACION
+        idSolicitud: null
+        creadoEn: '2099-01-01T14:00:00.000Z'
+        actualizadoEn: '2099-01-01T14:05:00.000Z'
+    ReservaCancelada:
+      summary: Reserva cancelada lógicamente
+      value:
+        id: '10000000-0000-4000-8000-000000000001'
+        clienteId: '20000000-0000-4000-8000-000000000001'
+        origen: Terminal de Ómnibus
+        destino: Aeropuerto
+        vehiculo: AUTO
+        fechaHoraProgramada: '2099-01-01T17:30:00.000Z'
+        estado: CANCELADA
+        tarifaEstimada: 2500
+        moneda: ARS
+        criterioAsignacion: MEJOR_CALIFICACION
+        idSolicitud: null
+        creadoEn: '2099-01-01T14:00:00.000Z'
+        actualizadoEn: '2099-01-01T14:10:00.000Z'
+    ListadoReservas:
+      summary: Lista ordenada por fecha programada
+      value:
+        reservas:
+          - id: '10000000-0000-4000-8000-000000000001'
+            clienteId: '20000000-0000-4000-8000-000000000001'
+            origen: Terminal de Ómnibus
+            destino: Aeropuerto
+            vehiculo: AUTO
+            fechaHoraProgramada: '2099-01-01T17:30:00.000Z'
+            estado: PROGRAMADA
+            tarifaEstimada: 2500
+            moneda: ARS
+            criterioAsignacion: MEJOR_CALIFICACION
+            idSolicitud: null
+            creadoEn: '2099-01-01T14:00:00.000Z'
+            actualizadoEn: '2099-01-01T14:00:00.000Z'
+    ErrorValidacion:
+      summary: Fecha inválida
+      value: { error: { codigo: FECHA_INVALIDA, mensaje: La fecha y hora programada debe ser válida y futura. } }
+    ErrorNoEncontrada:
+      summary: Reserva inexistente
+      value: { error: { codigo: RESERVA_NO_ENCONTRADA, mensaje: La reserva no existe. } }
+    ErrorNoModificable:
+      summary: Reserva cancelada que no puede modificarse
+      value: { error: { codigo: RESERVA_NO_MODIFICABLE, mensaje: Solo se pueden modificar reservas en estado PROGRAMADA. } }
+    ErrorNoCancelable:
+      summary: Reserva que no puede cancelarse
+      value: { error: { codigo: RESERVA_NO_CANCELABLE, mensaje: Solo se pueden cancelar reservas en estado PROGRAMADA. } }
+    ErrorInterno:
+      summary: Error no controlado
+      value: { error: { codigo: ERROR_PERSISTENCIA, mensaje: Ocurrió un error interno. } }
   schemas:
     HealthResponse:
       type: object
@@ -141,19 +272,19 @@ components:
       required: [clienteId, origen, destino, vehiculo, fechaHoraProgramada]
       properties:
         clienteId: { type: string, format: uuid }
-        origen: { type: string, minLength: 1, maxLength: 500 }
-        destino: { type: string, minLength: 1, maxLength: 500 }
+        origen: { type: string, minLength: 1, maxLength: 500, description: Debe ser diferente de destino. }
+        destino: { type: string, minLength: 1, maxLength: 500, description: Debe ser diferente de origen. }
         vehiculo: { type: string, enum: [AUTO, MOTO] }
-        fechaHoraProgramada: { type: string, format: date-time }
+        fechaHoraProgramada: { type: string, format: date-time, description: Fecha ISO 8601 con offset y posterior al instante actual. }
     ActualizarReservaRequest:
       type: object
       additionalProperties: false
       minProperties: 1
       properties:
-        origen: { type: string, minLength: 1, maxLength: 500 }
-        destino: { type: string, minLength: 1, maxLength: 500 }
+        origen: { type: string, minLength: 1, maxLength: 500, description: Debe ser diferente de destino. }
+        destino: { type: string, minLength: 1, maxLength: 500, description: Debe ser diferente de origen. }
         vehiculo: { type: string, enum: [AUTO, MOTO] }
-        fechaHoraProgramada: { type: string, format: date-time }
+        fechaHoraProgramada: { type: string, format: date-time, description: Fecha ISO 8601 con offset y posterior al instante actual. }
     Reserva:
       type: object
       additionalProperties: false

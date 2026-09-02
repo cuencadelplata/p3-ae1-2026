@@ -1,12 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { request } from 'node:http';
 
-import {
-  getLocalSupabaseCredentials,
-  runSupabase,
-  SUPABASE_EXCLUDED_SERVICES,
-} from './lib/supabase-cli.mjs';
-
 const npmCli = process.env.npm_execpath;
 
 if (!npmCli) {
@@ -51,35 +45,32 @@ const waitForHealth = async () => {
 };
 
 let composeStarted = false;
-let supabaseStarted = false;
 try {
-  console.log('Iniciando Supabase local para E2E...');
-  runSupabase(['start', '--exclude', SUPABASE_EXCLUDED_SERVICES], { capture: true });
-  supabaseStarted = true;
-  runSupabase(['db', 'reset']);
-  const credentials = getLocalSupabaseCredentials();
   const dockerEnvironment = {
     ...process.env,
     PORT: '3909',
     RESERVATION_JOB_INTERVAL: '*/1 * * * * *',
-    SUPABASE_LOCAL_SERVICE_ROLE_KEY: credentials.serviceRoleKey,
   };
-  run('docker', ['compose', 'up', '--build', '-d'], dockerEnvironment);
   composeStarted = true;
+  run('docker', ['compose', '--parallel', '1', 'up', '--build', '-d'], dockerEnvironment);
   await waitForHealth();
+  run(
+    'docker',
+    ['compose', 'exec', '-T', 'm9-reservas', 'wget', '-qO-', 'http://m5-stub:3001/health'],
+    dockerEnvironment,
+  );
+  run(
+    'docker',
+    ['compose', 'exec', '-T', 'm9-reservas', 'wget', '-qO-', 'http://m7-stub:3002/health'],
+    dockerEnvironment,
+  );
   run(
     process.execPath,
     [npmCli, 'run', 'test:e2e:only'],
     { ...process.env, E2E_BASE_URL: 'http://127.0.0.1:3909' },
   );
 } finally {
-  try {
-    if (composeStarted) {
-      run('docker', ['compose', 'down']);
-    }
-  } finally {
-    if (supabaseStarted) {
-      runSupabase(['stop', '--no-backup']);
-    }
+  if (composeStarted) {
+    run('docker', ['compose', 'down']);
   }
 }

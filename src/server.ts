@@ -2,13 +2,12 @@ import { createApp } from './app.js';
 import { HttpDespachoClient } from './clients/despacho.client.js';
 import { HttpTarifaClient } from './clients/tarifa.client.js';
 import { env } from './config/env.js';
-import { supabase } from './config/supabase.js';
 import { ReservasScheduler } from './jobs/reservas.scheduler.js';
-import { SupabaseReservaRepository } from './repositories/supabase-reserva.repository.js';
+import { InMemoryReservaRepository } from './repositories/in-memory-reserva.repository.js';
 import { ActivacionReservaService } from './services/activacion-reserva.service.js';
 import { ReservaService } from './services/reserva.service.js';
 
-const repository = new SupabaseReservaRepository(supabase);
+const repository = new InMemoryReservaRepository();
 const reservaService = new ReservaService(repository, new HttpTarifaClient(env.M7_URL));
 const activacionService = new ActivacionReservaService(
   repository,

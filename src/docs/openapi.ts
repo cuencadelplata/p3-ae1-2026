@@ -1,15 +1,156 @@
-const jsonSchema = (ref: string) => ({
-  content: { 'application/json': { schema: { $ref: ref } } },
+const examples = {
+  HealthOk: {
+    summary: 'Servicio disponible',
+    value: { service: 'm9-reservas-programadas', status: 'ok' },
+  },
+  CrearReservaValida: {
+    summary: 'Solicitud válida de reserva futura',
+    value: {
+      clienteId: '20000000-0000-4000-8000-000000000001',
+      origen: 'Terminal de Ómnibus',
+      destino: 'Aeropuerto',
+      vehiculo: 'AUTO',
+      fechaHoraProgramada: '2099-01-01T14:30:00-03:00',
+    },
+  },
+  ActualizarReservaValida: {
+    summary: 'Cambio de destino de una reserva programada',
+    value: { destino: 'Puerto de Buenos Aires' },
+  },
+  ReservaProgramada: {
+    summary: 'Reserva creada o consultada',
+    value: {
+      id: '10000000-0000-4000-8000-000000000001',
+      clienteId: '20000000-0000-4000-8000-000000000001',
+      origen: 'Terminal de Ómnibus',
+      destino: 'Aeropuerto',
+      vehiculo: 'AUTO',
+      fechaHoraProgramada: '2099-01-01T17:30:00.000Z',
+      estado: 'PROGRAMADA',
+      tarifaEstimada: 2500,
+      moneda: 'ARS',
+      criterioAsignacion: 'MEJOR_CALIFICACION',
+      idSolicitud: null,
+      creadoEn: '2099-01-01T14:00:00.000Z',
+      actualizadoEn: '2099-01-01T14:00:00.000Z',
+    },
+  },
+  ReservaModificada: {
+    summary: 'Reserva modificada correctamente',
+    value: {
+      id: '10000000-0000-4000-8000-000000000001',
+      clienteId: '20000000-0000-4000-8000-000000000001',
+      origen: 'Terminal de Ómnibus',
+      destino: 'Puerto de Buenos Aires',
+      vehiculo: 'AUTO',
+      fechaHoraProgramada: '2099-01-01T17:30:00.000Z',
+      estado: 'PROGRAMADA',
+      tarifaEstimada: 2500,
+      moneda: 'ARS',
+      criterioAsignacion: 'MEJOR_CALIFICACION',
+      idSolicitud: null,
+      creadoEn: '2099-01-01T14:00:00.000Z',
+      actualizadoEn: '2099-01-01T14:05:00.000Z',
+    },
+  },
+  ReservaCancelada: {
+    summary: 'Reserva cancelada lógicamente',
+    value: {
+      id: '10000000-0000-4000-8000-000000000001',
+      clienteId: '20000000-0000-4000-8000-000000000001',
+      origen: 'Terminal de Ómnibus',
+      destino: 'Aeropuerto',
+      vehiculo: 'AUTO',
+      fechaHoraProgramada: '2099-01-01T17:30:00.000Z',
+      estado: 'CANCELADA',
+      tarifaEstimada: 2500,
+      moneda: 'ARS',
+      criterioAsignacion: 'MEJOR_CALIFICACION',
+      idSolicitud: null,
+      creadoEn: '2099-01-01T14:00:00.000Z',
+      actualizadoEn: '2099-01-01T14:10:00.000Z',
+    },
+  },
+  ListadoReservas: {
+    summary: 'Lista ordenada por fecha programada',
+    value: {
+      reservas: [
+        {
+          id: '10000000-0000-4000-8000-000000000001',
+          clienteId: '20000000-0000-4000-8000-000000000001',
+          origen: 'Terminal de Ómnibus',
+          destino: 'Aeropuerto',
+          vehiculo: 'AUTO',
+          fechaHoraProgramada: '2099-01-01T17:30:00.000Z',
+          estado: 'PROGRAMADA',
+          tarifaEstimada: 2500,
+          moneda: 'ARS',
+          criterioAsignacion: 'MEJOR_CALIFICACION',
+          idSolicitud: null,
+          creadoEn: '2099-01-01T14:00:00.000Z',
+          actualizadoEn: '2099-01-01T14:00:00.000Z',
+        },
+      ],
+    },
+  },
+  ErrorValidacion: {
+    summary: 'Fecha inválida',
+    value: {
+      error: {
+        codigo: 'FECHA_INVALIDA',
+        mensaje: 'La fecha y hora programada debe ser válida y futura.',
+      },
+    },
+  },
+  ErrorNoEncontrada: {
+    summary: 'Reserva inexistente',
+    value: { error: { codigo: 'RESERVA_NO_ENCONTRADA', mensaje: 'La reserva no existe.' } },
+  },
+  ErrorNoModificable: {
+    summary: 'Reserva cancelada que no puede modificarse',
+    value: {
+      error: {
+        codigo: 'RESERVA_NO_MODIFICABLE',
+        mensaje: 'Solo se pueden modificar reservas en estado PROGRAMADA.',
+      },
+    },
+  },
+  ErrorNoCancelable: {
+    summary: 'Reserva que no puede cancelarse',
+    value: {
+      error: {
+        codigo: 'RESERVA_NO_CANCELABLE',
+        mensaje: 'Solo se pueden cancelar reservas en estado PROGRAMADA.',
+      },
+    },
+  },
+  ErrorInterno: {
+    summary: 'Error no controlado',
+    value: { error: { codigo: 'ERROR_PERSISTENCIA', mensaje: 'Ocurrió un error interno.' } },
+  },
+} as const;
+
+type ExampleName = keyof typeof examples;
+
+const jsonSchema = (ref: string, exampleName?: ExampleName) => ({
+  content: {
+    'application/json': {
+      schema: { $ref: ref },
+      ...(exampleName === undefined
+        ? {}
+        : { examples: { principal: { $ref: `#/components/examples/${exampleName}` } } }),
+    },
+  },
 });
 
-const errorResponse = (description: string) => ({
+const errorResponse = (description: string, exampleName: ExampleName) => ({
   description,
-  ...jsonSchema('#/components/schemas/ErrorResponse'),
+  ...jsonSchema('#/components/schemas/ErrorResponse', exampleName),
 });
 
-const reservaResponse = (description: string) => ({
+const reservaResponse = (description: string, exampleName: ExampleName) => ({
   description,
-  ...jsonSchema('#/components/schemas/Reserva'),
+  ...jsonSchema('#/components/schemas/Reserva', exampleName),
 });
 
 export const openApiDocument = {
@@ -17,8 +158,10 @@ export const openApiDocument = {
   info: {
     title: 'M9 – Reservas Programadas',
     version: '1.0.0',
-    description: 'API REST para administrar y activar reservas programadas.',
+    description:
+      'API REST para administrar y activar reservas programadas. En AE1 M9 no implementa autenticación propia: la autenticación pertenece a M1 – Identidad y Acceso y su integración queda fuera del alcance actual del módulo.',
   },
+  security: [],
   tags: [{ name: 'Salud' }, { name: 'Reservas' }],
   paths: {
     '/health': {
@@ -29,7 +172,7 @@ export const openApiDocument = {
         responses: {
           '200': {
             description: 'El servicio está disponible.',
-            ...jsonSchema('#/components/schemas/HealthResponse'),
+            ...jsonSchema('#/components/schemas/HealthResponse', 'HealthOk'),
           },
         },
       },
@@ -41,12 +184,12 @@ export const openApiDocument = {
         operationId: 'crearReserva',
         requestBody: {
           required: true,
-          ...jsonSchema('#/components/schemas/CrearReservaRequest'),
+          ...jsonSchema('#/components/schemas/CrearReservaRequest', 'CrearReservaValida'),
         },
         responses: {
-          '201': reservaResponse('Reserva creada.'),
-          '400': errorResponse('Datos o fecha inválidos.'),
-          '500': errorResponse('Error de persistencia.'),
+          '201': reservaResponse('Reserva creada.', 'ReservaProgramada'),
+          '400': errorResponse('Datos o fecha inválidos.', 'ErrorValidacion'),
+          '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
         },
       },
       get: {
@@ -68,10 +211,11 @@ export const openApiDocument = {
                     },
                   },
                 },
+                examples: { principal: { $ref: '#/components/examples/ListadoReservas' } },
               },
             },
           },
-          '500': errorResponse('Error de persistencia.'),
+          '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
         },
       },
     },
@@ -82,6 +226,7 @@ export const openApiDocument = {
           in: 'path',
           required: true,
           schema: { type: 'string', format: 'uuid' },
+          example: '10000000-0000-4000-8000-000000000001',
         },
       ],
       get: {
@@ -89,10 +234,10 @@ export const openApiDocument = {
         summary: 'Obtener una reserva',
         operationId: 'obtenerReserva',
         responses: {
-          '200': reservaResponse('Reserva encontrada.'),
-          '400': errorResponse('Identificador inválido.'),
-          '404': errorResponse('Reserva no encontrada.'),
-          '500': errorResponse('Error de persistencia.'),
+          '200': reservaResponse('Reserva encontrada.', 'ReservaProgramada'),
+          '400': errorResponse('Identificador inválido.', 'ErrorValidacion'),
+          '404': errorResponse('Reserva no encontrada.', 'ErrorNoEncontrada'),
+          '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
         },
       },
       patch: {
@@ -101,14 +246,14 @@ export const openApiDocument = {
         operationId: 'actualizarReserva',
         requestBody: {
           required: true,
-          ...jsonSchema('#/components/schemas/ActualizarReservaRequest'),
+          ...jsonSchema('#/components/schemas/ActualizarReservaRequest', 'ActualizarReservaValida'),
         },
         responses: {
-          '200': reservaResponse('Reserva actualizada.'),
-          '400': errorResponse('Datos, fecha o identificador inválidos.'),
-          '404': errorResponse('Reserva no encontrada.'),
-          '409': errorResponse('Reserva no modificable.'),
-          '500': errorResponse('Error de persistencia.'),
+          '200': reservaResponse('Reserva actualizada.', 'ReservaModificada'),
+          '400': errorResponse('Datos, fecha o identificador inválidos.', 'ErrorValidacion'),
+          '404': errorResponse('Reserva no encontrada.', 'ErrorNoEncontrada'),
+          '409': errorResponse('Reserva no modificable.', 'ErrorNoModificable'),
+          '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
         },
       },
       delete: {
@@ -116,16 +261,17 @@ export const openApiDocument = {
         summary: 'Cancelar lógicamente una reserva PROGRAMADA',
         operationId: 'cancelarReserva',
         responses: {
-          '200': reservaResponse('Reserva cancelada.'),
-          '400': errorResponse('Identificador inválido.'),
-          '404': errorResponse('Reserva no encontrada.'),
-          '409': errorResponse('Reserva no cancelable.'),
-          '500': errorResponse('Error de persistencia.'),
+          '200': reservaResponse('Reserva cancelada.', 'ReservaCancelada'),
+          '400': errorResponse('Identificador inválido.', 'ErrorValidacion'),
+          '404': errorResponse('Reserva no encontrada.', 'ErrorNoEncontrada'),
+          '409': errorResponse('Reserva no cancelable.', 'ErrorNoCancelable'),
+          '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
         },
       },
     },
   },
   components: {
+    examples,
     schemas: {
       HealthResponse: {
         type: 'object',
@@ -142,10 +288,14 @@ export const openApiDocument = {
         required: ['clienteId', 'origen', 'destino', 'vehiculo', 'fechaHoraProgramada'],
         properties: {
           clienteId: { type: 'string', format: 'uuid' },
-          origen: { type: 'string', minLength: 1, maxLength: 500 },
-          destino: { type: 'string', minLength: 1, maxLength: 500 },
+          origen: { type: 'string', minLength: 1, maxLength: 500, description: 'Debe ser diferente de destino.' },
+          destino: { type: 'string', minLength: 1, maxLength: 500, description: 'Debe ser diferente de origen.' },
           vehiculo: { type: 'string', enum: ['AUTO', 'MOTO'] },
-          fechaHoraProgramada: { type: 'string', format: 'date-time' },
+          fechaHoraProgramada: {
+            type: 'string',
+            format: 'date-time',
+            description: 'Fecha ISO 8601 con offset y posterior al instante actual.',
+          },
         },
       },
       ActualizarReservaRequest: {
@@ -153,10 +303,14 @@ export const openApiDocument = {
         additionalProperties: false,
         minProperties: 1,
         properties: {
-          origen: { type: 'string', minLength: 1, maxLength: 500 },
-          destino: { type: 'string', minLength: 1, maxLength: 500 },
+          origen: { type: 'string', minLength: 1, maxLength: 500, description: 'Debe ser diferente de destino.' },
+          destino: { type: 'string', minLength: 1, maxLength: 500, description: 'Debe ser diferente de origen.' },
           vehiculo: { type: 'string', enum: ['AUTO', 'MOTO'] },
-          fechaHoraProgramada: { type: 'string', format: 'date-time' },
+          fechaHoraProgramada: {
+            type: 'string',
+            format: 'date-time',
+            description: 'Fecha ISO 8601 con offset y posterior al instante actual.',
+          },
         },
       },
       Reserva: {

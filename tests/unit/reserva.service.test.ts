@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import type { TarifaClient } from '../../src/clients/tarifa.client.js';
+import { InMemoryReservaRepository } from '../../src/repositories/in-memory-reserva.repository.js';
 import { ReservaService } from '../../src/services/reserva.service.js';
-import { InMemoryReservaRepository } from '../support/in-memory-reserva.repository.js';
 
 describe('ReservaService', () => {
   it('crea la reserva sin tarifa cuando M7 no está disponible', async () => {

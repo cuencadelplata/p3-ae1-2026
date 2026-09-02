@@ -9,11 +9,3 @@ export class AppError extends Error {
     this.name = 'AppError';
   }
 }
-
-export const persistenceError = (cause?: unknown): AppError =>
-  new AppError(
-    500,
-    'ERROR_PERSISTENCIA',
-    'No fue posible completar la operación de persistencia.',
-    { cause },
-  );

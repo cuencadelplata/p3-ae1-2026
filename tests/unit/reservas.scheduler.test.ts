@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { DespachoClient } from '../../src/clients/despacho.client.js';
 import { ReservasScheduler } from '../../src/jobs/reservas.scheduler.js';
+import { InMemoryReservaRepository } from '../../src/repositories/in-memory-reserva.repository.js';
 import { ActivacionReservaService } from '../../src/services/activacion-reserva.service.js';
-import { InMemoryReservaRepository } from '../support/in-memory-reserva.repository.js';
 
 const crearVencida = (repository: InMemoryReservaRepository) =>
   repository.crear({
