@@ -19,6 +19,10 @@ Las imágenes publicadas están disponibles en:
  - [Código principal M6](https://hub.docker.com/repository/docker/mordkalucas/p3-ae1-2026_g10-m6/general)
  - [Dependencias simuladas](https://hub.docker.com/repository/docker/mordkalucas/p3-ae1-2026_g10-m6-dependencies/general)
 
+Primero, abra Visual Studio Code y cree una carpeta donde contendrá las imágenes, coloquese con Visual Studio Code en dicha carpeta como raíz.
+
+Luego, en la parte superior izquierda vaya a `Terminal` -> `New Terminal Window`. En dicha terminal ejecute los siguientes comandos:
+
 Para descargar la versión `2.0` desde la terminal integrada de VS Code:
 
 ```sh
