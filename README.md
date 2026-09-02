@@ -16,7 +16,7 @@ Rama: M7--Tarifas,-Pagos-y-Liquidaciones
 ## Imagen publicada en Docker Hub
 - Nombre: `aylen0/m7-tarifas`
 - Enlace: https://hub.docker.com/r/aylen0/m7-tarifas
-- Versión: `3.0`
+- Versión: `4.0`
 
 
 ## Levantar con Docker Hub
@@ -25,10 +25,10 @@ Rama: M7--Tarifas,-Pagos-y-Liquidaciones
     Abrir "cmd" o "PowerShell" en el menú de inicio y abrirlo
 
 ### Paso 2: descargar la imagen desde Docker Hub
-    Escribir el comando en la terminal:     docker pull aylen0/m7-tarifas:3.0
+    Escribir el comando en la terminal:     docker pull aylen0/m7-tarifas:4.0
 
 ### Paso 3: levantar el contenedor
-    Nuevamente en la terminal colocar:      docker run -d -p 3000:3000 --name m7-tarifas aylen0/m7-tarifas:3.0
+    Nuevamente en la terminal colocar:      docker run -d -p 3000:3000 --name m7-tarifas aylen0/m7-tarifas:4.0
 
 ### Paso 4: verificar que está vivo
     En misma terminal:      curl -X POST http://localhost:3000/reintegro -H "Content-Type: application/json" -d "{\"montoCancelacion\": 1000, \"viajeId\": \"v1\"}"
@@ -59,7 +59,7 @@ En la misma terminal:
 ### Paso 7: ver cobertura de tests (opcional)
 - npm run test:coverage
 
-Cobertura actual: ~96% de los 4 RF implementados
+Cobertura actual: 100% de los 4 RF implementados
 
 ### Paso 8: apagar y borrar el contenedor
 En terminal:
