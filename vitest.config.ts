@@ -7,7 +7,9 @@ export default defineConfig({
     exclude: ['tests/e2e/**/*.test.ts'],
     maxWorkers: 1,
     coverage: {
+      provider: 'v8',
       reportsDirectory: 'coverage',
+      reporter: ['text', 'html'],
     },
   },
 });

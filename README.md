@@ -34,7 +34,18 @@ npm install
 npm run local:up
 ```
 
-El segundo comando construye las imágenes locales e inicia M9, M5 stub y M7 stub.
+La instalación inicial con `npm install` prepara las dependencias locales. El segundo comando construye las imágenes locales e inicia M9, M5 stub y M7 stub.
+
+Si se quiere una instalación reproducible a partir del lockfile, también puede usarse:
+
+```bash
+npm ci
+npm run local:up
+```
+
+`npm ci` instala exactamente las versiones registradas en `package-lock.json`. El segundo comando construye la imagen local e inicia coordinadamente M9, M5 stub y M7 stub mediante Docker Compose.
+
+Si se necesita personalizar un valor, copiar `.env.example` como `.env` antes de iniciar. Para la evaluación estándar no es necesario modificarlo porque Compose incluye valores predeterminados.
 
 ## Accesos locales
 
@@ -114,26 +125,75 @@ Consecuencias actuales:
 
 ## Pruebas
 
-Pruebas unitarias y de integración:
+### Verificaciones del código
 
 ```bash
-npm test
 npm run typecheck
 npm run build
+npm test
 ```
 
-Prueba automatizada contra contenedores:
+`npm test` ejecuta las pruebas unitarias y de integración. No incluye el E2E, ya que este necesita la solución iniciada en contenedores.
+
+### Cobertura de pruebas
+
+Generar el resumen de cobertura y el informe HTML:
+
+```bash
+npm run test:coverage
+```
+
+El porcentaje por archivo se muestra en la terminal. El informe navegable se genera en `coverage/index.html`; puede abrirse con:
+
+```powershell
+start coverage/index.html
+```
+
+En Linux:
+
+```bash
+xdg-open coverage/index.html
+```
+
+La carpeta `coverage/` es un resultado generado y está excluida del repositorio mediante `.gitignore`. La cobertura corresponde a las pruebas unitarias y de integración; las pruebas E2E se informan por separado porque consumen los servicios reales de Compose.
+
+### End-to-End contra contenedores
+
+Con Docker Desktop iniciado, ejecutar:
 
 ```bash
 npm run test:e2e
 ```
 
-El E2E construye y levanta los contenedores, consume únicamente la UI y la API pública de M9, verifica CRUD, tarifa M7 y activación M5, y desmonta Compose al finalizar.
+El comando es autocontenido: construye la imagen, levanta M9 y los stubs, espera sus health checks, ejecuta las pruebas por HTTP contra `http://127.0.0.1:3909` y desmonta Compose al finalizar, incluso si una prueba falla. No accede directamente al repositorio ni a una base de datos.
+
+Escenarios automatizados:
+
+- disponibilidad de la UI pública;
+- creación, consulta, listado, modificación y cancelación lógica de una reserva;
+- estimación de tarifa mediante M7;
+- activación de una reserva vencida mediante el scheduler y M5;
+- salud de M9, M5 y M7 antes de comenzar las pruebas.
+
+Para evitar que la ejecución E2E reemplace una composición iniciada manualmente, detenerla primero con `npm run local:down`. Si se desea seguir usando la aplicación después de las pruebas, ejecutar nuevamente `npm run local:up`.
+
+### Secuencia completa recomendada para la evaluación
+
+```bash
+npm ci
+npm run typecheck
+npm run build
+npm test
+npm run test:coverage
+npm run test:e2e
+npm run local:up
+```
+
+Luego verificar `http://localhost:3000/health`, abrir `http://localhost:3000/docs/` y operar la UI en `http://localhost:3000/`. Al terminar, ejecutar `npm run local:down`.
 
 ## Imágenes Docker y registry
 
 La composición actual construye una única imagen multirol para M9 y los stubs M5/M7:
-
 ```text
 m9-reservas-programadas:local
 ```
@@ -166,6 +226,23 @@ Detener y eliminar recursos locales de Compose:
 npm run local:clean
 ```
 
+<<<<<<< HEAD
+=======
+La limpieza elimina los contenedores, la red y los volúmenes asociados a esta composición. La implementación actual no define volúmenes de datos porque utiliza persistencia en memoria.
+
+## Preparación del archivo de entrega
+
+Para el Campus Virtual se debe incluir una copia `.zip` del repositorio dentro del archivo principal de entrega. Antes de comprimir, verificar que no se incluyan:
+
+- `node_modules/`;
+- `dist/`;
+- `coverage/`;
+- `.env` u otros archivos con secretos;
+- logs y archivos temporales.
+
+Sí deben incluirse el código fuente, las pruebas, `Dockerfile`, `docker-compose.yml`, `package.json`, `package-lock.json`, `.env.example`, `.gitignore`, `README.md`, `docs/` y `openapi/openapi.yaml`.
+
+>>>>>>> f404cb6 (Code cleaning y actualizacion de dependencias)
 ## Documentación
 
 - `docs/FUNCIONAMIENTO.md`: arquitectura, flujos, scheduler, contenedores y limitaciones.
