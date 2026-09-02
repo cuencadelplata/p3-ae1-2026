@@ -19,5 +19,7 @@
     "esModuleInterop": true,
 
     "skipLibCheck": true
-  }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "M7-cargo-cancelacion"]
 }
