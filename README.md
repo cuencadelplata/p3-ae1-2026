@@ -31,7 +31,7 @@ Rama: M7--Tarifas,-Pagos-y-Liquidaciones
     Nuevamente en la terminal colocar:      docker run -d -p 3000:3000 --name m7-tarifas aylen0/m7-tarifas:4.0
 
 ### Paso 4: verificar que está vivo
-    En misma terminal:      curl -X POST http://localhost:3000/reintegro -H "Content-Type: application/json" -d "{\"montoCancelacion\": 1000, \"viajeId\": \"v1\"}"
+    En misma terminal:      curl -X POST http://localhost:3000/metodo-pago -H "Content-Type: application/json" -d "{\"clienteId\": \"cliente1\", \"viajeId\": \"v99\", \"tipo\": \"efectivo\"}"
 
 
 # Si en PowerShell da error este ùltimo comando intentar con: curl -X POST http://localhost:3000/reintegro -H "Content-Type: application/json" -d '{\"montoCancelacion\": 1000, \"viajeId\": \"v1\"}'
@@ -56,12 +56,7 @@ En la misma terminal:
 
 - curl -X POST http://localhost:3000/metodo-pago/v1/autorizar -H "Content-Type: application/json" -d "{\"idOrden\": \"orden-1\"}"
 
-### Paso 7: ver cobertura de tests (opcional)
-- npm run test:coverage
-
-Cobertura actual: 100% de los 4 RF implementados
-
-### Paso 8: apagar y borrar el contenedor
+### Paso 7: apagar y borrar el contenedor
 En terminal:
 - docker stop m7-tarifas
 - docker rm m7-tarifas
@@ -92,6 +87,11 @@ Parado dentro de la carpeta del proyecto, en la terminal:
 
 Con el contenedor ya levantado (Pasos 2-3 de la sección anterior):
 - npx playwright test
+
+### Paso 6: ver cobertura de tests (opcional)
+- npm run test:coverage
+
+Cobertura actual: 100% de los 4 RF implementados
 
 
 ## Arquitectura del proyecto

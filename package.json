@@ -9,22 +9,12 @@
   "main": "index.js",
   
   "scripts": {
-  
-    
-  "dev": "ts-node src/index.ts",
-  
-    
-  "build": "tsc",
-  
-    
-  "start": "node dist/index.js",
-  
-    
-  "test": "playwright test",
-  
-    
-  "test:unit": "vitest"
-  
+    "dev": "ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "playwright test",
+    "test:unit": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   
   "repository": {
