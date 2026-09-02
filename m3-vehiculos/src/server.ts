@@ -3,7 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { vehiculoRouter } from "./vehiculos/vehiculo-router.js";
-import { documentoRouter } from "./documents/documento-router.js";
+import { documentoRouter } from "./documents/documents-router.js";
 
 dotenv.config();
 

@@ -4,7 +4,6 @@ import type {
   VehiculoParaInsertar,
 } from "./vehiculo-dto.js";
 import {
-  existePatente,
   insertarVehiculo,
   listarVehiculosPorConductor,
   buscarVehiculoDeConductor,
