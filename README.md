@@ -56,8 +56,12 @@ En la misma terminal:
 
 - curl -X POST http://localhost:3000/metodo-pago/v1/autorizar -H "Content-Type: application/json" -d "{\"idOrden\": \"orden-1\"}"
 
+### Paso 7: ver cobertura de tests (opcional)
+- npm run test:coverage
 
-### Paso 7: apagar y borrar el contenedor
+Cobertura actual: ~96% de los 4 RF implementados
+
+### Paso 8: apagar y borrar el contenedor
 En terminal:
 - docker stop m7-tarifas
 - docker rm m7-tarifas

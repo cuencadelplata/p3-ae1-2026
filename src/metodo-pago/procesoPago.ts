@@ -10,7 +10,7 @@ function generarId():string{
 
 export function registrarMetodoPago(clienteId:string, viajeId: string, tipo: TipoPago): MetodoPago{
 
-    if (clienteId||viajeId){
+    if (!clienteId || !viajeId){
         throw new Error("clienteId y viajeId debe existir"); 
     }
 

@@ -54,9 +54,9 @@ describe("POST /metodo-pago/:viajeId/autorizar (ruta HTTP)", () => {
       .post("/metodo-pago")
       .send({ clienteId: "cliente1", viajeId: "viaje-http-3", tipo: "efectivo" });
 
-    const respuesta = await request(app).post(
-      "/metodo-pago/viaje-http-3/autorizar"
-    );
+    const respuesta = await request(app)
+      .post("/metodo-pago/viaje-http-3/autorizar")
+      .send({ idOrden: "orden-http-3" });
 
     expect(respuesta.status).toBe(200);
     expect(respuesta.body.estado).toBe("autorizado");
