@@ -1,141 +1,130 @@
-# Módulo 1 - Identidad y Acceso: RF-1.4 y RF-1.5 Extended
+# Módulo 1: Identidad y Acceso
 
-## ⚠️ Nota Importante
+Esta carpeta contiene la versión extendida del Módulo 1. Incluye los requerimientos RF-1.1 a RF-1.5. La implementación original de RF-1.1 a RF-1.3 se conserva en `../modulo-1-identidad-acceso/`.
 
-Esta carpeta contiene la implementación extendida del Módulo 1 con los **Requerimientos 4 y 5**.
+## Funcionalidades
 
-La carpeta original `../modulo-1-identidad-acceso/` está **protegida** con los 3 requerimientos originales intactos.
+### Registro y autenticación
 
----
+- Registro de usuarios con nombre, apellido, DNI, teléfono, email, contraseña y rol.
+- Roles disponibles: `CLIENTE`, `CONDUCTOR` y `OPERADOR`.
+- Inicio de sesión mediante email y contraseña.
+- Generación de tokens JWT con una duración de una hora.
+- Validación protegida de identidad y rol.
+- Bloqueo de usuarios.
 
-## 📦 Contenido
+### Recuperación de acceso (RF-1.4)
 
-### ✅ RF 1-3: Requerimientos Originales (Intactos)
-- Registro de usuario
-- Login con email/password  
-- Validación de token y rol
+- Solicitud de recuperación mediante email.
+- Generación de tokens únicos con una duración de 30 minutos.
+- Restablecimiento de contraseña con token válido.
+- Invalidación del token después de utilizarlo.
+- Contraseñas protegidas mediante bcrypt.
 
-### ✨ RF-1.4: Recuperación y Permiso (Nuevo)
-- Solicitar token de recuperación
-- Resetear contraseña con validaciones
-- Tokens únicos con expiración 30 minutos
+Actualmente el proyecto no envía correos reales. El token se registra en la salida del servidor para facilitar las pruebas locales.
 
-### ✨ RF-1.5: Integración Estándar (Nuevo - Stub)
-- Contrato OAuth2/OpenID Connect
-- Endpoints 501 Not Implemented con plan de evolución
-- Interfaz clara para futura implementación
+### Integración OAuth2/OpenID Connect (RF-1.5)
 
----
+El requerimiento está implementado como un stub funcional. Se incluyen las rutas, validaciones, contratos y persistencia necesarios para una futura integración con proveedores externos. Las rutas OAuth2 responden `501 Not Implemented` porque todavía no realizan el flujo real de autenticación.
 
-## 🧪 Tests
+## API
+
+Las rutas principales son:
+
+```text
+GET  /health
+POST /auth/registrar-usuario
+POST /auth/iniciar-sesion
+GET  /auth/validar-identidad-y-rol
+POST /auth/solicitar-recuperacion
+POST /auth/resetear-contrasena
+GET  /auth/oauth2/authorize
+GET  /auth/oauth2/callback
+POST /auth/oauth2/link
+```
+
+La especificación completa está en `openapi.yaml`.
+
+## Requisitos
+
+- Node.js 22 o superior.
+- npm.
+
+En Windows, si `better-sqlite3` no puede compilarse por falta de herramientas de C++, instalar las dependencias con:
+
+```bash
+npm install --ignore-scripts
+```
+
+## Configuración
+
+Crear un archivo `.env` en esta carpeta:
+
+```env
+PORT=3001
+JWT_SECRET=clave-local-desarrollo
+```
+
+La variable `JWT_SECRET` es necesaria para generar y validar tokens JWT.
+
+## Ejecución
+
+Instalar dependencias y levantar el servidor:
+
+```bash
+npm install --ignore-scripts
+npm start
+```
+
+El servicio queda disponible en `http://localhost:3001`.
+
+## Pruebas
+
+La suite E2E se ejecuta con:
 
 ```bash
 npm test
 ```
 
-**Resultado esperado**: 16/16 tests ✅
+Resultado validado actualmente:
 
-```
-✅ RF-1.1: Registro (2 tests)
-✅ RF-1.2: Login (2 tests)
-✅ RF-1.3: Validación (3 tests)
-✅ RF-1.4: Recuperación (5 tests) ← NUEVO
-✅ RF-1.5: OAuth2 (2 tests) ← NUEVO (Stub)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ TOTAL: 16/16
+```text
+Test Files  1 passed
+Tests       36 passed
+Tests       0 failed
 ```
 
----
+Las pruebas cubren registro, autenticación, validación de tokens, bloqueo de usuarios, recuperación de contraseña, OAuth2 y casos de validación.
 
-## 📁 Archivos Clave
+## Persistencia
 
-### Nuevos Archivos
-- `src/services/password-recovery.service.ts` - Lógica de recuperación
-- `src/services/oauth2.service.ts` - Contrato y handler OAuth2
-- `src/controllers/recovery.controller.ts` - Endpoints (RF-1.4 y RF-1.5)
-- `IMPLEMENTATION_RF14_RF15.md` - Documentación técnica
-- `SUMMARY_RF14_RF15.md` - Resumen ejecutivo
+La aplicación utiliza SQLite local. La base de datos se almacena en:
 
-### Archivos Modificados
-- `src/config/database.ts` - 2 nuevas tablas
-- `src/types/user.types.ts` - 3 nuevos tipos/interfaces
-- `src/repositories/user.repository.ts` - 8 nuevas funciones
-- `src/routes/auth.routes.ts` - 6 nuevas rutas
-- `tests/e2e/identidad-acceso.e2e.test.ts` - 12 nuevos tests
-
----
-
-## 🚀 Endpoints Nuevos
-
-### RF-1.4: Recuperación
-```
-POST /auth/solicitar-recuperacion
-  Input: { email: string }
-  Output: Confirmación genérica
-
-POST /auth/resetear-contrasena
-  Input: { token: string, newPassword: string }
-  Output: Confirmación con email
+```text
+data/identity.db
 ```
 
-### RF-1.5: OAuth2 (Stub)
-```
-GET /auth/oauth2/authorize
-  Parámetros: provider, redirect_uri
-  Output: 501 Not Implemented
+Las tablas principales son:
 
-GET /auth/oauth2/callback
-  Parámetros: code, state, provider
-  Output: 501 Not Implemented
+- `usuarios`
+- `password_recovery_tokens`
+- `oauth2_providers`
 
-POST /auth/oauth2/link
-  Requiere: Bearer token
-  Output: 501 Not Implemented
-```
+Las columnas personales agregadas al registro se incorporan mediante una migración automática al iniciar el servidor.
 
----
+## Documentación adicional
 
-## 🔐 Seguridad
+- `openapi.yaml`: contrato de la API.
+- `IMPLEMENTATION_RF14_RF15.md`: detalle técnico de RF-1.4 y RF-1.5.
+- `SUMMARY_RF14_RF15.md`: resumen de la implementación.
+- `../ESTRUCTURA.md`: descripción de la estructura del proyecto.
 
-✅ Contraseñas hasheadas (bcrypt salt 10)
-✅ Tokens de recuperación únicos (32 bytes hex)
-✅ One-time use tokens
-✅ Expiración 30 minutos
-✅ No revela existencia de emails
-✅ CSRF protection preparada (OAuth2)
+## Estado de implementación
 
----
-
-## 🗄️ Base de Datos
-
-Nuevas tablas automáticas:
-- `password_recovery_tokens` - Tokens de recuperación
-- `oauth2_providers` - Proveedores OAuth2
-
-Migraciones automáticas en `src/config/database.ts`
-
----
-
-## 📚 Documentación
-
-Ver:
-- **`IMPLEMENTATION_RF14_RF15.md`** - Detalles técnicos completos
-- **`SUMMARY_RF14_RF15.md`** - Resumen con tablas
-- **`../ESTRUCTURA.md`** - Comparación de carpetas
-
----
-
-## 🎯 Estado
-
-| Requerimiento | Status | Tests |
-|---------------|--------|-------|
-| RF-1.1 | ✅ Completo | 2 ✅ |
-| RF-1.2 | ✅ Completo | 2 ✅ |
-| RF-1.3 | ✅ Completo | 3 ✅ |
-| **RF-1.4** | **✅ Completo** | **5 ✅** |
-| **RF-1.5** | **✅ Stub** | **2 ✅** |
-| **TOTAL** | **✅ 16/16** | **✅** |
-
----
-
-**Carpeta segura y funcional** ✅
+| Requerimiento | Estado |
+|---|---|
+| RF-1.1: Registro | Completo |
+| RF-1.2: Autenticación | Completo |
+| RF-1.3: Identidad y rol | Completo |
+| RF-1.4: Recuperación de acceso | Completo, sin envío real de emails |
+| RF-1.5: OAuth2/OpenID Connect | Stub funcional, pendiente de integración real |

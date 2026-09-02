@@ -20,6 +20,22 @@ let token = "";
 let tokenConductor = "";
 let userId = 0;
 
+function registrationData(
+    userEmail: string,
+    userPassword: string,
+    role: string
+) {
+    return {
+        nombre: "Usuario",
+        apellido: "Prueba",
+        dni: "30123456",
+        telefono: "11 5555 1234",
+        email: userEmail,
+        password: userPassword,
+        rol: role
+    };
+}
+
 describe.sequential(
     "M1 - Identidad y Acceso - Tests E2E Complejos",
     () => {
@@ -28,11 +44,7 @@ describe.sequential(
             it("E2E-1.1: Registrar cliente y verificar datos", async () => {
                 const response = await request(app)
                     .post("/auth/registrar-usuario")
-                    .send({
-                        email,
-                        password,
-                        rol: "CLIENTE"
-                    });
+                    .send(registrationData(email, password, "CLIENTE"));
 
                 expect(response.status).toBe(201);
                 expect(response.body).toHaveProperty("id");
@@ -47,11 +59,7 @@ describe.sequential(
             it("E2E-1.2: Intentar registrar con email duplicado", async () => {
                 const response = await request(app)
                     .post("/auth/registrar-usuario")
-                    .send({
-                        email,
-                        password,
-                        rol: "CLIENTE"
-                    });
+                    .send(registrationData(email, password, "CLIENTE"));
 
                 expect(response.status).toBe(409);
                 expect(response.body.error).toBe(
@@ -62,11 +70,11 @@ describe.sequential(
             it("E2E-1.3: Validar rechazo de contraseña corta", async () => {
                 const response = await request(app)
                     .post("/auth/registrar-usuario")
-                    .send({
-                        email: `short-${timestamp}@test.com`,
-                        password: "123",
-                        rol: "CLIENTE"
-                    });
+                    .send(registrationData(
+                        `short-${timestamp}@test.com`,
+                        "123",
+                        "CLIENTE"
+                    ));
 
                 expect(response.status).toBe(400);
                 expect(response.body.error).toContain("6 caracteres");
@@ -75,11 +83,7 @@ describe.sequential(
             it("E2E-1.4: Validar rechazo de email inválido", async () => {
                 const response = await request(app)
                     .post("/auth/registrar-usuario")
-                    .send({
-                        email: "no-es-email",
-                        password: "123456",
-                        rol: "CLIENTE"
-                    });
+                    .send(registrationData("no-es-email", "123456", "CLIENTE"));
 
                 expect(response.status).toBe(400);
                 expect(response.body.error).toContain("válido");
@@ -187,11 +191,7 @@ describe.sequential(
             it("E2E-3.1: Registrar usuario para bloquear", async () => {
                 const response = await request(app)
                     .post("/auth/registrar-usuario")
-                    .send({
-                        email: blockedEmail,
-                        password,
-                        rol: "CONDUCTOR"
-                    });
+                    .send(registrationData(blockedEmail, password, "CONDUCTOR"));
 
                 expect(response.status).toBe(201);
             });
@@ -246,11 +246,7 @@ describe.sequential(
             it("E2E-4.1: Registrar conductor", async () => {
                 const response = await request(app)
                     .post("/auth/registrar-usuario")
-                    .send({
-                        email: email2,
-                        password,
-                        rol: "CONDUCTOR"
-                    });
+                    .send(registrationData(email2, password, "CONDUCTOR"));
 
                 expect(response.status).toBe(201);
                 expect(response.body.rol).toBe("CONDUCTOR");
@@ -277,11 +273,11 @@ describe.sequential(
             it("E2E-4.3: Validar rechazo de rol inválido", async () => {
                 const response = await request(app)
                     .post("/auth/registrar-usuario")
-                    .send({
-                        email: `invalid-${timestamp}@test.com`,
+                    .send(registrationData(
+                        `invalid-${timestamp}@test.com`,
                         password,
-                        rol: "ADMIN"
-                    });
+                        "ADMIN"
+                    ));
 
                 expect(response.status).toBe(400);
                 expect(response.body.error).toContain("CLIENTE, CONDUCTOR u OPERADOR");
@@ -476,11 +472,7 @@ describe.sequential(
             it("E2E-7.1: Email con espacios se normaliza", async () => {
                 const response = await request(app)
                     .post("/auth/registrar-usuario")
-                    .send({
-                        email: `  ${email}  `,
-                        password,
-                        rol: "CLIENTE"
-                    });
+                    .send(registrationData(`  ${email}  `, password, "CLIENTE"));
 
                 expect(response.status).toBe(409);
             });
