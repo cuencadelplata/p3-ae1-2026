@@ -24,21 +24,24 @@ npm run test:e2e
 paso 3 : levantar docker
 docker compose up -d --build
 
-paso 4: verificar que este vivo
+paso 4: 
+docker run -d -p 3000:3000 noeediez/m6-viajes:1.0
+
+paso 5: verificar que este vivo
 curl http://localhost:3000/health
 
 
-paso 5: ver la documentacion OPENAPI
+paso 6: ver la documentacion OPENAPI
 tenés que estar parado adentro de m6_viajes (porque ahí está el archivo openapi.yaml):
 npx @scalar/cli document serve openapi.yaml --port 3001
 
-paso 6 (OPCIONAL) probar un endpoint  (cmd)
+paso 7 (OPCIONAL) probar un endpoint  (cmd)
 curl.exe -X POST "http://localhost:3000/api/viajes" -H "Content-Type: application/json" -d "{\"clienteId\":\"cliente-123\",\"origen\":\"Calle A\",\"destino\":\"Calle B\"}"
 
 en powershell
 Invoke-RestMethod -Uri "http://localhost:3000/api/viajes" -Method Post -Headers @{"Content-Type"="application/json"} -Body '{"clienteId":"cliente-123","origen":"Calle A","destino":"Calle B"}'
 
-paso 7 apagar
+paso 8 apagar
 docker compose down
 
 
