@@ -1,4 +1,12 @@
 {
+  "scripts": {
+    "dev": "ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "playwright test",
+    "test:unit": "vitest"
+},
+
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "./dist",
