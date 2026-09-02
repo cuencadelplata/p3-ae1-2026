@@ -1,7 +1,7 @@
-export enum TipoServicio {
+/*export enum TipoServicio {
   AUTO = "AUTO",
   MOTO = "MOTO",
-}
+}*/
 
 const PATENTE_REGEX = /^([A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/;
 
@@ -14,7 +14,7 @@ export interface VehiculoDatos {
   tipoServicio: TipoServicio | string;
 }
 
-export interface Vehiculo {
+/*export interface Vehiculo {
   id: string;
   driverId: string;
   patente: string;
@@ -24,7 +24,7 @@ export interface Vehiculo {
   tipoServicio: TipoServicio;
   activo: boolean;
   createdAt: Date;
-}
+}*/
 
 // Lo que se manda a Supabase al insertar- con el uuid que coincide en supabs
 export interface VehiculoParaInsertar {
