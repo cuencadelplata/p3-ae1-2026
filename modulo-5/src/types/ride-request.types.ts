@@ -10,7 +10,6 @@ export type RideRequestStatus =
   | 'SEARCHING'
   | 'OFFERED'
   | 'ASSIGNED'
-  | 'CANCELLED_BY_CLIENT'
   | 'EXPIRED'
   | 'NO_DRIVERS_AVAILABLE';
 
@@ -47,10 +46,6 @@ export interface CreateRideRequestDTO {
   origin: GeoLocation;
   destination: GeoLocation;
   vehicleType: VehicleType;
-}
-
-export interface CancelRideRequestDTO {
-  reason?: string;
 }
 
 export interface NearbyDriverStub {
@@ -121,5 +116,28 @@ export interface SendOffersResponseDTO {
   offers: RideOffer[];
   message: string;
 }
+
+/**
+ * Tipos para RF-5.4: Aceptar o rechazar oferta
+ */
+export type OfferAction = 'ACCEPT' | 'REJECT';
+
+export interface RespondOfferDTO {
+  action: OfferAction;
+  driverId?: string; // Opcional en el body si se envía por header / token JWT
+}
+
+export interface RespondOfferResponseDTO {
+  offerId: string;
+  requestId: string;
+  driverId: string;
+  action: OfferAction;
+  status: RideOfferStatus;
+  requestStatus: RideRequestStatus;
+  assignedDriverId?: string | null;
+  message: string;
+  respondedAt: string;
+}
+
 
 

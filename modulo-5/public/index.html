@@ -3,30 +3,33 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>M5: Solicitud y Despacho - Simulador de Viajes</title>
+  <title>M5: Solicitud y Despacho - Simulador de Movilidad</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-primary: #0b0f19;
-      --bg-secondary: #131b2e;
-      --bg-card: rgba(23, 32, 54, 0.7);
+      --bg-primary: #090d16;
+      --bg-secondary: #111827;
+      --bg-card: rgba(17, 24, 39, 0.75);
       --border-color: rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(59, 130, 246, 0.5);
       --accent-primary: #3b82f6;
       --accent-hover: #2563eb;
-      --accent-glow: rgba(59, 130, 246, 0.25);
-      --text-primary: #f1f5f9;
+      --accent-glow: rgba(59, 130, 246, 0.3);
+      --text-primary: #f8fafc;
       --text-secondary: #94a3b8;
       --text-muted: #64748b;
       --success: #10b981;
-      --success-glow: rgba(16, 185, 129, 0.2);
+      --success-glow: rgba(16, 185, 129, 0.25);
       --warning: #f59e0b;
       --danger: #ef4444;
-      --danger-glow: rgba(239, 68, 68, 0.2);
+      --danger-glow: rgba(239, 68, 68, 0.25);
+      --purple: #8b5cf6;
+      --purple-glow: rgba(139, 92, 246, 0.25);
       --radius-sm: 8px;
       --radius-md: 14px;
-      --radius-lg: 20px;
+      --radius-lg: 22px;
     }
 
     * {
@@ -41,13 +44,13 @@
       color: var(--text-primary);
       min-height: 100vh;
       background-image: 
-        radial-gradient(circle at 10% 15%, rgba(59, 130, 246, 0.12) 0%, transparent 40%),
-        radial-gradient(circle at 90% 85%, rgba(139, 92, 246, 0.1) 0%, transparent 40%);
-      padding: 24px;
+        radial-gradient(circle at 15% 15%, rgba(59, 130, 246, 0.12) 0%, transparent 45%),
+        radial-gradient(circle at 85% 85%, rgba(139, 92, 246, 0.1) 0%, transparent 45%);
+      padding: 20px;
     }
 
     .container {
-      max-width: 1200px;
+      max-width: 1300px;
       margin: 0 auto;
     }
 
@@ -56,9 +59,9 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 24px;
+      padding-bottom: 20px;
       border-bottom: 1px solid var(--border-color);
-      margin-bottom: 28px;
+      margin-bottom: 22px;
       flex-wrap: wrap;
       gap: 16px;
     }
@@ -66,19 +69,19 @@
     .brand {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
     }
 
     .brand-icon {
-      width: 44px;
-      height: 44px;
+      width: 46px;
+      height: 46px;
       background: linear-gradient(135deg, #3b82f6, #8b5cf6);
       border-radius: var(--radius-md);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 22px;
-      box-shadow: 0 4px 15px var(--accent-glow);
+      font-size: 24px;
+      box-shadow: 0 4px 20px var(--accent-glow);
     }
 
     .brand h1 {
@@ -134,30 +137,85 @@
 
     @keyframes pulse {
       0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.5; transform: scale(0.85); }
+      50% { opacity: 0.4; transform: scale(0.85); }
     }
 
-    /* Grid Layout */
+    /* Navigation Tabs (Menú de Vistas) */
+    .view-navigation {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+      background: rgba(17, 24, 39, 0.6);
+      padding: 6px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+      max-width: fit-content;
+    }
+
+    .nav-tab-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .nav-tab-btn:hover {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .nav-tab-btn.active {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
+      border-color: rgba(59, 130, 246, 0.4);
+      color: #93c5fd;
+      box-shadow: 0 4px 15px rgba(59, 130, 246, 0.15);
+    }
+
+    /* Tab Content Views */
+    .tab-view {
+      display: none;
+    }
+
+    .tab-view.active {
+      display: block;
+    }
+
+    /* Layout Grids */
     .dashboard-grid {
       display: grid;
       grid-template-columns: 1.15fr 1fr;
       gap: 24px;
     }
 
-    @media (max-width: 900px) {
-      .dashboard-grid {
+    .driver-view-layout {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 960px) {
+      .dashboard-grid, .driver-view-layout {
         grid-template-columns: 1fr;
       }
     }
 
-    /* Card */
+    /* Card Containers */
     .card {
       background: var(--bg-card);
       backdrop-filter: blur(16px);
       border: 1px solid var(--border-color);
       border-radius: var(--radius-lg);
-      padding: 24px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      padding: 22px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
     }
 
     .card-title {
@@ -166,12 +224,18 @@
       margin-bottom: 16px;
       display: flex;
       align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-title-left {
+      display: flex;
+      align-items: center;
       gap: 8px;
     }
 
     /* Preset Buttons */
     .presets-container {
-      margin-bottom: 20px;
+      margin-bottom: 18px;
     }
 
     .presets-label {
@@ -208,9 +272,54 @@
       transform: translateY(-1px);
     }
 
+    /* Vehicle Selector */
+    .vehicle-selector {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .vehicle-option {
+      background: rgba(0, 0, 0, 0.25);
+      border: 2px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: center;
+    }
+
+    .vehicle-option:hover {
+      border-color: rgba(59, 130, 246, 0.4);
+      background: rgba(59, 130, 246, 0.05);
+    }
+
+    .vehicle-option.selected {
+      border-color: var(--accent-primary);
+      background: rgba(59, 130, 246, 0.12);
+      box-shadow: 0 0 15px var(--accent-glow);
+    }
+
+    .vehicle-option .icon {
+      font-size: 28px;
+      margin-bottom: 4px;
+    }
+
+    .vehicle-option .title {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .vehicle-option .desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
     /* Forms */
     .form-group {
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .form-row {
@@ -227,7 +336,7 @@
       margin-bottom: 6px;
     }
 
-    input, select, textarea {
+    input, select {
       width: 100%;
       padding: 10px 14px;
       background: rgba(11, 15, 25, 0.7);
@@ -239,7 +348,7 @@
       transition: all 0.2s ease;
     }
 
-    input:focus, select:focus, textarea:focus {
+    input:focus, select:focus {
       outline: none;
       border-color: var(--accent-primary);
       box-shadow: 0 0 0 3px var(--accent-glow);
@@ -250,74 +359,34 @@
       border: 1px solid rgba(255, 255, 255, 0.04);
       border-radius: var(--radius-md);
       padding: 14px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .geo-section-header {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-primary);
-      margin-bottom: 10px;
-    }
-
-    /* Vehicle Selector */
-    .vehicle-selector {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 18px;
-    }
-
-    .vehicle-option {
-      background: rgba(11, 15, 25, 0.7);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      padding: 12px;
-      cursor: pointer;
-      text-align: center;
-      transition: all 0.2s ease;
-      user-select: none;
-    }
-
-    .vehicle-option.selected {
-      border-color: var(--accent-primary);
-      background: rgba(59, 130, 246, 0.12);
-      box-shadow: 0 0 15px var(--accent-glow);
-    }
-
-    .vehicle-option .icon {
-      font-size: 24px;
-      margin-bottom: 4px;
-    }
-
-    .vehicle-option .title {
-      font-size: 13px;
-      font-weight: 600;
-    }
-
-    .vehicle-option .desc {
-      font-size: 11px;
-      color: var(--text-muted);
     }
 
     /* Buttons */
     .btn {
       width: 100%;
       padding: 12px 18px;
+      border: none;
       border-radius: var(--radius-md);
       font-size: 14px;
       font-weight: 600;
-      font-family: inherit;
       cursor: pointer;
+      transition: all 0.2s ease;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      transition: all 0.2s ease;
-      border: none;
+      font-family: inherit;
     }
 
     .btn-primary {
@@ -326,123 +395,61 @@
       box-shadow: 0 4px 15px var(--accent-glow);
     }
 
-    .btn-primary:hover {
+    .btn-primary:hover:not(:disabled) {
       background: linear-gradient(135deg, #2563eb, #1d4ed8);
       transform: translateY(-1px);
     }
 
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
     .btn-danger {
       background: rgba(239, 68, 68, 0.15);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
     }
 
-    .btn-danger:hover {
+    .btn-danger:hover:not(:disabled) {
       background: rgba(239, 68, 68, 0.25);
-    }
-
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border-color);
-      color: var(--text-secondary);
-    }
-
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.1);
-      color: var(--text-primary);
+      color: white;
     }
 
     .btn-candidate {
       background: linear-gradient(135deg, #10b981, #059669);
       color: white;
-      box-shadow: 0 4px 15px var(--success-glow);
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25);
     }
 
-    .btn-candidate:hover {
+    .btn-candidate:hover:not(:disabled) {
       background: linear-gradient(135deg, #059669, #047857);
       transform: translateY(-1px);
     }
 
-    /* Candidatos Cards (RF-5.2) */
-    .candidates-section {
-      margin-top: 18px;
-      padding-top: 16px;
-      border-top: 1px solid var(--border-color);
+    .btn-offer {
+      background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+      color: white;
+      box-shadow: 0 4px 15px rgba(139, 92, 246, 0.25);
     }
 
-    .candidates-list {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      margin-top: 10px;
+    .btn-offer:hover:not(:disabled) {
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      transform: translateY(-1px);
     }
 
-    .candidate-card {
-      background: rgba(16, 185, 129, 0.08);
-      border: 1px solid rgba(16, 185, 129, 0.25);
-      border-radius: var(--radius-md);
-      padding: 12px 14px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      transition: all 0.2s ease;
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
     }
 
-    .candidate-card:hover {
-      border-color: rgba(16, 185, 129, 0.5);
-      background: rgba(16, 185, 129, 0.12);
-    }
-
-    .candidate-info {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .candidate-avatar {
-      width: 38px;
-      height: 38px;
-      border-radius: 50%;
-      background: rgba(16, 185, 129, 0.2);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-    }
-
-    .candidate-details {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .candidate-id {
-      font-family: 'JetBrains Mono', monospace;
-      font-weight: 600;
-      font-size: 13px;
-      color: #6ee7b7;
-    }
-
-    .candidate-meta {
-      font-size: 11px;
-      color: var(--text-secondary);
-    }
-
-    .candidate-stats {
-      text-align: right;
-    }
-
-    .candidate-dist {
-      font-weight: 700;
-      font-size: 14px;
-      color: var(--text-primary);
-    }
-
-    .candidate-eta {
-      font-size: 11px;
-      color: #94a3b8;
-    }
-
-    /* Active Trip Card */
+    /* Badges & Status */
     .status-badge {
       display: inline-flex;
       align-items: center;
@@ -467,10 +474,11 @@
       color: #c084fc;
     }
 
-    .status-badge.CANCELLED_BY_CLIENT {
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid rgba(239, 68, 68, 0.4);
-      color: #f87171;
+    .status-badge.ASSIGNED {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid rgba(16, 185, 129, 0.5);
+      color: #34d399;
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
     }
 
     .status-badge.NO_DRIVERS_AVAILABLE {
@@ -479,64 +487,13 @@
       color: #fbbf24;
     }
 
-    .btn-offer {
-      background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-      color: white;
-      box-shadow: 0 4px 15px rgba(139, 92, 246, 0.25);
+    .status-badge.EXPIRED {
+      background: rgba(100, 116, 139, 0.15);
+      border: 1px solid rgba(100, 116, 139, 0.4);
+      color: #cbd5e1;
     }
 
-    .btn-offer:hover {
-      background: linear-gradient(135deg, #7c3aed, #6d28d9);
-      transform: translateY(-1px);
-    }
-
-    /* Offers Section & Cards (RF-5.3) */
-    .offers-section {
-      margin-top: 18px;
-      padding-top: 16px;
-      border-top: 1px solid var(--border-color);
-    }
-
-    .offer-card {
-      background: rgba(139, 92, 246, 0.08);
-      border: 1px solid rgba(139, 92, 246, 0.25);
-      border-radius: var(--radius-md);
-      padding: 12px 14px;
-      margin-top: 10px;
-    }
-
-    .offer-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 6px;
-    }
-
-    .offer-driver {
-      font-family: 'JetBrains Mono', monospace;
-      font-weight: 600;
-      font-size: 13px;
-      color: #c4b5fd;
-    }
-
-    .offer-status {
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-
-    .offer-status.PENDING {
-      background: rgba(139, 92, 246, 0.2);
-      color: #d8b4fe;
-    }
-
-    .offer-status.EXPIRED {
-      background: rgba(239, 68, 68, 0.2);
-      color: #fca5a5;
-    }
-
+    /* Fare Card */
     .fare-card {
       background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
       border: 1px solid rgba(59, 130, 246, 0.2);
@@ -577,7 +534,7 @@
     .meta-list {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
       margin: 16px 0;
       font-size: 13px;
     }
@@ -605,6 +562,318 @@
       white-space: nowrap;
     }
 
+    .actions-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    /* Candidates & Offers */
+    .candidate-card {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .candidate-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .candidate-avatar {
+      font-size: 20px;
+    }
+
+    .candidate-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      font-size: 13px;
+      color: #6ee7b7;
+    }
+
+    .candidate-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .candidate-stats {
+      text-align: right;
+      font-size: 12px;
+    }
+
+    .candidate-dist {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .candidate-eta {
+      color: var(--warning);
+      font-size: 11px;
+    }
+
+    /* Offer Cards */
+    .offer-card {
+      background: rgba(139, 92, 246, 0.08);
+      border: 1px solid rgba(139, 92, 246, 0.25);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      margin-top: 10px;
+      transition: all 0.3s ease;
+    }
+
+    .offer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .offer-driver {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      font-size: 13px;
+      color: #c4b5fd;
+    }
+
+    .offer-status {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .offer-status.PENDING {
+      background: rgba(139, 92, 246, 0.2);
+      color: #d8b4fe;
+      border: 1px solid rgba(139, 92, 246, 0.3);
+    }
+
+    .offer-status.ACCEPTED {
+      background: rgba(16, 185, 129, 0.2);
+      color: #6ee7b7;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .offer-status.REJECTED {
+      background: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+
+    .offer-status.EXPIRED {
+      background: rgba(100, 116, 139, 0.2);
+      color: #cbd5e1;
+      border: 1px solid rgba(100, 116, 139, 0.3);
+    }
+
+    /* ==============================================================
+       📱 SMARTPHONE DEL CONDUCTOR (VISTA APP MÓVIL RF-5.4)
+       ============================================================== */
+    .driver-device-wrapper {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 10px;
+    }
+
+    .phone-frame {
+      width: 100%;
+      max-width: 380px;
+      background: #080d18;
+      border: 3px solid rgba(255, 255, 255, 0.12);
+      border-radius: 36px;
+      padding: 16px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      position: relative;
+    }
+
+    .phone-notch {
+      width: 120px;
+      height: 18px;
+      background: #040711;
+      border-radius: 0 0 12px 12px;
+      margin: -16px auto 14px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .phone-camera {
+      width: 8px;
+      height: 8px;
+      background: #1e293b;
+      border-radius: 50%;
+    }
+
+    .driver-app-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      margin-bottom: 14px;
+    }
+
+    .driver-profile {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .driver-avatar {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, #10b981, #047857);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .driver-app-status-idle {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      color: #6ee7b7;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Incoming Offer Screen on Driver Phone */
+    .incoming-offer-card {
+      background: linear-gradient(180deg, rgba(30, 27, 75, 0.8) 0%, rgba(15, 23, 42, 0.95) 100%);
+      border: 2px solid #8b5cf6;
+      border-radius: 20px;
+      padding: 18px;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(139, 92, 246, 0.3);
+      animation: alertGlow 1.5s infinite alternate;
+    }
+
+    @keyframes alertGlow {
+      from { border-color: rgba(139, 92, 246, 0.4); box-shadow: 0 0 15px rgba(139, 92, 246, 0.2); }
+      to { border-color: #8b5cf6; box-shadow: 0 0 25px rgba(139, 92, 246, 0.5); }
+    }
+
+    .incoming-fare-badge {
+      font-size: 32px;
+      font-weight: 800;
+      color: #a78bfa;
+      margin: 8px 0 2px 0;
+    }
+
+    .incoming-route {
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 12px;
+      padding: 12px;
+      margin: 14px 0;
+      text-align: left;
+      font-size: 12px;
+    }
+
+    .route-point {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .route-point:last-child {
+      margin-bottom: 0;
+    }
+
+    .driver-ttl-clock {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 15px;
+      font-weight: 700;
+      color: #fbbf24;
+      margin-bottom: 8px;
+    }
+
+    .driver-ttl-bar {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .driver-ttl-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #f59e0b, #ef4444);
+      width: 100%;
+      transition: width 1s linear;
+    }
+
+    .driver-buttons-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .btn-driver-accept-phone {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+      border: none;
+      padding: 14px 10px;
+      border-radius: 14px;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+      transition: all 0.2s ease;
+    }
+
+    .btn-driver-accept-phone:hover {
+      background: linear-gradient(135deg, #059669, #047857);
+      transform: scale(1.02);
+    }
+
+    .btn-driver-reject-phone {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+      padding: 14px 10px;
+      border-radius: 14px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-driver-reject-phone:hover {
+      background: rgba(239, 68, 68, 0.3);
+      color: white;
+    }
+
+    /* Driver Assigned Screen */
+    .driver-assigned-screen {
+      background: rgba(16, 185, 129, 0.1);
+      border: 2px solid #10b981;
+      border-radius: 20px;
+      padding: 20px;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.2);
+    }
+
     /* JSON Box */
     .json-box {
       background: #060911;
@@ -614,30 +883,23 @@
       font-family: 'JetBrains Mono', monospace;
       font-size: 12px;
       color: #93c5fd;
-      max-height: 250px;
+      max-height: 220px;
       overflow-y: auto;
       white-space: pre-wrap;
       word-break: break-all;
     }
 
-    .actions-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-top: 16px;
-    }
-
     /* Empty state */
     .empty-state {
       text-align: center;
-      padding: 40px 20px;
+      padding: 30px 20px;
       color: var(--text-muted);
     }
 
     .empty-state-icon {
-      font-size: 40px;
-      margin-bottom: 12px;
-      opacity: 0.5;
+      font-size: 38px;
+      margin-bottom: 10px;
+      opacity: 0.6;
     }
 
     /* Toast */
@@ -686,7 +948,7 @@
         <div class="brand-icon">🚗</div>
         <div>
           <h1>Módulo 5: Solicitud y Despacho</h1>
-          <p>Simulador y Monitor de Microservicio de Movilidad Urbana</p>
+          <p>Microservicio de Movilidad Urbana • Despacho Inteligente</p>
         </div>
       </div>
       <div class="header-actions">
@@ -700,233 +962,388 @@
       </div>
     </header>
 
-    <!-- Main Grid -->
-    <div class="dashboard-grid">
-      
-      <!-- Panel de Solicitud -->
-      <div class="card">
-        <div class="card-title">
-          <span>✨</span>
-          <span>Crear Nueva Solicitud de Viaje</span>
-        </div>
-
-        <!-- Preajustes -->
-        <div class="presets-container">
-          <div class="presets-label">Rutas de demostración rápida</div>
-          <div class="presets-row">
-            <button class="preset-btn" onclick="applyPreset('obelisco_recoleta')">📍 Obelisco ➔ Recoleta (~2.3km)</button>
-            <button class="preset-btn" onclick="applyPreset('palermo_puerto_madero')">📍 Palermo ➔ Pto. Madero (~7.1km)</button>
-            <button class="preset-btn" onclick="applyPreset('belgrano_centro')">📍 Belgrano ➔ Centro (~8.5km)</button>
-          </div>
-        </div>
-
-        <!-- Tipo de Vehículo -->
-        <label>Tipo de Vehículo</label>
-        <div class="vehicle-selector">
-          <div id="vehAuto" class="vehicle-option selected" onclick="selectVehicle('AUTO')">
-            <div class="icon">🚘</div>
-            <div class="title">Automóvil</div>
-            <div class="desc">Base $1500 + $500/km</div>
-          </div>
-          <div id="vehMoto" class="vehicle-option" onclick="selectVehicle('MOTO')">
-            <div class="icon">🛵</div>
-            <div class="title">Moto</div>
-            <div class="desc">Base $900 + $300/km</div>
-          </div>
-        </div>
-
-        <!-- Origen -->
-        <div class="geo-section">
-          <div class="geo-section-header">
-            <span>🟢</span> Origen de partida
-          </div>
-          <div class="form-group">
-            <label>Dirección</label>
-            <input type="text" id="originAddress" value="Av. 9 de Julio y Corrientes (Obelisco)">
-          </div>
-          <div class="form-row">
-            <div class="form-group" style="margin-bottom:0;">
-              <label>Latitud</label>
-              <input type="number" step="0.0001" id="originLat" value="-34.6037">
-            </div>
-            <div class="form-group" style="margin-bottom:0;">
-              <label>Longitud</label>
-              <input type="number" step="0.0001" id="originLng" value="-58.3816">
-            </div>
-          </div>
-        </div>
-
-        <!-- Destino -->
-        <div class="geo-section">
-          <div class="geo-section-header">
-            <span>🔴</span> Destino de llegada
-          </div>
-          <div class="form-group">
-            <label>Dirección</label>
-            <input type="text" id="destAddress" value="Av. Alvear 1891 (Recoleta)">
-          </div>
-          <div class="form-row">
-            <div class="form-group" style="margin-bottom:0;">
-              <label>Latitud</label>
-              <input type="number" step="0.0001" id="destLat" value="-34.5885">
-            </div>
-            <div class="form-group" style="margin-bottom:0;">
-              <label>Longitud</label>
-              <input type="number" step="0.0001" id="destLng" value="-58.3974">
-            </div>
-          </div>
-        </div>
-
-        <!-- Cliente & Idempotency Key -->
-        <div class="form-row">
-          <div class="form-group">
-            <label>ID de Cliente (x-user-id)</label>
-            <input type="text" id="clientId" value="client_demo_1">
-          </div>
-          <div class="form-group">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-              <label style="margin:0;">Idempotency-Key</label>
-              <a href="#" onclick="generateNewKey(event)" style="font-size:11px; color:var(--accent-primary); text-decoration:none;">Nueva Clave</a>
-            </div>
-            <input type="text" id="idempotencyKey">
-          </div>
-        </div>
-
-        <button id="btnSubmit" class="btn btn-primary" onclick="createRideRequest()">
-          🚀 Solicitar Viaje (POST /api/v1/ride-requests)
-        </button>
-      </div>
-
-      <!-- Panel de Estado y Resultados -->
-      <div class="card">
-        <div class="card-title">
-          <span>📡</span>
-          <span>Estado del Viaje Activo</span>
-        </div>
-
-        <div id="emptyTripState" class="empty-state">
-          <div class="empty-state-icon">📋</div>
-          <p>No hay ninguna solicitud activa en este momento.</p>
-          <p style="font-size: 12px; margin-top: 6px;">Crea una solicitud desde el panel izquierdo para ver el despacho y cálculo tarifario en tiempo real.</p>
-        </div>
-
-        <div id="activeTripDetails" style="display: none;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-size: 12px; color: var(--text-muted);">Estado Actual:</span>
-            <span id="tripStatusBadge" class="status-badge SEARCHING">SEARCHING</span>
-          </div>
-
-          <!-- Tarifa Estimada Card -->
-          <div class="fare-card">
-            <div style="font-size:12px; color:var(--text-secondary); margin-bottom:2px;">Tarifa Estimada (M7 Stub)</div>
-            <div class="fare-amount" id="fareAmount">$0 ARS</div>
-            <div class="fare-details">
-              <div>
-                <div class="fare-stat-label">Distancia</div>
-                <div class="fare-stat-value" id="fareDist">0 km</div>
-              </div>
-              <div>
-                <div class="fare-stat-label">Duración</div>
-                <div class="fare-stat-value" id="fareDur">0 min</div>
-              </div>
-              <div>
-                <div class="fare-stat-label">Vehículo</div>
-                <div class="fare-stat-value" id="fareVeh">AUTO</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Metadatos de la Solicitud -->
-          <div class="meta-list">
-            <div class="meta-item">
-              <span class="label">ID de Solicitud</span>
-              <span class="value" id="metaRequestId">-</span>
-            </div>
-            <div class="meta-item">
-              <span class="label">Cliente</span>
-              <span class="value" id="metaClientId">-</span>
-            </div>
-            <div class="meta-item">
-              <span class="label">Expiración (TTL 3m)</span>
-              <span class="value" id="metaExpiresAt">-</span>
-            </div>
-            <div class="meta-item">
-              <span class="label">Fare Token</span>
-              <span class="value" id="metaFareToken">-</span>
-            </div>
-          </div>
-
-          <!-- Botones de Acción -->
-          <div class="actions-grid">
-            <button class="btn btn-secondary" onclick="refreshCurrentTrip()">
-              🔄 Consultar Estado (GET)
-            </button>
-            <button id="btnCancelTrip" class="btn btn-danger" onclick="cancelCurrentTrip()">
-              🛑 Cancelar Viaje (PATCH)
-            </button>
-          </div>
-
-          <!-- Búsqueda de Candidatos (RF-5.2) -->
-          <div class="candidates-section">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-              <span style="font-size:13px; font-weight:600; color:var(--text-primary);">🎯 Candidatos Cercanos (RF-5.2)</span>
-              <span id="candidatesCountBadge" style="font-size:11px; background:rgba(16,185,129,0.15); color:#6ee7b7; padding:2px 8px; border-radius:999px; display:none;">0 encontrados</span>
-            </div>
-            
-            <div class="form-row" style="margin-bottom: 10px;">
-              <div class="form-group" style="margin-bottom:0;">
-                <label style="font-size:11px;">Radio (km)</label>
-                <input type="number" id="searchRadiusKm" value="5" min="1" max="30" step="0.5" style="padding:8px 12px; font-size:12px;">
-              </div>
-              <div class="form-group" style="margin-bottom:0;">
-                <label style="font-size:11px;">Máx. Candidatos</label>
-                <input type="number" id="searchMaxCandidates" value="5" min="1" max="20" style="padding:8px 12px; font-size:12px;">
-              </div>
-            </div>
-
-            <button id="btnSearchCandidates" class="btn btn-candidate" onclick="searchCandidates()">
-              🔍 Buscar Candidatos (POST /candidates)
-            </button>
-
-            <div id="candidatesListContainer" class="candidates-list" style="display: none;"></div>
-          </div>
-
-          <!-- Ofertas con Vencimiento (RF-5.3) -->
-          <div class="offers-section">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-              <span style="font-size:13px; font-weight:600; color:var(--text-primary);">📨 Despachar Oferta a Conductores (RF-5.3)</span>
-              <span id="offersCountBadge" style="font-size:11px; background:rgba(139,92,246,0.15); color:#c4b5fd; padding:2px 8px; border-radius:999px; display:none;">0 activas</span>
-            </div>
-
-            <div class="form-row" style="margin-bottom: 10px;">
-              <div class="form-group" style="margin-bottom:0;">
-                <label style="font-size:11px;">Tiempo Máximo de Respuesta (TTL en seg)</label>
-                <input type="number" id="offerTtlSeconds" value="30" min="5" max="180" style="padding:8px 12px; font-size:12px;">
-              </div>
-            </div>
-
-            <button id="btnSendOffers" class="btn btn-offer" onclick="sendOffers()">
-              ⚡ Enviar Oferta con TTL (POST /offers)
-            </button>
-
-            <div id="offersListContainer" style="display: none; margin-top: 10px;"></div>
-          </div>
-        </div>
-
-
-
-        <!-- Visor de Respuesta JSON -->
-        <div style="margin-top: 24px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <div class="presets-label" style="margin:0;">Respuesta JSON del Servidor</div>
-            <span id="responseStatus" style="font-size:11px; font-family:'JetBrains Mono'; color:var(--text-muted);">Status: -</span>
-          </div>
-          <div class="json-box" id="jsonOutput">// Las respuestas de la API aparecerán aquí...</div>
-        </div>
-
-      </div>
-
+    <!-- Menú de Vistas (Tabs) -->
+    <div class="view-navigation">
+      <button id="tabBtnPassenger" class="nav-tab-btn active" onclick="switchView('passenger')">
+        👤 Vista Pasajero (RF-5.1)
+      </button>
+      <button id="tabBtnDriver" class="nav-tab-btn" onclick="switchView('driver')">
+        📱 App del Conductor (RF-5.4)
+      </button>
+      <button id="tabBtnSplit" class="nav-tab-btn" onclick="switchView('split')">
+        ⚡ Simulación Completa (Doble Pantalla)
+      </button>
     </div>
+
+    <!-- ==============================================================
+         TAB 1: VISTA PASAJERO (CLIENTE)
+         ============================================================== -->
+    <div id="viewPassenger" class="tab-view active">
+      <div class="dashboard-grid">
+        
+        <!-- Formulario Crear Solicitud -->
+        <div class="card">
+          <div class="card-title">
+            <div class="card-title-left">
+              <span>✨</span>
+              <span>Solicitar un Viaje (Cliente)</span>
+            </div>
+            <button class="preset-btn" onclick="resetNewTrip()" title="Limpiar y generar nueva clave">
+              🔄 Limpiar / Nuevo
+            </button>
+          </div>
+
+          <!-- Rutas demo -->
+          <div class="presets-container">
+            <div class="presets-label">Rutas de demostración rápida</div>
+            <div class="presets-row">
+              <button class="preset-btn" onclick="applyPreset('obelisco_recoleta')">📍 Obelisco ➔ Recoleta (~2.3km)</button>
+              <button class="preset-btn" onclick="applyPreset('palermo_puerto_madero')">📍 Palermo ➔ Pto. Madero (~7.1km)</button>
+              <button class="preset-btn" onclick="applyPreset('belgrano_centro')">📍 Belgrano ➔ Centro (~8.5km)</button>
+            </div>
+          </div>
+
+          <!-- Vehículo -->
+          <label>Tipo de Vehículo</label>
+          <div class="vehicle-selector">
+            <div id="vehAuto" class="vehicle-option selected" onclick="selectVehicle('AUTO')">
+              <div class="icon">🚘</div>
+              <div class="title">Automóvil</div>
+              <div class="desc">Base $1500 + $500/km</div>
+            </div>
+            <div id="vehMoto" class="vehicle-option" onclick="selectVehicle('MOTO')">
+              <div class="icon">🛵</div>
+              <div class="title">Moto</div>
+              <div class="desc">Base $900 + $300/km</div>
+            </div>
+          </div>
+
+          <!-- Origen -->
+          <div class="geo-section">
+            <div class="geo-section-header">
+              <span>🟢</span> Origen de partida
+            </div>
+            <div class="form-group">
+              <label>Dirección</label>
+              <input type="text" id="originAddress" value="Av. 9 de Julio y Corrientes (Obelisco)">
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Latitud</label>
+                <input type="number" step="0.0001" id="originLat" value="-34.6037">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Longitud</label>
+                <input type="number" step="0.0001" id="originLng" value="-58.3816">
+              </div>
+            </div>
+          </div>
+
+          <!-- Destino -->
+          <div class="geo-section">
+            <div class="geo-section-header">
+              <span>🔴</span> Destino de llegada
+            </div>
+            <div class="form-group">
+              <label>Dirección</label>
+              <input type="text" id="destAddress" value="Av. Alvear 1891 (Recoleta)">
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Latitud</label>
+                <input type="number" step="0.0001" id="destLat" value="-34.5885">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Longitud</label>
+                <input type="number" step="0.0001" id="destLng" value="-58.3974">
+              </div>
+            </div>
+          </div>
+
+          <!-- Cliente & Idempotency Key -->
+          <div class="form-row">
+            <div class="form-group">
+              <label>ID de Cliente (x-user-id)</label>
+              <input type="text" id="clientId" value="client_demo_1">
+            </div>
+            <div class="form-group">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <label style="margin:0;">Idempotency-Key</label>
+                <a href="#" onclick="generateNewKey(event)" style="font-size:11px; color:var(--accent-primary); text-decoration:none;">Nueva Clave</a>
+              </div>
+              <input type="text" id="idempotencyKey">
+            </div>
+          </div>
+
+          <button id="btnSubmit" class="btn btn-primary" onclick="createRideRequest()">
+            🚀 Solicitar Viaje (POST /api/v1/ride-requests)
+          </button>
+        </div>
+
+        <!-- Panel de Estado del Viaje -->
+        <div class="card">
+          <div class="card-title">
+            <div class="card-title-left">
+              <span>📡</span>
+              <span>Monitoreo del Viaje Activo</span>
+            </div>
+            <span id="tripStatusBadge" class="status-badge SEARCHING" style="display: none;">SEARCHING</span>
+          </div>
+
+          <div id="emptyTripState" class="empty-state">
+            <div class="empty-state-icon">📋</div>
+            <p>No hay ninguna solicitud activa en este momento.</p>
+            <p style="font-size: 12px; margin-top: 6px;">Crea una solicitud para ver la tarifa estimada y el despacho en tiempo real.</p>
+          </div>
+
+          <div id="activeTripDetails" style="display: none;">
+            
+            <!-- Banner Conductor Asignado -->
+            <div id="assignedBanner" style="display: none; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 14px;">
+              <div style="font-size: 13px; font-weight: 700; color: #34d399; display:flex; align-items:center; gap: 8px;">
+                <span>🎉</span> ¡Viaje Aceptado y Asignado!
+              </div>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                Conductor asignado: <strong id="assignedDriverName" style="color: #6ee7b7;">drv_101</strong> (en camino al punto de partida).
+              </div>
+            </div>
+
+            <!-- Tarifa Estimada -->
+            <div class="fare-card">
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:2px;">Tarifa Estimada (M7 Stub)</div>
+              <div class="fare-amount" id="fareAmount">$0 ARS</div>
+              <div class="fare-details">
+                <div>
+                  <div class="fare-stat-label">Distancia</div>
+                  <div class="fare-stat-value" id="fareDist">0 km</div>
+                </div>
+                <div>
+                  <div class="fare-stat-label">Duración</div>
+                  <div class="fare-stat-value" id="fareDur">0 min</div>
+                </div>
+                <div>
+                  <div class="fare-stat-label">Vehículo</div>
+                  <div class="fare-stat-value" id="fareVeh">AUTO</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Metadatos -->
+            <div class="meta-list">
+              <div class="meta-item">
+                <span class="label">ID de Solicitud</span>
+                <span class="value" id="metaRequestId">-</span>
+              </div>
+              <div class="meta-item">
+                <span class="label">Cliente</span>
+                <span class="value" id="metaClientId">-</span>
+              </div>
+              <div class="meta-item">
+                <span class="label">Expiración Búsqueda</span>
+                <span class="value" id="metaExpiresAt">-</span>
+              </div>
+              <div class="meta-item" id="assignedDriverRow" style="display: none; border: 1px solid rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08);">
+                <span class="label" style="color: #6ee7b7; font-weight: 600;">Conductor Asignado (RF-5.4)</span>
+                <span class="value" id="metaAssignedDriver" style="color: #34d399; font-weight: 700;">-</span>
+              </div>
+            </div>
+
+            <!-- Botones de Acción -->
+            <div>
+              <button class="btn btn-secondary" style="width: 100%;" onclick="refreshCurrentTrip()">
+                🔄 Consultar Estado (GET)
+              </button>
+            </div>
+
+            <!-- Búsqueda Automática de Candidatos y Despacho de Ofertas (RF-5.2 / RF-5.3) -->
+            <div style="margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <span style="font-size:13px; font-weight:600; color:var(--text-primary);">🎯 Búsqueda y Despacho Automático</span>
+                <span id="candidatesCountBadge" style="font-size:11px; background:rgba(16,185,129,0.15); color:#6ee7b7; padding:2px 8px; border-radius:999px; display:none;">0 encontrados</span>
+              </div>
+              
+              <div class="form-row" style="margin-bottom: 10px;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label style="font-size:11px;">Radio de Búsqueda (km)</label>
+                  <input type="number" id="searchRadiusKm" value="5" min="1" max="30" step="0.5" style="padding:8px 12px; font-size:12px;">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label style="font-size:11px;">Máx. Conductores</label>
+                  <input type="number" id="searchMaxCandidates" value="3" min="1" max="10" style="padding:8px 12px; font-size:12px;">
+                </div>
+              </div>
+
+              <button id="btnSearchCandidates" class="btn btn-candidate" onclick="searchAndDispatchCandidates()">
+                ⚡ Buscar Candidatos y Enviar Ofertas (30s)
+              </button>
+
+              <div id="candidatesListContainer" style="display: none; margin-top: 10px;"></div>
+            </div>
+
+          </div>
+
+          <!-- Consola JSON -->
+          <div style="margin-top: 22px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <div class="presets-label" style="margin:0;">Respuesta JSON del Servidor</div>
+              <span id="responseStatus" style="font-size:11px; font-family:'JetBrains Mono'; color:var(--text-muted);">-</span>
+            </div>
+            <div class="json-box" id="jsonOutput">// Las respuestas de la API aparecerán aquí...</div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==============================================================
+         TAB 2: VISTA / APP DEL CONDUCTOR (RF-5.4)
+         ============================================================== -->
+    <div id="viewDriver" class="tab-view">
+      <div class="driver-view-layout">
+        
+        <!-- Panel lateral: Selección de Conductor -->
+        <div class="card">
+          <div class="card-title">
+            <div class="card-title-left">
+              <span>🚗</span>
+              <span>Panel del Chofer</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Seleccionar Conductor Activo</label>
+            <select id="driverSelector" onchange="onDriverSelected()">
+              <option value="drv_101">drv_101 (Automóvil • ⭐ 4.9)</option>
+              <option value="drv_102">drv_102 (Automóvil • ⭐ 4.8)</option>
+              <option value="drv_103">drv_103 (Moto • ⭐ 5.0)</option>
+            </select>
+          </div>
+
+          <div style="background: rgba(0,0,0,0.25); padding: 14px; border-radius: var(--radius-md); margin-bottom: 16px;">
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Vehículo Registrado</div>
+            <div style="font-size: 14px; font-weight: 600;" id="driverVehInfo">Toyota Corolla 2022 (AUTO)</div>
+            <div style="font-size: 11px; color: var(--success); margin-top: 4px;">🟢 Conductor habilitado y en línea</div>
+          </div>
+
+          <button class="btn btn-secondary" onclick="checkDriverOffers()">
+            🔄 Buscar Ofertas Entrantes
+          </button>
+        </div>
+
+        <!-- Smartphone del Conductor (UI Interactiva) -->
+        <div class="card" style="display: flex; justify-content: center; align-items: center;">
+          <div class="phone-frame">
+            <div class="phone-notch">
+              <div class="phone-camera"></div>
+            </div>
+
+            <!-- Header de la App móvil -->
+            <div class="driver-app-header">
+              <div class="driver-profile">
+                <div class="driver-avatar" id="phoneDriverAvatar">🚗</div>
+                <div>
+                  <div style="font-weight: 700; font-size: 14px;" id="phoneDriverId">drv_101</div>
+                  <div style="font-size: 11px; color: var(--text-muted);">Conductor Activo</div>
+                </div>
+              </div>
+              <div class="driver-app-status-idle" id="phoneStatusBadge">
+                <span class="health-dot"></span>
+                <span>En Línea</span>
+              </div>
+            </div>
+
+            <!-- Estado 1: En Espera (Sin ofertas activas) -->
+            <div id="driverPhoneIdleState" style="text-align: center; padding: 40px 10px;">
+              <div style="font-size: 48px; margin-bottom: 12px; animation: pulse 2.5s infinite;">📡</div>
+              <div style="font-size: 16px; font-weight: 700;">Buscando viajes cercanos...</div>
+              <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px; max-width: 240px; margin-left: auto; margin-right: auto;">
+                Mantén la aplicación abierta. Te notificaremos cuando un pasajero solicite un viaje.
+              </div>
+            </div>
+
+            <!-- Estado 2: Oferta Entrante (RF-5.4) -->
+            <div id="driverPhoneIncomingOffer" style="display: none;" class="incoming-offer-card">
+              <div style="font-size: 11px; font-weight: 700; color: #c4b5fd; text-transform: uppercase; letter-spacing: 0.08em;">
+                🔔 ¡NUEVA OFERTA DE VIAJE!
+              </div>
+
+              <div class="incoming-fare-badge" id="phoneFareAmount">$4,200 ARS</div>
+              <div style="font-size: 12px; color: #a5b4fc;" id="phoneTripDistance">Distancia: ~2.3 km (6 min)</div>
+
+              <div class="incoming-route">
+                <div class="route-point">
+                  <span style="color:#10b981;">🟢</span>
+                  <div>
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Punto de recogida</div>
+                    <strong id="phoneOriginAddr">Av. 9 de Julio (Obelisco)</strong>
+                  </div>
+                </div>
+                <div class="route-point">
+                  <span style="color:#ef4444;">🔴</span>
+                  <div>
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Destino</div>
+                    <strong id="phoneDestAddr">Av. Alvear (Recoleta)</strong>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Cuenta regresiva TTL -->
+              <div class="driver-ttl-clock">
+                <span>⏱️</span>
+                <span id="phoneTtlCountdown">30s restantes</span>
+              </div>
+              <div class="driver-ttl-bar">
+                <div class="driver-ttl-fill" id="phoneTtlFill"></div>
+              </div>
+
+              <!-- Botones de Decisión del Chofer -->
+              <div class="driver-buttons-container">
+                <button class="btn-driver-accept-phone" id="btnPhoneAccept" onclick="driverDecision('ACCEPT')">
+                  🟢 ACEPTAR
+                </button>
+                <button class="btn-driver-reject-phone" id="btnPhoneReject" onclick="driverDecision('REJECT')">
+                  🔴 RECHAZAR
+                </button>
+              </div>
+            </div>
+
+            <!-- Estado 3: Viaje Asignado / En Curso -->
+            <div id="driverPhoneAssignedState" style="display: none;" class="driver-assigned-screen">
+              <div style="font-size: 40px; margin-bottom: 10px;">🚗💨</div>
+              <div style="font-size: 16px; font-weight: 700; color: #34d399;">¡Viaje Asignado!</div>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;">
+                Dirigiéndose al punto de origen para recoger al cliente.
+              </div>
+              <div style="background: rgba(0,0,0,0.3); border-radius: 12px; padding: 12px; margin-top: 14px; text-align: left; font-size: 12px;">
+                <div>🟢 <strong>Origen:</strong> <span id="assignedPhoneOrigin">-</span></div>
+                <div style="margin-top: 6px;">🔴 <strong>Destino:</strong> <span id="assignedPhoneDest">-</span></div>
+                <div style="margin-top: 6px;">💰 <strong>A cobrar:</strong> <span id="assignedPhoneFare">-</span></div>
+              </div>
+              <button class="btn btn-secondary" onclick="completeDriverTrip()" style="margin-top: 14px; font-size: 12px; padding: 8px;">
+                🏁 Finalizar Viaje / Quedar Disponible
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==============================================================
+         TAB 3: SPLIT SCREEN (SIMULACIÓN COMPLETA)
+         ============================================================== -->
+    <div id="viewSplit" class="tab-view">
+      <div style="margin-bottom: 16px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); padding: 12px 18px; border-radius: var(--radius-md); font-size: 13px; color: #93c5fd;">
+        💡 <strong>Demostración en Vivo:</strong> Puedes solicitar y despachar un viaje en el panel izquierdo y ver cómo entra la oferta en el smartphone del chofer a la derecha en tiempo real.
+      </div>
+      <div class="dashboard-grid">
+        <div id="splitLeftContainer"></div>
+        <div id="splitRightContainer"></div>
+      </div>
+    </div>
+
   </div>
 
   <div id="toast" class="toast">Mensaje</div>
@@ -934,6 +1351,8 @@
   <script>
     let currentVehicle = 'AUTO';
     let currentRequestId = null;
+    let currentActiveOffer = null;
+    let driverCountdownTimer = null;
 
     const presets = {
       obelisco_recoleta: {
@@ -960,7 +1379,7 @@
     }
 
     function generateKey() {
-      return 'req_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString().slice(-4);
+      return 'req_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString().slice(-4);
     }
 
     function generateNewKey(e) {
@@ -988,11 +1407,50 @@
       showToast('Ruta de demostración cargada', 'success');
     }
 
+    function switchView(viewName) {
+      document.getElementById('tabBtnPassenger').classList.toggle('active', viewName === 'passenger');
+      document.getElementById('tabBtnDriver').classList.toggle('active', viewName === 'driver');
+      document.getElementById('tabBtnSplit').classList.toggle('active', viewName === 'split');
+
+      document.getElementById('viewPassenger').classList.toggle('active', viewName === 'passenger' || viewName === 'split');
+      document.getElementById('viewDriver').classList.toggle('active', viewName === 'driver');
+      document.getElementById('viewSplit').classList.toggle('active', viewName === 'split');
+
+      if (viewName === 'split') {
+        // En modo split mostramos Passenger y Driver juntos
+        document.getElementById('viewPassenger').style.display = 'block';
+        document.getElementById('viewDriver').style.display = 'block';
+      } else {
+        document.getElementById('viewPassenger').style.display = viewName === 'passenger' ? 'block' : 'none';
+        document.getElementById('viewDriver').style.display = viewName === 'driver' ? 'block' : 'none';
+      }
+    }
+
+    const API_BASE = window.location.protocol === 'file:' ? 'http://localhost:3005' : (window.location.port === '3005' ? '' : 'http://localhost:3005');
+
+    function resetNewTrip() {
+      currentRequestId = null;
+      currentActiveOffer = null;
+      latestDispatchedOffers = [];
+      generateNewKey();
+      
+      document.getElementById('emptyTripState').style.display = 'block';
+      document.getElementById('activeTripDetails').style.display = 'none';
+      document.getElementById('tripStatusBadge').style.display = 'none';
+      document.getElementById('assignedBanner').style.display = 'none';
+      document.getElementById('assignedDriverRow').style.display = 'none';
+      document.getElementById('candidatesListContainer').style.display = 'none';
+
+      // Resetear vista del chofer
+      setDriverPhoneState('IDLE');
+      showToast('Listo para solicitar un nuevo viaje', 'info');
+    }
+
     async function checkHealth() {
       const badge = document.getElementById('healthBadge');
       const text = document.getElementById('healthText');
       try {
-        const res = await fetch('/health');
+        const res = await fetch(`${API_BASE}/health`);
         if (res.ok) {
           badge.classList.remove('offline');
           text.innerText = 'Servicio ONLINE (3005)';
@@ -1021,18 +1479,14 @@
         address: document.getElementById('destAddress').value.trim()
       };
 
-      const payload = {
-        origin,
-        destination,
-        vehicleType: currentVehicle
-      };
+      const payload = { origin, destination, vehicleType: currentVehicle };
 
       const btn = document.getElementById('btnSubmit');
       btn.innerText = '⏳ Procesando despacho...';
       btn.disabled = true;
 
       try {
-        const res = await fetch('/api/v1/ride-requests', {
+        const res = await fetch(`${API_BASE}/api/v1/ride-requests`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1050,6 +1504,7 @@
           showToast('¡Solicitud de viaje creada exitosamente!', 'success');
           currentRequestId = data.id;
           renderTripDetails(data);
+          generateNewKey(); // Regenerar clave para el próximo viaje
         } else {
           showToast(data.message || 'Error al procesar solicitud', 'error');
         }
@@ -1065,15 +1520,8 @@
       document.getElementById('emptyTripState').style.display = 'none';
       document.getElementById('activeTripDetails').style.display = 'block';
 
-      // Resetear vista de candidatos
-      document.getElementById('candidatesListContainer').style.display = 'none';
-      document.getElementById('candidatesCountBadge').style.display = 'none';
-
-      // Resetear vista de ofertas
-      document.getElementById('offersListContainer').style.display = 'none';
-      document.getElementById('offersCountBadge').style.display = 'none';
-
       const badge = document.getElementById('tripStatusBadge');
+      badge.style.display = 'inline-flex';
       badge.innerText = trip.status;
       badge.className = `status-badge ${trip.status}`;
 
@@ -1082,20 +1530,31 @@
         document.getElementById('fareDist').innerText = `${trip.estimatedFare.estimatedDistanceKm} km`;
         document.getElementById('fareDur').innerText = `${trip.estimatedFare.estimatedDurationMin} min`;
         document.getElementById('fareVeh').innerText = trip.vehicleType;
-        document.getElementById('metaFareToken').innerText = trip.estimatedFare.fareToken || 'N/A';
       }
 
       document.getElementById('metaRequestId').innerText = trip.id;
       document.getElementById('metaClientId').innerText = trip.clientId;
       document.getElementById('metaExpiresAt').innerText = trip.expiresAt ? new Date(trip.expiresAt).toLocaleTimeString() : 'N/A';
 
-      const btnCancel = document.getElementById('btnCancelTrip');
-      if (trip.status === 'CANCELLED_BY_CLIENT' || trip.status === 'NO_DRIVERS_AVAILABLE') {
-        btnCancel.disabled = true;
-        btnCancel.style.opacity = '0.5';
+      const assignedBanner = document.getElementById('assignedBanner');
+      const assignedRow = document.getElementById('assignedDriverRow');
+      const assignedVal = document.getElementById('metaAssignedDriver');
+      const assignedName = document.getElementById('assignedDriverName');
+
+      if (trip.status === 'ASSIGNED' || trip.assignedDriverId) {
+        assignedBanner.style.display = 'block';
+        assignedRow.style.display = 'flex';
+        assignedVal.innerText = trip.assignedDriverId || 'Asignado';
+        if (assignedName) assignedName.innerText = trip.assignedDriverId || 'Asignado';
+
+        // Actualizar la pantalla del conductor si coincide
+        const selectedDriver = document.getElementById('driverSelector').value;
+        if (trip.assignedDriverId === selectedDriver) {
+          setDriverPhoneState('ASSIGNED', trip);
+        }
       } else {
-        btnCancel.disabled = false;
-        btnCancel.style.opacity = '1';
+        assignedBanner.style.display = 'none';
+        assignedRow.style.display = 'none';
       }
     }
 
@@ -1104,10 +1563,8 @@
       const clientId = document.getElementById('clientId').value.trim();
 
       try {
-        const res = await fetch(`/api/v1/ride-requests/${currentRequestId}`, {
-          headers: {
-            'x-user-id': clientId
-          }
+        const res = await fetch(`${API_BASE}/api/v1/ride-requests/${currentRequestId}`, {
+          headers: { 'x-user-id': clientId }
         });
         const data = await res.json();
         document.getElementById('responseStatus').innerText = `Status: ${res.status} ${res.statusText}`;
@@ -1124,50 +1581,25 @@
       }
     }
 
-    async function cancelCurrentTrip() {
-      if (!currentRequestId) return;
-      const clientId = document.getElementById('clientId').value.trim();
+    let latestDispatchedOffers = [];
 
-      try {
-        const res = await fetch(`/api/v1/ride-requests/${currentRequestId}/cancel`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-id': clientId
-          },
-          body: JSON.stringify({ reason: 'Cancelado por el usuario desde la UI de prueba' })
-        });
-        const data = await res.json();
-        document.getElementById('responseStatus').innerText = `Status: ${res.status} ${res.statusText}`;
-        document.getElementById('jsonOutput').innerText = JSON.stringify(data, null, 2);
-
-        if (res.ok) {
-          showToast('Solicitud cancelada', 'success');
-          renderTripDetails(data);
-        } else {
-          showToast(data.message || 'No se pudo cancelar el viaje', 'error');
-        }
-      } catch (err) {
-        showToast('Error de red', 'error');
-      }
-    }
-
-    async function searchCandidates() {
+    async function searchAndDispatchCandidates() {
       if (!currentRequestId) {
-        showToast('No hay solicitud activa seleccionada', 'error');
+        showToast('Crea una solicitud primero', 'error');
         return;
       }
 
       const clientId = document.getElementById('clientId').value.trim();
       const radiusKm = parseFloat(document.getElementById('searchRadiusKm').value) || 5.0;
-      const maxCandidates = parseInt(document.getElementById('searchMaxCandidates').value) || 5;
+      const maxCandidates = parseInt(document.getElementById('searchMaxCandidates').value) || 3;
 
       const btn = document.getElementById('btnSearchCandidates');
-      btn.innerText = '⏳ Buscando candidatos en M4...';
+      btn.innerText = '⏳ Buscando candidatos y despachando ofertas...';
       btn.disabled = true;
 
       try {
-        const res = await fetch(`/api/v1/ride-requests/${currentRequestId}/candidates`, {
+        // 1. Buscar candidatos en M4 (RF-5.2)
+        const resCand = await fetch(`${API_BASE}/api/v1/ride-requests/${currentRequestId}/candidates`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1176,126 +1608,335 @@
           body: JSON.stringify({ radiusKm, maxCandidates })
         });
 
-        const data = await res.json();
-        document.getElementById('responseStatus').innerText = `Status: ${res.status} ${res.statusText}`;
-        document.getElementById('jsonOutput').innerText = JSON.stringify(data, null, 2);
+        const candData = await resCand.json();
 
+        if (!resCand.ok || !candData.candidates || candData.candidates.length === 0) {
+          showToast(candData.message || 'No se encontraron conductores disponibles en el radio', 'warning');
+          document.getElementById('responseStatus').innerText = `Status: ${resCand.status}`;
+          document.getElementById('jsonOutput').innerText = JSON.stringify(candData, null, 2);
+          return;
+        }
+
+        const candidateDriverIds = candData.candidates.map((c) => c.driverId);
+
+        // Renderizar lista visual de candidatos
         const listContainer = document.getElementById('candidatesListContainer');
         const badge = document.getElementById('candidatesCountBadge');
+        badge.style.display = 'inline-block';
+        badge.innerText = `${candData.candidatesCount} candidatos con oferta activa (30s)`;
 
-        if (res.ok) {
-          showToast(`¡${data.candidatesCount} candidatos encontrados!`, 'success');
-          badge.style.display = 'inline-block';
-          badge.innerText = `${data.candidatesCount} encontrados (<= ${data.searchRadiusKm}km)`;
-
-          listContainer.innerHTML = '';
-          data.candidates.forEach((cand, idx) => {
-            const icon = cand.vehicleType === 'AUTO' ? '🚘' : '🛵';
-            const card = document.createElement('div');
-            card.className = 'candidate-card';
-            card.innerHTML = `
-              <div class="candidate-info">
-                <div class="candidate-avatar">${icon}</div>
-                <div class="candidate-details">
-                  <span class="candidate-id">#${idx + 1} ${cand.driverId}</span>
-                  <span class="candidate-meta">⭐ ${cand.rating || '5.0'} • Tipo: ${cand.vehicleType}</span>
-                </div>
+        listContainer.innerHTML = '';
+        candData.candidates.forEach((cand, idx) => {
+          const icon = cand.vehicleType === 'AUTO' ? '🚘' : '🛵';
+          const card = document.createElement('div');
+          card.className = 'candidate-card';
+          card.innerHTML = `
+            <div class="candidate-info">
+              <div class="candidate-avatar">${icon}</div>
+              <div>
+                <div class="candidate-id">#${idx + 1} ${cand.driverId}</div>
+                <div class="candidate-meta">⭐ ${cand.rating || '5.0'} • Tipo: ${cand.vehicleType}</div>
               </div>
-              <div class="candidate-stats">
-                <div class="candidate-dist">📍 ${cand.distanceKm} km</div>
-                <div class="candidate-eta">⏱️ ~${cand.estimatedEtaMinutes} min ETA</div>
-              </div>
-            `;
-            listContainer.appendChild(card);
-          });
-          listContainer.style.display = 'flex';
-        } else {
-          badge.style.display = 'none';
-          listContainer.style.display = 'none';
-          showToast(data.message || 'Error al buscar candidatos', 'error');
-        }
-      } catch (err) {
-        showToast('Error de conexión al buscar candidatos', 'error');
-      } finally {
-        btn.innerText = '🔍 Buscar Candidatos (POST /candidates)';
-        btn.disabled = false;
-      }
-    }
+            </div>
+            <div class="candidate-stats">
+              <div class="candidate-dist">📍 ${cand.distanceKm} km</div>
+              <div class="candidate-eta">⏱️ Oferta enviada (30s)</div>
+            </div>
+          `;
+          listContainer.appendChild(card);
+        });
+        listContainer.style.display = 'block';
 
-    async function sendOffers() {
-      if (!currentRequestId) {
-        showToast('No hay solicitud activa seleccionada', 'error');
-        return;
-      }
-
-      const clientId = document.getElementById('clientId').value.trim();
-      const ttlSeconds = parseInt(document.getElementById('offerTtlSeconds').value) || 30;
-
-      const btn = document.getElementById('btnSendOffers');
-      btn.innerText = '⏳ Emitiendo ofertas a conductores...';
-      btn.disabled = true;
-
-      try {
-        const res = await fetch(`/api/v1/ride-requests/${currentRequestId}/offers`, {
+        // 2. Despachar ofertas automáticamente con 30s TTL (RF-5.3)
+        const resOffer = await fetch(`${API_BASE}/api/v1/ride-requests/${currentRequestId}/offers`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'x-user-id': clientId
           },
-          body: JSON.stringify({ ttlSeconds })
+          body: JSON.stringify({ ttlSeconds: 30, driverIds: candidateDriverIds })
+        });
+
+        const offerData = await resOffer.json();
+        document.getElementById('responseStatus').innerText = `Status: ${resOffer.status} ${resOffer.statusText}`;
+        document.getElementById('jsonOutput').innerText = JSON.stringify(offerData, null, 2);
+
+        if (resOffer.ok) {
+          showToast(`⚡ ¡Ofertas despachadas a ${offerData.offersSentCount} conductores con 30s TTL!`, 'success');
+
+          // Guardar ofertas en memoria inmediata para sincronización instantánea
+          latestDispatchedOffers = offerData.offers || [];
+
+          // Actualizar estado del viaje a OFFERED
+          const tripBadge = document.getElementById('tripStatusBadge');
+          tripBadge.innerText = 'OFFERED';
+          tripBadge.className = 'status-badge OFFERED';
+
+          // Sincronizar inmediatamente la pantalla del chofer
+          checkDriverOffers();
+        } else {
+          showToast(offerData.message || 'Error al despachar ofertas', 'error');
+        }
+      } catch (err) {
+        showToast('Error de red al buscar y despachar candidatos', 'error');
+      } finally {
+        btn.innerText = '⚡ Buscar Candidatos y Enviar Ofertas (30s)';
+        btn.disabled = false;
+      }
+    }
+
+    /* ==============================================================
+       📱 LÓGICA DE LA APP DEL CONDUCTOR (RF-5.4)
+       ============================================================== */
+    function onDriverSelected() {
+      const driverId = document.getElementById('driverSelector').value;
+      document.getElementById('phoneDriverId').innerText = driverId;
+      document.getElementById('phoneDriverAvatar').innerText = driverId.includes('103') ? '🛵' : '🚗';
+      document.getElementById('driverVehInfo').innerText = driverId.includes('103') ? 'Honda Wave 110 (MOTO)' : 'Toyota Corolla 2022 (AUTO)';
+      checkDriverOffers();
+    }
+
+    const dismissedOrCompletedOffers = new Set();
+    let assignedDriverGlobal = null;
+
+    function completeDriverTrip() {
+      if (currentActiveOffer) {
+        dismissedOrCompletedOffers.add(currentActiveOffer.id);
+        if (currentActiveOffer.requestId) {
+          dismissedOrCompletedOffers.add(currentActiveOffer.requestId);
+        }
+      }
+      if (currentRequestId) {
+        dismissedOrCompletedOffers.add(currentRequestId);
+      }
+      currentActiveOffer = null;
+      setDriverPhoneState('IDLE');
+      showToast('🏁 Viaje finalizado. Conductor listo para recibir nuevos pedidos.', 'success');
+    }
+
+    async function checkDriverOffers() {
+      const driverId = document.getElementById('driverSelector').value;
+
+      // 1. Sincronización con memoria activa
+      if (latestDispatchedOffers && latestDispatchedOffers.length > 0) {
+        const matchingOffer = latestDispatchedOffers.find((o) => 
+          o.driverId === driverId && 
+          o.status === 'PENDING' &&
+          !dismissedOrCompletedOffers.has(o.id)
+        );
+        const isAcceptedByMe = latestDispatchedOffers.some((o) => 
+          o.driverId === driverId && 
+          o.status === 'ACCEPTED' && 
+          o.requestId === currentRequestId &&
+          !dismissedOrCompletedOffers.has(o.id) &&
+          !dismissedOrCompletedOffers.has(o.requestId)
+        );
+
+        if (matchingOffer && new Date(matchingOffer.expiresAt).getTime() > Date.now()) {
+          currentActiveOffer = matchingOffer;
+          setDriverPhoneState('INCOMING', matchingOffer);
+          return;
+        } else if (isAcceptedByMe && currentRequestId) {
+          setDriverPhoneState('ASSIGNED', currentActiveOffer || matchingOffer);
+          return;
+        } else {
+          if (currentActiveOffer && currentActiveOffer.driverId === driverId && currentActiveOffer.status !== 'PENDING') {
+            currentActiveOffer = null;
+            setDriverPhoneState('IDLE');
+          }
+        }
+      }
+
+      // 2. Consulta al backend
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/drivers/${driverId}/offers`);
+        if (res.ok) {
+          const data = await res.json();
+          const pendingOffer = data.offers?.find((o) => 
+            o.status === 'PENDING' && 
+            new Date(o.expiresAt).getTime() > Date.now() &&
+            !dismissedOrCompletedOffers.has(o.id)
+          );
+          const acceptedOffer = data.offers?.find((o) => 
+            o.status === 'ACCEPTED' && 
+            o.requestId === currentRequestId &&
+            !dismissedOrCompletedOffers.has(o.id) &&
+            !dismissedOrCompletedOffers.has(o.requestId)
+          );
+
+          if (pendingOffer) {
+            currentActiveOffer = pendingOffer;
+            setDriverPhoneState('INCOMING', pendingOffer);
+          } else if (acceptedOffer && currentRequestId) {
+            setDriverPhoneState('ASSIGNED', acceptedOffer);
+          } else {
+            if (currentActiveOffer && currentActiveOffer.driverId === driverId && currentActiveOffer.status === 'PENDING') {
+              currentActiveOffer = null;
+              showToast('⚠️ Este viaje ya fue tomado o la oferta expiró', 'warning');
+            }
+            setDriverPhoneState('IDLE');
+          }
+        }
+      } catch (err) {
+        console.error('Error checking driver offers:', err);
+      }
+    }
+
+    function setDriverPhoneState(state, data = null) {
+      if (driverCountdownTimer) {
+        clearInterval(driverCountdownTimer);
+        driverCountdownTimer = null;
+      }
+
+      const idleEl = document.getElementById('driverPhoneIdleState');
+      const incomingEl = document.getElementById('driverPhoneIncomingOffer');
+      const assignedEl = document.getElementById('driverPhoneAssignedState');
+      const statusBadge = document.getElementById('phoneStatusBadge');
+
+      idleEl.style.display = 'none';
+      incomingEl.style.display = 'none';
+      assignedEl.style.display = 'none';
+
+      if (state === 'IDLE') {
+        idleEl.style.display = 'block';
+        statusBadge.innerHTML = '<span class="health-dot"></span><span>En Línea</span>';
+        statusBadge.className = 'driver-app-status-idle';
+      } else if (state === 'INCOMING' && data) {
+        incomingEl.style.display = 'block';
+        statusBadge.innerHTML = '<span>🔔 Oferta Entrante</span>';
+        statusBadge.className = 'status-badge OFFERED';
+
+        document.getElementById('phoneFareAmount').innerText = `$${data.estimatedFare ? data.estimatedFare.amount.toLocaleString() : '0'} ${data.estimatedFare?.currency || 'ARS'}`;
+        document.getElementById('phoneTripDistance').innerText = `Distancia: ~${data.estimatedFare?.estimatedDistanceKm || '2'} km (~${data.estimatedFare?.estimatedDurationMin || '6'} min)`;
+        document.getElementById('phoneOriginAddr').innerText = data.origin?.address || 'Origen';
+        document.getElementById('phoneDestAddr').innerText = data.destination?.address || 'Destino';
+
+        // Iniciar temporizador de cuenta regresiva
+        const totalTtl = data.ttlSeconds || 30;
+        const expiresTime = new Date(data.expiresAt).getTime();
+
+        const updateTimer = () => {
+          const now = Date.now();
+          const left = Math.max(0, Math.round((expiresTime - now) / 1000));
+          const pct = Math.min(100, Math.max(0, (left / totalTtl) * 100));
+
+          document.getElementById('phoneTtlCountdown').innerText = `${left}s restantes`;
+          document.getElementById('phoneTtlFill').style.width = `${pct}%`;
+
+          if (left <= 0) {
+            clearInterval(driverCountdownTimer);
+            driverCountdownTimer = null;
+            currentActiveOffer = null;
+            showToast('⌛ El tiempo de 30s de la oferta expiró. Puedes buscar otros candidatos.', 'warning');
+            setDriverPhoneState('IDLE');
+
+            // Actualizar vista del cliente
+            const tripBadge = document.getElementById('tripStatusBadge');
+            if (tripBadge && tripBadge.innerText === 'OFFERED') {
+              tripBadge.innerText = 'NO_DRIVERS_AVAILABLE';
+              tripBadge.className = 'status-badge NO_DRIVERS_AVAILABLE';
+            }
+            const candBadge = document.getElementById('candidatesCountBadge');
+            if (candBadge) {
+              candBadge.innerText = 'Ofertas expiradas (0 tomadas)';
+            }
+          }
+        };
+
+        updateTimer();
+        driverCountdownTimer = setInterval(updateTimer, 1000);
+      } else if (state === 'ASSIGNED') {
+        assignedEl.style.display = 'block';
+        statusBadge.innerHTML = '<span>🚀 Viaje en Curso</span>';
+        statusBadge.className = 'status-badge ASSIGNED';
+
+        if (data) {
+          document.getElementById('assignedPhoneOrigin').innerText = data.origin?.address || 'Punto de Partida';
+          document.getElementById('assignedPhoneDest').innerText = data.destination?.address || 'Punto de Destino';
+          document.getElementById('assignedPhoneFare').innerText = `$${data.estimatedFare?.amount || '0'} ${data.estimatedFare?.currency || 'ARS'}`;
+        }
+      }
+    }
+
+    async function driverDecision(action) {
+      if (!currentActiveOffer) {
+        showToast('No hay oferta activa', 'error');
+        return;
+      }
+
+      const driverId = document.getElementById('driverSelector').value;
+      const offerId = currentActiveOffer.id;
+      const actionName = action === 'ACCEPT' ? 'Aceptando' : 'Rechazando';
+
+      showToast(`⏳ ${actionName} viaje como ${driverId}...`, 'info');
+
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/offers/${offerId}/respond`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-driver-id': driverId
+          },
+          body: JSON.stringify({ action, driverId })
         });
 
         const data = await res.json();
         document.getElementById('responseStatus').innerText = `Status: ${res.status} ${res.statusText}`;
         document.getElementById('jsonOutput').innerText = JSON.stringify(data, null, 2);
 
-        const listContainer = document.getElementById('offersListContainer');
-        const badge = document.getElementById('offersCountBadge');
-
         if (res.ok) {
-          showToast(data.message || '¡Ofertas enviadas exitosamente!', 'success');
-          badge.style.display = 'inline-block';
-          badge.innerText = `${data.offersSentCount} enviadas (TTL ${ttlSeconds}s)`;
+          if (action === 'ACCEPT') {
+            showToast(`🎉 ¡Viaje Aceptado por ${driverId}!`, 'success');
+            
+            // Marcar esta oferta como ACCEPTED y anular las demás ofertas en memoria
+            if (latestDispatchedOffers) {
+              latestDispatchedOffers.forEach(o => {
+                if (o.id === offerId) o.status = 'ACCEPTED';
+                else o.status = 'EXPIRED';
+              });
+            }
+            assignedDriverGlobal = driverId;
 
-          // Actualizar estado de viaje en UI
-          const tripBadge = document.getElementById('tripStatusBadge');
-          tripBadge.innerText = 'OFFERED';
-          tripBadge.className = 'status-badge OFFERED';
+            setDriverPhoneState('ASSIGNED', currentActiveOffer);
 
-          listContainer.innerHTML = '';
-          data.offers.forEach((offer) => {
-            const card = document.createElement('div');
-            card.className = 'offer-card';
-            card.innerHTML = `
-              <div class="offer-header">
-                <span class="offer-driver">🎯 ${offer.driverId}</span>
-                <span class="offer-status ${offer.status}">${offer.status}</span>
-              </div>
-              <div style="font-size:12px; color:var(--text-secondary); display:flex; justify-content:space-between;">
-                <span>ID: ${offer.id.substring(0, 16)}...</span>
-                <span>Expira: ${new Date(offer.expiresAt).toLocaleTimeString()} (${offer.ttlSeconds}s)</span>
-              </div>
-            `;
-            listContainer.appendChild(card);
-          });
-          listContainer.style.display = 'block';
+            // Actualizar vista del cliente a ASSIGNED
+            const tripBadge = document.getElementById('tripStatusBadge');
+            tripBadge.innerText = 'ASSIGNED';
+            tripBadge.className = 'status-badge ASSIGNED';
+
+            document.getElementById('assignedBanner').style.display = 'block';
+            document.getElementById('assignedDriverRow').style.display = 'flex';
+            document.getElementById('metaAssignedDriver').innerText = driverId;
+            document.getElementById('assignedDriverName').innerText = driverId;
+          } else {
+            showToast(`Oferta rechazada por ${driverId}`, 'info');
+            if (latestDispatchedOffers) {
+              const off = latestDispatchedOffers.find(o => o.id === offerId);
+              if (off) off.status = 'REJECTED';
+            }
+            setDriverPhoneState('IDLE');
+          }
+          currentActiveOffer = null;
         } else {
-          showToast(data.message || 'Error al enviar ofertas', 'error');
+          // Si otro conductor ya tomó el viaje o la oferta expiró
+          if (data.code === 'REQUEST_ALREADY_ASSIGNED' || data.code === 'OFFER_EXPIRED') {
+            showToast('⚠️ El viaje ya fue tomado por otro conductor', 'error');
+          } else {
+            showToast(data.message || 'Error al responder oferta', 'error');
+          }
+          currentActiveOffer = null;
+          setDriverPhoneState('IDLE');
         }
       } catch (err) {
-        showToast('Error de conexión al enviar ofertas', 'error');
-      } finally {
-        btn.innerText = '⚡ Enviar Oferta con TTL (POST /offers)';
-        btn.disabled = false;
+        showToast('Error de comunicación con el servidor', 'error');
       }
     }
 
-    // Inicialización
+    // Inicialización y polling
     document.getElementById('idempotencyKey').value = generateKey();
     checkHealth();
-    setInterval(checkHealth, 10000);
+    setInterval(checkHealth, 2500);
+    setInterval(checkDriverOffers, 2000); // Polling suave para sincronizar automáticamente el teléfono del chofer
   </script>
 </body>
 </html>
-
-

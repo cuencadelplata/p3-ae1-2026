@@ -4,6 +4,9 @@ import {
   CreateRideRequestDTO,
   EstimatedFare,
   NearbyDriverStub,
+  OfferAction,
+  RespondOfferDTO,
+  RespondOfferResponseDTO,
   RideOffer,
   RideRequest,
   SearchCandidatesOptions,
@@ -108,6 +111,18 @@ export class RideRequestService {
       throw new ValidationError('Datos de solicitud inválidos', validation.errors);
     }
 
+    // Actualizar solicitudes previas que hayan expirado por tiempo
+    const nowTime = Date.now();
+    for (const r of this.requests.values()) {
+      if (
+        (r.status === 'PENDING' || r.status === 'SEARCHING' || r.status === 'OFFERED') &&
+        new Date(r.expiresAt).getTime() < nowTime
+      ) {
+        r.status = 'EXPIRED';
+        r.updatedAt = new Date().toISOString();
+      }
+    }
+
     // 3. Verificar que el cliente no tenga otra solicitud activa pendiente/en búsqueda
     const existingActive = Array.from(this.requests.values()).find(
       (r) =>
@@ -176,27 +191,6 @@ export class RideRequestService {
     if (request.clientId !== clientId) {
       throw new ConflictError('No tiene permisos para acceder a esta solicitud', 'FORBIDDEN_ACCESS');
     }
-
-    return request;
-  }
-
-  /**
-   * Cancela la solicitud antes de ser asignada (RF-5.6)
-   */
-  public async cancelRideRequest(requestId: string, clientId: string, _reason?: string): Promise<RideRequest> {
-    const request = await this.getRideRequestById(requestId, clientId);
-
-    const cancellableStatuses = ['PENDING', 'SEARCHING', 'OFFERED'];
-    if (!cancellableStatuses.includes(request.status)) {
-      throw new ConflictError(
-        `No se puede cancelar una solicitud en estado ${request.status}. Debe gestionarse en M6 si ya fue asignada.`,
-        'CANNOT_CANCEL_REQUEST'
-      );
-    }
-
-    request.status = 'CANCELLED_BY_CLIENT';
-    request.updatedAt = new Date().toISOString();
-    this.requests.set(requestId, request);
 
     return request;
   }
@@ -384,6 +378,206 @@ export class RideRequestService {
 
     return requestOffers;
   }
+
+  /**
+   * RF-5.4: Aceptar o rechazar oferta
+   * Permite a un conductor responder a una oferta mientras se encuentre vigente.
+   */
+  public async respondToOffer(
+    offerId: string,
+    driverId: string,
+    dto: RespondOfferDTO
+  ): Promise<RespondOfferResponseDTO> {
+    // 1. Validar DTO
+    const validation = RideRequestValidator.validateRespondOfferDTO(dto);
+    if (!validation.valid) {
+      throw new ValidationError('Parámetros de respuesta a la oferta inválidos', validation.errors);
+    }
+
+    const { action } = dto;
+    const targetDriverId = dto.driverId || driverId;
+
+    // 2. Buscar la oferta
+    const offer = this.offers.get(offerId);
+    if (!offer) {
+      throw new NotFoundError('Oferta de viaje no encontrada', 'OFFER_NOT_FOUND');
+    }
+
+    // 3. Validar que el conductor sea el destinatario de la oferta (si no es demo default)
+    if (targetDriverId !== 'driver_demo_default' && offer.driverId !== targetDriverId) {
+      throw new ConflictError(
+        'No tiene autorización para responder a esta oferta (destinatario no coincide)',
+        'FORBIDDEN_ACCESS'
+      );
+    }
+
+    // 4. Verificar vigencia por tiempo (TTL)
+    const now = new Date();
+    const nowTime = now.getTime();
+    const expiresAtTime = new Date(offer.expiresAt).getTime();
+
+    if (nowTime > expiresAtTime || offer.status === 'EXPIRED') {
+      offer.status = 'EXPIRED';
+      this.offers.set(offerId, offer);
+      throw new ConflictError(
+        'La oferta ha expirado y ya no está vigente',
+        'OFFER_EXPIRED'
+      );
+    }
+
+    // 5. Verificar que la oferta esté en estado PENDING
+    if (offer.status !== 'PENDING') {
+      throw new ConflictError(
+        `La oferta ya fue respondida previamente y se encuentra en estado ${offer.status}`,
+        'OFFER_ALREADY_RESPONDED'
+      );
+    }
+
+    // 6. Obtener la solicitud asociada
+    const request = this.requests.get(offer.requestId);
+    if (!request) {
+      throw new NotFoundError('Solicitud de viaje asociada no encontrada', 'RIDE_REQUEST_NOT_FOUND');
+    }
+
+    if (action === 'REJECT') {
+      offer.status = 'REJECTED';
+      this.offers.set(offerId, offer);
+
+      // Si todas las ofertas para esta solicitud fueron rechazadas o expiraron
+      const relatedOffers = Array.from(this.offers.values()).filter(
+        (o) => o.requestId === request.id
+      );
+      const allDone = relatedOffers.every(
+        (o) => o.status === 'REJECTED' || o.status === 'EXPIRED'
+      );
+      if (allDone && request.status === 'OFFERED') {
+        request.status = 'NO_DRIVERS_AVAILABLE';
+        request.updatedAt = now.toISOString();
+        this.requests.set(request.id, request);
+      }
+
+      return {
+        offerId: offer.id,
+        requestId: request.id,
+        driverId: offer.driverId,
+        action: 'REJECT',
+        status: 'REJECTED',
+        requestStatus: request.status,
+        assignedDriverId: request.assignedDriverId,
+        message: `Oferta rechazada exitosamente por el conductor ${offer.driverId}.`,
+        respondedAt: now.toISOString()
+      };
+    }
+
+    // action === 'ACCEPT'
+    // 7. Si la acción es aceptar, validar que la solicitud aún esté disponible para ser asignada
+    if (request.status === 'ASSIGNED') {
+      offer.status = 'EXPIRED'; // La oferta queda revocada porque ya se asignó a otro
+      this.offers.set(offerId, offer);
+      throw new ConflictError(
+        'La solicitud de viaje ya fue asignada a otro conductor',
+        'REQUEST_ALREADY_ASSIGNED'
+      );
+    }
+
+    if (request.status === 'EXPIRED') {
+      offer.status = 'EXPIRED';
+      this.offers.set(offerId, offer);
+      throw new ConflictError(
+        `La solicitud de viaje no está disponible para ser aceptada (estado: ${request.status})`,
+        'REQUEST_NOT_AVAILABLE'
+      );
+    }
+
+    // 8. Asignar la solicitud y marcar la oferta como ACCEPTED
+    offer.status = 'ACCEPTED';
+    this.offers.set(offerId, offer);
+
+    request.status = 'ASSIGNED';
+    request.assignedDriverId = offer.driverId;
+    request.updatedAt = now.toISOString();
+    this.requests.set(request.id, request);
+
+    // 9. Cancelar / expirar automáticamente las demás ofertas pendientes para esta misma solicitud
+    Array.from(this.offers.values())
+      .filter((o) => o.requestId === request.id && o.id !== offer.id && o.status === 'PENDING')
+      .forEach((otherOffer) => {
+        otherOffer.status = 'EXPIRED';
+        this.offers.set(otherOffer.id, otherOffer);
+      });
+
+    return {
+      offerId: offer.id,
+      requestId: request.id,
+      driverId: offer.driverId,
+      action: 'ACCEPT',
+      status: 'ACCEPTED',
+      requestStatus: 'ASSIGNED',
+      assignedDriverId: offer.driverId,
+      message: `¡Oferta aceptada! El viaje ha sido asignado exitosamente al conductor ${offer.driverId}.`,
+      respondedAt: now.toISOString()
+    };
+  }
+
+  /**
+   * Obtiene una oferta por su ID
+   */
+  public async getOfferById(offerId: string): Promise<RideOffer> {
+    const offer = this.offers.get(offerId);
+    if (!offer) {
+      throw new NotFoundError('Oferta no encontrada', 'OFFER_NOT_FOUND');
+    }
+    const now = new Date().getTime();
+    if (offer.status === 'PENDING' && new Date(offer.expiresAt).getTime() < now) {
+      offer.status = 'EXPIRED';
+      this.offers.set(offerId, offer);
+    }
+    return offer;
+  }
+
+  /**
+   * Obtiene las ofertas dirigidas a un conductor específico
+   */
+  public async getOffersForDriver(driverId: string): Promise<RideOffer[]> {
+    const now = new Date().getTime();
+    return Array.from(this.offers.values())
+      .filter((offer) => offer.driverId === driverId)
+      .map((offer) => {
+        const req = this.requests.get(offer.requestId);
+        const isAssignedToOther = req && req.status === 'ASSIGNED' && req.assignedDriverId !== driverId;
+        const isReqClosed = req && (req.status === 'EXPIRED' || req.status === 'NO_DRIVERS_AVAILABLE');
+        const isTimeExpired = new Date(offer.expiresAt).getTime() < now;
+
+        if (offer.status === 'PENDING' && (isTimeExpired || isAssignedToOther || isReqClosed)) {
+          offer.status = 'EXPIRED';
+          this.offers.set(offer.id, offer);
+        }
+        return offer;
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  /**
+   * Obtiene todas las ofertas activas en el sistema
+   */
+  public async getAllOffers(): Promise<RideOffer[]> {
+    const now = new Date().getTime();
+    return Array.from(this.offers.values())
+      .map((offer) => {
+        const req = this.requests.get(offer.requestId);
+        const isAssigned = req && req.status === 'ASSIGNED';
+        const isReqClosed = req && req.status === 'EXPIRED';
+        const isTimeExpired = new Date(offer.expiresAt).getTime() < now;
+
+        if (offer.status === 'PENDING' && (isTimeExpired || isAssigned || isReqClosed)) {
+          offer.status = 'EXPIRED';
+          this.offers.set(offer.id, offer);
+        }
+        return offer;
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
 }
+
 
 

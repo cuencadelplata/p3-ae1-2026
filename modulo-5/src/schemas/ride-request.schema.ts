@@ -137,6 +137,29 @@ export class RideRequestValidator {
       errors
     };
   }
+
+  /**
+   * Valida respuesta a una oferta de viaje (RF-5.4)
+   */
+  public static validateRespondOfferDTO(dto?: { action?: unknown }): ValidationResult {
+    const errors: string[] = [];
+
+    if (!dto || !dto.action) {
+      errors.push("action: Campo requerido. Debe ser 'ACCEPT' o 'REJECT'");
+      return { valid: false, errors };
+    }
+
+    const validActions = ['ACCEPT', 'REJECT'];
+    if (typeof dto.action !== 'string' || !validActions.includes(dto.action)) {
+      errors.push("action: Valor inválido. Debe ser 'ACCEPT' o 'REJECT'");
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
 }
+
 
 

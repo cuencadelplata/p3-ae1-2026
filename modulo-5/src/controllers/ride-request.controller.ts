@@ -14,12 +14,11 @@ export class RideRequestController {
    * Extrae el ID del cliente del contexto de seguridad (JWT / M1)
    */
   private extractClientId(req: Request): string {
-    // En producción se obtiene de (req as any).user.sub proveniente del middleware JWT de M1
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return 'client_demo_default';
+    const customHeader = req.headers['x-user-id'] || req.headers['x-client-id'];
+    if (customHeader) {
+      return customHeader.toString();
     }
-    return req.headers['x-user-id']?.toString() || 'client_demo_default';
+    return 'client_demo_default';
   }
 
   /**
@@ -62,26 +61,6 @@ export class RideRequestController {
 
       const rideRequest = await this.rideRequestService.getRideRequestById(requestId, clientId);
       res.status(200).json(rideRequest);
-    } catch (error) {
-      this.handleError(res, error);
-    }
-  };
-
-  /**
-   * PATCH /api/v1/ride-requests/:requestId/cancel
-   */
-  public cancel = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { requestId } = req.params;
-      const clientId = this.extractClientId(req);
-      const reason = req.body?.reason;
-
-      const updatedRequest = await this.rideRequestService.cancelRideRequest(
-        requestId,
-        clientId,
-        reason
-      );
-      res.status(200).json(updatedRequest);
     } catch (error) {
       this.handleError(res, error);
     }
@@ -148,6 +127,122 @@ export class RideRequestController {
 
       const offers = await this.rideRequestService.getOffersByRequestId(requestId, clientId);
       res.status(200).json({ requestId, offersCount: offers.length, offers });
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  /**
+   * Extrae el ID del conductor del contexto de seguridad (JWT / M1)
+   */
+  private extractDriverId(req: Request): string {
+    const customHeader = req.headers['x-driver-id'] || req.headers['x-user-id'];
+    if (customHeader) {
+      return customHeader.toString();
+    }
+    if (req.body?.driverId) {
+      return req.body.driverId.toString();
+    }
+    return 'driver_demo_default';
+  }
+
+  /**
+   * POST /api/v1/offers/:offerId/respond
+   * Aceptar o rechazar una oferta de viaje (RF-5.4)
+   */
+  public respondOffer = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { offerId } = req.params;
+      const driverId = this.extractDriverId(req);
+      const { action } = req.body || {};
+
+      const result = await this.rideRequestService.respondToOffer(offerId, driverId, {
+        action,
+        driverId: req.body?.driverId
+      });
+
+      res.status(200).json(result);
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  /**
+   * POST /api/v1/offers/:offerId/accept
+   * Aceptar una oferta de viaje vigente (RF-5.4)
+   */
+  public acceptOffer = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { offerId } = req.params;
+      const driverId = this.extractDriverId(req);
+
+      const result = await this.rideRequestService.respondToOffer(offerId, driverId, {
+        action: 'ACCEPT',
+        driverId: req.body?.driverId
+      });
+
+      res.status(200).json(result);
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  /**
+   * POST /api/v1/offers/:offerId/reject
+   * Rechazar una oferta de viaje vigente (RF-5.4)
+   */
+  public rejectOffer = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { offerId } = req.params;
+      const driverId = this.extractDriverId(req);
+
+      const result = await this.rideRequestService.respondToOffer(offerId, driverId, {
+        action: 'REJECT',
+        driverId: req.body?.driverId
+      });
+
+      res.status(200).json(result);
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  /**
+   * GET /api/v1/offers/:offerId
+   * Consultar estado individual de una oferta
+   */
+  public getOfferById = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { offerId } = req.params;
+      const offer = await this.rideRequestService.getOfferById(offerId);
+      res.status(200).json(offer);
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  /**
+   * GET /api/v1/drivers/:driverId/offers
+   * Consulta todas las ofertas dirigidas a un conductor (RF-5.4)
+   */
+  public getOffersForDriver = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { driverId } = req.params;
+      const offers = await this.rideRequestService.getOffersForDriver(driverId);
+      res.status(200).json({ driverId, count: offers.length, offers });
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  /**
+   * GET /api/v1/offers
+   * Listado de todas las ofertas emitidas en el sistema
+   */
+  public getAllOffers = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const offers = await this.rideRequestService.getAllOffers();
+      res.status(200).json({ count: offers.length, offers });
     } catch (error) {
       this.handleError(res, error);
     }
