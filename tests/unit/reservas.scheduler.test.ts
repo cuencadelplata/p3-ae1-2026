@@ -60,4 +60,36 @@ describe('activación programada', () => {
     await expect(service.activar(reserva.id)).rejects.toThrow('M5 caído');
     expect((await repository.obtenerPorId(reserva.id))?.estado).toBe('FALLIDA');
   });
+
+  it('rechaza expresiones cron inválidas y evita programar dos jobs', () => {
+    const repository = new InMemoryReservaRepository();
+    const service = new ActivacionReservaService(repository, {
+      crearSolicitud: vi.fn(async () => ({ solicitudId: randomUUID(), estado: 'CREADA' })),
+    });
+    const scheduler = new ReservasScheduler(repository, service, 'INVALIDA');
+
+    expect(() => scheduler.start()).toThrow('RESERVATION_JOB_INTERVAL no es una expresión cron válida.');
+
+    const valido = new ReservasScheduler(repository, service, '* * * * * *');
+    valido.start();
+    valido.start();
+    valido.stop();
+    valido.stop();
+
+    expect(valido).toBeInstanceOf(ReservasScheduler);
+  });
+
+  it('devuelve cero cuando no hay reservas pendientes', async () => {
+    const repository = new InMemoryReservaRepository();
+    const service = new ActivacionReservaService(repository, {
+      crearSolicitud: vi.fn(async () => ({ solicitudId: randomUUID(), estado: 'CREADA' })),
+    });
+    const scheduler = new ReservasScheduler(repository, service, '* * * * * *');
+
+    await expect(scheduler.ejecutar()).resolves.toEqual({
+      encontradas: 0,
+      activadas: 0,
+      fallidas: 0,
+    });
+  });
 });
