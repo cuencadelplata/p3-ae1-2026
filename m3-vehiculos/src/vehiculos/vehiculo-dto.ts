@@ -1,4 +1,4 @@
-import { type TipoServicio } from "./vehiculo.model.js";
+import { type TipoServicio } from "./vehiculo-model.js";
 
 // Forma cruda del body que manda el cliente (sin garantías todavía:
 // puede venir con mayúsculas/minúsculas mezcladas, campos faltantes, etc.).
