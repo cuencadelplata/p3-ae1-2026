@@ -2,6 +2,24 @@
 
 Este catálogo permite ubicar rápidamente los escenarios comprobados. Los nombres técnicos de endpoints, códigos y tipos se conservan para facilitar la relación con el contrato OpenAPI.
 
+## ¿Dónde busco una prueba?
+
+| Quiero comprobar | Archivo principal |
+| --- | --- |
+| Validación de entrada QR | `tests/unit/qr/qr.validator.test.ts` |
+| Reglas principales y validación QR | `tests/unit/qr/qr.service.test.ts` |
+| TTL y configuración QR | `tests/unit/qr/qr.config.test.ts` |
+| Generación de imagen QR | `tests/unit/qr/qr-generator.test.ts` |
+| Almacenamiento, single-use o QR reutilizado | `tests/unit/qr/qr.store.test.ts` |
+| Concurrencia de validaciones QR | `tests/integration/qr/qr.integration.test.ts` |
+| Validación de notificaciones | `tests/unit/notifications/notification.validator.test.ts` |
+| Lógica y mensajes de notificaciones | `tests/unit/notifications/notification.service.test.ts` |
+| Integración HTTP RF-8.1 | `tests/integration/notifications/notifications.integration.test.ts` |
+| Integración HTTP RF-8.2 | `tests/integration/qr/qr.integration.test.ts` |
+| E2E API RF-8.1 | `tests/e2e/api/notifications.e2e.test.ts` |
+| E2E API RF-8.2 | `tests/e2e/api/qr.e2e.test.ts` |
+| E2E visual Playwright | `tests/e2e/ui/m8.ui.e2e.test.ts` |
+
 ## RF-8.1 — Notificaciones
 
 ### Unit
@@ -113,18 +131,18 @@ Tipo: E2E UI. RF: RF-8.1 y RF-8.2. Con Chromium y Docker, verifica la interfaz v
 
 ## Infraestructura compartida
 
-#### `tests/e2e/support/docker-service.ts`
+#### `tests/e2e/infrastructure/docker-service.ts`
 
 Soporte E2E. Construye la imagen, levanta un contenedor temporal con puerto host dinámico, espera disponibilidad mediante HTTP real y elimina únicamente ese contenedor.
 
-#### `tests/e2e/support/docker-global-setup.ts`
+#### `tests/e2e/infrastructure/docker-global-setup.ts`
 
 Soporte Vitest. Entrega `e2eBaseUrl` a las pruebas API y registra el teardown del contenedor.
 
-#### `tests/e2e/support/playwright-global-setup.ts`
+#### `tests/e2e/infrastructure/playwright-global-setup.ts`
 
 Soporte Playwright. Entrega `M8_E2E_BASE_URL` a la prueba UI y registra el teardown del contenedor.
 
-#### `tests/e2e/support/vitest-context.ts`
+#### `tests/e2e/infrastructure/vitest-context.ts`
 
 Soporte de tipos. Declara el contexto provisto por Vitest para las pruebas E2E API; no contiene lógica de negocio.

@@ -1,6 +1,8 @@
 # Guía de pruebas de M8
 
-Las pruebas se organizan por nivel y por requerimiento funcional. RF-8.1 cubre el procesamiento de notificaciones de viaje y RF-8.2 la generación y validación de QR temporales. La guía de casos concretos está en [CATALOGO_PRUEBAS.md](./CATALOGO_PRUEBAS.md).
+Las pruebas se organizan por nivel y por requerimiento funcional. RF-8.1 cubre el procesamiento de notificaciones de viaje y RF-8.2 la generación y validación de QR temporales.
+
+Este archivo funciona como índice general. Las guías por nivel son [Unit](./unit/README.md), [Integration](./integration/README.md) y [E2E](./e2e/README.md); la infraestructura E2E se explica en [infrastructure](./e2e/infrastructure/README.md). La guía de casos concretos está en [CATALOGO_PRUEBAS.md](./CATALOGO_PRUEBAS.md).
 
 ## Niveles de prueba
 

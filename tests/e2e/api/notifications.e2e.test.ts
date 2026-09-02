@@ -4,7 +4,7 @@
  */
 import { describe, expect, inject, it } from "vitest";
 
-import "../support/vitest-context";
+import "../infrastructure/vitest-context";
 
 const baseUrl = inject("e2eBaseUrl");
 
