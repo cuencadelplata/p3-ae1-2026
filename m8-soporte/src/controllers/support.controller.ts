@@ -21,7 +21,7 @@ export class SupportController {
 
   // Endpoint: GET /tickets/:id
   static obtenerTicket(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const ticket = ticketRepository.obtenerPorId(id);
 
     if (!ticket) {
@@ -34,7 +34,7 @@ export class SupportController {
 
   // Endpoint: PATCH /tickets/:id/estado
   static actualizarEstado(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { estado } = req.body;
 
     // Validar que el estado sea correcto

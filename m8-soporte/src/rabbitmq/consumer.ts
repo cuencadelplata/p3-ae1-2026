@@ -1,11 +1,12 @@
-import amqp, { Connection, Channel } from 'amqplib';
+import * as amqp from 'amqplib';
+import { Connection, Channel } from 'amqplib';
 import { NotificationServiceMock } from '../mocks/notification.mock.js';
 import { DocumentServiceMock } from '../mocks/document.mock.js';
 import { ticketRepository } from '../models/ticket.model.js';
 
 export class RabbitMQConsumer {
-  private static connection: Connection | null = null;
-  private static channel: Channel | null = null;
+  private static connection: any = null;
+  private static channel: any = null;
   private static readonly QUEUE_NAME = 'm8_async_events';
   private static readonly EXCHANGE_NAME = 'viajes_exchange';
 
@@ -16,11 +17,11 @@ export class RabbitMQConsumer {
       this.channel = await this.connection.createChannel();
       
       // Aseguramos que el exchange y la cola existan (arquitectura resiliente)
-      await this.channel.assertExchange(this.EXCHANGE_NAME, 'topic', { durable: true });
-      await this.channel.assertQueue(this.QUEUE_NAME, { durable: true });
+      await this.channel!.assertExchange(this.EXCHANGE_NAME, 'topic', { durable: true });
+      await this.channel!.assertQueue(this.QUEUE_NAME, { durable: true });
       
       // Escuchamos eventos clave (ej. viaje completado, conductor asignado)
-      await this.channel.bindQueue(this.QUEUE_NAME, this.EXCHANGE_NAME, 'viaje.*');
+      await this.channel!.bindQueue(this.QUEUE_NAME, this.EXCHANGE_NAME, 'viaje.*');
 
       console.log(`[RabbitMQ] Conectado exitosamente. Esperando mensajes en la cola: ${this.QUEUE_NAME}`);
       
@@ -75,12 +76,12 @@ export class RabbitMQConsumer {
         }
 
         // Confirmamos (ACK) que el mensaje fue procesado para sacarlo de la cola
-        this.channel.ack(msg);
+        this.channel!.ack(msg);
       } catch (error) {
         console.error('[RabbitMQ] Error procesando mensaje:', error);
         // Si hay error temporal, podríamos no hacer ack para que se reencole (NACK). 
         // En AE4 se pedirán reintentos, por ahora lo descartamos o logueamos.
-        this.channel.ack(msg); 
+        this.channel!.ack(msg); 
       }
     });
   }
