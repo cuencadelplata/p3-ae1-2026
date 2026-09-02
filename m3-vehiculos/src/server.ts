@@ -3,7 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { vehiculoRouter } from "./vehiculos/vehiculo-router.js";
-//import { documentoRouter } from "./documents/documento-router.js";
+import { documentoRouter } from "./documents/documento-router.js";
 
 dotenv.config();
 
@@ -22,7 +22,7 @@ app.get("/health", (_req: Request, res: Response) => {
 });
 
 app.use("/api/v1/drivers/:driverId/vehicles", vehiculoRouter);
-//app.use("/api/v1/drivers/:driverId/documents", documentoRouter);
+app.use("/api/v1/drivers/:driverId/documents", documentoRouter);
 
 // Siempre al final, después de todas las rutas
 app.use(errorHandler);
