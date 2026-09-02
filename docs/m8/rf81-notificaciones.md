@@ -78,7 +78,7 @@ Las respuestas de error utilizan el formato uniforme `error.code`, `error.messag
 
 ## OpenAPI
 
-La fuente única del contrato es [`docs/api/openapi.yaml`](../api/openapi.yaml). El mismo archivo se expone por HTTP en `GET /openapi.yaml`.
+La fuente única del contrato es [`docs/api/openapi.yaml`](../api/openapi.yaml). El mismo archivo se expone por HTTP en `GET /openapi.yaml` y puede revisarse localmente mediante Swagger UI en `GET /api-docs/`.
 
 No existe un contrato duplicado para la UI ni para la API.
 

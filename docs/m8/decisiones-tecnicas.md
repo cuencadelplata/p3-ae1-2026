@@ -6,7 +6,7 @@ Este documento registra la arquitectura efectiva del servicio M8 integrado del G
 
 ## Servicio único
 
-M8 es una única aplicación Node.js 24 con TypeScript y Express. `src/app.ts` compone los endpoints, los recursos públicos de RF-8.1 y el manejo común de errores; `src/server.ts` es el único punto de arranque HTTP y obtiene `PORT` desde el entorno.
+M8 es una única aplicación Node.js 24 con TypeScript y Express. `src/app.ts` compone los endpoints, los recursos públicos, `GET /health`, el contrato OpenAPI, Swagger UI local y el manejo común de errores; `src/server.ts` es el único punto de arranque HTTP y obtiene `PORT` desde el entorno.
 
 La estructura relevante es:
 
@@ -25,7 +25,7 @@ No se crean servicios independientes para QR o notificaciones.
 
 `src/notifications/**` contiene validación, generación del mensaje, procesamiento y el contrato `PushProvider`. La composición usa `MockPushProvider` durante AE1; ese mock reemplaza solamente al proveedor externo, no la lógica de M8.
 
-La UI estática de demostración se sirve desde `public/`. `GET /openapi.yaml` expone el contrato para revisión local.
+La UI estática de demostración se sirve desde `public/`. `GET /openapi.yaml` expone el contrato y `GET /api-docs/` sirve Swagger UI local, sin CDN.
 
 ## RF-8.2
 
@@ -43,7 +43,7 @@ Cada dominio clasifica sus fallas de procesamiento: RF-8.1 usa `NOTIFICATION_PRO
 
 ## Dependencias y herramientas
 
-El proyecto usa pnpm 10.33.0 como único gestor. Las dependencias de ejecución son Express y `qrcode`; TypeScript, Vitest, Supertest, `jsqr`, `pngjs` y sus tipos se usan en desarrollo y pruebas.
+El proyecto usa pnpm 10.33.0 como único gestor. Las dependencias de ejecución son Express, `qrcode` y `swagger-ui-dist`; TypeScript, Vitest, Supertest, Playwright, `jsqr`, `pngjs` y sus tipos se usan en desarrollo y pruebas.
 
 No se agregan Redis, RabbitMQ, ORM ni base de datos para AE1.
 
@@ -51,14 +51,14 @@ No se agregan Redis, RabbitMQ, ORM ni base de datos para AE1.
 
 Vitest organiza los proyectos `unit`, `integration` y `e2e`. Supertest cubre los endpoints en integración. La cobertura se calcula sobre el código integrado.
 
-Las E2E comparten un único `globalSetup`: construye una única imagen Docker, crea un único contenedor temporal con puerto host dinámico, provee `e2eBaseUrl` y lo elimina al finalizar. Ambos RF realizan HTTP real contra ese mismo servicio; el contenedor recibe `QR_TTL_SECONDS=120` para verificar configuración QR.
+Las E2E API y UI usan configuraciones separadas de Vitest y Playwright. Ambas reutilizan `tests/e2e/infrastructure/docker-service.ts`, que construye la imagen, crea un contenedor temporal con puerto host dinámico y lo elimina al finalizar. Los flujos realizan HTTP real contra el servicio integrado; el contenedor recibe `QR_TTL_SECONDS=120` para verificar la configuración QR.
 
 ## Docker
 
 El Dockerfile multi-stage usa Node.js 24 Alpine y pnpm 10.33.0. Instala con `--frozen-lockfile`, compila TypeScript y ejecuta en runtime solamente con dependencias de producción, `NODE_ENV=production`, usuario `node` y `node dist/server.js`.
 
-La imagen copia `public/` y `docs/api/openapi.yaml`, por lo que puede servir la UI y el contrato además de los tres endpoints.
+La imagen copia `public/` y `docs/api/openapi.yaml`, por lo que puede servir la UI, Swagger UI local y el contrato además de los endpoints HTTP del servicio. `compose.yaml` ofrece la ejecución local reproducible, fija el puerto interno en 3000 y publica un puerto host configurable.
 
 ## Límites
 
-M8 no integra M6 directamente ni modifica estados de viaje. No se adelantan CI/CD, despliegue cloud, observabilidad avanzada, RabbitMQ, Redis ni persistencia distribuida propios de etapas posteriores.
+M8 no integra M6 directamente ni modifica estados de viaje. GitHub Actions CI verifica typecheck, build, pruebas y E2E en la branch de integración; no existe CD, despliegue cloud ni publicación de imágenes. Tampoco se adelantan observabilidad avanzada, RabbitMQ, Redis ni persistencia distribuida propios de etapas posteriores.

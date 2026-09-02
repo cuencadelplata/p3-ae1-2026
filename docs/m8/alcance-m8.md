@@ -39,7 +39,8 @@ Durante AE1 no existe integración real con M6. `tripId` representa la referenci
 - Validación runtime y respuestas de error uniformes.
 - Procesamiento PUSH mock y UI de demostración de RF-8.1.
 - Token criptográfico, hash SHA-256, representación QR real, TTL y uso único para RF-8.2.
-- Pruebas unitarias, integración y E2E contra una única imagen Docker temporal.
+- Pruebas unitarias, integración y E2E API/UI contra imágenes Docker temporales con orquestación compartida.
+- `GET /health`, el contrato OpenAPI y Swagger UI local para verificar la disponibilidad y el contrato del servicio.
 
 ## Fuera de alcance
 

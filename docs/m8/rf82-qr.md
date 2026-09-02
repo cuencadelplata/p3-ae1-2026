@@ -140,16 +140,16 @@ RF-8.2 debe rechazar, como mínimo:
 - QR expirado;
 - QR ya utilizado.
 
-Estos casos deben producir un resultado de validación rechazado. La representación HTTP, los códigos de estado y los códigos de error definitivos se cerrarán al revisar OpenAPI, manteniendo el formato uniforme de errores de M8.
+Estos casos producen un resultado de validación rechazado. `docs/api/openapi.yaml` define su representación HTTP, códigos de estado y códigos de error, manteniendo el formato uniforme de errores de M8.
 
-## Contrato REST previsto
+## Contrato REST
 
-RF-8.2 se expondrá inicialmente mediante:
+RF-8.2 se expone mediante:
 
 - `POST /qr`, para generar un QR;
 - `POST /qr/validate`, para validar y consumir un QR.
 
-No se requieren endpoints adicionales para cumplir el alcance actual. La definición HTTP detallada pertenece a `docs/api/openapi.yaml`.
+No se requieren endpoints adicionales para cumplir el alcance actual. La definición HTTP detallada pertenece a `docs/api/openapi.yaml`, disponible también en `GET /openapi.yaml` y revisable con Swagger UI local en `GET /api-docs/`.
 
 ## Criterios de aceptación
 

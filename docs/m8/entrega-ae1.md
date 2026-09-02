@@ -16,10 +16,12 @@ El contrato completo y sus ejemplos están en `docs/api/openapi.yaml`.
 | Verificación | Resultado |
 | --- | --- |
 | Unit | `122/122` |
-| Integration | `52/52` |
-| Unit + Integration | `174/174` |
-| E2E Docker | `22/22` |
-| Total automatizado | `196` |
+| Integration | `55/55` |
+| Unit + Integration | `177/177` |
+| E2E API Docker | `24/24` |
+| E2E UI Docker + Playwright | `2/2` |
+| E2E total | `26/26` |
+| Total automatizado | `203` |
 | Typecheck | OK |
 | Typecheck de tests | OK |
 | Build | OK |
@@ -29,10 +31,10 @@ Cobertura integrada:
 
 | Métrica | Resultado |
 | --- | --- |
-| Statements | `99.50% (199/200)` |
+| Statements | `99.52% (208/209)` |
 | Branches | `99.02% (102/103)` |
-| Functions | `100% (38/38)` |
-| Lines | `99.50% (199/200)` |
+| Functions | `100% (41/41)` |
+| Lines | `99.52% (208/209)` |
 
 La diferencia respecto de 100% corresponde al fallback genérico seguro de `error-handler`, separado de los errores de dominio de notificaciones y QR.
 
@@ -50,7 +52,7 @@ pnpm test:coverage
 pnpm test:e2e
 ```
 
-`pnpm test:e2e` construye una imagen M8, inicia un único contenedor temporal con puerto host dinámico y lo elimina al finalizar. Los flujos E2E verifican notificaciones, UI, recursos públicos, OpenAPI y el ciclo QR generar → validar → reutilizar.
+`pnpm test:e2e` ejecuta E2E API y E2E UI. Ambas configuraciones reutilizan la infraestructura Docker compartida, levantan un contenedor temporal con puerto host dinámico y lo eliminan al finalizar. Los flujos verifican notificaciones, UI, recursos públicos, health, OpenAPI, Swagger UI y el ciclo QR generar → validar → reutilizar.
 
 ## Docker integrado
 
@@ -69,4 +71,4 @@ docker run --rm -e PORT=3000 -e QR_TTL_SECONDS=300 -p 3010:3000 m8-service:local
 - PUSH usa un proveedor simulado en AE1; no confirma entrega en un dispositivo.
 - El almacenamiento QR es temporal en memoria; no existe base de datos, Redis ni RabbitMQ.
 - No se implementan EMAIL, SMS, historial de notificaciones, autenticación propia, pagos, usuarios ni otros RF de M8.
-- GitHub Actions CI y publicación en Docker Hub todavía no fueron realizadas.
+- GitHub Actions CI valida la branch de integración; no existe publicación en Docker Hub ni despliegue cloud.
