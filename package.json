@@ -1,4 +1,10 @@
 {
+  "name": "m3-conductor",
+  "version": "1.0.0",
+  "description": "Modulo 3: Conductor y Valoraciones",
+  "scripts": {
+    "test:front": "npx serve public"
+  },
   "dependencies": {
     "supabase": "^2.116.0"
   }

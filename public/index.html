@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>M3 - Conductor & Valoraciones | API Tester</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Swagger UI CDN -->
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css" />
+  <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    pre code {
+      font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    }
+    .json-key { color: #93c5fd; }
+    .json-string { color: #86efac; }
+    .json-number { color: #fde047; }
+    .json-boolean { color: #f472b6; }
+    .json-null { color: #94a3b8; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans">
+
+  <!-- Header -->
+  <header class="bg-slate-800 border-b border-slate-700 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="bg-indigo-600 p-2 rounded-lg text-white shadow-lg shadow-indigo-500/20">
+          <i data-lucide="car" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-bold text-lg text-white tracking-wide">M3: Conductores & Valoraciones</h1>
+            <span class="text-xs bg-indigo-950 text-indigo-300 border border-indigo-700 px-2 py-0.5 rounded-full font-semibold">OpenAPI 3.0</span>
+          </div>
+          <p class="text-xs text-slate-400">Panel de pruebas interactivo para la API de movilidad urbana</p>
+        </div>
+      </div>
+
+      <!-- Mode Tabs -->
+      <div class="flex bg-slate-900 p-1 rounded-lg border border-slate-700 text-sm">
+        <button id="tabTesterBtn" onclick="switchView('tester')" class="px-4 py-1.5 rounded-md font-medium text-white bg-indigo-600 transition shadow">
+          <span class="flex items-center gap-1.5"><i data-lucide="play-circle" class="w-4 h-4"></i> Test Runner</span>
+        </button>
+        <button id="tabSwaggerBtn" onclick="switchView('swagger')" class="px-4 py-1.5 rounded-md font-medium text-slate-400 hover:text-white transition">
+          <span class="flex items-center gap-1.5"><i data-lucide="book-open" class="w-4 h-4"></i> Swagger UI</span>
+        </button>
+      </div>
+
+      <!-- Base URL Config -->
+      <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700 text-xs">
+        <span class="text-slate-400 font-medium">Base URL:</span>
+        <input id="baseUrlInput" type="text" value="http://localhost:3000/api" class="bg-slate-800 text-slate-200 px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-indigo-500 w-56 font-mono text-xs">
+        <button onclick="pingServer()" class="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white" title="Comprobar conectividad">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+        </button>
+        <span id="serverStatusBadge" class="w-2.5 h-2.5 rounded-full bg-yellow-500" title="Estado: Desconocido (haz ping)"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- VIEW 1: TEST RUNNER -->
+    <div id="testerView" class="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
+      
+      <!-- Left Column: Endpoint selector & inputs (7 cols) -->
+      <section class="lg:col-span-7 flex flex-col gap-4">
+        
+        <!-- Endpoint Selection Card -->
+        <div class="bg-slate-800 rounded-xl border border-slate-700 p-4 shadow-sm">
+          <label class="block text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Seleccionar Endpoint a Testear</label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" id="endpointsGrid">
+            
+            <!-- Endpoints Conductores -->
+            <button onclick="selectEndpoint('get_conductores')" id="btn_get_conductores" class="endpoint-btn text-left p-2.5 rounded-lg border border-slate-700 bg-slate-850 hover:bg-slate-750 transition flex items-center justify-between">
+              <div>
+                <span class="inline-block px-2 py-0.5 text-xs font-bold rounded bg-emerald-900/60 text-emerald-400 border border-emerald-700 mr-2">GET</span>
+                <span class="font-mono text-xs text-slate-200">/conductores</span>
+              </div>
+              <span class="text-xs text-slate-400">Listar</span>
+            </button>
+
+            <button onclick="selectEndpoint('get_conductor_id')" id="btn_get_conductor_id" class="endpoint-btn text-left p-2.5 rounded-lg border border-slate-700 bg-slate-850 hover:bg-slate-750 transition flex items-center justify-between">
+              <div>
+                <span class="inline-block px-2 py-0.5 text-xs font-bold rounded bg-emerald-900/60 text-emerald-400 border border-emerald-700 mr-2">GET</span>
+                <span class="font-mono text-xs text-slate-200">/conductores/{id}</span>
+              </div>
+              <span class="text-xs text-slate-400">Por ID</span>
+            </button>
+
+            <button onclick="selectEndpoint('post_conductor')" id="btn_post_conductor" class="endpoint-btn text-left p-2.5 rounded-lg border border-slate-700 bg-slate-850 hover:bg-slate-750 transition flex items-center justify-between">
+              <div>
+                <span class="inline-block px-2 py-0.5 text-xs font-bold rounded bg-blue-900/60 text-blue-400 border border-blue-700 mr-2">POST</span>
+                <span class="font-mono text-xs text-slate-200">/conductores/</span>
+              </div>
+              <span class="text-xs text-slate-400">Crear</span>
+            </button>
+
+            <!-- Endpoints Valoraciones -->
+            <button onclick="selectEndpoint('get_valoraciones')" id="btn_get_valoraciones" class="endpoint-btn text-left p-2.5 rounded-lg border border-slate-700 bg-slate-850 hover:bg-slate-750 transition flex items-center justify-between">
+              <div>
+                <span class="inline-block px-2 py-0.5 text-xs font-bold rounded bg-emerald-900/60 text-emerald-400 border border-emerald-700 mr-2">GET</span>
+                <span class="font-mono text-xs text-slate-200">/conductor/valoraciones</span>
+              </div>
+              <span class="text-xs text-amber-400">Ver reseñas</span>
+            </button>
+
+            <button onclick="selectEndpoint('post_valoracion')" id="btn_post_valoracion" class="endpoint-btn text-left p-2.5 rounded-lg border border-slate-700 bg-slate-850 hover:bg-slate-750 transition flex items-center justify-between col-span-1 sm:col-span-2">
+              <div>
+                <span class="inline-block px-2 py-0.5 text-xs font-bold rounded bg-blue-900/60 text-blue-400 border border-blue-700 mr-2">POST</span>
+                <span class="font-mono text-xs text-slate-200">/conductor/valoraciones</span>
+              </div>
+              <span class="text-xs text-amber-400">Registrar valoración</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Request Builder Card -->
+        <div class="bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-sm flex flex-col gap-4">
+          <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+            <div class="flex items-center gap-2">
+              <span id="reqMethodBadge" class="px-2.5 py-1 text-xs font-bold rounded bg-emerald-900/80 text-emerald-300 border border-emerald-700">GET</span>
+              <span id="reqEndpointUrl" class="font-mono text-sm text-slate-200">/conductores</span>
+            </div>
+            <span id="reqDescription" class="text-xs text-slate-400">Listado de conductores</span>
+          </div>
+
+          <!-- Dynamic Parameters Area -->
+          <div id="paramsSection" class="space-y-3">
+            <!-- Rendered by JS -->
+          </div>
+
+          <!-- Request Body Area -->
+          <div id="bodySection" class="space-y-2 hidden">
+            <div class="flex items-center justify-between">
+              <label class="text-xs uppercase tracking-wider font-semibold text-slate-400 flex items-center gap-1.5">
+                <i data-lucide="file-json" class="w-3.5 h-3.5"></i> Request Body (JSON)
+              </label>
+              <button onclick="loadSampleBody()" class="text-xs text-indigo-400 hover:text-indigo-300 underline font-medium">
+                Cargar datos de prueba
+              </button>
+            </div>
+            <textarea id="jsonBodyInput" rows="7" class="w-full bg-slate-900 text-slate-200 p-3 rounded-lg border border-slate-700 font-mono text-xs focus:outline-none focus:border-indigo-500 resize-y" placeholder='{ ... }'></textarea>
+          </div>
+
+          <!-- Send Button -->
+          <div class="pt-2 flex items-center gap-3">
+            <button id="sendBtn" onclick="executeRequest()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 px-4 rounded-lg transition shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2">
+              <i data-lucide="send" class="w-4 h-4"></i>
+              <span>Enviar Petición</span>
+            </button>
+            <button onclick="resetCurrentForm()" class="px-3 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition text-xs font-medium" title="Limpiar formulario">
+              Limpiar
+            </button>
+          </div>
+        </div>
+
+        <!-- Request History -->
+        <div class="bg-slate-800 rounded-xl border border-slate-700 p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs uppercase tracking-wider font-semibold text-slate-400 flex items-center gap-1">
+              <i data-lucide="history" class="w-3.5 h-3.5"></i> Historial Reciente
+            </h3>
+            <button onclick="clearHistory()" class="text-[11px] text-slate-500 hover:text-slate-300">Borrar historial</button>
+          </div>
+          <div id="historyList" class="space-y-1.5 max-h-40 overflow-y-auto pr-1 text-xs">
+            <p class="text-slate-500 italic py-2 text-center text-xs">No hay peticiones recientes</p>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Right Column: Response inspector (5 cols) -->
+      <section class="lg:col-span-5 flex flex-col gap-4">
+        
+        <!-- Response Card -->
+        <div class="bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-sm flex flex-col h-full">
+          <div class="flex items-center justify-between border-b border-slate-700 pb-3 mb-4">
+            <h3 class="font-semibold text-sm text-slate-200 flex items-center gap-2">
+              <i data-lucide="activity" class="w-4 h-4 text-indigo-400"></i> Respuesta HTTP
+            </h3>
+            <div id="resMetadata" class="flex items-center gap-2">
+              <span id="statusBadge" class="hidden px-2 py-0.5 text-xs font-bold rounded">200 OK</span>
+              <span id="timeBadge" class="hidden text-xs text-slate-400 font-mono">0 ms</span>
+            </div>
+          </div>
+
+          <!-- URL consultada -->
+          <div class="mb-3 bg-slate-900 p-2 rounded-lg border border-slate-700 text-xs font-mono text-slate-400 break-all">
+            <span class="text-slate-500 select-none">URL: </span><span id="executedUrlText">Esperando petición...</span>
+          </div>
+
+          <!-- JSON / Response Viewer -->
+          <div class="flex-1 relative flex flex-col min-h-[340px]">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Cuerpo de la Respuesta</span>
+              <button id="copyBtn" onclick="copyResponseToClipboard()" class="text-xs text-slate-400 hover:text-white flex items-center gap-1">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copiar
+              </button>
+            </div>
+            <div id="responseContainer" class="flex-1 bg-slate-900 rounded-lg border border-slate-700 p-4 font-mono text-xs overflow-auto max-h-[500px]">
+              <div id="emptyState" class="h-full flex flex-col items-center justify-center text-slate-500 py-12">
+                <i data-lucide="inbox" class="w-10 h-10 mb-2 stroke-1"></i>
+                <p>Presiona "Enviar Petición" para ver la respuesta aquí</p>
+              </div>
+              <pre id="jsonOutput" class="hidden whitespace-pre-wrap break-words leading-relaxed"></pre>
+            </div>
+          </div>
+
+          <!-- Raw Headers Toggle -->
+          <div class="mt-4 pt-3 border-t border-slate-700">
+            <details class="text-xs">
+              <summary class="cursor-pointer text-slate-400 hover:text-slate-200 font-medium select-none">
+                Ver Headers de Respuesta
+              </summary>
+              <pre id="headersOutput" class="mt-2 bg-slate-900 p-3 rounded border border-slate-700 text-slate-400 font-mono text-[11px] overflow-x-auto max-h-36">Sin headers</pre>
+            </details>
+          </div>
+
+        </div>
+
+      </section>
+
+    </div>
+
+    <!-- VIEW 2: SWAGGER UI OFFICIAL -->
+    <div id="swaggerView" class="lg:col-span-12 hidden w-full bg-white rounded-xl p-4 shadow-lg overflow-hidden">
+      <div id="swagger-ui"></div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-slate-800 border-t border-slate-700 py-3 text-center text-xs text-slate-500">
+    Paradigmas y Lenguajes III - AE1 2026 | Módulo M3: Conductores y Valoraciones
+  </footer>
+
+  <!-- Script Logic -->
+  <script>
+    // OpenAPI definition embedded for direct offline Swagger UI loading & schema inspection
+    const openApiSpec = {
+      "openapi": "3.0.4",
+      "info": {
+        "title": "Conductores API",
+        "version": "1.0.0",
+        "description": "Esta API se utilizará para la comunicación con los conductores y los vehículos."
+      },
+      "servers": [
+        {
+          "url": "http://localhost:3000/api",
+          "description": "Servidor local para realizar tests de la API"
+        }
+      ],
+      "paths": {
+        "/conductores": {
+          "get": {
+            "summary": "Listado de conductores",
+            "responses": {
+              "200": { "description": "Pedir la lista completa de conductores registrados en la base de datos." }
+            }
+          }
+        },
+        "/conductores/{id}": {
+          "get": {
+            "summary": "Obtener un conductor por ID",
+            "parameters": [
+              { "name": "id", "in": "path", "required": true, "description": "ID del conductor a obtener" }
+            ],
+            "responses": {
+              "200": { "description": "Conductor encontrado" },
+              "404": { "description": "Conductor no encontrado" }
+            }
+          }
+        },
+        "/conductores/": {
+          "post": {
+            "summary": "Crear un nuevo conductor",
+            "requestBody": { "required": true },
+            "responses": {
+              "201": { "description": "Conductor creado exitosamente" },
+              "400": { "description": "Solicitud inválida" }
+            }
+          }
+        },
+        "/conductor/valoraciones": {
+          "get": {
+            "summary": "Obtener las valoraciones de un conductor",
+            "parameters": [
+              { "name": "usuarioId", "in": "query", "required": true, "description": "ID del conductor para obtener sus valoraciones" }
+            ],
+            "responses": {
+              "200": { "description": "Valoraciones obtenidas correctamente" },
+              "404": { "description": "Conductor no encontrado" }
+            }
+          },
+          "post": {
+            "summary": "Registrar la valoracion de un conductor",
+            "parameters": [
+              { "name": "usuarioId", "in": "query", "required": true, "description": "ID del conductor para registrar su valoracion" }
+            ],
+            "requestBody": { "required": true },
+            "responses": {
+              "201": { "description": "Valoracion registrada correctamente" },
+              "400": { "description": "Solicitud inválida" }
+            }
+          }
+        }
+      }
+    };
+
+    // Endpoints configuration for test runner
+    const endpointsConfig = {
+      get_conductores: {
+        method: 'GET',
+        path: '/conductores',
+        description: 'Pedir la lista completa de conductores registrados en la base de datos.',
+        params: [],
+        hasBody: false
+      },
+      get_conductor_id: {
+        method: 'GET',
+        path: '/conductores/{id}',
+        description: 'Obtener un conductor específico mediante su ID.',
+        params: [
+          { name: 'id', in: 'path', label: 'ID del Conductor (Path)', default: 'cond_001', required: true }
+        ],
+        hasBody: false
+      },
+      post_conductor: {
+        method: 'POST',
+        path: '/conductores/',
+        description: 'Crear y registrar un nuevo conductor en el sistema.',
+        params: [],
+        hasBody: true,
+        defaultBody: {
+          "usuarioID": "usr_9988",
+          "ciudad": "Corrientes",
+          "tipovehiculo": "auto",
+          "licenciaId": "lic_ar_4589",
+          "vehiculoId": "veh_cor_123",
+          "habilitado": "pendiente",
+          "estado_conexion": "desconectado"
+        }
+      },
+      get_valoraciones: {
+        method: 'GET',
+        path: '/conductor/valoraciones',
+        description: 'Obtener las valoraciones y calificaciones recibidas por un conductor.',
+        params: [
+          { name: 'usuarioId', in: 'query', label: 'usuarioId / Conductor ID (Query param)', default: 'usr_9988', required: true }
+        ],
+        hasBody: false
+      },
+      post_valoracion: {
+        method: 'POST',
+        path: '/conductor/valoraciones',
+        description: 'Registrar una nueva valoración/reseña para un conductor.',
+        params: [
+          { name: 'usuarioId', in: 'query', label: 'usuarioId / Conductor ID (Query param)', default: 'usr_9988', required: true }
+        ],
+        hasBody: true,
+        defaultBody: {
+          "usuarioId": "pasajero_3321",
+          "conductorId": "usr_9988",
+          "valoracion": 5,
+          "comentario": "Excelente viaje, conductor puntual y muy amable."
+        }
+      }
+    };
+
+    let currentEndpointKey = 'get_conductores';
+    let lastResponseText = '';
+    const requestHistory = [];
+
+    // Switch between Test Runner and Swagger UI view
+    function switchView(view) {
+      const testerView = document.getElementById('testerView');
+      const swaggerView = document.getElementById('swaggerView');
+      const tabTesterBtn = document.getElementById('tabTesterBtn');
+      const tabSwaggerBtn = document.getElementById('tabSwaggerBtn');
+
+      if (view === 'tester') {
+        testerView.classList.remove('hidden');
+        swaggerView.classList.add('hidden');
+        tabTesterBtn.className = "px-4 py-1.5 rounded-md font-medium text-white bg-indigo-600 transition shadow";
+        tabSwaggerBtn.className = "px-4 py-1.5 rounded-md font-medium text-slate-400 hover:text-white transition";
+      } else {
+        testerView.classList.add('hidden');
+        swaggerView.classList.remove('hidden');
+        tabSwaggerBtn.className = "px-4 py-1.5 rounded-md font-medium text-white bg-indigo-600 transition shadow";
+        tabTesterBtn.className = "px-4 py-1.5 rounded-md font-medium text-slate-400 hover:text-white transition";
+        initSwaggerUI();
+      }
+    }
+
+    // Select Endpoint
+    function selectEndpoint(key) {
+      currentEndpointKey = key;
+      const config = endpointsConfig[key];
+
+      // Highlight active button
+      document.querySelectorAll('.endpoint-btn').forEach(btn => {
+        btn.classList.remove('ring-2', 'ring-indigo-500', 'bg-slate-750');
+      });
+      const activeBtn = document.getElementById(`btn_${key}`);
+      if (activeBtn) activeBtn.classList.add('ring-2', 'ring-indigo-500', 'bg-slate-750');
+
+      // Update Method Badge & Path
+      const methodBadge = document.getElementById('reqMethodBadge');
+      methodBadge.textContent = config.method;
+      if (config.method === 'GET') {
+        methodBadge.className = 'px-2.5 py-1 text-xs font-bold rounded bg-emerald-900/80 text-emerald-300 border border-emerald-700';
+      } else {
+        methodBadge.className = 'px-2.5 py-1 text-xs font-bold rounded bg-blue-900/80 text-blue-300 border border-blue-700';
+      }
+
+      document.getElementById('reqEndpointUrl').textContent = config.path;
+      document.getElementById('reqDescription').textContent = config.description;
+
+      // Render Parameters
+      const paramsContainer = document.getElementById('paramsSection');
+      paramsContainer.innerHTML = '';
+
+      if (config.params.length > 0) {
+        config.params.forEach(param => {
+          const div = document.createElement('div');
+          div.className = 'flex flex-col gap-1';
+          div.innerHTML = `
+            <div class="flex items-center justify-between text-xs">
+              <label for="param_${param.name}" class="font-medium text-slate-300">${param.label}</label>
+              <span class="text-[11px] text-slate-500 font-mono">(${param.in})</span>
+            </div>
+            <input type="text" id="param_${param.name}" value="${param.default || ''}" class="bg-slate-900 text-slate-200 px-3 py-2 rounded-lg border border-slate-700 font-mono text-xs focus:outline-none focus:border-indigo-500 w-full" placeholder="${param.name}">
+          `;
+          paramsContainer.appendChild(div);
+        });
+      } else {
+        paramsContainer.innerHTML = `<p class="text-xs text-slate-500 italic">Este endpoint no requiere parámetros en la URL.</p>`;
+      }
+
+      // Handle Request Body
+      const bodySection = document.getElementById('bodySection');
+      const bodyInput = document.getElementById('jsonBodyInput');
+      if (config.hasBody) {
+        bodySection.classList.remove('hidden');
+        bodyInput.value = JSON.stringify(config.defaultBody, null, 2);
+      } else {
+        bodySection.classList.add('hidden');
+        bodyInput.value = '';
+      }
+    }
+
+    function loadSampleBody() {
+      const config = endpointsConfig[currentEndpointKey];
+      if (config && config.defaultBody) {
+        document.getElementById('jsonBodyInput').value = JSON.stringify(config.defaultBody, null, 2);
+      }
+    }
+
+    function resetCurrentForm() {
+      selectEndpoint(currentEndpointKey);
+    }
+
+    // Execute Request via Fetch
+    async function executeRequest() {
+      const config = endpointsConfig[currentEndpointKey];
+      let baseUrl = document.getElementById('baseUrlInput').value.trim();
+      if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+
+      let url = baseUrl + config.path;
+      const queryParams = new URLSearchParams();
+
+      // Replace path params & gather query params
+      config.params.forEach(param => {
+        const inputElem = document.getElementById(`param_${param.name}`);
+        const val = inputElem ? inputElem.value.trim() : '';
+
+        if (param.in === 'path') {
+          url = url.replace(`{${param.name}}`, encodeURIComponent(val));
+        } else if (param.in === 'query' && val) {
+          queryParams.append(param.name, val);
+        }
+      });
+
+      if (queryParams.toString()) {
+        url += (url.includes('?') ? '&' : '?') + queryParams.toString();
+      }
+
+      document.getElementById('executedUrlText').textContent = `${config.method} ${url}`;
+
+      // Build fetch options
+      const options = {
+        method: config.method,
+        headers: {
+          'Accept': 'application/json'
+        }
+      };
+
+      if (config.hasBody) {
+        const bodyStr = document.getElementById('jsonBodyInput').value.trim();
+        try {
+          if (bodyStr) {
+            JSON.parse(bodyStr); // Validate JSON format
+            options.body = bodyStr;
+            options.headers['Content-Type'] = 'application/json';
+          }
+        } catch (err) {
+          alert('Error: El JSON en el Request Body no es válido:\n' + err.message);
+          return;
+        }
+      }
+
+      // UI state: Loading
+      const sendBtn = document.getElementById('sendBtn');
+      const originalBtnHtml = sendBtn.innerHTML;
+      sendBtn.disabled = true;
+      sendBtn.innerHTML = `<span class="animate-spin mr-2">⏳</span> Conectando...`;
+
+      const startTime = performance.now();
+
+      try {
+        const response = await fetch(url, options);
+        const duration = Math.round(performance.now() - startTime);
+
+        // Extract headers
+        const headersObj = {};
+        response.headers.forEach((val, key) => { headersObj[key] = val; });
+        document.getElementById('headersOutput').textContent = JSON.stringify(headersObj, null, 2);
+
+        // Extract body
+        const contentType = response.headers.get('content-type') || '';
+        let bodyData;
+        if (contentType.includes('application/json')) {
+          bodyData = await response.json();
+          lastResponseText = JSON.stringify(bodyData, null, 2);
+          renderSyntaxHighlightedJson(bodyData);
+        } else {
+          lastResponseText = await response.text();
+          renderPlainText(lastResponseText);
+        }
+
+        // Render Status Badges
+        renderStatusBadge(response.status, response.statusText, duration);
+
+        // Record history
+        addToHistory({
+          method: config.method,
+          url,
+          status: response.status,
+          duration,
+          time: new Date().toLocaleTimeString()
+        });
+
+      } catch (networkError) {
+        const duration = Math.round(performance.now() - startTime);
+        renderStatusBadge(0, 'ERR_CONNECTION_REFUSED / CORS', duration);
+        
+        const errorDetails = {
+          "error": "Fallo en la comunicación con el servidor",
+          "causa_probable": [
+            "1. El servidor local no está iniciado en " + baseUrl,
+            "2. El puerto o la ruta no coinciden con la configuración",
+            "3. La API no tiene habilitados los encabezados CORS (Access-Control-Allow-Origin)"
+          ],
+          "mensaje_original": networkError.message
+        };
+
+        lastResponseText = JSON.stringify(errorDetails, null, 2);
+        renderSyntaxHighlightedJson(errorDetails);
+        document.getElementById('headersOutput').textContent = 'No se recibieron headers (Error de Red)';
+
+        addToHistory({
+          method: config.method,
+          url,
+          status: 'Error',
+          duration,
+          time: new Date().toLocaleTimeString()
+        });
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = originalBtnHtml;
+        lucide.createIcons();
+      }
+    }
+
+    function renderStatusBadge(status, statusText, duration) {
+      const statusBadge = document.getElementById('statusBadge');
+      const timeBadge = document.getElementById('timeBadge');
+
+      statusBadge.classList.remove('hidden', 'bg-emerald-900/80', 'text-emerald-300', 'border-emerald-700', 'bg-amber-900/80', 'text-amber-300', 'border-amber-700', 'bg-rose-900/80', 'text-rose-300', 'border-rose-700');
+      statusBadge.classList.add('border');
+
+      if (status >= 200 && status < 300) {
+        statusBadge.classList.add('bg-emerald-900/80', 'text-emerald-300', 'border-emerald-700');
+        statusBadge.textContent = `${status} ${statusText || 'OK'}`;
+      } else if (status >= 400 && status < 500) {
+        statusBadge.classList.add('bg-amber-900/80', 'text-amber-300', 'border-amber-700');
+        statusBadge.textContent = `${status} ${statusText || 'Bad Request'}`;
+      } else {
+        statusBadge.classList.add('bg-rose-900/80', 'text-rose-300', 'border-rose-700');
+        statusBadge.textContent = status === 0 ? 'Conexión Fallida' : `${status} ${statusText || 'Server Error'}`;
+      }
+
+      timeBadge.classList.remove('hidden');
+      timeBadge.textContent = `${duration} ms`;
+    }
+
+    function renderSyntaxHighlightedJson(jsonObj) {
+      document.getElementById('emptyState').classList.add('hidden');
+      const jsonPre = document.getElementById('jsonOutput');
+      jsonPre.classList.remove('hidden');
+
+      const str = JSON.stringify(jsonObj, null, 2);
+      jsonPre.innerHTML = syntaxHighlight(str);
+    }
+
+    function renderPlainText(text) {
+      document.getElementById('emptyState').classList.add('hidden');
+      const jsonPre = document.getElementById('jsonOutput');
+      jsonPre.classList.remove('hidden');
+      jsonPre.textContent = text || '(Respuesta vacía)';
+    }
+
+    function syntaxHighlight(json) {
+      json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+        let cls = 'json-number';
+        if (/^"/.test(match)) {
+          if (/:$/.test(match)) {
+            cls = 'json-key';
+          } else {
+            cls = 'json-string';
+          }
+        } else if (/true|false/.test(match)) {
+          cls = 'json-boolean';
+        } else if (/null/.test(match)) {
+          cls = 'json-null';
+        }
+        return '<span class="' + cls + '">' + match + '</span>';
+      });
+    }
+
+    function copyResponseToClipboard() {
+      if (!lastResponseText) return;
+      navigator.clipboard.writeText(lastResponseText).then(() => {
+        const copyBtn = document.getElementById('copyBtn');
+        const oldHtml = copyBtn.innerHTML;
+        copyBtn.innerHTML = `<span class="text-emerald-400">✓ Copiado</span>`;
+        setTimeout(() => { copyBtn.innerHTML = oldHtml; lucide.createIcons(); }, 1800);
+      });
+    }
+
+    function addToHistory(entry) {
+      requestHistory.unshift(entry);
+      if (requestHistory.length > 10) requestHistory.pop();
+      renderHistory();
+    }
+
+    function renderHistory() {
+      const container = document.getElementById('historyList');
+      if (requestHistory.length === 0) {
+        container.innerHTML = `<p class="text-slate-500 italic py-2 text-center text-xs">No hay peticiones recientes</p>`;
+        return;
+      }
+      container.innerHTML = requestHistory.map(item => `
+        <div class="flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-700/60 font-mono">
+          <div class="flex items-center gap-2 overflow-hidden">
+            <span class="font-bold text-[10px] ${item.method === 'GET' ? 'text-emerald-400' : 'text-blue-400'}">${item.method}</span>
+            <span class="truncate text-slate-300 max-w-[200px]" title="${item.url}">${item.url}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] ${item.status >= 200 && item.status < 300 ? 'text-emerald-400' : 'text-rose-400'}">${item.status}</span>
+            <span class="text-slate-500 text-[10px]">${item.time}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function clearHistory() {
+      requestHistory.length = 0;
+      renderHistory();
+    }
+
+    async function pingServer() {
+      const baseUrl = document.getElementById('baseUrlInput').value.trim();
+      const badge = document.getElementById('serverStatusBadge');
+      badge.className = "w-2.5 h-2.5 rounded-full bg-yellow-400 animate-pulse";
+      badge.title = "Comprobando...";
+
+      try {
+        // Intenta hacer un fetch a /conductores
+        await fetch(baseUrl + '/conductores', { method: 'GET', mode: 'cors' });
+        badge.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+        badge.title = "Servidor responde correctamente";
+      } catch (err) {
+        badge.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+        badge.title = "No responde (¿está encendido localhost:3000?)";
+      }
+    }
+
+    // Initialize Swagger UI standalone
+    let swaggerInitialized = false;
+    function initSwaggerUI() {
+      if (swaggerInitialized) return;
+      
+      // Dynamically update Swagger spec host to match configured base URL
+      const currentBaseUrl = document.getElementById('baseUrlInput').value.trim();
+      openApiSpec.servers = [{ url: currentBaseUrl, description: "Servidor configurado en el tester" }];
+
+      SwaggerUIBundle({
+        spec: openApiSpec,
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIBundle.SwaggerUIStandalonePreset
+        ],
+        layout: "BaseLayout"
+      });
+      swaggerInitialized = true;
+    }
+
+    // Initial setup
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      selectEndpoint('get_conductores');
+    });
+  </script>
+</body>
+</html>
