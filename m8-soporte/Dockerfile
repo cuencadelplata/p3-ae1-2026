@@ -8,8 +8,8 @@ COPY package.json pnpm-lock.yaml ./
 # Instalación de dependencias del proyecto
 RUN npm install
 
-# Copiar archivo de configuración de TypeScript y código fuente
-COPY tsconfig.json ./
+# Copiar archivos de configuración, OpenAPI y código fuente
+COPY tsconfig.json openapi.yaml ./
 COPY src/ ./src/
 
 # Exponer el puerto predeterminado del servicio
