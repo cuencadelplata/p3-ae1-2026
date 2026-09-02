@@ -29,6 +29,37 @@ paths:
       responses:
         '200': { description: Viaje cancelado }
         '400': { description: Cancelación inválida }
+  /api/viajes/{viajeId}/cancelacion-conductor:
+    post:
+      summary: Cancela un viaje por solicitud del conductor
+      parameters:
+        - { name: viajeId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CancelarConductor' }
+      responses:
+        '200': { description: Viaje cancelado y cliente retornado al despacho }
+        '400': { description: Cancelación inválida }
+  /api/viajes/{viajeId}/historial-transiciones:
+    get:
+      summary: Obtiene el historial de transiciones de un viaje
+      parameters:
+        - { name: viajeId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Historial de transiciones
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [historial]
+                properties:
+                  historial:
+                    type: array
+                    items: { $ref: '#/components/schemas/TransicionViaje' }
+        '404': { description: Viaje no encontrado }
 components:
   schemas:
     FinalizarViaje:
@@ -44,3 +75,16 @@ components:
       required: [motivo]
       properties:
         motivo: { type: string, minLength: 1 }
+    CancelarConductor:
+      type: object
+      required: [motivo]
+      properties:
+        motivo: { type: string, minLength: 1 }
+    TransicionViaje:
+      type: object
+      required: [from, to, timestamp]
+      properties:
+        from: { type: string, enum: [solicitado, asignado, en curso, completado, cancelado] }
+        to: { type: string, enum: [solicitado, asignado, en curso, completado, cancelado] }
+        timestamp: { type: string, format: date-time }
+        detalle: { type: string }
