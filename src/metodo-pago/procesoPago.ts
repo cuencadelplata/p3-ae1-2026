@@ -20,7 +20,15 @@ const nuevoMetodo: MetodoPago={
     fecha: new Date().toLocaleDateString(),
     detalle: ""
 };
-metodosPago.push(nuevoMetodo);
+metodosPago.push(nuevoMetodo);  //.push() agrega un elemento de metodoNuevo y lo coloca al final de la lista de MétododePago
 
     return nuevoMetodo;
 };
+
+//buscar el pago de in vieja seggun su id
+export function buscarPagoPorViaje(viajeId: string): MetodoPago | undefined{
+
+   return metodosPago.find( (metodoPago) => metodoPago.viajeId === viajeId );
+}
+
+// .find()  busca dentro de un array un elemento en particular, es utiliza para BD 
