@@ -31,6 +31,34 @@
             }
           }
         }
+      },
+      "post": {
+        "summary": "Crear un nuevo conductor",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/conductores"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Conductor creado exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/conductores"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida"
+          }
+        }
       }
     },
     "/conductores/{id}": {
@@ -94,7 +122,7 @@
         }
       }
     },
-    "/conductores/{conductorId}/valoraciones": {
+    "/conductor/valoraciones": {
       "get": {
         "summary": "Obtener las valoraciones de conductor",
         "parameters": [
