@@ -177,6 +177,10 @@ export class RideRequestService {
     this.requests.set(newRequest.id, newRequest);
     this.idempotencyStore.set(idempotencyKey, newRequest);
 
+    console.log(
+      `[RF-5.1] Solicitud de viaje creada: ID=${newRequest.id} | Cliente=${clientId} | Vehículo=${newRequest.vehicleType} | Tarifa=$${estimatedFare.amount} ARS | Origen="${dto.origin.address}" ➔ Destino="${dto.destination.address}"`
+    );
+
     return newRequest;
   }
 
@@ -268,6 +272,10 @@ export class RideRequestService {
       this.requests.set(requestId, request);
     }
 
+    console.log(
+      `[RF-5.2] Búsqueda de candidatos para solicitud ${requestId}: Radio=${radiusKm}km | Tipo=${request.vehicleType} | Encontrados=${candidates.length} [${candidates.map((c) => `${c.driverId} (${c.distanceKm}km, ETA ${c.estimatedEtaMinutes}m)`).join(', ')}]`
+    );
+
     return {
       requestId: request.id,
       vehicleType: request.vehicleType,
@@ -352,6 +360,10 @@ export class RideRequestService {
     request.status = 'OFFERED';
     request.updatedAt = now.toISOString();
     this.requests.set(requestId, request);
+
+    console.log(
+      `[RF-5.3] Ofertas despachadas: Solicitud=${request.id} | Cantidad=${createdOffers.length} | TTL=${ttlSeconds}s (Expira: ${expiresAt.toISOString()}) | Conductores=[${createdOffers.map((o) => `${o.driverId} (Oferta: ${o.id})`).join(', ')}]`
+    );
 
     return {
       requestId: request.id,
@@ -517,6 +529,10 @@ export class RideRequestService {
         this.offers.set(otherOffer.id, otherOffer);
       });
 
+    console.log(
+      `[RF-5.4 / RF-5.5] Oferta ${offer.id} ACEPTADA por conductor ${offer.driverId}. Solicitud ${request.id} ASIGNADA exclusivamente a ${offer.driverId}.`
+    );
+
     return {
       offerId: offer.id,
       requestId: request.id,
@@ -587,6 +603,10 @@ export class RideRequestService {
         pendingOffer.status = 'EXPIRED';
         this.offers.set(pendingOffer.id, pendingOffer);
       });
+
+    console.log(
+      `[RF-5.6] Solicitud de viaje ${request.id} CANCELADA por cliente ${clientId}. Motivo="${request.cancellationReason || 'Sin motivo especificado'}"`
+    );
 
     return {
       requestId: request.id,
