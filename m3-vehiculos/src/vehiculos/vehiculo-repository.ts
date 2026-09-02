@@ -1,5 +1,5 @@
 import { supabase } from "../config/supabaseClient.js";
-import { type VehiculoParaInsertar } from "./vehiculo.js";
+import { type VehiculoParaInsertar } from "./vehiculo-dto.js";
 
 type TipoServicio = string;
 
