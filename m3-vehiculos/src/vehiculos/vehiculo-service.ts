@@ -1,7 +1,7 @@
-import { TipoServicio, type Vehiculo } from "./vehiculo-model.js";
-import {
-  type VehiculoRequestDTO,
-  type VehiculoParaInsertar,
+import { TipoServicio, type Vehiculo } from "./vehiculo.model.js";
+import type {
+  VehiculoRequestDTO,
+  VehiculoParaInsertar,
 } from "./vehiculo-dto.js";
 import {
   existePatente,
@@ -10,121 +10,59 @@ import {
   buscarVehiculoDeConductor,
   activarVehiculoEnBD,
 } from "./vehiculo-repository.js";
-import { ValidationError } from "../errors/validationError.js";
-import { NotFoundError } from "../errors/notFoundError.js";
-import { ConflictError } from "../errors/conflictError.js";
+import { AppError } from "../errors/AppError.js";
 
 const PATENTE_REGEX = /^([A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/;
-
-export function validarYPrepararVehiculo(
-  driverId: string,
-  datos: VehiculoRequestDTO,
-): VehiculoParaInsertar {
-  if (!driverId || typeof driverId !== "string" || driverId.trim() === "") {
-    throw new ValidationError(
-      "El driverId es obligatorio y debe ser un texto.",
-    );
-  }
-
-  if (
-    !datos.patente ||
-    typeof datos.patente !== "string" ||
-    datos.patente.trim() === ""
-  ) {
-    throw new ValidationError("La patente es obligatoria.");
-  }
-
-  const patenteNormalizada = datos.patente.trim().toUpperCase();
-  if (!PATENTE_REGEX.test(patenteNormalizada)) {
-    throw new ValidationError(
-      "La patente no respeta un formato válido (AAA000 o AA000AA).",
-    );
-  }
-
-  const tiposValidos = Object.values(TipoServicio) as string[];
-  const tipoUpper =
-    typeof datos.tipoServicio === "string"
-      ? datos.tipoServicio.toUpperCase()
-      : "";
-
-  if (!tipoUpper || !tiposValidos.includes(tipoUpper)) {
-    throw new ValidationError(
-      "El tipo de servicio debe ser estrictamente AUTO o MOTO.",
-    );
-  }
-
-  const anioActual = new Date().getFullYear();
-  if (
-    !datos.anio ||
-    typeof datos.anio !== "number" ||
-    datos.anio < 1990 ||
-    datos.anio > anioActual + 1
-  ) {
-    throw new ValidationError("El año del vehículo no es válido.");
-  }
-
-  return {
-    driverId: driverId.trim(),
-    patente: patenteNormalizada,
-    marca: datos.marca?.trim() || null,
-    modelo: datos.modelo?.trim() || null,
-    anio: datos.anio,
-    tipoServicio: tipoUpper as TipoServicio,
-    activo: false,
-  };
-}
 
 export async function registrarVehiculo(
   driverId: string,
   datos: VehiculoRequestDTO,
 ): Promise<Vehiculo> {
-  const payload = validarYPrepararVehiculo(driverId, datos);
+  if (!datos.patente) throw new AppError("Falta la patente");
 
-  const yaExiste = await existePatente(payload.patente);
-  if (yaExiste) {
-    throw new ConflictError(
-      `Ya existe un vehículo registrado con la patente '${payload.patente}'.`,
-    );
+  const patente = datos.patente.trim().toUpperCase();
+  if (!PATENTE_REGEX.test(patente)) {
+    throw new AppError("Patente inválida, formato AAA000 o AA000AA");
   }
+
+  const tipo = String(datos.tipoServicio).toUpperCase();
+  if (tipo !== "AUTO" && tipo !== "MOTO") {
+    throw new AppError("El tipo de servicio tiene que ser AUTO o MOTO");
+  }
+
+  const anioActual = new Date().getFullYear();
+  if (!datos.anio || datos.anio < 1990 || datos.anio > anioActual + 1) {
+    throw new AppError("Año inválido");
+  }
+
+  const existe = await existePatente(patente);
+  if (existe) throw new AppError("Ya existe un vehículo con esa patente", 409);
+
+  const payload: VehiculoParaInsertar = {
+    driverId,
+    patente,
+    marca: datos.marca?.trim() || null,
+    modelo: datos.modelo?.trim() || null,
+    anio: datos.anio,
+    tipoServicio: tipo as TipoServicio,
+    activo: false,
+  };
 
   return insertarVehiculo(payload);
 }
 
-export async function listarVehiculos(driverId: string): Promise<Vehiculo[]> {
-  if (!driverId || driverId.trim() === "") {
-    throw new ValidationError("El driverId es obligatorio.");
-  }
+export async function listarVehiculos(driverId: string) {
   return listarVehiculosPorConductor(driverId);
 }
 
-export async function obtenerVehiculo(
-  driverId: string,
-  vehicleId: string,
-): Promise<Vehiculo> {
-  if (!driverId || !vehicleId) {
-    throw new ValidationError("driverId y vehicleId son requeridos.");
-  }
+export async function obtenerVehiculo(driverId: string, vehicleId: string) {
   const vehiculo = await buscarVehiculoDeConductor(driverId, vehicleId);
-  if (!vehiculo) {
-    throw new NotFoundError(
-      `No se encontró el vehículo ${vehicleId} para el conductor ${driverId}.`,
-    );
-  }
+  if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
   return vehiculo;
 }
 
-export async function activarVehiculo(
-  driverId: string,
-  vehicleId: string,
-): Promise<Vehiculo> {
-  if (!driverId || !vehicleId) {
-    throw new ValidationError("driverId y vehicleId son requeridos.");
-  }
+export async function activarVehiculo(driverId: string, vehicleId: string) {
   const vehiculo = await buscarVehiculoDeConductor(driverId, vehicleId);
-  if (!vehiculo) {
-    throw new NotFoundError(
-      `No se encontró el vehículo ${vehicleId} para el conductor ${driverId}.`,
-    );
-  }
+  if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
   return activarVehiculoEnBD(driverId, vehicleId);
 }
