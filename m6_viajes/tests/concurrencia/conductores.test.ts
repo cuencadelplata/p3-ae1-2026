@@ -47,7 +47,7 @@ describe('Concurrencia - Dos conductores intentan aceptar el mismo viaje', () =>
     console.log(`   Status: ${resConductor2.statusCode}`);
     console.log(`   Error: ${resConductor2.data.error}`);
 
-    // ✅ VALIDACIONES
+    //  VALIDACIONES
     // Conductor 1 debería tener éxito (201 o 200)
     expect(resConductor1.statusCode).toBe(200);
     expect(resConductor1.data.viaje.conductorId).toBe('conductor-001');
@@ -129,6 +129,6 @@ describe('Concurrencia - Dos conductores intentan aceptar el mismo viaje', () =>
     // Solo alfa debe ser el conductor asignado
     expect(res1.data.viaje.conductorId).toBe('alfa');
     
-    console.log(`✅ Se rechazaron ${[res2, res3].filter(r => r.statusCode === 400).length} intentos de asignación concurrente`);
+    console.log(`Se rechazaron ${[res2, res3].filter(r => r.statusCode === 400).length} intentos de asignación concurrente`);
   });
 });
