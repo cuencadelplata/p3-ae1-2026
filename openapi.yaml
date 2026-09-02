@@ -5,7 +5,7 @@ info:
     API del módulo M7, correspondiente a los requerimientos RF-7.2
     (Método de pago), RF-7.3 (Autorización/captura), RF-7.5 (Reintegro)
     y RF-7.6 (Idempotencia de pago).
-  version: 2.0
+  version: 3.0
 
 paths:
   /reintegro:
