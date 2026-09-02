@@ -1,7 +1,0 @@
-{
-  "devDependencies": {
-    "@types/cors": "^2.8.19",
-    "@types/node": "^26.4.1",
-    "typescript": "^7.0.2"
-  }
-}
