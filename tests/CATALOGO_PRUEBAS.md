@@ -21,6 +21,9 @@ Este catálogo permite ubicar rápidamente los escenarios comprobados. Los nombr
 | E2E visual Playwright | `tests/e2e/ui/m8.ui.e2e.test.ts` |
 | Disponibilidad técnica del servicio | `tests/integration/health/health.integration.test.ts` |
 | Health contra Docker | `tests/e2e/api/health.e2e.test.ts` |
+| Documentación Swagger UI por HTTP | `tests/integration/docs/api-docs.integration.test.ts` |
+| OpenAPI y Swagger UI contra Docker | `tests/e2e/api/openapi.e2e.test.ts` |
+| Swagger UI renderizado en navegador | `tests/e2e/ui/openapi.ui.e2e.test.ts` |
 
 ## Disponibilidad técnica
 
@@ -39,6 +42,32 @@ Verifica que `GET /health` responda `200`, use JSON y devuelva el estado estable
 Tipo: E2E API. RF: infraestructura compartida.
 
 Verifica `GET /health` contra el servicio M8 real dentro de Docker. También es la operación usada para readiness de los E2E.
+
+## Documentación OpenAPI interactiva
+
+### Integración
+
+#### `tests/integration/docs/api-docs.integration.test.ts`
+
+Tipo: Integration. RF: infraestructura compartida.
+
+Verifica la redirección de `/api-docs` y que `/api-docs/` sirve HTML local configurado para cargar `/openapi.yaml` y assets de Swagger UI.
+
+### E2E API
+
+#### `tests/e2e/api/openapi.e2e.test.ts`
+
+Tipo: E2E API. RF: infraestructura compartida.
+
+Verifica desde Docker la disponibilidad de `/openapi.yaml`, `/api-docs/` y los assets locales de Swagger UI.
+
+### E2E UI
+
+#### `tests/e2e/ui/openapi.ui.e2e.test.ts`
+
+Tipo: E2E UI. RF: infraestructura compartida.
+
+Verifica en Chromium que Swagger UI renderiza las operaciones `GET /health`, `POST /notifications`, `POST /qr` y `POST /qr/validate`.
 
 ## RF-8.1 — Notificaciones
 

@@ -12,4 +12,6 @@ HTTP → Router/Controller → Validator → Service → Store/Provider → resp
 
 `health/` prueba `GET /health`, la comprobación técnica sin efectos secundarios que utiliza Docker para conocer la disponibilidad del servicio.
 
+`docs/` prueba la publicación local de `/api-docs/` y su vínculo con `/openapi.yaml`.
+
 Existe un archivo integrado por RF porque el objetivo es comprobar el flujo público completo de cada requerimiento. La separación Controller/Service/Validator se comprueba de forma aislada en Unit; duplicarla aquí no agregaría una integración distinta.

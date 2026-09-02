@@ -26,7 +26,8 @@
   },
   "dependencies": {
     "express": "^5.2.1",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "swagger-ui-dist": "^5.32.14"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

@@ -290,17 +290,17 @@ paths:
                       code: UNSUPPORTED_MEDIA_TYPE
                       message: El tipo de contenido debe ser application/json.
         '500':
-          description: Error interno al validar el QR.
+          description: Error interno inesperado al validar el QR.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               examples:
-                processingError:
+                internalServerError:
                   value:
                     error:
-                      code: QR_PROCESSING_ERROR
-                      message: No fue posible validar el QR.
+                      code: INTERNAL_SERVER_ERROR
+                      message: No fue posible procesar la solicitud.
 
 components:
   schemas:
@@ -532,6 +532,7 @@ components:
         - QR_EXPIRED
         - QR_ALREADY_USED
         - QR_PROCESSING_ERROR
+        - INTERNAL_SERVER_ERROR
       example: VALIDATION_ERROR
 
     ErrorDetail:
