@@ -51,3 +51,21 @@ export function autorizarPago (viajeId: string): MetodoPago{
     return metodoPago;
 
 }
+
+export function rechazarPago(viajeId: string): MetodoPago {
+
+    const metodoPago = buscarPagoPorViaje(viajeId);
+
+    if (!metodoPago) {
+        throw new Error("no existe un tipo de pago registrado que este asociado para dicho viaje");
+    }
+
+    if (metodoPago.estado !== "pendiente") {
+        throw new Error("El pago no fue procesado aún");
+    }
+
+    metodoPago.estado = "rechazado";
+
+    return metodoPago;
+
+}
