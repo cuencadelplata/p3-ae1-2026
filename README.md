@@ -5,76 +5,81 @@
 - Codermatz, Valentino
 - Parra Ingaramo, Ignacio
 
-Microservicio de la Actividad AE1 para crear, consultar, modificar, cancelar y activar reservas de viajes futuros. El trabajo se realizó directamente en la rama `M9-ReservasProgramadas`.
+Microservicio de AE1 para crear, consultar, modificar, cancelar y activar reservas de viajes futuros. El trabajo se realiza exclusivamente en la rama `M9-ReservasProgramadas` y se ejecuta de forma local, sin despliegue cloud.
 
 ## Alcance implementado
 
 - CRUD REST con cancelación lógica.
-- Validación Zod estricta y errores de dominio estables.
-- Persistencia en el proyecto Supabase existente `Modulo9:Reservas`.
+- UI responsive para operar reservas.
+- Validación estricta con Zod y errores de dominio estables.
+- Persistencia local en Supabase con esquema, RLS y seed versionados.
 - Estimación de tarifa mediante M7 con degradación controlada.
-- Scheduler persistente con `node-cron`.
-- Reclamo atómico `PROGRAMADA → ACTIVANDO` seguro ante múltiples workers.
+- Scheduler persistente con reclamo atómico `PROGRAMADA → ACTIVANDO`.
 - Activación en M5 y persistencia de `idSolicitud`.
-- Stubs M5/M7 y red Docker Compose interna.
-- OpenAPI, Swagger UI y pruebas unitarias/integración.
+- Stubs M5/M7 y red interna Docker Compose.
+- OpenAPI portable, Swagger UI y pruebas unitarias, de integración y E2E.
 
-## Requisitos
+## Requisitos previos
 
 - Node.js 22 o superior.
 - npm.
-- Docker Desktop con Docker Compose, si se usa contenedores.
-- URL y clave server-only del proyecto Supabase existente.
+- Docker Desktop con Docker Compose.
+- Al menos 4 GB de memoria disponible para los contenedores locales.
 
-## Configuración
+No se necesita una cuenta de Supabase, una URL cloud ni credenciales privadas.
 
-Copiar `.env.example` como `.env` y reemplazar únicamente los placeholders:
+## Preparación desde un entorno limpio
+
+```bash
+npm install
+npm run local:up
+```
+
+La primera ejecución descarga los componentes oficiales mínimos de Supabase, aplica las migraciones y el seed, construye las imágenes locales e inicia M9, M5 stub y M7 stub.
+
+El comando obtiene la clave server-only de Supabase local sin imprimirla ni guardarla y la entrega a M9 únicamente como variable del proceso de Compose.
+
+## Accesos locales
+
+| Recurso | Dirección |
+| --- | --- |
+| UI | `http://localhost:3000/` |
+| API de reservas | `http://localhost:3000/reservas` |
+| Swagger UI | `http://localhost:3000/docs/` |
+| Salud de M9 | `http://localhost:3000/health` |
+| Data API local de Supabase | `http://localhost:54321` |
+
+M5 y M7 son dependencias internas de `reservas-network` y no publican puertos al host. No se utilizan volúmenes definidos por Compose; Supabase CLI administra sus volúmenes locales.
+
+## Variables de entorno
+
+La ejecución recomendada con `npm run local:up` configura Supabase automáticamente. `.env.example` se utiliza solamente para ejecutar M9 directamente con npm.
 
 | Variable | Default | Descripción |
 | --- | --- | --- |
 | `PORT` | `3000` | Puerto HTTP de M9. |
-| `NODE_ENV` | `development` | `development`, `test` o `production`. |
-| `SUPABASE_URL` | — | URL del proyecto Supabase. Obligatoria. |
-| `SUPABASE_KEY` | — | Clave secreta/server-only. Obligatoria; nunca usar en frontend o commits. |
-| `M5_URL` | `http://localhost:3001` | Base URL de M5. |
-| `M7_URL` | `http://localhost:3002` | Base URL de M7. |
+| `NODE_ENV` | `development` | Entorno de Node.js. |
+| `SUPABASE_URL` | `http://127.0.0.1:54321` | Data API local para ejecución directa. |
+| `SUPABASE_KEY` | — | Clave server-only local; nunca se versiona. |
+| `M5_URL` | `http://localhost:3001` | URL de M5 fuera de Compose. |
+| `M7_URL` | `http://localhost:3002` | URL de M7 fuera de Compose. |
 | `RESERVATION_JOB_INTERVAL` | `*/30 * * * * *` | Expresión cron del scheduler. |
 
-El scheduler opera reservas de distintos clientes y por eso la clave debe tener privilegios server-side equivalentes a `service_role`. Una publishable/anon key sin JWT de usuario no atraviesa las políticas RLS existentes.
-
-## Ejecución local
-
-```bash
-npm install
-cp .env.example .env
-npm run dev
-```
-
-En PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-npm run dev
-```
-
-Para ejecutar M5 y M7 fuera de Docker:
-
-```bash
-npx tsx src/stubs/m5/server.ts
-npx tsx src/stubs/m7/server.ts
-```
+Nunca se deben copiar claves del proyecto Supabase cloud al repositorio, al ZIP ni a una imagen Docker.
 
 ## API
 
-| Método | Ruta | Regla principal |
+| Método | Ruta | Propósito |
 | --- | --- | --- |
-| GET | `/health` | Estado básico. |
-| POST | `/reservas` | Crea en `PROGRAMADA`; consulta M7. |
-| GET | `/reservas` | Lista por fecha ascendente. |
-| GET | `/reservas/:id` | Obtiene una reserva. |
-| PATCH | `/reservas/:id` | Solo modifica `PROGRAMADA`. |
-| DELETE | `/reservas/:id` | Cancela lógicamente solo `PROGRAMADA`. |
-| GET | `/docs` | Swagger UI. |
+| GET | `/health` | Consultar salud básica. |
+| POST | `/reservas` | Crear una reserva `PROGRAMADA` y consultar M7. |
+| GET | `/reservas` | Listar reservas por fecha ascendente. |
+| GET | `/reservas/:id` | Obtener una reserva por UUID. |
+| PATCH | `/reservas/:id` | Modificar una reserva `PROGRAMADA`. |
+| DELETE | `/reservas/:id` | Cancelar lógicamente una reserva `PROGRAMADA`. |
+| GET | `/docs/` | Abrir Swagger UI. |
+
+La especificación portable está versionada en `openapi/openapi.yaml`.
 
 Ejemplo de creación:
 
@@ -84,69 +89,68 @@ Ejemplo de creación:
   "origen": "Terminal de Ómnibus",
   "destino": "Aeropuerto",
   "vehiculo": "AUTO",
-  "fechaHoraProgramada": "2026-09-02T14:30:00-03:00"
+  "fechaHoraProgramada": "2099-01-01T14:30:00-03:00"
 }
 ```
 
-Los clientes no pueden enviar `estado`, `tarifaEstimada`, `idSolicitud` ni timestamps. El formato de error es:
+## Supabase local
 
-```json
-{
-  "error": {
-    "codigo": "RESERVA_NO_MODIFICABLE",
-    "mensaje": "Solo se pueden modificar reservas en estado PROGRAMADA."
-  }
-}
-```
+Los archivos reproducibles son:
 
-La especificación portable está en `openapi/openapi.yaml`.
+- `supabase/config.toml`;
+- `supabase/migrations/`;
+- `supabase/seed.sql`.
 
-## Scheduler y estados
-
-Cada ejecución consulta en Supabase las filas `PROGRAMADA` cuya fecha ya venció. No existe una lista de reservas en memoria. El reclamo se hace con un único update condicionado por ID y estado; solo un worker puede obtener la fila.
-
-```text
-PROGRAMADA --cancelación--> CANCELADA
-PROGRAMADA --reclamo-----> ACTIVANDO --M5 OK----> ACTIVADA
-                                      `--M5 falla-> FALLIDA
-```
-
-Si M7 falla al crear, la reserva sigue en `PROGRAMADA` con `tarifaEstimada: null`. Si M5 falla después del reclamo, se marca `FALLIDA` para evitar reintentos que puedan duplicar despachos.
-
-## Docker Compose
-
-Con `.env` configurado:
+Para reconstruir la base desde cero:
 
 ```bash
-docker compose up --build
+npm run local:reset
 ```
 
-Compose inicia `m9-reservas`, `m5-stub` y `m7-stub` en `reservas-network`. Solo M9 publica un puerto al host. Supabase continúa en la nube y no se duplica localmente.
+Este comando destruye únicamente la base local de este repositorio, vuelve a aplicar las migraciones y carga datos ficticios. Nunca utiliza `--linked` ni modifica el proyecto cloud.
 
-## Verificación
+## Pruebas
+
+Pruebas unitarias y de integración:
 
 ```bash
 npm test
 npm run typecheck
 npm run build
-docker compose config --quiet
 ```
 
-La suite Supabase real escribe exclusivamente filas temporales propias y las elimina al terminar. Está desactivada por defecto. Para habilitarla explícitamente en PowerShell:
+Prueba automatizada contra contenedores:
 
-```powershell
-$env:RUN_SUPABASE_INTEGRATION='true'
-npm test -- supabase-reserva.repository.live
+```bash
+npm run test:e2e
 ```
 
-## Documentación técnica
+El E2E inicia una base local limpia, construye y levanta los contenedores, consume la UI y las interfaces HTTP públicas, verifica CRUD, tarifa M7 y activación M5, y elimina sus contenedores y datos temporales al finalizar. No accede directamente a tablas para reemplazar operaciones del flujo.
 
-- `docs/ARCHITECTURE.md`: capas, dependencias y flujo de activación.
-- `docs/SUPABASE_SCHEMA.md`: auditoría real de tablas, tipos, constraints, índices, funciones, grants y RLS.
-- `docs/DATE_TIME_POLICY.md`: contrato temporal y UTC.
-- `docs/RISK_MANAGEMENT.md`: degradación, concurrencia y riesgos pendientes.
-- `docs/BACKLOG.md`: estado y mejoras no bloqueantes.
+> `npm run test:e2e` elimina cualquier dato existente en la instancia Supabase local de este repositorio. No afecta bases remotas.
 
-## Límite de seguridad actual
+## Detención y limpieza
 
-RLS sigue habilitado y la clave de backend no se entrega a consumidores. Sin embargo, autenticación/autorización HTTP está fuera del alcance actual: `clienteId` es un dato declarado por el consumidor. Antes de exposición pública se debe integrar identidad, autorización y rate limiting.
+Detener conservando los datos locales:
+
+```bash
+npm run local:down
+```
+
+Detener y eliminar los datos locales:
+
+```bash
+npm run local:clean
+```
+
+## Documentación
+
+- `docs/SUPABASE_LOCAL.md`: arquitectura local, migraciones, pruebas, limpieza y seguridad.
+- `openapi/openapi.yaml`: contrato OpenAPI portable.
+- `http://localhost:3000/docs/`: visualización interactiva mediante Swagger UI.
+
+## Seguridad y límites
+
+RLS permanece habilitado y la clave server-only solo existe en el backend. La API HTTP todavía no implementa autenticación de usuarios finales: `clienteId` es declarado por el consumidor. El servicio no debe exponerse a Internet sin autenticación, autorización y rate limiting.
+
+La instancia local de Supabase utiliza credenciales de desarrollo y tampoco debe exponerse a redes públicas.

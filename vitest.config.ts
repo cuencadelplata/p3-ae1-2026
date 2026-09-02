@@ -5,6 +5,7 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts'],
     exclude: ['tests/e2e/**/*.test.ts'],
+    maxWorkers: 1,
     coverage: {
       reportsDirectory: 'coverage',
     },

@@ -1,18 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
-import 'dotenv/config';
-import { afterAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import type { Reserva } from '../../src/domain/reserva.js';
-import type { Database } from '../../src/types/database.js';
 
 const baseUrl = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3909';
-const createdIds: string[] = [];
-
-const supabase = createClient<Database>(
-  process.env.SUPABASE_URL ?? 'http://localhost',
-  process.env.SUPABASE_KEY ?? 'missing',
-  { auth: { persistSession: false, autoRefreshToken: false } },
-);
 
 const requestJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(`${baseUrl}${path}`, init);
@@ -34,13 +24,6 @@ const waitForActivated = async (id: string): Promise<Reserva> => {
   throw new Error('La reserva no llegó a ACTIVADA dentro de 20 segundos.');
 };
 
-afterAll(async () => {
-  if (createdIds.length > 0) {
-    const { error } = await supabase.from('reservas').delete().in('id', createdIds);
-    if (error) throw new Error(`No se pudieron limpiar las filas E2E: ${error.message}`);
-  }
-});
-
 describe('E2E local contra contenedores', () => {
   it('sirve la UI y ejecuta el CRUD completo con M7', async () => {
     const ui = await fetch(`${baseUrl}/`);
@@ -58,7 +41,6 @@ describe('E2E local contra contenedores', () => {
         fechaHoraProgramada: new Date(Date.now() + 600_000).toISOString(),
       }),
     });
-    createdIds.push(creada.id);
     expect(creada).toMatchObject({ estado: 'PROGRAMADA', tarifaEstimada: 2_500, moneda: 'ARS' });
 
     expect((await requestJson<Reserva>(`/reservas/${creada.id}`)).id).toBe(creada.id);
@@ -88,8 +70,6 @@ describe('E2E local contra contenedores', () => {
         fechaHoraProgramada: new Date(Date.now() + 6_000).toISOString(),
       }),
     });
-    createdIds.push(creada.id);
-
     const activada = await waitForActivated(creada.id);
     expect(activada.estado).toBe('ACTIVADA');
     expect(activada.idSolicitud).toMatch(/^[0-9a-f-]{36}$/);

@@ -7,13 +7,15 @@ services:
     environment:
       NODE_ENV: production
       PORT: ${PORT:-3000}
-      SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_KEY: ${SUPABASE_KEY}
+      SUPABASE_URL: http://host.docker.internal:54321
+      SUPABASE_KEY: ${SUPABASE_LOCAL_SERVICE_ROLE_KEY:-local-key-not-configured}
       M5_URL: http://m5-stub:3001
       M7_URL: http://m7-stub:3002
       RESERVATION_JOB_INTERVAL: ${RESERVATION_JOB_INTERVAL:-*/30 * * * * *}
     ports:
       - "${PORT:-3000}:${PORT:-3000}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       m5-stub:
         condition: service_healthy

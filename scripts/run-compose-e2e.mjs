@@ -1,11 +1,11 @@
 import { spawnSync } from 'node:child_process';
 import { request } from 'node:http';
 
-const dockerEnvironment = {
-  ...process.env,
-  PORT: '3909',
-  RESERVATION_JOB_INTERVAL: '*/1 * * * * *',
-};
+import {
+  getLocalSupabaseCredentials,
+  runSupabase,
+  SUPABASE_EXCLUDED_SERVICES,
+} from './lib/supabase-cli.mjs';
 
 const npmCli = process.env.npm_execpath;
 
@@ -51,7 +51,19 @@ const waitForHealth = async () => {
 };
 
 let composeStarted = false;
+let supabaseStarted = false;
 try {
+  console.log('Iniciando Supabase local para E2E...');
+  runSupabase(['start', '--exclude', SUPABASE_EXCLUDED_SERVICES], { capture: true });
+  supabaseStarted = true;
+  runSupabase(['db', 'reset']);
+  const credentials = getLocalSupabaseCredentials();
+  const dockerEnvironment = {
+    ...process.env,
+    PORT: '3909',
+    RESERVATION_JOB_INTERVAL: '*/1 * * * * *',
+    SUPABASE_LOCAL_SERVICE_ROLE_KEY: credentials.serviceRoleKey,
+  };
   run('docker', ['compose', 'up', '--build', '-d'], dockerEnvironment);
   composeStarted = true;
   await waitForHealth();
@@ -61,7 +73,13 @@ try {
     { ...process.env, E2E_BASE_URL: 'http://127.0.0.1:3909' },
   );
 } finally {
-  if (composeStarted) {
-    run('docker', ['compose', 'down'], dockerEnvironment);
+  try {
+    if (composeStarted) {
+      run('docker', ['compose', 'down']);
+    }
+  } finally {
+    if (supabaseStarted) {
+      runSupabase(['stop', '--no-backup']);
+    }
   }
 }
