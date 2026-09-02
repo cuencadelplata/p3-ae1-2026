@@ -30,7 +30,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-500 to-indigo-600 flex items-center justify-center p-4">
+    <div className="relative min-h-screen flex flex-col items-center justify-start sm:justify-center p-4 py-8 sm:py-12 overflow-y-auto">
       {authState === 'login' && (
         <Login onLoginSuccess={handleLoginSuccess} onSwitchToRegister={() => setAuthState('register')} />
       )}
@@ -40,6 +40,7 @@ function App() {
       {authState === 'dashboard' && token && user && (
         <Dashboard user={user} onLogout={handleLogout} />
       )}
+
     </div>
   )
 }

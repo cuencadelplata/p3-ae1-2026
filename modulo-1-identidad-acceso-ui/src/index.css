@@ -1,5 +1,26 @@
 @import "tailwindcss";
 
+/* ============================================================
+   Sistema de diseño — "Ink & Champagne"
+   Fondo profundo, vidrio sutil, acento dorado, tipografía serif
+   ============================================================ */
+
+:root {
+  --ink-900: #0d1117;
+  --ink-800: #141a24;
+  --ink-700: #1c2432;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --text: #ecebe7;
+  --text-soft: #a2a8b3;
+  --text-dim: #737a86;
+  --gold: #c9a961;
+  --gold-soft: #e2cd9a;
+  --danger: #e0685f;
+  --font-display: "Cormorant Garamond", "Didot", Georgia, "Times New Roman", serif;
+  --font-body: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -7,9 +28,16 @@
 }
 
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  font-family: var(--font-body);
+  color: var(--text);
+  background:
+    radial-gradient(900px 600px at 15% -10%, rgba(201, 169, 97, 0.12), transparent 60%),
+    radial-gradient(800px 620px at 100% 110%, rgba(90, 120, 160, 0.14), transparent 60%),
+    linear-gradient(160deg, #0b0f16 0%, #121926 55%, #0d1117 100%);
+  background-attachment: fixed;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: 0.01em;
 }
 
 #root {
@@ -17,37 +45,178 @@ body {
   min-height: 100vh;
 }
 
+/* Panel de vidrio oscuro ------------------------------------ */
 .glass {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+  position: relative;
+  background: linear-gradient(
+    155deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    rgba(255, 255, 255, 0.035) 45%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid var(--line);
+  box-shadow:
+    0 40px 90px -30px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  animation: riseIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Filo dorado superior */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201, 169, 97, 0.6), transparent);
+  pointer-events: none;
+}
+
+/* Tipografía ------------------------------------------------- */
+.display {
+  font-family: var(--font-display);
+  font-weight: 300;
+  letter-spacing: 0.005em;
+  line-height: 1.05;
+}
+
+.eyebrow {
+  font-size: 0.68rem;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.hairline {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
+}
+
+/* Botones ---------------------------------------------------- */
 .btn-primary {
-  @apply px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition duration-300 cursor-pointer;
+  @apply relative w-full px-6 py-3.5 rounded-xl font-medium tracking-wide cursor-pointer;
+  background: linear-gradient(120deg, #d8bd82 0%, #c9a961 48%, #b08f4c 100%);
+  color: #14181f;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 14px 30px -14px rgba(201, 169, 97, 0.75);
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease, filter 0.35s ease;
+}
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.05);
+  box-shadow: 0 20px 44px -16px rgba(201, 169, 97, 0.85);
+}
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+.btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .btn-secondary {
-  @apply px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-100 transition duration-300 cursor-pointer;
+  @apply w-full px-6 py-3.5 rounded-xl font-medium tracking-wide cursor-pointer;
+  color: var(--text-soft);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line-strong);
+  transition: color 0.3s ease, background 0.3s ease, border-color 0.3s ease;
+}
+.btn-secondary:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(201, 169, 97, 0.45);
 }
 
+.btn-ghost {
+  @apply px-4 py-2 rounded-lg text-sm font-medium cursor-pointer;
+  color: var(--text-soft);
+  border: 1px solid var(--line);
+  background: transparent;
+  transition: all 0.3s ease;
+}
+.btn-ghost:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Campos ----------------------------------------------------- */
 .input-field {
-  @apply w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition duration-300;
+  @apply w-full px-4 py-3.5 rounded-xl;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+}
+.input-field::placeholder {
+  color: var(--text-dim);
+}
+.input-field:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(201, 169, 97, 0.6);
+  box-shadow: 0 0 0 4px rgba(201, 169, 97, 0.12);
 }
 
-/* Smooth animations */
-@keyframes fadeIn {
+.field-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* Tarjetas de detalle ---------------------------------------- */
+.detail-card {
+  border-radius: 1rem;
+  padding: 1.25rem 1.35rem;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--line);
+  transition: border-color 0.3s ease, background 0.3s ease, transform 0.3s ease;
+}
+.detail-card:hover {
+  border-color: rgba(201, 169, 97, 0.35);
+  background: rgba(255, 255, 255, 0.055);
+  transform: translateY(-2px);
+}
+
+/* Selector de rol -------------------------------------------- */
+.role-chip {
+  @apply rounded-xl py-3 px-2 text-center cursor-pointer;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--line);
+  color: var(--text-soft);
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.role-chip:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.role-chip[data-active="true"] {
+  color: #14181f;
+  background: linear-gradient(120deg, #d8bd82, #c9a961);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 12px 26px -14px rgba(201, 169, 97, 0.8);
+}
+
+/* Alerta ----------------------------------------------------- */
+.alert-error {
+  border-radius: 0.85rem;
+  padding: 0.9rem 1.1rem;
+  color: #f2c2bd;
+  background: rgba(224, 104, 95, 0.09);
+  border: 1px solid rgba(224, 104, 95, 0.35);
+}
+
+/* Animaciones ------------------------------------------------ */
+@keyframes riseIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(18px) scale(0.985);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
-}
-
-.glass {
-  animation: fadeIn 0.5s ease-out;
 }

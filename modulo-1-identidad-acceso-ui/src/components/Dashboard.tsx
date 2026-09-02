@@ -1,4 +1,4 @@
-import { LogOut, User, Mail, Shield, CheckCircle } from 'lucide-react'
+import { LogOut, Mail, Shield, Fingerprint, Clock, Check } from 'lucide-react'
 
 interface DashboardProps {
   user: any
@@ -6,128 +6,117 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ user, onLogout }: DashboardProps) {
-  const getRoleColor = (role: string) => {
-    const colors: { [key: string]: string } = {
-      CLIENTE: 'from-blue-500 to-cyan-500',
-      CONDUCTOR: 'from-green-500 to-emerald-500',
-      OPERADOR: 'from-purple-500 to-pink-500',
+  const roleLabel = (rol: string) => {
+    const labels: { [key: string]: string } = {
+      CLIENTE: 'Cliente',
+      CONDUCTOR: 'Conductor',
+      OPERADOR: 'Operador',
     }
-    return colors[role] || 'from-gray-500 to-gray-600'
+    return labels[rol] || rol
   }
 
-  const getRoleIcon = (role: string) => {
-    const icons: { [key: string]: string } = {
-      CLIENTE: '👤',
-      CONDUCTOR: '🚗',
-      OPERADOR: '⚙️',
-    }
-    return icons[role] || '👤'
-  }
+  const initials = (value: string) =>
+    (value || '?').replace(/@.*/, '').slice(0, 2).toUpperCase()
 
   return (
-    <div className="w-full max-w-2xl">
-      <div className="glass rounded-3xl shadow-2xl p-10">
-        {/* Header with Logout */}
-        <div className="flex justify-between items-start mb-8">
+    <div className="w-full max-w-3xl">
+      <div className="glass rounded-[1.75rem] p-9 md:p-12">
+        {/* Encabezado */}
+        <div className="flex items-start justify-between gap-6">
           <div>
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">Panel de Control</h1>
-            <p className="text-gray-600">Información de tu cuenta autenticada</p>
+            <p className="eyebrow">Panel</p>
+            <h1 className="display text-[2.6rem] mt-3">Tu cuenta</h1>
           </div>
-          <button
-            onClick={onLogout}
-            className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-semibold transition"
-          >
-            <LogOut className="w-5 h-5" />
-            Cerrar Sesión
+          <button onClick={onLogout} className="btn-ghost flex items-center gap-2 shrink-0">
+            <LogOut className="w-4 h-4" />
+            Cerrar sesión
           </button>
         </div>
 
-        {/* User Card */}
-        <div className={`bg-gradient-to-br ${getRoleColor(user.rol)} rounded-2xl p-8 text-white mb-8 shadow-lg`}>
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-3xl font-bold mb-2">{user.sub}</h2>
-              <p className="text-white text-opacity-80">ID: {user.jti}</p>
-            </div>
-            <div className="text-6xl">{getRoleIcon(user.rol)}</div>
+        <div className="hairline my-9" />
+
+        {/* Identidad */}
+        <div className="flex items-center gap-5">
+          <div className="h-16 w-16 rounded-full border border-[rgba(201,169,97,0.45)] flex items-center justify-center display text-xl text-[var(--gold)]">
+            {initials(user.sub)}
           </div>
-          <div className="flex items-center gap-2 mt-4">
-            <CheckCircle className="w-5 h-5" />
-            <span className="text-lg font-semibold">Sesión activa</span>
+          <div className="min-w-0">
+            <p className="display text-2xl truncate">{user.sub}</p>
+            <div className="mt-2 flex items-center gap-2 text-[11px] tracking-[0.22em] uppercase text-[var(--text-dim)]">
+              <span className="inline-flex items-center gap-1.5 text-[var(--gold)]">
+                <Check className="w-3.5 h-3.5" /> Sesión activa
+              </span>
+              <span>·</span>
+              <span>{roleLabel(user.rol)}</span>
+            </div>
           </div>
         </div>
 
-        {/* User Details */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {/* Email */}
-          <div className="bg-gray-50 rounded-xl p-6">
-            <div className="flex items-center gap-3 mb-3">
-              <Mail className="w-5 h-5 text-blue-500" />
-              <label className="font-semibold text-gray-700">Email (sub)</label>
+        {/* Detalles */}
+        <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="detail-card">
+            <div className="flex items-center gap-2.5 mb-3">
+              <Mail className="w-4 h-4 text-[var(--gold)]" />
+              <span className="field-label !mb-0">Email</span>
             </div>
-            <p className="text-gray-900 font-mono text-sm break-all">{user.sub}</p>
+            <p className="font-mono text-sm break-all text-[var(--text)]">{user.sub}</p>
           </div>
 
-          {/* Role */}
-          <div className="bg-gray-50 rounded-xl p-6">
-            <div className="flex items-center gap-3 mb-3">
-              <Shield className="w-5 h-5 text-purple-500" />
-              <label className="font-semibold text-gray-700">Rol</label>
+          <div className="detail-card">
+            <div className="flex items-center gap-2.5 mb-3">
+              <Shield className="w-4 h-4 text-[var(--gold)]" />
+              <span className="field-label !mb-0">Rol</span>
             </div>
-            <p className="text-gray-900 font-semibold text-lg">{user.rol}</p>
+            <p className="text-sm tracking-[0.14em] uppercase">{user.rol}</p>
           </div>
 
-          {/* JWT ID */}
-          <div className="bg-gray-50 rounded-xl p-6">
-            <div className="flex items-center gap-3 mb-3">
-              <User className="w-5 h-5 text-cyan-500" />
-              <label className="font-semibold text-gray-700">JWT ID</label>
+          <div className="detail-card">
+            <div className="flex items-center gap-2.5 mb-3">
+              <Fingerprint className="w-4 h-4 text-[var(--gold)]" />
+              <span className="field-label !mb-0">JWT ID</span>
             </div>
-            <p className="text-gray-900 font-mono text-xs break-all">{user.jti}</p>
+            <p className="font-mono text-xs break-all text-[var(--text-soft)]">{user.jti}</p>
           </div>
 
-          {/* Issued At */}
-          <div className="bg-gray-50 rounded-xl p-6">
-            <div className="flex items-center gap-3 mb-3">
-              <User className="w-5 h-5 text-green-500" />
-              <label className="font-semibold text-gray-700">Emitido el</label>
+          <div className="detail-card">
+            <div className="flex items-center gap-2.5 mb-3">
+              <Clock className="w-4 h-4 text-[var(--gold)]" />
+              <span className="field-label !mb-0">Emitido el</span>
             </div>
-            <p className="text-gray-900 font-mono text-sm">
+            <p className="font-mono text-sm text-[var(--text-soft)]">
               {new Date(user.iat * 1000).toLocaleString('es-AR')}
             </p>
           </div>
         </div>
 
-        {/* Token Info */}
-        <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6 mb-8">
-          <h3 className="font-semibold text-blue-900 mb-3">Información de Sesión</h3>
-          <ul className="space-y-2 text-sm text-blue-800">
-            <li>✓ Token JWT válido y activo</li>
-            <li>✓ Permiso de acceso confirmado</li>
-            <li>✓ Identidad y rol verificados</li>
-            <li>✓ Datos cifrados en tránsito</li>
+        {/* Estado de sesión */}
+        <div className="mt-8 rounded-2xl border border-[var(--line)] p-6">
+          <p className="eyebrow mb-4">Estado de la sesión</p>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-[var(--text-soft)]">
+            {[
+              'Token JWT válido y activo',
+              'Permiso de acceso confirmado',
+              'Identidad y rol verificados',
+              'Datos cifrados en tránsito',
+            ].map((item) => (
+              <li key={item} className="flex items-center gap-2.5">
+                <Check className="w-4 h-4 text-[var(--gold)] shrink-0" />
+                {item}
+              </li>
+            ))}
           </ul>
         </div>
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-4">
-          <button className="px-6 py-3 bg-blue-100 text-blue-700 rounded-lg font-semibold hover:bg-blue-200 transition">
-            Editar Perfil
-          </button>
-          <button className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-semibold hover:bg-gray-200 transition">
-            Ver Documentación
-          </button>
+        {/* Acciones */}
+        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <button className="btn-primary">Editar perfil</button>
+          <button className="btn-secondary">Ver documentación</button>
         </div>
 
-        {/* Footer */}
-        <div className="mt-8 pt-8 border-t border-gray-200 text-center">
-          <p className="text-gray-500 text-sm">
-            M1 - Identidad y Acceso | Plataforma de Movilidad Urbana
-          </p>
-          <p className="text-gray-400 text-xs mt-2">
-            API: localhost:3001 | Documentación: localhost:3001/docs
-          </p>
-        </div>
+        <div className="hairline mt-10 mb-5" />
+        <p className="text-center text-[11px] tracking-[0.22em] uppercase text-[var(--text-dim)]">
+          API localhost:3001 · Docs /docs
+        </p>
       </div>
     </div>
   )

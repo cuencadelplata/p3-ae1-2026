@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Mail, Lock, User, UserCheck, Eye, EyeOff, ArrowLeft } from 'lucide-react'
+import { Eye, EyeOff, ArrowLeft } from 'lucide-react'
 import axios from 'axios'
 
 interface RegisterProps {
@@ -39,8 +39,6 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin }: Registe
       })
 
       const { token } = response.data
-
-      // Decode JWT to get user info
       const parts = token.split('.')
       const decoded = JSON.parse(atob(parts[1]))
 
@@ -52,152 +50,123 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin }: Registe
     }
   }
 
-  const roles: { value: UserRole; label: string; icon: string }[] = [
-    { value: 'CLIENTE', label: 'Cliente', icon: '👤' },
-    { value: 'CONDUCTOR', label: 'Conductor', icon: '🚗' },
-    { value: 'OPERADOR', label: 'Operador', icon: '⚙️' },
+  const roles: { value: UserRole; label: string }[] = [
+    { value: 'CLIENTE', label: 'Cliente' },
+    { value: 'CONDUCTOR', label: 'Conductor' },
+    { value: 'OPERADOR', label: 'Operador' },
   ]
 
   return (
     <div className="w-full max-w-md">
-      <div className="glass rounded-3xl shadow-2xl p-8 md:p-10">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <div className="bg-gradient-to-br from-cyan-500 to-blue-500 p-4 rounded-full">
-              <UserCheck className="w-8 h-8 text-white" />
-            </div>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Crear Cuenta</h1>
-          <p className="text-gray-600">Únete a nuestra plataforma</p>
+      <div className="glass rounded-[1.75rem] p-9 md:p-11">
+        {/* Encabezado */}
+        <div className="mb-9">
+          <p className="eyebrow">Registro</p>
+          <h1 className="display text-[2.6rem] mt-3 mb-2">Creá tu cuenta</h1>
+          <p className="text-sm text-[var(--text-soft)]">
+            Unos pocos datos y ya formás parte de la plataforma.
+          </p>
         </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded">
-            <p className="text-red-700 text-sm">{error}</p>
-          </div>
-        )}
+        <div className="hairline mb-8" />
 
-        {/* Form */}
-        <form onSubmit={handleRegister} className="space-y-5">
-          {/* Name Input */}
+        {error && <div className="alert-error mb-6 text-sm">{error}</div>}
+
+        <form onSubmit={handleRegister} className="space-y-6">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Nombre Completo</label>
+            <label className="field-label">Nombre completo</label>
             <div className="relative">
-              <User className={`absolute left-4 top-4 w-5 h-5 transition-opacity ${name ? 'opacity-0' : 'opacity-100 text-gray-400'}`} />
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="input-field pl-12"
+                className="input-field"
                 placeholder="Juan Pérez"
                 required
               />
             </div>
           </div>
 
-          {/* Email Input */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+            <label className="field-label">Email</label>
             <div className="relative">
-              <Mail className={`absolute left-4 top-4 w-5 h-5 transition-opacity ${email ? 'opacity-0' : 'opacity-100 text-gray-400'}`} />
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="input-field pl-12"
+                className="input-field"
                 placeholder="tu@email.com"
                 required
               />
             </div>
           </div>
 
-          {/* Role Selection */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-3">Tipo de Usuario</label>
-            <div className="grid grid-cols-3 gap-2">
+            <label className="field-label">Tipo de usuario</label>
+            <div className="grid grid-cols-3 gap-2.5">
               {roles.map((r) => (
                 <button
                   key={r.value}
                   type="button"
+                  data-active={role === r.value}
                   onClick={() => setRole(r.value)}
-                  className={`p-3 rounded-lg text-center font-semibold transition ${
-                    role === r.value
-                      ? 'bg-gradient-to-br from-blue-500 to-cyan-500 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  className="role-chip text-xs tracking-[0.12em] uppercase"
                 >
-                  <div className="text-xl mb-1">{r.icon}</div>
-                  <div className="text-xs">{r.label}</div>
+                  {r.label}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Password Input */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Contraseña</label>
+            <label className="field-label">Contraseña</label>
             <div className="relative">
-              <Lock className={`absolute left-4 top-4 w-5 h-5 transition-opacity ${password ? 'opacity-0' : 'opacity-100 text-gray-400'}`} />
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="input-field pl-12 pr-12"
+                className="input-field pr-11"
                 placeholder="••••••••"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-dim)] hover:text-[var(--gold)] transition-colors"
+                aria-label="Mostrar contraseña"
               >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-1">Mínimo 6 caracteres</p>
+            <p className="mt-2 text-[11px] tracking-wide text-[var(--text-dim)]">Mínimo 6 caracteres</p>
           </div>
 
-          {/* Confirm Password Input */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Confirmar Contraseña</label>
+            <label className="field-label">Confirmar contraseña</label>
             <div className="relative">
-              <Lock className={`absolute left-4 top-4 w-5 h-5 transition-opacity ${confirmPassword ? 'opacity-0' : 'opacity-100 text-gray-400'}`} />
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="input-field pl-12"
+                className="input-field"
                 placeholder="••••••••"
                 required
               />
             </div>
           </div>
 
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn-primary w-full mt-6 disabled:opacity-50"
-          >
-            {loading ? 'Creando cuenta...' : 'Registrarse'}
+          <button type="submit" disabled={loading} className="btn-primary mt-2">
+            {loading ? 'Creando cuenta…' : 'Registrarme'}
           </button>
         </form>
 
-        {/* Back to Login */}
         <button
           onClick={onSwitchToLogin}
-          className="w-full mt-4 flex items-center justify-center gap-2 text-blue-600 hover:text-blue-700 font-semibold"
+          className="mt-6 w-full flex items-center justify-center gap-2 text-xs tracking-[0.18em] uppercase text-[var(--text-soft)] hover:text-[var(--gold)] transition-colors"
         >
-          <ArrowLeft className="w-4 h-4" />
-          Volver al Login
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Volver al inicio de sesión
         </button>
-
-        {/* Footer */}
-        <p className="text-center text-gray-500 text-xs mt-6">
-          M1 - Identidad y Acceso | Plataforma de Movilidad
-        </p>
       </div>
     </div>
   )

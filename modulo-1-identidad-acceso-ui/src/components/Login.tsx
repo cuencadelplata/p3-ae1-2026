@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Mail, Lock, Eye, EyeOff, LogIn } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 import axios from 'axios'
 
 interface LoginProps {
@@ -26,8 +26,6 @@ export default function Login({ onLoginSuccess, onSwitchToRegister }: LoginProps
       })
 
       const { token } = response.data
-
-      // Decode JWT to get user info
       const parts = token.split('.')
       const decoded = JSON.parse(atob(parts[1]))
 
@@ -41,98 +39,72 @@ export default function Login({ onLoginSuccess, onSwitchToRegister }: LoginProps
 
   return (
     <div className="w-full max-w-md">
-      <div className="glass rounded-3xl shadow-2xl p-8 md:p-10">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <div className="bg-gradient-to-br from-blue-500 to-cyan-500 p-4 rounded-full">
-              <LogIn className="w-8 h-8 text-white" />
-            </div>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Bienvenido</h1>
-          <p className="text-gray-600">Inicia sesión en tu cuenta</p>
+      <div className="glass rounded-[1.75rem] p-9 md:p-11">
+        {/* Encabezado */}
+        <div className="mb-9">
+          <p className="eyebrow">Acceso</p>
+          <h1 className="display text-[2.6rem] mt-3 mb-2">Bienvenido</h1>
+          <p className="text-sm text-[var(--text-soft)]">
+            Ingresá tus credenciales para continuar.
+          </p>
         </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded">
-            <p className="text-red-700 text-sm">{error}</p>
-          </div>
-        )}
+        <div className="hairline mb-8" />
 
-        {/* Form */}
-        <form onSubmit={handleLogin} className="space-y-5">
-          {/* Email Input */}
+        {error && <div className="alert-error mb-6 text-sm">{error}</div>}
+
+        <form onSubmit={handleLogin} className="space-y-6">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+            <label className="field-label">Email</label>
             <div className="relative">
-              <Mail className={`absolute left-4 top-4 w-5 h-5 transition-opacity ${email ? 'opacity-0' : 'opacity-100 text-gray-400'}`} />
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="input-field pl-12"
+                className="input-field"
                 placeholder="tu@email.com"
                 required
               />
             </div>
           </div>
 
-          {/* Password Input */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Contraseña</label>
+            <label className="field-label">Contraseña</label>
             <div className="relative">
-              <Lock className={`absolute left-4 top-4 w-5 h-5 transition-opacity ${password ? 'opacity-0' : 'opacity-100 text-gray-400'}`} />
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="input-field pl-12 pr-12"
+                className="input-field pr-11"
                 placeholder="••••••••"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-dim)] hover:text-[var(--gold)] transition-colors"
+                aria-label="Mostrar contraseña"
               >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
 
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn-primary w-full mt-6 disabled:opacity-50"
-          >
-            {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
+          <button type="submit" disabled={loading} className="btn-primary mt-2">
+            {loading ? 'Iniciando sesión…' : 'Iniciar sesión'}
           </button>
         </form>
 
-        {/* Divider */}
-        <div className="relative my-8">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-200"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-3 bg-white text-gray-500">O</span>
-          </div>
+        <div className="relative my-9">
+          <div className="hairline" />
+          <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 px-3 text-[10px] tracking-[0.3em] uppercase text-[var(--text-dim)] bg-[#111722]">
+            o
+          </span>
         </div>
 
-        {/* Register Link */}
-        <button
-          onClick={onSwitchToRegister}
-          className="btn-secondary w-full"
-        >
-          ¿No tienes cuenta? Regístrate
+        <button onClick={onSwitchToRegister} className="btn-secondary">
+          Crear una cuenta
         </button>
-
-        {/* Footer */}
-        <p className="text-center text-gray-500 text-xs mt-6">
-          M1 - Identidad y Acceso | Plataforma de Movilidad
-        </p>
       </div>
     </div>
   )
