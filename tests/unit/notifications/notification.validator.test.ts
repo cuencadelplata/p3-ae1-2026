@@ -1,3 +1,7 @@
+/*
+ * RF-8.1 — Pruebas unitarias del validador de notificaciones.
+ * Verifican el cuerpo permitido, eventos, canales y detalles de error sin HTTP.
+ */
 import { describe, expect, it } from "vitest";
 
 import { EVENT_TYPES } from "../../../src/notifications/notification.types";
@@ -10,8 +14,8 @@ const validRequest = {
   channels: ["PUSH"],
 };
 
-describe("validateNotificationRequest", () => {
-  it("accepts a complete valid request", () => {
+describe("RF-8.1 — validateNotificationRequest", () => {
+  it("acepta una solicitud válida y completa", () => {
     const result = validateNotificationRequest(validRequest);
 
     expect(result).toEqual({ valid: true, data: validRequest });
@@ -62,7 +66,7 @@ describe("validateNotificationRequest", () => {
     }
   });
 
-  it("rejects an unsupported eventType", () => {
+  it("rechaza un eventType no soportado", () => {
     const result = validateNotificationRequest({ ...validRequest, eventType: "UNKNOWN" });
 
     expect(result).toMatchObject({ valid: false });
@@ -85,7 +89,7 @@ describe("validateNotificationRequest", () => {
     }
   });
 
-  it("rejects an additional property", () => {
+  it("rechaza una propiedad adicional", () => {
     const result = validateNotificationRequest({ ...validRequest, extra: true });
 
     expect(result).toMatchObject({ valid: false });
@@ -98,7 +102,7 @@ describe("validateNotificationRequest", () => {
     expect(validateNotificationRequest(body)).toMatchObject({ valid: false });
   });
 
-  it("accepts whitespace and one-character IDs without normalization", () => {
+  it("acepta IDs con espacios o un carácter sin normalizarlos", () => {
     const input = { ...validRequest, tripId: " ", recipientId: "x" };
 
     expect(validateNotificationRequest(input)).toEqual({ valid: true, data: input });
@@ -129,7 +133,7 @@ describe("validateNotificationRequest", () => {
     if (!result.valid) expect(result.details).toContainEqual(expect.objectContaining({ field }));
   });
 
-  it("accumulates details and does not mutate the input", () => {
+  it("acumula detalles y no modifica la entrada", () => {
     const input: Record<string, unknown> = {
       tripId: "", recipientId: null, eventType: "UNKNOWN", channels: ["PUSH", "PUSH"], extra: true, other: true,
     };

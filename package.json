@@ -16,13 +16,20 @@
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:coverage": "vitest run --project unit --project integration --coverage",
-    "test:e2e": "vitest run --project e2e"
+    "test:e2e": "pnpm test:e2e:api && pnpm test:e2e:ui",
+    "test:unit:notifications": "vitest run --project unit tests/unit/notifications",
+    "test:unit:qr": "vitest run --project unit tests/unit/qr",
+    "test:integration:notifications": "vitest run --project integration tests/integration/notifications",
+    "test:integration:qr": "vitest run --project integration tests/integration/qr",
+    "test:e2e:api": "vitest run --project e2e",
+    "test:e2e:ui": "playwright test"
   },
   "dependencies": {
     "express": "^5.2.1",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/express": "^5.0.6",
     "@types/node": "^24.13.3",
     "@types/pngjs": "^6.0.5",

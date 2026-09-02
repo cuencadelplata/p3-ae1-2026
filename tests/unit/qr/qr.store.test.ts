@@ -1,3 +1,7 @@
+/*
+ * RF-8.2 — Pruebas unitarias del almacenamiento temporal QR.
+ * Verifican asociación, vencimiento y consumo único sin usar HTTP.
+ */
 import { describe, expect, it } from "vitest";
 
 import { createQrStore } from "../../../src/qr/qr.store";

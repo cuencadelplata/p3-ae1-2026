@@ -1,6 +1,10 @@
+/*
+ * RF-8.2 — Prueba E2E API contra el servicio M8 en Docker.
+ * Verifica generación, validación y uso único mediante HTTP real.
+ */
 import { describe, expect, inject, it } from "vitest";
 
-import "./vitest-context";
+import "../support/vitest-context";
 
 const baseUrl = inject("e2eBaseUrl");
 const QR_TTL_SECONDS = 120;

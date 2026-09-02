@@ -1,21 +1,19 @@
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { fileURLToPath } from "node:url";
-import type { TestProject } from "vitest/node";
-
-import "./vitest-context";
 
 const imageName = "m8-service:e2e";
 const containerPort = "3100";
 const qrTtlSeconds = "120";
-const projectRoot = fileURLToPath(new URL("../../", import.meta.url));
+const projectRoot = process.cwd();
+
+export interface E2eService {
+  readonly baseUrl: string;
+  cleanup(): void;
+}
 
 function runCommand(command: string, args: string[], stdio: "inherit" | "pipe" = "inherit") {
-  const result = spawnSync(command, args, {
-    cwd: projectRoot,
-    encoding: "utf8",
-    stdio,
-  });
+  const result = spawnSync(command, args, { cwd: projectRoot, encoding: "utf8", stdio });
 
   if (result.error) {
     throw new Error(`No fue posible ejecutar ${command}: ${result.error.message}`);
@@ -27,15 +25,6 @@ function runCommand(command: string, args: string[], stdio: "inherit" | "pipe" =
   }
 
   return result.stdout?.trim() ?? "";
-}
-
-function printLogs(containerName: string) {
-  spawnSync("docker", ["logs", containerName], { cwd: projectRoot, stdio: "inherit" });
-}
-
-function cleanupContainer(containerName: string) {
-  spawnSync("docker", ["stop", containerName], { cwd: projectRoot, stdio: "inherit" });
-  spawnSync("docker", ["rm", containerName], { cwd: projectRoot, stdio: "inherit" });
 }
 
 function getBaseUrl(containerName: string) {
@@ -80,9 +69,16 @@ async function waitForServer(baseUrl: string) {
   throw new Error("El servicio no estuvo disponible dentro de 30 segundos.");
 }
 
-export default async function setup(project: TestProject) {
-  const containerName = `m8-notifications-e2e-${process.pid}-${Date.now()}`;
+export async function startE2eService(): Promise<E2eService> {
+  const containerName = `m8-e2e-${process.pid}-${randomUUID().slice(0, 8)}`;
   let containerStarted = false;
+
+  const cleanup = () => {
+    if (!containerStarted) return;
+    spawnSync("docker", ["stop", containerName], { cwd: projectRoot, stdio: "inherit" });
+    spawnSync("docker", ["rm", containerName], { cwd: projectRoot, stdio: "inherit" });
+    containerStarted = false;
+  };
 
   try {
     runCommand("docker", ["version", "--format", "{{.Server.Version}}"], "pipe");
@@ -109,19 +105,16 @@ export default async function setup(project: TestProject) {
     const baseUrl = getBaseUrl(containerName);
     console.log(`E2E_BASE_URL=${baseUrl}`);
     await waitForServer(baseUrl);
-    project.provide("e2eBaseUrl", baseUrl);
+
+    return { baseUrl, cleanup };
   } catch (error) {
     if (containerStarted) {
       console.error("\nLogs del contenedor E2E:");
-      printLogs(containerName);
-      cleanupContainer(containerName);
+      spawnSync("docker", ["logs", containerName], { cwd: projectRoot, stdio: "inherit" });
+      cleanup();
     }
 
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`No fue posible preparar la infraestructura E2E. ${message}`);
   }
-
-  return async () => {
-    cleanupContainer(containerName);
-  };
 }

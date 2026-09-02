@@ -1,3 +1,7 @@
+/*
+ * RF-8.1 — Pruebas unitarias del servicio de notificaciones.
+ * Verifican mensajes, procesamiento PUSH y fallos del proveedor sin usar HTTP.
+ */
 import { describe, expect, it, vi } from "vitest";
 
 import { processNotification } from "../../../src/notifications/notification.service";
@@ -23,8 +27,8 @@ const messages: Array<[EventType, string]> = [
   ["TRIP_COMPLETED", "Tu viaje ha finalizado."],
 ];
 
-describe("processNotification", () => {
-  it("processes a notification after the provider succeeds", async () => {
+describe("RF-8.1 — processNotification", () => {
+  it("procesa una notificación después de que el proveedor finaliza correctamente", async () => {
     const send = vi.fn(async (_payload: PushNotificationPayload): Promise<void> => {});
     const pushProvider: PushProvider = {
       send,
@@ -53,7 +57,7 @@ describe("processNotification", () => {
     expect(send.mock.calls[0][0]).not.toHaveProperty("status");
   });
 
-  it.each(messages)("generates the expected message for %s", async (eventType, message) => {
+  it.each(messages)("genera el mensaje esperado para %s", async (eventType, message) => {
     const pushProvider: PushProvider = { async send() {} };
 
     const notification = await processNotification({ ...baseRequest, eventType }, pushProvider);
@@ -61,7 +65,7 @@ describe("processNotification", () => {
     expect(notification.message).toBe(message);
   });
 
-  it("propagates a provider failure without returning a processed notification", async () => {
+  it("propaga un fallo del proveedor sin devolver una notificación procesada", async () => {
     const failure = new Error("push provider failure");
     const pushProvider: PushProvider = {
       async send() {
@@ -72,7 +76,7 @@ describe("processNotification", () => {
     await expect(processNotification(baseRequest, pushProvider)).rejects.toBe(failure);
   });
 
-  it("resolves only after the provider completes", async () => {
+  it("se resuelve solo después de que finaliza el proveedor", async () => {
     let release: (() => void) | undefined;
     const pushProvider: PushProvider = { send: () => new Promise<void>((resolve) => { release = resolve; }) };
     let resolved = false;

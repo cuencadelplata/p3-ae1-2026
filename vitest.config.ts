@@ -23,8 +23,8 @@ export default defineConfig({
       {
         test: {
           name: "e2e",
-          include: ["tests/e2e/**/*.e2e.test.ts"],
-          globalSetup: ["tests/e2e/docker-global-setup.ts"],
+          include: ["tests/e2e/api/*.e2e.test.ts"],
+          globalSetup: ["tests/e2e/support/docker-global-setup.ts"],
         },
       },
     ],

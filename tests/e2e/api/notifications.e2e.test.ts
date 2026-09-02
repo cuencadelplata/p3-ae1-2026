@@ -1,6 +1,10 @@
+/*
+ * RF-8.1 — Pruebas E2E API contra el servicio M8 en Docker.
+ * Verifican contrato HTTP público y recursos estáticos mediante HTTP real.
+ */
 import { describe, expect, inject, it } from "vitest";
 
-import "./vitest-context";
+import "../support/vitest-context";
 
 const baseUrl = inject("e2eBaseUrl");
 
@@ -42,8 +46,8 @@ async function expectSafeError(response: Response, code: string) {
   expect(serialized).not.toContain("container");
 }
 
-describe("POST /notifications E2E", () => {
-  it("processes a valid notification through the public HTTP contract", async () => {
+describe("RF-8.1 — POST /notifications E2E", () => {
+  it("procesa una notificación válida mediante el contrato HTTP público", async () => {
     const response = await postNotification(validRequest);
 
     expect(response.status).toBe(201);
@@ -67,7 +71,7 @@ describe("POST /notifications E2E", () => {
     expect(Number.isNaN(Date.parse(body.createdAt))).toBe(false);
   });
 
-  it.each(expectedMessages)("processes %s with its message", async (eventType, message) => {
+  it.each(expectedMessages)("procesa %s con su mensaje", async (eventType, message) => {
     const response = await postNotification({ ...validRequest, eventType });
 
     expect(response.status).toBe(201);
@@ -75,7 +79,7 @@ describe("POST /notifications E2E", () => {
     expect(body).toMatchObject({ eventType, message, status: "PROCESSED" });
   });
 
-  it("accepts application/json with a charset", async () => {
+  it("acepta application/json con charset", async () => {
     const response = await postNotification(validRequest, "application/json; charset=utf-8");
 
     expect(response.status).toBe(201);
@@ -83,20 +87,20 @@ describe("POST /notifications E2E", () => {
   });
 
   it.each([
-    ["tripId is missing", { recipientId: "recipient", eventType: "TRIP_STARTED", channels: ["PUSH"] }],
-    ["recipientId is missing", { tripId: "trip", eventType: "TRIP_STARTED", channels: ["PUSH"] }],
-    ["eventType is invalid", { ...validRequest, eventType: "UNKNOWN" }],
-    ["channels is empty", { ...validRequest, channels: [] }],
-    ["EMAIL is requested", { ...validRequest, channels: ["EMAIL"] }],
-    ["an additional property is included", { ...validRequest, additional: true }],
-  ])("returns a safe 400 VALIDATION_ERROR when %s", async (_description, body) => {
+    ["falta tripId", { recipientId: "recipient", eventType: "TRIP_STARTED", channels: ["PUSH"] }],
+    ["falta recipientId", { tripId: "trip", eventType: "TRIP_STARTED", channels: ["PUSH"] }],
+    ["eventType es inválido", { ...validRequest, eventType: "UNKNOWN" }],
+    ["channels está vacío", { ...validRequest, channels: [] }],
+    ["se solicita EMAIL", { ...validRequest, channels: ["EMAIL"] }],
+    ["se incluye una propiedad adicional", { ...validRequest, additional: true }],
+  ])("responde 400 VALIDATION_ERROR seguro cuando %s", async (_description, body) => {
     const response = await postNotification(body);
 
     expect(response.status).toBe(400);
     await expectSafeError(response, "VALIDATION_ERROR");
   });
 
-  it("returns a safe 400 VALIDATION_ERROR for malformed JSON", async () => {
+  it("responde 400 VALIDATION_ERROR seguro ante JSON malformado", async () => {
     const response = await postNotification('{"tripId":');
 
     expect(response.status).toBe(400);
@@ -106,7 +110,7 @@ describe("POST /notifications E2E", () => {
   it.each([
     ["text/plain", "text/plain"],
     ["application/xml", "application/xml"],
-  ])("returns a safe 415 UNSUPPORTED_MEDIA_TYPE for %s", async (_description, contentType) => {
+  ])("responde 415 UNSUPPORTED_MEDIA_TYPE seguro para %s", async (_description, contentType) => {
     const response = await postNotification("not JSON", contentType);
 
     expect(response.status).toBe(415);
@@ -115,7 +119,7 @@ describe("POST /notifications E2E", () => {
 });
 
 describe("recursos públicos E2E", () => {
-  it("serves the integrated RF-8.1 and RF-8.2 demonstration UI from Docker", async () => {
+  it("sirve desde Docker la interfaz de demostración integrada RF-8.1 y RF-8.2", async () => {
     const response = await getResource("/");
 
     expect(response.status).toBe(200);
@@ -130,7 +134,7 @@ describe("recursos públicos E2E", () => {
     expect(body).toContain("/openapi.yaml");
   });
 
-  it("serves the UI stylesheet from Docker", async () => {
+  it("sirve desde Docker la hoja de estilos de la interfaz", async () => {
     const response = await getResource("/styles.css");
 
     expect(response.status).toBe(200);
@@ -138,7 +142,7 @@ describe("recursos públicos E2E", () => {
     expect((await response.text()).length).toBeGreaterThan(0);
   });
 
-  it("serves the UI script from Docker", async () => {
+  it("sirve desde Docker el script de la interfaz", async () => {
     const response = await getResource("/app.js");
 
     expect(response.status).toBe(200);
@@ -150,7 +154,7 @@ describe("recursos públicos E2E", () => {
     expect(body).toContain("/qr/validate");
   });
 
-  it("serves the approved OpenAPI contract from Docker", async () => {
+  it("sirve desde Docker el contrato OpenAPI aprobado", async () => {
     const response = await getResource("/openapi.yaml");
 
     expect(response.status).toBe(200);

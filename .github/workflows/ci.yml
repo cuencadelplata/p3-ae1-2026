@@ -52,5 +52,8 @@ jobs:
       - name: Calculate coverage
         run: pnpm test:coverage
 
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Run Docker E2E tests
         run: pnpm test:e2e

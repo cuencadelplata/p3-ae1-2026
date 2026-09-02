@@ -1,8 +1,12 @@
+/*
+ * RF-8.1 — Pruebas de integración de POST /notifications y recursos públicos.
+ * Verifican contrato HTTP, errores y composición Express con Supertest.
+ */
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { app, createApp } from "../../src/app";
-import type { PushProvider } from "../../src/notifications/push-provider";
+import { app, createApp } from "../../../src/app";
+import type { PushProvider } from "../../../src/notifications/push-provider";
 
 const successfulPushProvider: PushProvider = { async send() {} };
 
@@ -13,8 +17,8 @@ const validRequest = {
   channels: ["PUSH"],
 };
 
-describe("POST /notifications", () => {
-  it("returns 201 for a valid request with a JSON charset", async () => {
+describe("RF-8.1 — POST /notifications", () => {
+  it("responde 201 ante una solicitud válida con charset JSON", async () => {
     const response = await request(createApp(successfulPushProvider))
       .post("/notifications")
       .set("Content-Type", "application/json; charset=utf-8")
@@ -54,7 +58,7 @@ describe("POST /notifications", () => {
     expect(response.body.error.details).toEqual(expect.any(Array));
   });
 
-  it("returns 400 VALIDATION_ERROR for malformed JSON", async () => {
+  it("responde 400 VALIDATION_ERROR ante JSON malformado", async () => {
     const response = await request(createApp(successfulPushProvider))
       .post("/notifications")
       .set("Content-Type", "application/json")
@@ -64,7 +68,7 @@ describe("POST /notifications", () => {
     expect(response.body.error.code).toBe("VALIDATION_ERROR");
   });
 
-  it("returns 415 UNSUPPORTED_MEDIA_TYPE for text/plain", async () => {
+  it("responde 415 UNSUPPORTED_MEDIA_TYPE para text/plain", async () => {
     const response = await request(createApp(successfulPushProvider))
       .post("/notifications")
       .set("Content-Type", "text/plain")
@@ -111,7 +115,7 @@ describe("POST /notifications", () => {
     expect(response.body.error.details).toEqual(expect.any(Array));
   });
 
-  it("does not invoke the provider for invalid requests", async () => {
+  it("no invoca al proveedor para solicitudes inválidas", async () => {
     const send = vi.fn(async () => {});
     const response = await request(createApp({ send })).post("/notifications").send({ ...validRequest, eventType: "UNKNOWN" });
 
@@ -119,7 +123,7 @@ describe("POST /notifications", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("does not invoke the provider for malformed JSON or an invalid media type", async () => {
+  it("no invoca al proveedor ante JSON malformado o media type inválido", async () => {
     const send = vi.fn(async () => {});
     const testApp = createApp({ send });
 
@@ -142,14 +146,14 @@ describe("POST /notifications", () => {
     expect(response.body.message).toBe(message);
   });
 
-  it("uses the real AE1 composition with mockPushProvider", async () => {
+  it("usa la composición real de AE1 con mockPushProvider", async () => {
     const response = await request(app).post("/notifications").send(validRequest);
 
     expect(response.status).toBe(201);
     expect(response.body.status).toBe("PROCESSED");
   });
 
-  it("returns a safe 500 response when the push provider fails", async () => {
+  it("responde 500 seguro cuando falla el proveedor PUSH", async () => {
     const failingPushProvider: PushProvider = {
       async send() {
         throw new Error("internal provider failure");
@@ -192,7 +196,7 @@ describe("POST /notifications", () => {
     },
   );
 
-  it("recognizes a parse error represented with statusCode", async () => {
+  it("reconoce un error de parseo representado mediante statusCode", async () => {
     const parseErrorProvider: PushProvider = {
       send: () => Promise.reject({ type: "entity.parse.failed", statusCode: 400 }),
     };
@@ -210,7 +214,7 @@ describe("POST /notifications", () => {
 });
 
 describe("recursos públicos", () => {
-  it("serves the integrated RF-8.1 and RF-8.2 demonstration UI", async () => {
+  it("sirve la interfaz de demostración integrada RF-8.1 y RF-8.2", async () => {
     const response = await request(app).get("/");
 
     expect(response.status).toBe(200);
@@ -227,7 +231,7 @@ describe("recursos públicos", () => {
     expect(response.text).toContain("/openapi.yaml");
   });
 
-  it("serves the UI stylesheet", async () => {
+  it("sirve la hoja de estilos de la interfaz", async () => {
     const response = await request(app).get("/styles.css");
 
     expect(response.status).toBe(200);
@@ -235,7 +239,7 @@ describe("recursos públicos", () => {
     expect(response.text.length).toBeGreaterThan(0);
   });
 
-  it("serves the UI script", async () => {
+  it("sirve el script de la interfaz", async () => {
     const response = await request(app).get("/app.js");
 
     expect(response.status).toBe(200);
@@ -246,7 +250,7 @@ describe("recursos públicos", () => {
     expect(response.text).toContain("/qr/validate");
   });
 
-  it("serves the approved OpenAPI contract", async () => {
+  it("sirve el contrato OpenAPI aprobado", async () => {
     const response = await request(app).get("/openapi.yaml");
 
     expect(response.status).toBe(200);

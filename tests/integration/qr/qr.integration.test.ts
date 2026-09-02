@@ -1,8 +1,12 @@
+/*
+ * RF-8.2 — Pruebas de integración de POST /qr y POST /qr/validate.
+ * Verifican contrato HTTP, uso único y concurrencia con Express real.
+ */
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../../src/app";
-import { registerQrRoutes } from "../../src/qr/qr.controller";
+import { createApp } from "../../../src/app";
+import { registerQrRoutes } from "../../../src/qr/qr.controller";
 
 function buildApp() {
   return createApp(registerQrRoutes);

@@ -1,3 +1,7 @@
+/*
+ * RF-8.2 — Pruebas unitarias del servicio QR.
+ * Verifican generación, validación, hash y traducción de errores sin HTTP.
+ */
 import { createHash } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";

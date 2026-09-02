@@ -1,3 +1,7 @@
+/*
+ * RF-8.2 — Pruebas unitarias de la configuración TTL del QR.
+ * Verifican QR_TTL_SECONDS y sus límites sin iniciar el servicio.
+ */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { loadQrConfig } from "../../../src/qr/qr.config";

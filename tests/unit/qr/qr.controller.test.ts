@@ -1,3 +1,7 @@
+/*
+ * RF-8.2 — Pruebas unitarias de los handlers HTTP de QR.
+ * Verifican validación y propagación de resultados/errores sin servidor Express.
+ */
 import type { Request, Response } from "express";
 import { describe, expect, it, vi } from "vitest";
 

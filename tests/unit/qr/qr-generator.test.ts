@@ -1,3 +1,7 @@
+/*
+ * RF-8.2 — Pruebas unitarias de token y representación QR.
+ * Verifican opacidad, hash y contenido QR sin utilizar HTTP.
+ */
 import { createHash } from "node:crypto";
 
 import jsQR from "jsqr";

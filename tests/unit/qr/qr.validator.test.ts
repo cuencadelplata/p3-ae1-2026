@@ -1,3 +1,7 @@
+/*
+ * RF-8.2 — Pruebas unitarias de validación de solicitudes QR.
+ * Verifican el esquema y los detalles de error sin levantar un servidor.
+ */
 import { describe, expect, it } from "vitest";
 
 import { validateQrGenerationRequest, validateQrValidationRequest } from "../../../src/qr/qr.validator";
