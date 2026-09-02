@@ -11,6 +11,9 @@ type UserRole = 'CLIENTE' | 'CONDUCTOR' | 'OPERADOR'
 
 export default function Register({ onRegisterSuccess, onSwitchToLogin }: RegisterProps) {
   const [name, setName] = useState('')
+  const [surname, setSurname] = useState('')
+  const [dni, setDni] = useState('')
+  const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -33,6 +36,9 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin }: Registe
     try {
       await axios.post('http://localhost:3001/auth/registrar-usuario', {
         nombre: name,
+        apellido: surname,
+        dni,
+        telefono: phone,
         email,
         password,
         rol: role,
@@ -78,15 +84,51 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin }: Registe
         {error && <div className="alert-error mb-6 text-sm">{error}</div>}
 
         <form onSubmit={handleRegister} className="space-y-6">
-          <div>
-            <label className="field-label">Nombre completo</label>
-            <div className="relative">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="field-label">Nombre</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="input-field"
-                placeholder="Juan Pérez"
+                placeholder="Juan"
+                required
+              />
+            </div>
+            <div>
+              <label className="field-label">Apellido</label>
+              <input
+                type="text"
+                value={surname}
+                onChange={(e) => setSurname(e.target.value)}
+                className="input-field"
+                placeholder="Pérez"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="field-label">DNI</label>
+              <input
+                type="text"
+                value={dni}
+                onChange={(e) => setDni(e.target.value)}
+                className="input-field"
+                placeholder="12345678"
+                required
+              />
+            </div>
+            <div>
+              <label className="field-label">Teléfono</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="input-field"
+                placeholder="11 1234 5678"
                 required
               />
             </div>

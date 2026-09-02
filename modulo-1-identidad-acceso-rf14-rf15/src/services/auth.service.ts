@@ -22,6 +22,10 @@ export class AuthError extends Error {
 }
 
 interface RegisterInput {
+    nombre: unknown;
+    apellido: unknown;
+    dni: unknown;
+    telefono: unknown;
     email: unknown;
     password: unknown;
     rol: unknown;
@@ -35,16 +39,27 @@ interface LoginInput {
 export async function registerUser(
     input: RegisterInput
 ) {
-    const { email, password, rol } = input;
+    const { nombre, apellido, dni, telefono, email, password, rol } = input;
 
     if (
+        typeof nombre !== "string" ||
+        typeof apellido !== "string" ||
+        typeof dni !== "string" ||
+        typeof telefono !== "string" ||
         typeof email !== "string" ||
         typeof password !== "string" ||
         typeof rol !== "string"
     ) {
         throw new AuthError(
             400,
-            "Email, password y rol son obligatorios"
+            "Nombre, apellido, DNI, telefono, email, password y rol son obligatorios"
+        );
+    }
+
+    if (!nombre.trim() || !apellido.trim() || !dni.trim() || !telefono.trim()) {
+        throw new AuthError(
+            400,
+            "Nombre, apellido, DNI y telefono son obligatorios"
         );
     }
 
@@ -89,6 +104,10 @@ export async function registerUser(
     );
 
     const id = createUser(
+        nombre.trim(),
+        apellido.trim(),
+        dni.trim(),
+        telefono.trim(),
         emailNormalizado,
         passwordHash,
         rol as UserRole
@@ -96,6 +115,10 @@ export async function registerUser(
 
     return {
         id,
+        nombre: nombre.trim(),
+        apellido: apellido.trim(),
+        dni: dni.trim(),
+        telefono: telefono.trim(),
         email: emailNormalizado,
         rol,
         estado: "ACTIVO"
@@ -175,6 +198,10 @@ export async function loginUser(
         expiresIn: "1h",
         usuario: {
             id: usuario.id,
+            nombre: usuario.nombre,
+            apellido: usuario.apellido,
+            dni: usuario.dni,
+            telefono: usuario.telefono,
             email: usuario.email,
             rol: usuario.rol,
             estado: usuario.estado

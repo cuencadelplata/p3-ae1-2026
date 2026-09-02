@@ -108,6 +108,10 @@ export async function handleOAuth2Callback(
         .substring(2);
 
     const usuarioId = createUser(
+        "",
+        "",
+        "",
+        "",
         userInfo.email,
         randomPassword,
         defaultRole

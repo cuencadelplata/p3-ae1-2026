@@ -28,6 +28,10 @@ export function findUserById(
 }
 
 export function createUser(
+    nombre: string,
+    apellido: string,
+    dni: string,
+    telefono: string,
     email: string,
     passwordHash: string,
     rol: UserRole
@@ -35,14 +39,18 @@ export function createUser(
     const result = db
         .prepare(`
             INSERT INTO usuarios (
+                nombre,
+                apellido,
+                dni,
+                telefono,
                 email,
                 password_hash,
                 rol,
                 estado
             )
-            VALUES (?, ?, ?, 'ACTIVO')
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVO')
         `)
-        .run(email, passwordHash, rol);
+        .run(nombre, apellido, dni, telefono, email, passwordHash, rol);
 
     return Number(result.lastInsertRowid);
 }

@@ -19,6 +19,10 @@ export type OAuth2Status =
 
 export interface UserRow {
     id: number;
+    nombre: string;
+    apellido: string;
+    dni: string;
+    telefono: string;
     email: string;
     password_hash: string;
     rol: UserRole;

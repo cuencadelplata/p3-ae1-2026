@@ -36,6 +36,14 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RegisterRequest'
+            example:
+              nombre: Juan
+              apellido: Perez
+              dni: '12345678'
+              telefono: '11 1234 5678'
+              email: juan.perez@example.com
+              password: '123456'
+              rol: CLIENTE
       responses:
         '201':
           description: Usuario registrado
@@ -189,8 +197,12 @@ components:
       enum: [CLIENTE, CONDUCTOR, OPERADOR]
     RegisterRequest:
       type: object
-      required: [email, password, rol]
+      required: [nombre, apellido, dni, telefono, email, password, rol]
       properties:
+        nombre: { type: string, example: Juan }
+        apellido: { type: string, example: Perez }
+        dni: { type: string, example: '12345678' }
+        telefono: { type: string, example: '11 1234 5678' }
         email: { type: string, format: email }
         password: { type: string, minLength: 6, format: password }
         rol: { $ref: '#/components/schemas/UserRole' }
@@ -204,6 +216,10 @@ components:
       type: object
       properties:
         id: { type: integer }
+        nombre: { type: string }
+        apellido: { type: string }
+        dni: { type: string }
+        telefono: { type: string }
         email: { type: string, format: email }
         rol: { $ref: '#/components/schemas/UserRole' }
         estado: { type: string, enum: [ACTIVO, BLOQUEADO] }
