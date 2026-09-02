@@ -25,13 +25,13 @@ describe("calculoReintegro", () => {
   });
 
   it("funciona con el primer dato del mock (monto 3000)", () => {
-    const primero = cancelacionesDeEjemplo[0];
+    const primero = cancelacionesDeEjemplo[0]!;
     const resultado = calculoReintegro(primero.montoCancelacion);
     expect(resultado).toBe(2850); // 3000 * 0.95
   });
 
   it("funciona con el segundo dato del mock (monto 4500)", () => {
-    const segundo = cancelacionesDeEjemplo[1];
+    const segundo = cancelacionesDeEjemplo[1]!;
     const resultado = calculoReintegro(segundo.montoCancelacion);
     expect(resultado).toBe(4275); // 4500 * 0.95
   });

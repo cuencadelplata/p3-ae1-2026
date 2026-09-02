@@ -1,7 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
 import express from "express";
 import rutaPago from "../metodo-pago/rutaPago";
+import * as procesoPago from "../metodo-pago/procesoPago";
+
 
 const app = express();
 app.use(express.json());
@@ -92,4 +94,32 @@ describe("POST /metodo-pago/:viajeId/rechazar (ruta HTTP)", () => {
 
     expect(respuesta.status).toBe(400);
   });
+});
+
+describe("Casos adicionales de cobertura", () => {
+
+  it("devuelve 400 al autorizar si falta idOrden en el body", async () => {
+    await request(app)
+      .post("/metodo-pago")
+      .send({ clienteId: "cliente1", viajeId: "viaje-sin-orden", tipo: "efectivo" });
+
+    const respuesta = await request(app)
+      .post("/metodo-pago/viaje-sin-orden/autorizar")
+      .send({}); // sin idOrden
+
+    expect(respuesta.status).toBe(400);
+    expect(respuesta.body.mensaje).toBe("idOrden es requerido");
+  });
+
+  it("devuelve 400 si ocurre un error inesperado al consultar un método de pago", async () => {
+    vi.spyOn(procesoPago, "buscarPagoPorViaje").mockImplementation(() => {
+      throw new Error("fallo inesperado simulado");
+    });
+
+    const respuesta = await request(app).get("/metodo-pago/cualquiera");
+    expect(respuesta.status).toBe(400);
+
+    vi.restoreAllMocks();
+  });
+
 });

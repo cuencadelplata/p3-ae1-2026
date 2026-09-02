@@ -6,6 +6,7 @@ export default defineConfig({
       "M7-cargo-cancelacion",
       "dist",
       "src/test/E2E",   // Vitest no debe tocar esto, es de Playwright
+      "tests",
     ],
   },
 });

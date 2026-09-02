@@ -2,31 +2,28 @@
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "./dist",
-
-    "module": "nodenext",
+    "module": "commonjs",
     "target": "esnext",
-
     "types": ["node"],
-
     "sourceMap": true,
     "declaration": true,
     "declarationMap": true,
-
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-
     "strict": true,
-    "verbatimModuleSyntax": true,
+    "verbatimModuleSyntax": false,
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "esModuleInterop": true
   },
   "include": ["src/**/*.ts"],
   "exclude": [
     "node_modules",
     "dist",
     "tests",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "M7-cargo-cancelacion"
   ]
 }
