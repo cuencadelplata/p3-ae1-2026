@@ -1,4 +1,5 @@
 import { supabase } from "../config/supabaseClient.js";
+import { AppError } from "../errors/AppError.js";
 import { type VehiculoParaInsertar } from "./vehiculo-dto.js";
 import { type Vehiculo, type TipoServicio } from "./vehiculo-model.js";
 
@@ -60,6 +61,9 @@ export async function insertarVehiculo(
     .single();
 
   if (error) {
+    if (error.code === "23505") {
+      throw new AppError("Ya existe un vehículo con esa patente", 409);
+    }
     throw new Error(`Error al registrar vehículo: ${error.message}`);
   }
   return filaAVehiculo(data as VehiculoFila);
