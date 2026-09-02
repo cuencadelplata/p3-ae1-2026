@@ -13,6 +13,14 @@ describe('GET /docs', () => {
     expect(response.text).toContain('Swagger UI');
   });
 
+  it('expone la especificación OpenAPI en formato JSON', async () => {
+    const response = await request(app).get('/openapi.json');
+
+    expect(response.status).toBe(200);
+    expect(response.type).toMatch(/json/);
+    expect(response.body).toEqual(openApiDocument);
+  });
+
   it('documenta ejemplos y la ausencia de autenticación propia en AE1', () => {
     expect(openApiDocument.security).toEqual([]);
     expect(openApiDocument.info.description).toContain('no implementa autenticación propia');

@@ -1,16 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
 import request from 'supertest';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createApp } from '../../src/app.js';
 import type { TarifaClient } from '../../src/clients/tarifa.client.js';
 import { InMemoryReservaRepository } from '../../src/repositories/in-memory-reserva.repository.js';
 import { ReservaService } from '../../src/services/reserva.service.js';
-
-const tarifaClient: TarifaClient = {
-  estimar: async () => ({ tarifaEstimada: 3_250, moneda: 'ARS' }),
-};
 
 const bodyValido = () => ({
   clienteId: randomUUID(),
@@ -23,10 +19,52 @@ const bodyValido = () => ({
 describe('API /reservas', () => {
   let repository: InMemoryReservaRepository;
   let app: ReturnType<typeof createApp>;
+  let estimarTarifa: ReturnType<typeof vi.fn<TarifaClient['estimar']>>;
 
   beforeEach(() => {
     repository = new InMemoryReservaRepository();
-    app = createApp({ reservaService: new ReservaService(repository, tarifaClient) });
+    estimarTarifa = vi.fn(async () => ({ tarifaEstimada: 3_250, moneda: 'ARS' }));
+    app = createApp({
+      reservaService: new ReservaService(repository, { estimar: estimarTarifa }),
+    });
+  });
+
+  it('recalcula la tarifa al modificar origen, destino o vehículo', async () => {
+    const creada = await request(app).post('/reservas').send(bodyValido());
+    estimarTarifa.mockResolvedValueOnce({ tarifaEstimada: 4_800, moneda: 'ARS' });
+
+    const actualizada = await request(app)
+      .patch(`/reservas/${creada.body.id as string}`)
+      .send({ destino: 'Puerto', vehiculo: 'MOTO' });
+
+    expect(actualizada.status).toBe(200);
+    expect(actualizada.body).toMatchObject({
+      destino: 'Puerto',
+      vehiculo: 'MOTO',
+      tarifaEstimada: 4_800,
+      moneda: 'ARS',
+    });
+    expect(estimarTarifa).toHaveBeenLastCalledWith({
+      origen: bodyValido().origen,
+      destino: 'Puerto',
+      vehiculo: 'MOTO',
+    });
+  });
+
+  it('elimina la tarifa anterior si M7 falla al modificar el recorrido', async () => {
+    const creada = await request(app).post('/reservas').send(bodyValido());
+    estimarTarifa.mockRejectedValueOnce(new Error('M7 no disponible'));
+
+    const actualizada = await request(app)
+      .patch(`/reservas/${creada.body.id as string}`)
+      .send({ destino: 'Puerto' });
+
+    expect(actualizada.status).toBe(200);
+    expect(actualizada.body).toMatchObject({
+      destino: 'Puerto',
+      tarifaEstimada: null,
+      moneda: 'ARS',
+    });
   });
 
   it('crea, consulta, lista, modifica y cancela lógicamente una reserva', async () => {
@@ -42,9 +80,7 @@ describe('API /reservas', () => {
     const listado = await request(app).get('/reservas');
     expect(listado.body.reservas).toHaveLength(1);
 
-    const modificada = await request(app)
-      .patch(`/reservas/${id}`)
-      .send({ destino: 'Puerto' });
+    const modificada = await request(app).patch(`/reservas/${id}`).send({ destino: 'Puerto' });
     expect(modificada.status).toBe(200);
     expect(modificada.body.destino).toBe('Puerto');
 

@@ -27,10 +27,14 @@ const waitForHealth = async () => {
   while (Date.now() < deadline) {
     try {
       const healthy = await new Promise((resolve) => {
-        const healthRequest = request('http://127.0.0.1:3909/health', { timeout: 2_000 }, (response) => {
-          response.resume();
-          resolve(response.statusCode === 200);
-        });
+        const healthRequest = request(
+          'http://127.0.0.1:3909/health',
+          { timeout: 2_000 },
+          (response) => {
+            response.resume();
+            resolve(response.statusCode === 200);
+          },
+        );
         healthRequest.on('timeout', () => healthRequest.destroy());
         healthRequest.on('error', () => resolve(false));
         healthRequest.end();
@@ -64,11 +68,10 @@ try {
     ['compose', 'exec', '-T', 'm9-reservas', 'wget', '-qO-', 'http://m7-stub:3002/health'],
     dockerEnvironment,
   );
-  run(
-    process.execPath,
-    [npmCli, 'run', 'test:e2e:only'],
-    { ...process.env, E2E_BASE_URL: 'http://127.0.0.1:3909' },
-  );
+  run(process.execPath, [npmCli, 'run', 'test:e2e:only'], {
+    ...process.env,
+    E2E_BASE_URL: 'http://127.0.0.1:3909',
+  });
 } finally {
   if (composeStarted) {
     run('docker', ['compose', 'down']);

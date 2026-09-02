@@ -35,7 +35,7 @@ describe('middleware de errores', () => {
     expect(response.status).toHaveBeenCalledWith(500);
     expect(json).toHaveBeenCalledWith({
       error: {
-        codigo: 'ERROR_PERSISTENCIA',
+        codigo: 'ERROR_INTERNO',
         mensaje: 'Ocurrió un error interno.',
       },
     });

@@ -44,8 +44,9 @@ describe('E2E local contra contenedores', () => {
     expect(creada).toMatchObject({ estado: 'PROGRAMADA', tarifaEstimada: 2_500, moneda: 'ARS' });
 
     expect((await requestJson<Reserva>(`/reservas/${creada.id}`)).id).toBe(creada.id);
-    expect((await requestJson<{ reservas: Reserva[] }>('/reservas')).reservas)
-      .toEqual(expect.arrayContaining([expect.objectContaining({ id: creada.id })]));
+    expect((await requestJson<{ reservas: Reserva[] }>('/reservas')).reservas).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: creada.id })]),
+    );
 
     const actualizada = await requestJson<Reserva>(`/reservas/${creada.id}`, {
       method: 'PATCH',

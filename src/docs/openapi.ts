@@ -126,7 +126,7 @@ const examples = {
   },
   ErrorInterno: {
     summary: 'Error no controlado',
-    value: { error: { codigo: 'ERROR_PERSISTENCIA', mensaje: 'Ocurrió un error interno.' } },
+    value: { error: { codigo: 'ERROR_INTERNO', mensaje: 'Ocurrió un error interno.' } },
   },
 } as const;
 
@@ -160,9 +160,22 @@ export const openApiDocument = {
     version: '1.0.0',
     description:
       'API REST para administrar y activar reservas programadas. En AE1 M9 no implementa autenticación propia: la autenticación pertenece a M1 – Identidad y Acceso y su integración queda fuera del alcance actual del módulo.',
+    license: {
+      name: 'Uso académico',
+    },
   },
+  servers: [
+    {
+      url: 'http://localhost:3000',
+      description: 'Ejecución local predeterminada',
+    },
+  ],
   security: [],
-  tags: [{ name: 'Salud' }, { name: 'Reservas' }],
+  tags: [
+    { name: 'Salud', description: 'Verificación de disponibilidad del servicio.' },
+    { name: 'Documentación', description: 'Contrato OpenAPI del módulo.' },
+    { name: 'Reservas', description: 'Gestión del ciclo de reservas programadas.' },
+  ],
   paths: {
     '/health': {
       get: {
@@ -173,6 +186,26 @@ export const openApiDocument = {
           '200': {
             description: 'El servicio está disponible.',
             ...jsonSchema('#/components/schemas/HealthResponse', 'HealthOk'),
+          },
+        },
+      },
+    },
+    '/openapi.json': {
+      get: {
+        tags: ['Documentación'],
+        summary: 'Obtener la especificación OpenAPI',
+        operationId: 'getOpenApiDocument',
+        responses: {
+          '200': {
+            description: 'Especificación OpenAPI utilizada por Swagger UI.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  additionalProperties: true,
+                },
+              },
+            },
           },
         },
       },
@@ -288,8 +321,18 @@ export const openApiDocument = {
         required: ['clienteId', 'origen', 'destino', 'vehiculo', 'fechaHoraProgramada'],
         properties: {
           clienteId: { type: 'string', format: 'uuid' },
-          origen: { type: 'string', minLength: 1, maxLength: 500, description: 'Debe ser diferente de destino.' },
-          destino: { type: 'string', minLength: 1, maxLength: 500, description: 'Debe ser diferente de origen.' },
+          origen: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 500,
+            description: 'Debe ser diferente de destino.',
+          },
+          destino: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 500,
+            description: 'Debe ser diferente de origen.',
+          },
           vehiculo: { type: 'string', enum: ['AUTO', 'MOTO'] },
           fechaHoraProgramada: {
             type: 'string',
@@ -303,8 +346,18 @@ export const openApiDocument = {
         additionalProperties: false,
         minProperties: 1,
         properties: {
-          origen: { type: 'string', minLength: 1, maxLength: 500, description: 'Debe ser diferente de destino.' },
-          destino: { type: 'string', minLength: 1, maxLength: 500, description: 'Debe ser diferente de origen.' },
+          origen: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 500,
+            description: 'Debe ser diferente de destino.',
+          },
+          destino: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 500,
+            description: 'Debe ser diferente de origen.',
+          },
           vehiculo: { type: 'string', enum: ['AUTO', 'MOTO'] },
           fechaHoraProgramada: {
             type: 'string',
@@ -317,9 +370,19 @@ export const openApiDocument = {
         type: 'object',
         additionalProperties: false,
         required: [
-          'id', 'clienteId', 'origen', 'destino', 'vehiculo', 'fechaHoraProgramada',
-          'estado', 'tarifaEstimada', 'moneda', 'criterioAsignacion', 'idSolicitud',
-          'creadoEn', 'actualizadoEn',
+          'id',
+          'clienteId',
+          'origen',
+          'destino',
+          'vehiculo',
+          'fechaHoraProgramada',
+          'estado',
+          'tarifaEstimada',
+          'moneda',
+          'criterioAsignacion',
+          'idSolicitud',
+          'creadoEn',
+          'actualizadoEn',
         ],
         properties: {
           id: { type: 'string', format: 'uuid' },

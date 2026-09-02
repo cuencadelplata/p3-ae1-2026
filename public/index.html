@@ -14,7 +14,13 @@
   <body>
     <header class="site-header">
       <a class="brand" href="/" aria-label="Ir al inicio de M9 Reservas">M9 Reservas</a>
-      <button class="menu-button" id="menu-button" type="button" aria-expanded="false" aria-controls="header-nav">
+      <button
+        class="menu-button"
+        id="menu-button"
+        type="button"
+        aria-expanded="false"
+        aria-controls="header-nav"
+      >
         <span></span><span></span><span></span>
         <span class="sr-only">Abrir navegación</span>
       </button>
@@ -28,7 +34,9 @@
       <div class="toast" id="toast" role="status" aria-live="polite" hidden>
         <span class="toast-icon" aria-hidden="true">✓</span>
         <p id="toast-message"></p>
-        <button id="toast-close" class="toast-close" type="button" aria-label="Cerrar notificación">×</button>
+        <button id="toast-close" class="toast-close" type="button" aria-label="Cerrar notificación">
+          ×
+        </button>
       </div>
 
       <div class="workspace">
@@ -49,7 +57,14 @@
 
             <div class="field">
               <label for="origen">Origen</label>
-              <input id="origen" name="origen" type="text" placeholder="Ej. Campus Central" maxlength="500" required />
+              <input
+                id="origen"
+                name="origen"
+                type="text"
+                placeholder="Ej. Campus Central"
+                maxlength="500"
+                required
+              />
             </div>
 
             <div class="field">
@@ -76,8 +91,12 @@
             </div>
 
             <div class="form-actions">
-              <button class="primary-button" id="submit-button" type="submit">Programar reserva</button>
-              <button class="secondary-button" id="cancel-edit-button" type="button" hidden>Cancelar edición</button>
+              <button class="primary-button" id="submit-button" type="submit">
+                Programar reserva
+              </button>
+              <button class="secondary-button" id="cancel-edit-button" type="button" hidden>
+                Cancelar edición
+              </button>
             </div>
           </form>
         </section>
@@ -97,7 +116,9 @@
               </select>
               <button class="refresh-button" id="refresh-button" type="button">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M20 6v5h-5M4 18v-5h5M18.5 9A7 7 0 0 0 6.2 6.2L4 8m16 8-2.2 1.8A7 7 0 0 1 5.5 15" />
+                  <path
+                    d="M20 6v5h-5M4 18v-5h5M18.5 9A7 7 0 0 0 6.2 6.2L4 8m16 8-2.2 1.8A7 7 0 0 1 5.5 15"
+                  />
                 </svg>
                 Actualizar
               </button>

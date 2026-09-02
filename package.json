@@ -1,6 +1,6 @@
 {
   "name": "m9-reservas-programadas",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Microservicio M9 para la gestión de reservas programadas.",
   "type": "module",
@@ -24,7 +24,8 @@
     "lint:fix": "eslint . --ext .ts,.js --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "verify": "npm run typecheck && npm run lint && npm run format:check && npm test"
   },
   "dependencies": {
     "cors": "2.8.6",
@@ -36,19 +37,21 @@
     "zod": "4.5.4"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/cors": "2.8.19",
     "@types/express": "5.0.6",
     "@types/node": "22.20.1",
     "@types/supertest": "7.2.1",
     "@types/swagger-ui-express": "4.1.8",
     "@vitest/coverage-v8": "^4.1.11",
-    "eslint": "^9.39.5",
+    "eslint": "^10.9.1",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-import": "^2.32.0",
+    "globals": "^17.12.0",
     "prettier": "^3.9.6",
     "supertest": "7.2.2",
     "tsx": "4.23.13",
-    "typescript": "7.0.2",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.69.0",
     "vitest": "4.1.11"
   }
 }

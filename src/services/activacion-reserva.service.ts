@@ -13,23 +13,16 @@ export class ActivacionReservaService {
   ) {}
 
   public async activar(reservaId: string): Promise<ResultadoActivacion> {
-    const reclamada = await this.repository.cambiarEstado(
-      reservaId,
-      'PROGRAMADA',
-      'ACTIVANDO',
-    );
+    const reclamada = await this.repository.cambiarEstado(reservaId, 'PROGRAMADA', 'ACTIVANDO');
     if (reclamada === null) {
       return { reservaId, activada: false };
     }
 
     try {
       const solicitud = await this.despachoClient.crearSolicitud(reclamada);
-      const activada = await this.repository.cambiarEstado(
-        reservaId,
-        'ACTIVANDO',
-        'ACTIVADA',
-        { idSolicitud: solicitud.solicitudId },
-      );
+      const activada = await this.repository.cambiarEstado(reservaId, 'ACTIVANDO', 'ACTIVADA', {
+        idSolicitud: solicitud.solicitudId,
+      });
       return { reservaId, activada: activada !== null };
     } catch (error) {
       await this.repository.cambiarEstado(reservaId, 'ACTIVANDO', 'FALLIDA');

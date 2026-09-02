@@ -1,5 +1,10 @@
 import type { TarifaClient } from '../clients/tarifa.client.js';
-import type { ActualizarReserva, CrearReserva, Reserva } from '../domain/reserva.js';
+import type {
+  ActualizarReserva,
+  CambiosReserva,
+  CrearReserva,
+  Reserva,
+} from '../domain/reserva.js';
 import { AppError } from '../errors/app.error.js';
 import type { ReservaRepository } from '../repositories/reserva.repository.js';
 
@@ -62,7 +67,26 @@ export class ReservaService {
     this.validarOrigenDestino(origen, destino);
     this.validarFechaFutura(fecha);
 
-    const actualizada = await this.repository.actualizarProgramada(id, input);
+    const cambios: CambiosReserva = { ...input };
+    const requiereNuevaTarifa =
+      input.origen !== undefined || input.destino !== undefined || input.vehiculo !== undefined;
+
+    if (requiereNuevaTarifa) {
+      try {
+        const tarifa = await this.tarifaClient.estimar({
+          origen,
+          destino,
+          vehiculo: input.vehiculo ?? actual.vehiculo,
+        });
+        cambios.tarifaEstimada = tarifa.tarifaEstimada;
+        cambios.moneda = tarifa.moneda;
+      } catch {
+        cambios.tarifaEstimada = null;
+        cambios.moneda = actual.moneda ?? 'ARS';
+      }
+    }
+
+    const actualizada = await this.repository.actualizarProgramada(id, cambios);
     if (actualizada === null) {
       throw new AppError(
         409,
@@ -106,11 +130,7 @@ export class ReservaService {
 
   private validarOrigenDestino(origen: string, destino: string): void {
     if (normalizarUbicacion(origen) === normalizarUbicacion(destino)) {
-      throw new AppError(
-        400,
-        'DATOS_INVALIDOS',
-        'El origen y el destino deben ser diferentes.',
-      );
+      throw new AppError(400, 'DATOS_INVALIDOS', 'El origen y el destino deben ser diferentes.');
     }
   }
 }

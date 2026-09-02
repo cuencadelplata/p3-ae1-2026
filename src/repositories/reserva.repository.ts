@@ -1,5 +1,5 @@
 import type {
-  ActualizarReserva,
+  CambiosReserva,
   CambioEstadoReserva,
   CrearReserva,
   EstadoReserva,
@@ -10,7 +10,7 @@ export interface ReservaRepository {
   crear(input: CrearReserva): Promise<Reserva>;
   obtenerPorId(id: string): Promise<Reserva | null>;
   listar(): Promise<Reserva[]>;
-  actualizarProgramada(id: string, input: ActualizarReserva): Promise<Reserva | null>;
+  actualizarProgramada(id: string, input: CambiosReserva): Promise<Reserva | null>;
   cancelarProgramada(id: string): Promise<Reserva | null>;
   buscarPendientes(fechaLimite: Date, limite?: number): Promise<Reserva[]>;
   cambiarEstado(

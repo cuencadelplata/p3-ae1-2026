@@ -1,6 +1,10 @@
 import type { RequestHandler } from 'express';
 
-import { parseActualizarReserva, parseCrearReserva, parseReservaId } from '../schemas/reserva.schema.js';
+import {
+  parseActualizarReserva,
+  parseCrearReserva,
+  parseReservaId,
+} from '../schemas/reserva.schema.js';
 import type { ReservaService } from '../services/reserva.service.js';
 
 export interface ReservaController {

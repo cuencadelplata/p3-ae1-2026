@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type {
-  ActualizarReserva,
+  CambiosReserva,
   CambioEstadoReserva,
   CrearReserva,
   EstadoReserva,
@@ -47,10 +47,7 @@ export class InMemoryReservaRepository implements ReservaRepository {
       .map(clone);
   }
 
-  public async actualizarProgramada(
-    id: string,
-    input: ActualizarReserva,
-  ): Promise<Reserva | null> {
+  public async actualizarProgramada(id: string, input: CambiosReserva): Promise<Reserva | null> {
     const reserva = this.reservas.get(id);
     if (reserva === undefined || reserva.estado !== 'PROGRAMADA') return null;
 

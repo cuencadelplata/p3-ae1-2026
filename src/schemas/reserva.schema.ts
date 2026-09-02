@@ -55,9 +55,7 @@ const actualizarReservaSchema = z
 const idSchema = z.string().uuid();
 
 const toValidationError = (error: z.ZodError): AppError => {
-  const fechaInvalida = error.issues.some(
-    (issue) => issue.path[0] === 'fechaHoraProgramada',
-  );
+  const fechaInvalida = error.issues.some((issue) => issue.path[0] === 'fechaHoraProgramada');
 
   return new AppError(
     400,

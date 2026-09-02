@@ -11,9 +11,9 @@ services:
       M7_URL: http://m7-stub:3002
       RESERVATION_JOB_INTERVAL: ${RESERVATION_JOB_INTERVAL:-*/30 * * * * *}
     ports:
-      - "${PORT:-3000}:${PORT:-3000}"
+      - '${PORT:-3000}:${PORT:-3000}'
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:$$PORT/health"]
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:$$PORT/health']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -29,13 +29,13 @@ services:
   m5-stub:
     image: ${DOCKER_IMAGE:-m9-reservas-programadas:local}
     pull_policy: never
-    command: ["node", "dist/stubs/m5/server.js"]
+    command: ['node', 'dist/stubs/m5/server.js']
     environment:
       PORT: 3001
     expose:
-      - "3001"
+      - '3001'
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3001/health']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -45,13 +45,13 @@ services:
   m7-stub:
     image: ${DOCKER_IMAGE:-m9-reservas-programadas:local}
     pull_policy: never
-    command: ["node", "dist/stubs/m7/server.js"]
+    command: ['node', 'dist/stubs/m7/server.js']
     environment:
       PORT: 3002
     expose:
-      - "3002"
+      - '3002'
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3002/health"]
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3002/health']
       interval: 5s
       timeout: 3s
       retries: 5

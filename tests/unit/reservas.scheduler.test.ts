@@ -43,7 +43,10 @@ describe('activación programada', () => {
     const crearSolicitud = vi.fn(async () => ({ solicitudId: randomUUID(), estado: 'CREADA' }));
     const service = new ActivacionReservaService(repository, { crearSolicitud });
 
-    const resultados = await Promise.all([service.activar(reserva.id), service.activar(reserva.id)]);
+    const resultados = await Promise.all([
+      service.activar(reserva.id),
+      service.activar(reserva.id),
+    ]);
 
     expect(resultados.filter(({ activada }) => activada)).toHaveLength(1);
     expect(crearSolicitud).toHaveBeenCalledTimes(1);
@@ -68,7 +71,9 @@ describe('activación programada', () => {
     });
     const scheduler = new ReservasScheduler(repository, service, 'INVALIDA');
 
-    expect(() => scheduler.start()).toThrow('RESERVATION_JOB_INTERVAL no es una expresión cron válida.');
+    expect(() => scheduler.start()).toThrow(
+      'RESERVATION_JOB_INTERVAL no es una expresión cron válida.',
+    );
 
     const valido = new ReservasScheduler(repository, service, '* * * * * *');
     valido.start();

@@ -36,6 +36,7 @@ export const createApp = ({ reservaService }: AppDependencies = {}) => {
   application.use(express.static(path.resolve('public')));
 
   application.use('/health', healthRouter);
+  application.get('/openapi.json', (_request, response) => response.json(openApiDocument));
   application.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
   if (reservaService !== undefined) {
     application.use('/reservas', createReservaRouter(reservaService));

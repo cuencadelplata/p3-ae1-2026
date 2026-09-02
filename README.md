@@ -49,12 +49,12 @@ Si se necesita personalizar un valor, copiar `.env.example` como `.env` antes de
 
 ## Accesos locales
 
-| Recurso | Dirección |
-| --- | --- |
-| UI | `http://localhost:3000/` |
+| Recurso         | Dirección                        |
+| --------------- | -------------------------------- |
+| UI              | `http://localhost:3000/`         |
 | API de reservas | `http://localhost:3000/reservas` |
-| Swagger UI | `http://localhost:3000/docs/` |
-| Salud de M9 | `http://localhost:3000/health` |
+| Swagger UI      | `http://localhost:3000/docs/`    |
+| Salud de M9     | `http://localhost:3000/health`   |
 
 M5 y M7 son dependencias internas de `reservas-network` y no publican puertos al host. La solución no define volúmenes porque la persistencia actual es en memoria.
 
@@ -78,25 +78,26 @@ docker compose exec -T m9-reservas wget -qO- http://m7-stub:3002/health
 
 Los valores de Compose ya están preparados para la ejecución coordinada. `.env.example` sirve como referencia para ejecutar M9 directamente con npm.
 
-| Variable | Default | Descripción |
-| --- | --- | --- |
-| `PORT` | `3000` | Puerto HTTP de M9. |
-| `NODE_ENV` | `development` | Entorno de Node.js. |
-| `M5_URL` | `http://localhost:3001` | URL del servicio de despacho. |
-| `M7_URL` | `http://localhost:3002` | URL del servicio de tarifas. |
-| `RESERVATION_JOB_INTERVAL` | `*/30 * * * * *` | Expresión cron del scheduler. |
+| Variable                   | Default                 | Descripción                   |
+| -------------------------- | ----------------------- | ----------------------------- |
+| `PORT`                     | `3000`                  | Puerto HTTP de M9.            |
+| `NODE_ENV`                 | `development`           | Entorno de Node.js.           |
+| `M5_URL`                   | `http://localhost:3001` | URL del servicio de despacho. |
+| `M7_URL`                   | `http://localhost:3002` | URL del servicio de tarifas.  |
+| `RESERVATION_JOB_INTERVAL` | `*/30 * * * * *`        | Expresión cron del scheduler. |
 
 ## API
 
-| Método | Ruta | Propósito |
-| --- | --- | --- |
-| GET | `/health` | Consultar salud básica. |
-| POST | `/reservas` | Crear una reserva `PROGRAMADA` y consultar M7. |
-| GET | `/reservas` | Listar reservas por fecha ascendente. |
-| GET | `/reservas/:id` | Obtener una reserva por UUID. |
-| PATCH | `/reservas/:id` | Modificar una reserva `PROGRAMADA`. |
-| DELETE | `/reservas/:id` | Cancelar lógicamente una reserva `PROGRAMADA`. |
-| GET | `/docs/` | Abrir Swagger UI. |
+| Método | Ruta            | Propósito                                                     |
+| ------ | --------------- | ------------------------------------------------------------- |
+| GET    | `/health`       | Consultar salud básica.                                       |
+| GET    | `/openapi.json` | Descargar la especificación OpenAPI utilizada por Swagger UI. |
+| POST   | `/reservas`     | Crear una reserva `PROGRAMADA` y consultar M7.                |
+| GET    | `/reservas`     | Listar reservas por fecha ascendente.                         |
+| GET    | `/reservas/:id` | Obtener una reserva por UUID.                                 |
+| PATCH  | `/reservas/:id` | Modificar una reserva `PROGRAMADA`.                           |
+| DELETE | `/reservas/:id` | Cancelar lógicamente una reserva `PROGRAMADA`.                |
+| GET    | `/docs/`        | Abrir Swagger UI.                                             |
 
 La especificación completa está versionada en `openapi/openapi.yaml`.
 
@@ -194,6 +195,7 @@ Luego verificar `http://localhost:3000/health`, abrir `http://localhost:3000/doc
 ## Imágenes Docker y registry
 
 La composición actual construye una única imagen multirol para M9 y los stubs M5/M7:
+
 ```text
 m9-reservas-programadas:local
 ```
@@ -226,8 +228,6 @@ Detener y eliminar recursos locales de Compose:
 npm run local:clean
 ```
 
-<<<<<<< HEAD
-=======
 La limpieza elimina los contenedores, la red y los volúmenes asociados a esta composición. La implementación actual no define volúmenes de datos porque utiliza persistencia en memoria.
 
 ## Preparación del archivo de entrega
@@ -240,13 +240,12 @@ Para el Campus Virtual se debe incluir una copia `.zip` del repositorio dentro d
 - `.env` u otros archivos con secretos;
 - logs y archivos temporales.
 
-Sí deben incluirse el código fuente, las pruebas, `Dockerfile`, `docker-compose.yml`, `package.json`, `package-lock.json`, `.env.example`, `.gitignore`, `README.md`, `docs/` y `openapi/openapi.yaml`.
+Sí deben incluirse el código fuente, las pruebas, `Dockerfile`, `docker-compose.yml`, `package.json`, `package-lock.json`, `.env.example`, `.gitignore`, `README.md` y `openapi/openapi.yaml`.
 
->>>>>>> f404cb6 (Code cleaning y actualizacion de dependencias)
 ## Documentación
 
-- `docs/FUNCIONAMIENTO.md`: arquitectura, flujos, scheduler, contenedores y limitaciones.
 - `openapi/openapi.yaml`: contrato OpenAPI portable.
+- `http://localhost:3000/openapi.json`: contrato OpenAPI servido por la aplicación.
 - `http://localhost:3000/docs/`: visualización interactiva mediante Swagger UI.
 
 ## Límites de seguridad

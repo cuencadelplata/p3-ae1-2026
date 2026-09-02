@@ -116,7 +116,9 @@ const resetForm = () => {
 };
 
 const cancelReservation = async (reserva) => {
-  const confirmed = window.confirm(`¿Cancelar la reserva de ${reserva.origen} a ${reserva.destino}?`);
+  const confirmed = window.confirm(
+    `¿Cancelar la reserva de ${reserva.origen} a ${reserva.destino}?`,
+  );
   if (!confirmed) return;
 
   try {
@@ -212,7 +214,9 @@ form.addEventListener('submit', async (event) => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ clienteId: clienteInput.value.trim(), ...payload }),
       });
-      showToast(`Reserva creada correctamente. El viaje ${created.id.slice(0, 8)} ha sido programado.`);
+      showToast(
+        `Reserva creada correctamente. El viaje ${created.id.slice(0, 8)} ha sido programado.`,
+      );
     } else {
       await requestJson(`/reservas/${editingId}`, {
         method: 'PATCH',

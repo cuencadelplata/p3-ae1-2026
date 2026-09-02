@@ -1,17 +1,21 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HttpDespachoClient } from '../../src/clients/despacho.client.js';
 import { HttpTarifaClient } from '../../src/clients/tarifa.client.js';
 import { AppError } from '../../src/errors/app.error.js';
 
 describe('clientes HTTP de servicios externos', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('crea una solicitud de despacho con la respuesta esperada', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ solicitudId: '123e4567-e89b-12d3-a456-426614174000', estado: 'CREADA' }),
     });
 
-    globalThis.fetch = fetchMock as typeof fetch;
+    vi.stubGlobal('fetch', fetchMock);
 
     const client = new HttpDespachoClient('http://m5:3001');
     const result = await client.crearSolicitud({
@@ -30,13 +34,16 @@ describe('clientes HTTP de servicios externos', () => {
       actualizadoEn: '2099-01-01T12:00:00.000Z',
     });
 
-    expect(result).toEqual({ solicitudId: '123e4567-e89b-12d3-a456-426614174000', estado: 'CREADA' });
+    expect(result).toEqual({
+      solicitudId: '123e4567-e89b-12d3-a456-426614174000',
+      estado: 'CREADA',
+    });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('lanza AppError si M5 falla', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 503 });
-    globalThis.fetch = fetchMock as typeof fetch;
+    vi.stubGlobal('fetch', fetchMock);
 
     const client = new HttpDespachoClient('http://m5:3001');
 
@@ -65,7 +72,7 @@ describe('clientes HTTP de servicios externos', () => {
       json: async () => ({ tarifaEstimada: 2450, moneda: 'ARS' }),
     });
 
-    globalThis.fetch = fetchMock as typeof fetch;
+    vi.stubGlobal('fetch', fetchMock);
 
     const client = new HttpTarifaClient('http://m7:3002');
     const result = await client.estimar({ origen: 'A', destino: 'B', vehiculo: 'AUTO' });
@@ -75,7 +82,7 @@ describe('clientes HTTP de servicios externos', () => {
 
   it('lanza AppError si M7 falla', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500 });
-    globalThis.fetch = fetchMock as typeof fetch;
+    vi.stubGlobal('fetch', fetchMock);
 
     const client = new HttpTarifaClient('http://m7:3002');
 

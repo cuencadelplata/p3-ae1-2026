@@ -44,6 +44,11 @@ export interface ActualizarReserva {
   fechaHoraProgramada?: string;
 }
 
+export interface CambiosReserva extends ActualizarReserva {
+  tarifaEstimada?: number | null;
+  moneda?: string | null;
+}
+
 export interface CambioEstadoReserva {
   idSolicitud?: string | null;
 }
