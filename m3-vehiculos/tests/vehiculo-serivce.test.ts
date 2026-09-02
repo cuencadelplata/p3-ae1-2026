@@ -1,4 +1,4 @@
-import { describe, jest } from "@jest/globals";
+import { beforeEach, describe, jest } from "@jest/globals";
 
 jest.unstable_mockModule("../src/vehiculos/vehiculo-repository.js", () => ({
   existePatente: jest.fn(),
