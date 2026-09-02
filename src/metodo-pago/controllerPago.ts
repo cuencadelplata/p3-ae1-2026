@@ -50,7 +50,14 @@ export function crearMetodoPago(req: Request, res: Response) {
 export function autorizarMetodoPago(req: Request, res: Response) {
   try {
     const viajeId = String(req.params.viajeId);
-    const metodoPago = autorizarPago(viajeId);
+    const idOrden = req.body.idOrden;
+
+    if (!idOrden) {
+      res.status(400).json({ mensaje: "idOrden es requerido" });
+      return;
+    }
+
+    const metodoPago = autorizarPago(viajeId, idOrden);
     res.status(200).json(metodoPago);
   } catch (error) {
     res.status(400).json({
