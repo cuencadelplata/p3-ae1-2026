@@ -13,9 +13,7 @@ guia paso a paso para levantar el servicio en Docker
 - ubicate en la carpeta m6_viajes 
 
 paso 0
-git clone [https://github.com/noeediez/p3-ae1-2026-M6-Viajes.git](https://github.com/noeediez/p3-ae1-2026-M6-Viajes.git)
-cd p3-ae1-2026-M6-Viajes\m6_viajes
-
+git clone https://github.com/cuencadelplata/p3-ae1-2026.git
 
 paso 1: ubicarte en la carpeta m6_viajes , abrir CMD.
 cd ruta\hasta\p3-ae1-2026\m6_viajes
@@ -26,14 +24,16 @@ npm test
 npm test -- --coverage
 npm run test:e2e
 
-paso 3 : levantar docker
+paso 3 : levantar docker (Opción Local)
 docker compose up -d --build
 
 paso 4: DESCARGAR Y EJECUTAR LA IMAGEN DE DOCKER
-docker run -d -p 3000:3000 noeediez/m6-viajes:1.0
+docker pull noeediez/m6-viajes:1.0
+docker rm -f m6-viajes 2>nul
+docker run -d -p 3000:3000 --name m6-viajes noeediez/m6-viajes:1.0
 
 paso 5: verificar que este vivo
-curl http://localhost:3000/health
+curl.exe http://localhost:3000/health
 
 
 paso 6: ver la documentacion OPENAPI
@@ -48,7 +48,6 @@ Invoke-RestMethod -Uri "http://localhost:3000/api/viajes" -Method Post -Headers 
 
 paso 8 apagar
 docker compose down
-
 
 
 ## Estructura del proyecto
