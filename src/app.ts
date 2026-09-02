@@ -27,6 +27,9 @@ export function createApp(
 
   app.use(express.json());
   app.use(express.static(path.join(__dirname, "..", "public")));
+  app.get("/health", (_request, response) => {
+    response.status(200).json({ status: "ok", service: "m8" });
+  });
   app.get("/openapi.yaml", (_request, response) => {
     response.sendFile(path.join(__dirname, "..", "docs", "api", "openapi.yaml"));
   });

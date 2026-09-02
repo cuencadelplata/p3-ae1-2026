@@ -19,6 +19,26 @@ Este catálogo permite ubicar rápidamente los escenarios comprobados. Los nombr
 | E2E API RF-8.1 | `tests/e2e/api/notifications.e2e.test.ts` |
 | E2E API RF-8.2 | `tests/e2e/api/qr.e2e.test.ts` |
 | E2E visual Playwright | `tests/e2e/ui/m8.ui.e2e.test.ts` |
+| Disponibilidad técnica del servicio | `tests/integration/health/health.integration.test.ts` |
+| Health contra Docker | `tests/e2e/api/health.e2e.test.ts` |
+
+## Disponibilidad técnica
+
+### Integración
+
+#### `tests/integration/health/health.integration.test.ts`
+
+Tipo: Integration. RF: infraestructura compartida.
+
+Verifica que `GET /health` responda `200`, use JSON y devuelva el estado estable `ok` sin ejecutar reglas de negocio.
+
+### E2E API
+
+#### `tests/e2e/api/health.e2e.test.ts`
+
+Tipo: E2E API. RF: infraestructura compartida.
+
+Verifica `GET /health` contra el servicio M8 real dentro de Docker. También es la operación usada para readiness de los E2E.
 
 ## RF-8.1 — Notificaciones
 

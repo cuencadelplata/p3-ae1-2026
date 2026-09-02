@@ -15,3 +15,5 @@ Playwright/Chromium → Docker → UI M8 → backend real
 ```
 
 Los comandos son `pnpm test:e2e:api`, `pnpm test:e2e:ui` y `pnpm test:e2e`.
+
+La infraestructura espera `GET /health` antes de ejecutar los casos, sin generar notificaciones ni QR como efecto de readiness.

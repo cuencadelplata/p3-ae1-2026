@@ -40,23 +40,12 @@ function getBaseUrl(containerName: string) {
 
 async function waitForServer(baseUrl: string) {
   const deadline = Date.now() + 30_000;
-  const readinessRequest = {
-    tripId: "e2e-readiness-trip",
-    recipientId: "e2e-readiness-recipient",
-    eventType: "TRIP_REQUESTED",
-    channels: ["PUSH"],
-  };
 
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`${baseUrl}/notifications`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(readinessRequest),
-        signal: AbortSignal.timeout(1_000),
-      });
+      const response = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(1_000) });
 
-      if (response.status === 201) {
+      if (response.status === 200) {
         return;
       }
     } catch {

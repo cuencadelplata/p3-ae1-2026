@@ -8,12 +8,34 @@ info:
     Notificaciones de viaje, y RF-8.2, QR de verificación.
 
 tags:
+  - name: Health
+    description: Disponibilidad técnica básica del servicio M8.
   - name: Notifications
     description: Procesamiento de notificaciones asociadas a acontecimientos de viaje.
   - name: QR Verification
     description: Generación y validación de QR temporales asociados a viajes.
 
 paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Consultar disponibilidad del servicio
+      description: Comprobación técnica sin efectos secundarios ni acceso a reglas de negocio.
+      operationId: getHealth
+      responses:
+        '200':
+          description: Servicio M8 disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                serviceAvailable:
+                  value:
+                    status: ok
+                    service: m8
+
   /notifications:
     post:
       tags:
@@ -282,6 +304,24 @@ paths:
 
 components:
   schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - service
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+          description: Indica que el proceso HTTP de M8 está disponible.
+        service:
+          type: string
+          enum:
+            - m8
+          description: Identificador estable del servicio.
+
     NotificationRequest:
       type: object
       additionalProperties: false

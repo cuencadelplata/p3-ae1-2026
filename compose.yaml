@@ -1,0 +1,21 @@
+services:
+  m8:
+    image: m8-notificaciones-qr:1.0.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${M8_HOST_PORT:-3000}:3000"
+    environment:
+      PORT: "3000"
+      QR_TTL_SECONDS: "${QR_TTL_SECONDS:-300}"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

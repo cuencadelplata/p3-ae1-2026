@@ -10,4 +10,6 @@ HTTP → Router/Controller → Validator → Service → Store/Provider → resp
 
 `qr/` prueba el comportamiento integrado de RF-8.2 mediante `POST /qr` y `POST /qr/validate`: validación, servicio, almacenamiento temporal, single-use y concurrencia HTTP.
 
+`health/` prueba `GET /health`, la comprobación técnica sin efectos secundarios que utiliza Docker para conocer la disponibilidad del servicio.
+
 Existe un archivo integrado por RF porque el objetivo es comprobar el flujo público completo de cada requerimiento. La separación Controller/Service/Validator se comprueba de forma aislada en Unit; duplicarla aquí no agregaría una integración distinta.
