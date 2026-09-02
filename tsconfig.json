@@ -3,7 +3,7 @@
     "rootDir": "./src",
     "outDir": "./dist",
 
-    "module": "commonjs",
+    "module": "nodenext",
     "target": "esnext",
 
     "types": ["node"],
@@ -12,14 +12,21 @@
     "declaration": true,
     "declarationMap": true,
 
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+
     "strict": true,
-
-    "verbatimModuleSyntax": false,
-
-    "esModuleInterop": true,
-
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
     "skipLibCheck": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "M7-cargo-cancelacion"]
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests",
+    "playwright.config.ts"
+  ]
 }
