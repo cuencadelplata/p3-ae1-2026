@@ -97,7 +97,7 @@ docker compose up -d --build
 docker compose ps
 ```
 
-Resultado esperado: la imagen local `m8-notificaciones-qr:1.0.0` configurada en `compose.yaml` se construye, el servicio `m8` queda ejecutándose y `healthy`, con puerto host `3000` por defecto. Este tag es local de Compose; no implica una release pública ni una imagen publicada en Docker Hub.
+Resultado esperado: `compose.yaml` utiliza `juanmainval/m8-notificaciones-qr:1.0.0`. `docker compose up -d --build` continúa construyendo el servicio desde el Dockerfile del repositorio y usa ese nombre y tag para la imagen resultante. El servicio `m8` queda ejecutándose y `healthy`, con puerto host `3000` por defecto. La imagen `1.0.0` está publicada en Docker Hub.
 
 Si se modifica `M8_HOST_PORT`, usar ese puerto en las URLs siguientes.
 
@@ -142,6 +142,23 @@ Copy-Item .env.example .env
 - `PORT`: puerto de Node al ejecutar localmente fuera de Compose.
 - Docker Compose mantiene internamente M8 en el puerto `3000`.
 - `QR_TTL_SECONDS`: vida útil de los QR temporales, en segundos.
+
+## Imagen Docker pública
+
+Repositorio público: `juanmainval/m8-notificaciones-qr`.
+
+Tags de imágenes disponibles:
+
+- `0.1.0` — primera integración funcional de RF-8.1 + RF-8.2.
+- `0.2.0` — integración con demo técnica de verificación QR.
+- `1.0.0` — estado final actual de AE1.
+
+Los valores anteriores son tags de imágenes Docker, no Git tags ni GitHub Releases. El repositorio es público y no requiere credenciales para descargar la versión final:
+
+```powershell
+docker pull juanmainval/m8-notificaciones-qr:1.0.0
+docker run --rm -p 3000:3000 juanmainval/m8-notificaciones-qr:1.0.0
+```
 
 ## API y UI
 

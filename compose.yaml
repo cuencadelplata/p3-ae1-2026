@@ -1,6 +1,6 @@
 services:
   m8:
-    image: m8-notificaciones-qr:1.0.0
+    image: juanmainval/m8-notificaciones-qr:1.0.0
     build:
       context: .
       dockerfile: Dockerfile
