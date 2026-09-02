@@ -1,0 +1,853 @@
+openapi: 3.0.3
+info:
+  title: Módulo 5 - Servicio de Solicitud y Despacho
+  description: API REST para la gestión del requerimiento RF-5.1 (Solicitud de Viaje) y flujo de asignación del sistema de movilidad urbana.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3005/api/v1
+    description: Entorno de Desarrollo Local
+paths:
+  /ride-requests:
+    post:
+      summary: Crear solicitud de viaje (RF-5.1)
+      description: Registra la solicitud del cliente indicando origen, destino y tipo de vehículo (Auto/Moto). Inicia el ciclo de búsqueda y despacho.
+      operationId: createRideRequest
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Clave de idempotencia para evitar dobles solicitudes por reintentos de red o doble click.
+          schema:
+            type: string
+            format: uuid
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRideRequestDTO'
+      responses:
+        '201':
+          description: Solicitud creada con éxito y en estado de búsqueda.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideRequestResponseDTO'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '409':
+          description: Conflicto - El cliente ya tiene una solicitud activa o se detectó colisión de idempotencia.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "ACTIVE_REQUEST_EXISTS"
+                message: "Ya existe una solicitud de viaje en curso para este cliente."
+                timestamp: "2026-09-01T14:30:00.000Z"
+        '422':
+          description: Error semántico en los datos (ej. origen idéntico a destino).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /ride-requests/{requestId}:
+    get:
+      summary: Consultar estado de solicitud de viaje
+      description: Obtiene el estado actual de la solicitud (PENDING, SEARCHING, OFFERED, ASSIGNED, EXPIRED, NO_DRIVERS_AVAILABLE, CANCELLED).
+      operationId: getRideRequestById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+      responses:
+        '200':
+          description: Información detallada de la solicitud de viaje.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideRequestResponseDTO'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
+  /ride-requests/{requestId}/cancel:
+    post:
+      summary: Cancelación previa de la solicitud de viaje (RF-5.6)
+      description: Permite al cliente cancelar una solicitud de viaje antes de que sea asignada a un conductor. Invalida de forma automática todas las ofertas emitidas a conductores que se encuentren en estado pendiente.
+      operationId: cancelRideRequest
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          description: ID único de la solicitud de viaje a cancelar (RF-5.1)
+          schema:
+            type: string
+            format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelRideRequestDTO'
+      responses:
+        '200':
+          description: Solicitud de viaje cancelada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelRideRequestResponseDTO'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '409':
+          description: Conflicto - La solicitud ya fue asignada a un conductor, ya está cancelada o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "REQUEST_ALREADY_ASSIGNED"
+                message: "No es posible realizar una cancelación previa: la solicitud ya ha sido asignada a un conductor"
+                timestamp: "2026-09-01T14:31:00.000Z"
+
+  /ride-requests/{requestId}/candidates:
+    post:
+      summary: Buscar candidatos para la solicitud (RF-5.2)
+      description: Selecciona y ordena conductores disponibles conforme a proximidad (radio configurable) y compatibilidad de vehículo (Auto/Moto).
+      operationId: searchCandidatesForRide
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          description: ID único de la solicitud de viaje (RF-5.1)
+          schema:
+            type: string
+            format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                radiusKm:
+                  type: number
+                  format: float
+                  minimum: 0.1
+                  maximum: 50.0
+                  default: 5.0
+                  description: Radio de búsqueda en kilómetros
+                  example: 5.0
+                maxCandidates:
+                  type: integer
+                  minimum: 1
+                  maximum: 50
+                  default: 5
+                  description: Cantidad máxima de candidatos a retornar
+                  example: 5
+      responses:
+        '200':
+          description: Lista de conductores candidatos ordenados por proximidad.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidateSearchResponseDTO'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          description: Solicitud de viaje no encontrada o sin candidatos disponibles (RF-5.7).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Estado inválido de la solicitud para realizar la búsqueda.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /ride-requests/{requestId}/offers:
+    post:
+      summary: Enviar oferta a conductores con vencimiento (RF-5.3)
+      description: Envía una oferta de viaje a uno o varios conductores destinatarios con un tiempo máximo de respuesta (TTL) en segundos. Transiciona la solicitud a OFFERED.
+      operationId: sendOffersForRide
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          description: ID único de la solicitud de viaje (RF-5.1)
+          schema:
+            type: string
+            format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                driverIds:
+                  type: array
+                  items:
+                    type: string
+                  description: Lista explícita de conductores destinatarios. Si se omite, se envían automáticamente a los mejores candidatos cercanos.
+                  example: ["drv_101", "drv_102"]
+                ttlSeconds:
+                  type: integer
+                  minimum: 5
+                  maximum: 180
+                  default: 30
+                  description: Tiempo de expiración de la oferta en segundos (TTL).
+                  example: 30
+      responses:
+        '201':
+          description: Oferta(s) creada(s) y despachada(s) exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendOffersResponseDTO'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          description: Solicitud no encontrada o no hay conductores disponibles para ofertar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflicto - La solicitud no se encuentra en un estado elegible para emitir ofertas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      summary: Consultar ofertas activas e históricas de la solicitud
+      description: Retorna el listado de ofertas despachadas asociadas a la solicitud, reflejando su estado actual (PENDING, ACCEPTED, REJECTED, EXPIRED).
+      operationId: getOffersByRequestId
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+      responses:
+        '200':
+          description: Listado de ofertas asociadas a la solicitud.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId:
+                    type: string
+                    format: uuid
+                  offersCount:
+                    type: integer
+                  offers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RideOfferDTO'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
+  /offers/{offerId}/respond:
+    post:
+      summary: Aceptar o rechazar oferta de viaje (RF-5.4)
+      description: Permite a un conductor destinatario responder (ACCEPT o REJECT) a una oferta de viaje mientras esté vigente dentro del TTL. Si se acepta, transiciona la solicitud a ASSIGNED. Si ya expiró o fue asignada a otro conductor, retorna 409 Conflict.
+      operationId: respondToRideOffer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: offerId
+          in: path
+          required: true
+          description: ID de la oferta a responder
+          schema:
+            type: string
+          example: "off_7c9e6679-7425-40de-944b-e07fc1f90ae7"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RespondOfferDTO'
+      responses:
+        '200':
+          description: Oferta procesada exitosamente (Aceptada o Rechazada).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespondOfferResponseDTO'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          description: Oferta no encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflicto - Oferta expirada, ya respondida o solicitud ya asignada a otro conductor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "OFFER_EXPIRED"
+                message: "La oferta ha expirado y ya no está vigente"
+                timestamp: "2026-09-01T14:31:00.000Z"
+
+  /offers/{offerId}/accept:
+    post:
+      summary: Aceptar oferta de viaje vigente (RF-5.4)
+      description: Endpoint específico para aceptar la oferta. Asigna inmediatamente el viaje al conductor y transiciona la solicitud a ASSIGNED.
+      operationId: acceptRideOffer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: offerId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "off_7c9e6679-7425-40de-944b-e07fc1f90ae7"
+      responses:
+        '200':
+          description: Oferta aceptada y viaje asignado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespondOfferResponseDTO'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '409':
+          $ref: '#/components/responses/409Conflict'
+
+  /offers/{offerId}/reject:
+    post:
+      summary: Rechazar oferta de viaje (RF-5.4)
+      description: Endpoint específico para rechazar la oferta despachada.
+      operationId: rejectRideOffer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: offerId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "off_7c9e6679-7425-40de-944b-e07fc1f90ae7"
+      responses:
+        '200':
+          description: Oferta rechazada por el conductor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespondOfferResponseDTO'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '409':
+          $ref: '#/components/responses/409Conflict'
+
+  /offers/{offerId}:
+    get:
+      summary: Consultar detalle de una oferta
+      description: Obtiene el estado actual de una oferta específica y su tiempo de expiración.
+      operationId: getOfferById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: offerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Información detallada de la oferta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideOfferDTO'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    GeoLocation:
+      type: object
+      required:
+        - latitude
+        - longitude
+        - address
+      properties:
+        latitude:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+          example: -34.603722
+        longitude:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+          example: -58.381592
+        address:
+          type: string
+          example: "Av. Corrientes 1234, CABA"
+
+    VehicleType:
+      type: string
+      enum: [AUTO, MOTO]
+      example: "AUTO"
+
+    CreateRideRequestDTO:
+      type: object
+      required:
+        - origin
+        - destination
+        - vehicleType
+      properties:
+        origin:
+          $ref: '#/components/schemas/GeoLocation'
+        destination:
+          $ref: '#/components/schemas/GeoLocation'
+        vehicleType:
+          $ref: '#/components/schemas/VehicleType'
+
+    EstimatedFare:
+      type: object
+      required:
+        - amount
+        - currency
+        - estimatedDistanceKm
+        - estimatedDurationMin
+      properties:
+        amount:
+          type: number
+          format: float
+          example: 4200.00
+        currency:
+          type: string
+          example: "ARS"
+        estimatedDistanceKm:
+          type: number
+          format: float
+          example: 6.5
+        estimatedDurationMin:
+          type: integer
+          example: 18
+
+    RideRequestResponseDTO:
+      type: object
+      required:
+        - id
+        - clientId
+        - origin
+        - destination
+        - vehicleType
+        - status
+        - estimatedFare
+        - createdAt
+        - expiresAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+        clientId:
+          type: string
+          example: "client_98124"
+        origin:
+          $ref: '#/components/schemas/GeoLocation'
+        destination:
+          $ref: '#/components/schemas/GeoLocation'
+        vehicleType:
+          $ref: '#/components/schemas/VehicleType'
+        status:
+          type: string
+          enum:
+            - PENDING
+            - SEARCHING
+            - OFFERED
+            - ASSIGNED
+            - EXPIRED
+            - NO_DRIVERS_AVAILABLE
+            - CANCELLED
+          example: "SEARCHING"
+        estimatedFare:
+          $ref: '#/components/schemas/EstimatedFare'
+        assignedDriverId:
+          type: string
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:30:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:30:02.000Z"
+        expiresAt:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:33:00.000Z"
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-09-01T14:30:15.000Z"
+        cancellationReason:
+          type: string
+          nullable: true
+          example: "El usuario decidió esperar otro medio de transporte"
+
+    CandidateDriverDTO:
+      type: object
+      required:
+        - driverId
+        - vehicleType
+        - distanceKm
+        - estimatedEtaMinutes
+      properties:
+        driverId:
+          type: string
+          example: "drv_101"
+        vehicleType:
+          $ref: '#/components/schemas/VehicleType'
+        distanceKm:
+          type: number
+          format: float
+          example: 1.2
+        estimatedEtaMinutes:
+          type: integer
+          example: 4
+        rating:
+          type: number
+          format: float
+          example: 4.8
+
+    CandidateSearchResponseDTO:
+      type: object
+      required:
+        - requestId
+        - vehicleType
+        - searchRadiusKm
+        - candidatesCount
+        - candidates
+        - searchTimestamp
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+        vehicleType:
+          $ref: '#/components/schemas/VehicleType'
+        searchRadiusKm:
+          type: number
+          format: float
+          example: 5.0
+        candidatesCount:
+          type: integer
+          example: 2
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/CandidateDriverDTO'
+        searchTimestamp:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:30:05.000Z"
+
+    RideOfferDTO:
+      type: object
+      required:
+        - id
+        - requestId
+        - driverId
+        - status
+        - estimatedFare
+        - origin
+        - destination
+        - vehicleType
+        - ttlSeconds
+        - createdAt
+        - expiresAt
+      properties:
+        id:
+          type: string
+          example: "off_7c9e6679-7425-40de-944b-e07fc1f90ae7"
+        requestId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+        driverId:
+          type: string
+          example: "drv_101"
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, REJECTED, EXPIRED]
+          example: "PENDING"
+        estimatedFare:
+          $ref: '#/components/schemas/EstimatedFare'
+        origin:
+          $ref: '#/components/schemas/GeoLocation'
+        destination:
+          $ref: '#/components/schemas/GeoLocation'
+        vehicleType:
+          $ref: '#/components/schemas/VehicleType'
+        ttlSeconds:
+          type: integer
+          example: 30
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:30:10.000Z"
+        expiresAt:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:30:40.000Z"
+
+    SendOffersResponseDTO:
+      type: object
+      required:
+        - requestId
+        - offersSentCount
+        - offers
+        - message
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+        offersSentCount:
+          type: integer
+          example: 2
+        offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/RideOfferDTO'
+        message:
+          type: string
+          example: "Oferta enviada exitosamente a 2 conductor(es) con TTL de 30s."
+
+    RespondOfferDTO:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum: [ACCEPT, REJECT]
+          example: "ACCEPT"
+        driverId:
+          type: string
+          description: ID del conductor que responde (opcional si se infiere del token de sesión)
+          example: "drv_101"
+
+    RespondOfferResponseDTO:
+      type: object
+      required:
+        - offerId
+        - requestId
+        - driverId
+        - action
+        - status
+        - requestStatus
+        - message
+        - respondedAt
+      properties:
+        offerId:
+          type: string
+          example: "off_7c9e6679-7425-40de-944b-e07fc1f90ae7"
+        requestId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+        driverId:
+          type: string
+          example: "drv_101"
+        action:
+          type: string
+          enum: [ACCEPT, REJECT]
+          example: "ACCEPT"
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, REJECTED, EXPIRED]
+          example: "ACCEPTED"
+        requestStatus:
+          type: string
+          enum: [PENDING, SEARCHING, OFFERED, ASSIGNED, EXPIRED, NO_DRIVERS_AVAILABLE]
+          example: "ASSIGNED"
+        assignedDriverId:
+          type: string
+          nullable: true
+          example: "drv_101"
+        message:
+          type: string
+          example: "¡Oferta aceptada! El viaje ha sido asignado exitosamente al conductor drv_101."
+        respondedAt:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:30:25.000Z"
+
+    CancelRideRequestDTO:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 255
+          description: Motivo opcional de la cancelación de la solicitud
+          example: "Cambio de planes del pasajero"
+
+    CancelRideRequestResponseDTO:
+      type: object
+      required:
+        - requestId
+        - clientId
+        - status
+        - cancelledAt
+        - message
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-494b-9c8e-aa8908d13234"
+        clientId:
+          type: string
+          example: "client_demo_1"
+        status:
+          type: string
+          enum: [CANCELLED]
+          example: "CANCELLED"
+        reason:
+          type: string
+          nullable: true
+          example: "Cambio de planes del pasajero"
+        cancelledAt:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:30:15.000Z"
+        message:
+          type: string
+          example: "Solicitud de viaje cancelada exitosamente por el cliente."
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+        - timestamp
+      properties:
+        code:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Error en los datos suministrados"
+        details:
+          type: array
+          items:
+            type: string
+          example: ["destination: El origen y el destino no pueden ser idénticos."]
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-09-01T14:30:00.000Z"
+
+  responses:
+    400BadRequest:
+      description: Parámetros inválidos en la solicitud.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    401Unauthorized:
+      description: Token de autenticación ausente o inválido.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    403Forbidden:
+      description: Acceso no autorizado para el rol o recurso solicitado.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    404NotFound:
+      description: Solicitud u oferta no encontrada.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    409Conflict:
+      description: Conflicto de estado (oferta expirada, oferta ya respondida o viaje ya asignado).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
