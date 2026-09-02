@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   m6-viajes:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: noeediez/m6-viajes:1.0
     ports:
       - "3000:3000"
     environment:
@@ -17,5 +15,3 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
-    volumes:
-      - /app/node_modules
