@@ -1,14 +1,18 @@
-import {
-  registrarVehiculo,
-  listarVehiculos,
-  obtenerVehiculo,
-  activarVehiculo,
-} from "../src/vehiculos/vehiculo-service.js";
-import * as repository from "../src/vehiculos/vehiculo-repository.js";
-import { AppError } from "../src/errors/AppError.js";
-import { TipoServicio } from "../src/vehiculos/vehiculo-model.js";
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 
-jest.mock("../src/vehiculos/vehiculo-repository.js");
+jest.unstable_mockModule("../src/vehiculos/vehiculo-repository.js", () => ({
+  existePatente: jest.fn(),
+  insertarVehiculo: jest.fn(),
+  listarVehiculosPorConductor: jest.fn(),
+  buscarVehiculoDeConductor: jest.fn(),
+  activarVehiculoEnBD: jest.fn(),
+}));
+
+const repository = await import("../src/vehiculos/vehiculo-repository.js");
+const { registrarVehiculo, listarVehiculos, obtenerVehiculo, activarVehiculo } =
+  await import("../src/vehiculos/vehiculo-service.js");
+const { AppError } = await import("../src/errors/AppError.js");
+const { TipoServicio } = await import("../src/vehiculos/vehiculo-model.js");
 
 describe("Vehiculo Service Tests", () => {
   const driverId = "driver-abc-123";
