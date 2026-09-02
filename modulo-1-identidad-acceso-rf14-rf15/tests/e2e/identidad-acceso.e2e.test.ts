@@ -24,7 +24,7 @@ describe.sequential(
     "M1 - Identidad y Acceso - Tests E2E Complejos",
     () => {
         // ============ FLUJO 1: AUTENTICACIÓN COMPLETA ============
-        describe("🔐 Flujo 1: Autenticación Completa", () => {
+        describe("Flujo 1: Autenticación Completa", () => {
             it("E2E-1.1: Registrar cliente y verificar datos", async () => {
                 const response = await request(app)
                     .post("/auth/registrar-usuario")
@@ -141,7 +141,7 @@ describe.sequential(
         });
 
         // ============ FLUJO 2: VALIDACIÓN DE SEGURIDAD ============
-        describe("🔒 Flujo 2: Validación de Seguridad", () => {
+        describe("Flujo 2: Validación de Seguridad", () => {
             it("E2E-2.1: Rechazar solicitud sin token", async () => {
                 const response = await request(app)
                     .get("/auth/validar-identidad-y-rol");
@@ -180,7 +180,7 @@ describe.sequential(
         });
 
         // ============ FLUJO 3: USUARIOS BLOQUEADOS ============
-        describe("⛔ Flujo 3: Bloqueo de Usuarios", () => {
+        describe("Flujo 3: Bloqueo de Usuarios", () => {
             const blockedEmail = `bloqueado-${timestamp}@test.com`;
             let blockedToken = "";
 
@@ -242,7 +242,7 @@ describe.sequential(
         });
 
         // ============ FLUJO 4: MÚLTIPLES ROLES ============
-        describe("👥 Flujo 4: Múltiples Roles", () => {
+        describe("Flujo 4: Múltiples Roles", () => {
             it("E2E-4.1: Registrar conductor", async () => {
                 const response = await request(app)
                     .post("/auth/registrar-usuario")
@@ -289,7 +289,7 @@ describe.sequential(
         });
 
         // ============ FLUJO 5: RECUPERACIÓN DE CONTRASEÑA ============
-        describe("🔑 Flujo 5: Recuperación de Contraseña", () => {
+        describe("Flujo 5: Recuperación de Contraseña", () => {
             it("E2E-5.1: Solicitar recuperación de contraseña", async () => {
                 const response = await request(app)
                     .post("/auth/solicitar-recuperacion")
@@ -407,7 +407,7 @@ describe.sequential(
         });
 
         // ============ FLUJO 6: OAUTH2 STUBS ============
-        describe("🔗 Flujo 6: OAuth2/OpenID Connect (Stub)", () => {
+        describe("Flujo 6: OAuth2/OpenID Connect (Stub)", () => {
             it("E2E-6.1: OAuth2 authorize con provider válido", async () => {
                 const response = await request(app)
                     .get("/auth/oauth2/authorize")
@@ -472,7 +472,7 @@ describe.sequential(
         });
 
         // ============ FLUJO 7: VALIDACIONES Y EDGE CASES ============
-        describe("⚠️ Flujo 7: Validaciones y Edge Cases", () => {
+        describe("Flujo 7: Validaciones y Edge Cases", () => {
             it("E2E-7.1: Email con espacios se normaliza", async () => {
                 const response = await request(app)
                     .post("/auth/registrar-usuario")
