@@ -23,6 +23,7 @@ export interface Documento {
 }
 
 ////////////////////////
+/*
 enum TipoDocumento {
   LICENCIA_CONDUCIR = "LICENCIA_CONDUCIR",
   SEGURO_VEHICULO = "SEGURO_VEHICULO",
@@ -115,3 +116,4 @@ export function validarDocumento(datos: DocumentoDatos): void {
     );
   }
 }
+*/

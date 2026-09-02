@@ -1,117 +1,81 @@
 import { supabase } from "../config/supabaseClient.js";
 import {
   type Documento,
-  type DocumentoDatos,
-  EstadoDocumento,
   type TipoDocumento,
-  validarDocumento,
-} from "./documentos.js";
+  type EstadoDocumento,
+} from "./documents-model.js";
+import { type DocumentoParaInsertar } from "./documents-dto.js";
 
-export class DocumentoRepository {
-  //guardar un nuevo documento con validación previa
-  static async crear(datos: DocumentoDatos): Promise<Documento> {
-    validarDocumento(datos);
+interface DocumentoFila {
+  id: string;
+  driver_id: string;
+  vehicle_id: string | null;
+  tipo_documento: string;
+  numero_documento: string;
+  fecha_vencimiento: string;
+  archivo_url: string;
+  estado: string;
+  created_at: string;
+}
 
-    const tipoDoc = (
-      typeof datos.tipoDocumento === "string"
-        ? datos.tipoDocumento.toUpperCase()
-        : datos.tipoDocumento
-    ) as TipoDocumento;
+function filaADocumento(fila: DocumentoFila): Documento {
+  return {
+    id: fila.id,
+    driverId: fila.driver_id,
+    vehicleId: fila.vehicle_id,
+    tipoDocumento: fila.tipo_documento as TipoDocumento,
+    numeroDocumento: fila.numero_documento,
+    fechaVencimiento: new Date(fila.fecha_vencimiento),
+    archivoUrl: fila.archivo_url,
+    estado: fila.estado as EstadoDocumento,
+    createdAt: new Date(fila.created_at),
+  };
+}
 
-    const fechaExp = new Date(datos.fechaVencimiento)
-      .toISOString()
-      .split("T")[0];
+export async function insertarDocumento(
+  datos: DocumentoParaInsertar,
+): Promise<Documento> {
+  const { data, error } = await supabase
+    .from("documentos")
+    .insert({
+      driver_id: datos.driverId,
+      vehicle_id: datos.vehicleId,
+      tipo_documento: datos.tipoDocumento,
+      numero_documento: datos.numeroDocumento,
+      fecha_vencimiento: datos.fechaVencimiento,
+      archivo_url: datos.archivoUrl,
+    })
+    .select()
+    .single();
 
-    const { data, error } = await supabase
-      .from("driver_documents")
-      .insert([
-        {
-          driver_id: datos.driverId.trim(),
-          vehicle_id: datos.vehicleId ? datos.vehicleId.trim() : null,
-          doc_type: tipoDoc,
-          doc_number: datos.numeroDocumento.trim(),
-          expiration_date: fechaExp,
-          file_url: datos.archivoUrl.trim(),
-          status: EstadoDocumento.PENDIENTE,
-        },
-      ])
-      .select()
-      .single();
+  if (error) throw new Error(`Error al registrar documento: ${error.message}`);
+  return filaADocumento(data as DocumentoFila);
+}
 
-    if (error) {
-      throw new Error(
-        `Error al guardar documento en Supabase: ${error.message}`,
-      );
-    }
+export async function listarDocumentosPorConductor(
+  driverId: string,
+): Promise<Documento[]> {
+  const { data, error } = await supabase
+    .from("documentos")
+    .select("*")
+    .eq("driver_id", driverId)
+    .order("fecha_vencimiento", { ascending: true });
 
-    return {
-      id: data.id,
-      driverId: data.driver_id,
-      vehicleId: data.vehicle_id,
-      tipoDocumento: data.doc_type as TipoDocumento,
-      numeroDocumento: data.doc_number,
-      fechaVencimiento: new Date(data.expiration_date),
-      archivoUrl: data.file_url,
-      estado: data.status as EstadoDocumento,
-      createdAt: new Date(data.created_at),
-    };
-  }
+  if (error) throw new Error(`Error al listar documentos: ${error.message}`);
+  return (data as DocumentoFila[]).map(filaADocumento);
+}
 
-  // Obtener todos los documentos asociados a un conductor
-  static async listarPorDriver(driverId: string): Promise<Documento[]> {
-    if (!driverId || driverId.trim() === "") {
-      throw new Error("El driverId es obligatorio para listar documentos.");
-    }
+export async function buscarDocumentoDeConductor(
+  driverId: string,
+  documentId: string,
+): Promise<Documento | null> {
+  const { data, error } = await supabase
+    .from("documentos")
+    .select("*")
+    .eq("id", documentId)
+    .eq("driver_id", driverId)
+    .maybeSingle();
 
-    const { data, error } = await supabase
-      .from("driver_documents")
-      .select("*")
-      .eq("driver_id", driverId.trim());
-
-    if (error) {
-      throw new Error(`Error al consultar documentos: ${error.message}`);
-    }
-
-    return (data || []).map((fila: any) => ({
-      id: fila.id,
-      driverId: fila.driver_id,
-      vehicleId: fila.vehicle_id,
-      tipoDocumento: fila.doc_type as TipoDocumento,
-      numeroDocumento: fila.doc_number,
-      fechaVencimiento: new Date(fila.expiration_date),
-      archivoUrl: fila.file_url,
-      estado: fila.status as EstadoDocumento,
-      createdAt: new Date(fila.created_at),
-    }));
-  }
-
-  // Obtener documentos asociados a un vehículo
-  static async listarPorVehiculo(vehicleId: string): Promise<Documento[]> {
-    if (!vehicleId || vehicleId.trim() === "") {
-      throw new Error("El vehicleId es obligatorio.");
-    }
-
-    const { data, error } = await supabase
-      .from("driver_documents")
-      .select("*")
-      .eq("vehicle_id", vehicleId.trim());
-
-    if (error) {
-      throw new Error(
-        `Error al consultar documentos del vehículo: ${error.message}`,
-      );
-    }
-
-    return (data || []).map((fila: any) => ({
-      id: fila.id,
-      driverId: fila.driver_id,
-      vehicleId: fila.vehicle_id,
-      tipoDocumento: fila.doc_type as TipoDocumento,
-      numeroDocumento: fila.doc_number,
-      fechaVencimiento: new Date(fila.expiration_date),
-      archivoUrl: fila.file_url,
-      estado: fila.status as EstadoDocumento,
-      createdAt: new Date(fila.created_at),
-    }));
-  }
+  if (error) throw new Error(`Error al buscar documento: ${error.message}`);
+  return data ? filaADocumento(data as DocumentoFila) : null;
 }
