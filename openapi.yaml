@@ -2,9 +2,10 @@ openapi: 3.0.0
 info:
   title: M7 - Tarifas, Pagos y Liquidaciones
   description: >
-    API del módulo M7, correspondiente a los requerimientos RF-7.5
-    (Reintegro) y RF-7.6 (Idempotencia de pago).
-  version: 1.0.0
+    API del módulo M7, correspondiente a los requerimientos RF-7.2
+    (Método de pago), RF-7.3 (Autorización/captura), RF-7.5 (Reintegro)
+    y RF-7.6 (Idempotencia de pago).
+  version: 1.1.0
 
 paths:
   /reintegro:
@@ -90,3 +91,216 @@ paths:
                     type: boolean
                     description: true si la orden ya fue procesada antes
                     example: true
+
+  /metodo-pago:
+    post:
+      summary: Registra un método de pago asociado a un viaje
+      description: >
+        RF-7.2. Registra un método de pago para un viaje, quedando en
+        estado inicial "pendiente".
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - clienteId
+                - viajeId
+                - tipo
+              properties:
+                clienteId:
+                  type: string
+                  example: "cliente1"
+                viajeId:
+                  type: string
+                  example: "v1"
+                tipo:
+                  type: string
+                  enum: [efectivo, tarjeta, transferencia]
+                  example: "efectivo"
+      responses:
+        '201':
+          description: Método de pago registrado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pagoId:
+                    type: string
+                    example: "0.123456789"
+                  clienteId:
+                    type: string
+                    example: "cliente1"
+                  viajeId:
+                    type: string
+                    example: "v1"
+                  tipo:
+                    type: string
+                    enum: [efectivo, tarjeta, transferencia]
+                    example: "efectivo"
+                  detalle:
+                    type: string
+                    example: ""
+                  fecha:
+                    type: string
+                    example: "2/9/2026"
+                  estado:
+                    type: string
+                    enum: [pendiente, autorizado, rechazado]
+                    example: "pendiente"
+        '400':
+          description: No se pudo registrar el método de pago (datos inválidos)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje:
+                    type: string
+                    example: "No se pudo registrar el método de pago"
+
+  /metodo-pago/{viajeId}:
+    get:
+      summary: Consulta el método de pago asociado a un viaje
+      description: RF-7.2. Busca el método de pago registrado para un viaje puntual.
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "v1"
+      responses:
+        '200':
+          description: Método de pago encontrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pagoId:
+                    type: string
+                    example: "0.123456789"
+                  clienteId:
+                    type: string
+                    example: "cliente1"
+                  viajeId:
+                    type: string
+                    example: "v1"
+                  tipo:
+                    type: string
+                    enum: [efectivo, tarjeta, transferencia]
+                    example: "efectivo"
+                  detalle:
+                    type: string
+                    example: ""
+                  fecha:
+                    type: string
+                    example: "2/9/2026"
+                  estado:
+                    type: string
+                    enum: [pendiente, autorizado, rechazado]
+                    example: "pendiente"
+        '404':
+          description: No se encontró un pago para ese viaje
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje:
+                    type: string
+                    example: "No se encontró un pago para ese viaje"
+
+  /metodo-pago/{viajeId}/autorizar:
+    post:
+      summary: Autoriza el cobro de un método de pago pendiente
+      description: RF-7.3. Cambia el estado de un método de pago de "pendiente" a "autorizado".
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "v1"
+      responses:
+        '200':
+          description: Pago autorizado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pagoId:
+                    type: string
+                    example: "0.123456789"
+                  clienteId:
+                    type: string
+                    example: "cliente1"
+                  viajeId:
+                    type: string
+                    example: "v1"
+                  tipo:
+                    type: string
+                    enum: [efectivo, tarjeta, transferencia]
+                    example: "efectivo"
+                  detalle:
+                    type: string
+                    example: ""
+                  fecha:
+                    type: string
+                    example: "2/9/2026"
+                  estado:
+                    type: string
+                    enum: [pendiente, autorizado, rechazado]
+                    example: "autorizado"
+        '400':
+          description: No se pudo autorizar (no existe, o no está en estado "pendiente")
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje:
+                    type: string
+                    example: "No se pudo autorizar el pago"
+
+  /metodo-pago/{viajeId}/rechazar:
+    post:
+      summary: Rechaza un método de pago pendiente
+      description: RF-7.3. Cambia el estado de un método de pago de "pendiente" a "rechazado".
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "v1"
+      responses:
+        '200':
+          description: Pago rechazado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pagoId:
+                    type: string
+                    example: "0.123456789"
+                  clienteId:
+                    type: string
+                    example: "cliente1"
+                  viajeId:
+                    type: string
+                    example: "v1"
+                  tipo:
+                    type: string
+                    enum: [efectivo, tarjeta, transferencia]
+                    example: "efectivo"
+                  detalle:
+                    type: string
+                    example: ""
+                  fecha:
+                    type: string

@@ -1,5 +1,5 @@
 import{Request, Response} from "express";
-import{ registrarMetodoPago, buscarPagoPorViaje } from "./procesoPago";
+import { registrarMetodoPago, buscarPagoPorViaje, autorizarPago, rechazarPago } from "./procesoPago";
 
 export function crearMetodoPago(req: Request, res: Response) {
 
@@ -46,3 +46,28 @@ export function crearMetodoPago(req: Request, res: Response) {
     } 
 }
 
+// AUTORIZAR PAGO DE UN VIAJE
+export function autorizarMetodoPago(req: Request, res: Response) {
+  try {
+    const viajeId = String(req.params.viajeId);
+    const metodoPago = autorizarPago(viajeId);
+    res.status(200).json(metodoPago);
+  } catch (error) {
+    res.status(400).json({
+      mensaje: "No se pudo autorizar el pago"
+    });
+  }
+}
+
+// RECHAZAR PAGO DE UN VIAJE
+export function rechazarMetodoPago(req: Request, res: Response) {
+  try {
+    const viajeId = String(req.params.viajeId);
+    const metodoPago = rechazarPago(viajeId);
+    res.status(200).json(metodoPago);
+  } catch (error) {
+    res.status(400).json({
+      mensaje: "No se pudo rechazar el pago"
+    });
+  }
+}
