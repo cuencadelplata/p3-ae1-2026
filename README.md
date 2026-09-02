@@ -19,10 +19,6 @@ Las imágenes publicadas están disponibles en:
  - [Código principal M6](https://hub.docker.com/repository/docker/mordkalucas/p3-ae1-2026_g10-m6/general)
  - [Dependencias simuladas](https://hub.docker.com/repository/docker/mordkalucas/p3-ae1-2026_g10-m6-dependencies/general)
 
-Primero, abra Visual Studio Code y cree una carpeta donde contendrá las imágenes, coloquese con Visual Studio Code en dicha carpeta como raíz.
-
-Luego, en la parte superior izquierda vaya a `Terminal` -> `New Terminal Window`. En dicha terminal ejecute los siguientes comandos:
-
 Para descargar la versión `2.0` desde la terminal integrada de VS Code:
 
 ```sh
@@ -39,17 +35,25 @@ docker image ls mordkalucas/p3-ae1-2026_g10-m6-dependencies
 
 ## Ejecutar los tests
 
+### Paso 1
+Primero, abra Visual Studio Code, luego, presione F1, escriba `Git: Clone` y presione enter, pegue el siguiente link:
+
+`https://github.com/cuencadelplata/p3-ae1-2026.git`
+
+Una vez el repositorio se haya clonado, deberá moverse a la rama correspondiente. Presione F1 nuevamente y escriba 
+Git: `Checkout to...`, presione enter y seleccione la rama `Grupo10-M6-Mordka-Mortola`
+
+### Paso 2
+
+Cuando se hayan descargado todos los archivos, vaya arriba a la izquierda `Terminal` -> `New Terminal`
+
+### Paso 3
+
 Desde la terminal de Visual Studio Code, ubicada en la raíz del proyecto:
 
 ```sh
 npm install
 npm test
-```
-
-También se puede ejecutar Vitest en modo observación:
-
-```sh
-npm run test:watch
 ```
 
 Para ejecutar los tests end-to-end, que requieren los servicios Docker:
