@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 
 # Instalación de dependencias del proyecto
-RUN npm install
+RUN corepack enable && pnpm install --frozen-lockfile
 
 # Copiar archivos de configuración, OpenAPI y código fuente
 COPY tsconfig.json openapi.yaml ./
@@ -16,4 +16,4 @@ COPY src/ ./src/
 EXPOSE 3000
 
 # Comando para ejecutar la aplicación
-CMD ["npm", "run", "dev"]
+CMD ["pnpm", "run", "dev"]

@@ -61,10 +61,10 @@ Para ejecutar la suite de pruebas unitarias y de integración contra los control
 cd m8-soporte
 
 # Instalación de dependencias locales
-npm install
+pnpm install
 
 # Ejecución de pruebas con Vitest
-npm test
+pnpm test
 ```
 
 ---
