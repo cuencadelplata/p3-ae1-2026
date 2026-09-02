@@ -12,6 +12,11 @@ guia paso a paso para levantar el servicio en Docker
 - El proyecto clonado o descomprimido!!
 - ubicate en la carpeta m6_viajes 
 
+paso 0
+git clone [https://github.com/noeediez/p3-ae1-2026-M6-Viajes.git](https://github.com/noeediez/p3-ae1-2026-M6-Viajes.git)
+cd p3-ae1-2026-M6-Viajes\m6_viajes
+
+
 paso 1: ubicarte en la carpeta m6_viajes , abrir CMD.
 cd ruta\hasta\p3-ae1-2026\m6_viajes
 
@@ -24,7 +29,7 @@ npm run test:e2e
 paso 3 : levantar docker
 docker compose up -d --build
 
-paso 4: 
+paso 4: DESCARGAR Y EJECUTAR LA IMAGEN DE DOCKER
 docker run -d -p 3000:3000 noeediez/m6-viajes:1.0
 
 paso 5: verificar que este vivo
