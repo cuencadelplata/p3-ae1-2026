@@ -64,7 +64,7 @@
         }
       }
     },
-     "/conductores/create": {
+     "/conductores/": {
       "post": {
         "summary": "Crear un nuevo conductor",
         "requestBody": {
@@ -94,13 +94,13 @@
         }
       }
     },
-    "/conductor/valoraciones": {
+    "/conductores/{conductorId}/valoraciones": {
       "get": {
-        "summary": "Obtener las valoraciones de un conductor",
+        "summary": "Obtener las valoraciones de conductor",
         "parameters": [
           {
-            "name": "usuarioId",
-            "in": "query",
+            "name": "conductorId",
+            "in": "path",
             "required": true,
             "description": "ID del conductor para obtener sus valoraciones",
             "schema": {
@@ -125,11 +125,11 @@
         }
       },
       "post": {
-        "summary": "Registrar la valoracion de un conductor",
+        "summary": "Registrar una nueva valoracion de un conductor",
         "parameters": [
           {
-            "name": "usuarioId",
-            "in": "query",
+            "name": "conductorId",
+            "in": "path",
             "required": true,
             "description": "ID del conductor para registrar su valoracion",
             "schema": {
@@ -142,7 +142,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/valoraciones"
+                "$ref": "#/components/schemas/nuevaValoracion"
               }
             }
           }
@@ -151,10 +151,75 @@
           "201": {
             "description": "valoracion registrada correctamente"
           },
-          "400": {
-            "description": "Solicitud inválida"
+          "400": {"description": "Solicitud inválida" },
+          "404": {"description": "Conductor no encontrado" }
+        }
+      }
+    }
+  },
+
+  "components": {
+    "schemas": {
+    "nuevaValoracion": {
+        "type": "object",
+        "required": ["usuarioId", "valoracion"],
+        "properties": {
+          "valoracion": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "viajeId": {
+            "type": "string",
+            "description": "ID del viaje asociado a la valoración"
+            },
+          "comentario": {
+            "type": "string",
+            "description": "Comentario opcional sobre la valoración"
           }
         }
+      },
+
+      "valoracion": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/nuevaValoracion"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "conductorId": {"type": "string"},
+              "fecha": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": ["id", "conductorId", "fecha"]
+          }
+        ]
+      },
+      "Conductor": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "apellido": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "telefono": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "nombre", "apellido", "email", "telefono"]
       }
     }
   }
