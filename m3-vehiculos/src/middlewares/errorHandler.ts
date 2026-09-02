@@ -1,21 +1,11 @@
 import type { Request, Response, NextFunction } from "express";
-import { ValidationError } from "../errors/validationError.js";
+import { AppError } from "../errors/AppError.js";
 
-// Errores de dominio (validarVehiculo, validarDocumento, etc.) deben
-// tirar ValidationError -> 400 (culpa del cliente).
-// Cualquier otro error (Supabase caído, bug inesperado) -> 500.
-export function errorHandler(
-  err: unknown,
-  _req: Request,
-  res: Response,
-  _next: NextFunction,
-): void {
-  if (err instanceof ValidationError) {
-    res.status(400).json({ error: err.message });
-    return;
+export function errorHandler(err: unknown, req: Request, res: Response, next: NextFunction) {
+  if (err instanceof AppError) {
+    return res.status(err.status).json({ error: err.message });
   }
 
-  const message = err instanceof Error ? err.message : "Error desconocido";
-  console.error(`[error] 500 - ${message}`);
+  console.error(err);
   res.status(500).json({ error: "Error interno del servidor" });
 }
