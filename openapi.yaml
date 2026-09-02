@@ -84,7 +84,7 @@ components:
       type: object
       required: [from, to, timestamp]
       properties:
-        from: { type: string, enum: [solicitado, asignado, en curso, completado, cancelado] }
-        to: { type: string, enum: [solicitado, asignado, en curso, completado, cancelado] }
+        from: { type: string, enum: [solicitado, asignado, 'en curso', completado, cancelado] }
+        to: { type: string, enum: [solicitado, asignado, 'en curso', completado, cancelado] }
         timestamp: { type: string, format: date-time }
         detalle: { type: string }
