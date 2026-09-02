@@ -3,7 +3,7 @@ import { TipoDocumento, type Documento } from "./documents-model.js";
 import type {
   DocumentoRequestDTO,
   DocumentoParaInsertar,
-} from "./documents-dto.js";
+} from "./documents-dto.ts";
 import {
   insertarDocumento,
   listarDocumentosPorConductor,
