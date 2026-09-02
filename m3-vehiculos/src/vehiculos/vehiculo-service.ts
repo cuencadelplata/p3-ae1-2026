@@ -35,22 +35,17 @@ export async function registrarVehiculo(
     throw new AppError("Año inválido");
   }
 
-  const existe = await existePatente(patente);
-  if (existe) throw new AppError("Ya existe un vehículo con esa patente", 409);
-
-  const tipoServicio = tipo as TipoServicio;
-
   const payload: VehiculoParaInsertar = {
     driverId,
     patente,
     marca: datos.marca?.trim() || null,
     modelo: datos.modelo?.trim() || null,
     anio: datos.anio,
-    tipoServicio,
+    tipoServicio: tipo as TipoServicio,
     activo: false,
   };
 
-  return insertarVehiculo(payload);
+  return insertarVehiculo(payload); // si la patente ya existe, errorrrr 409 directo
 }
 
 export async function listarVehiculos(driverId: string) {
