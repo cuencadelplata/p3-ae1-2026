@@ -22,7 +22,7 @@ services:
     container_name: p3-m3-api
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "4000:3000"
     environment:
       PORT: 3000
       REDIS_HOST: redis
