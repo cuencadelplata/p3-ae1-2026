@@ -1,4 +1,4 @@
-import { TipoServicio, type Vehiculo } from "./vehiculo.model.js";
+import { TipoServicio, type Vehiculo } from "./vehiculo-model.js";
 import {
   type VehiculoRequestDTO,
   type VehiculoParaInsertar,
@@ -11,20 +11,25 @@ import {
   activarVehiculoEnBD,
 } from "./vehiculo-repository.js";
 import { ValidationError } from "../errors/validationError.js";
-import { ConflictError } from "../errors/conflictError.js";
-import { NotFoundError } from "../errors/notFoundError.js";
+//import { NotFoundError } from "../errors/notFoundError.js";
 
 const PATENTE_REGEX = /^([A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/;
 
-function validarYPrepararVehiculo(
+export function validarYPrepararVehiculo(
   driverId: string,
   datos: VehiculoRequestDTO,
 ): VehiculoParaInsertar {
-  if (!driverId || driverId.trim() === "") {
-    throw new ValidationError("El driverId es obligatorio.");
+  if (!driverId || typeof driverId !== "string" || driverId.trim() === "") {
+    throw new ValidationError(
+      "El driverId es obligatorio y debe ser un texto.",
+    );
   }
 
-  if (!datos.patente || datos.patente.trim() === "") {
+  if (
+    !datos.patente ||
+    typeof datos.patente !== "string" ||
+    datos.patente.trim() === ""
+  ) {
     throw new ValidationError("La patente es obligatoria.");
   }
 
@@ -48,7 +53,12 @@ function validarYPrepararVehiculo(
   }
 
   const anioActual = new Date().getFullYear();
-  if (!datos.anio || datos.anio < 1990 || datos.anio > anioActual + 1) {
+  if (
+    !datos.anio ||
+    typeof datos.anio !== "number" ||
+    datos.anio < 1990 ||
+    datos.anio > anioActual + 1
+  ) {
     throw new ValidationError("El año del vehículo no es válido.");
   }
 
@@ -80,6 +90,9 @@ export async function registrarVehiculo(
 }
 
 export async function listarVehiculos(driverId: string): Promise<Vehiculo[]> {
+  if (!driverId || driverId.trim() === "") {
+    throw new ValidationError("El driverId es obligatorio.");
+  }
   return listarVehiculosPorConductor(driverId);
 }
 
@@ -87,6 +100,9 @@ export async function obtenerVehiculo(
   driverId: string,
   vehicleId: string,
 ): Promise<Vehiculo> {
+  if (!driverId || !vehicleId) {
+    throw new ValidationError("driverId y vehicleId son requeridos.");
+  }
   const vehiculo = await buscarVehiculoDeConductor(driverId, vehicleId);
   if (!vehiculo) {
     throw new NotFoundError(
@@ -100,6 +116,9 @@ export async function activarVehiculo(
   driverId: string,
   vehicleId: string,
 ): Promise<Vehiculo> {
+  if (!driverId || !vehicleId) {
+    throw new ValidationError("driverId y vehicleId son requeridos.");
+  }
   const vehiculo = await buscarVehiculoDeConductor(driverId, vehicleId);
   if (!vehiculo) {
     throw new NotFoundError(
