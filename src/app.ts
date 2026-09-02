@@ -7,7 +7,14 @@ import { customerController } from './controllers/customer.controller.js';
 export const app = express();
 
 // Middlewares globales
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:5173', // Vite dev server
+    'http://localhost:80',   // nginx local
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(express.json());
 
 // 1. Documentación Interactiva con Scalar (Exigido en SPECM5)

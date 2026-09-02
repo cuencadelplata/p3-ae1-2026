@@ -1,4 +1,37 @@
 services:
+  # Backend - Módulo 2 (Clientes)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: p3-api
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DB_HOST: db-profiles
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: profiles
+      M6_SERVICE_URL: http://localhost:8080
+    depends_on:
+      db-profiles:
+        condition: service_healthy
+
+  # Frontend - React + Vite (servido por nginx)
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: p3-client
+    restart: always
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
   # Base de Datos Relacional (PostgreSQL) - Contiene el esquema 'customers'
   db-profiles:
     image: postgres:16-alpine
