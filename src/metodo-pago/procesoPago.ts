@@ -18,7 +18,8 @@ const nuevoMetodo: MetodoPago={
     viajeId: viajeId,
     tipo: tipo,
     fecha: new Date().toLocaleDateString(),
-    detalle: ""
+    detalle: "",
+    estado: "pendiente", 
 };
 metodosPago.push(nuevoMetodo);  //.push() agrega un elemento de metodoNuevo y lo coloca al final de la lista de MétododePago
 
