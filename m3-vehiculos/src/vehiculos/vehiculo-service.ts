@@ -11,7 +11,8 @@ import {
   activarVehiculoEnBD,
 } from "./vehiculo-repository.js";
 import { ValidationError } from "../errors/validationError.js";
-//import { NotFoundError } from "../errors/notFoundError.js";
+import { NotFoundError } from "../errors/notFoundError.js";
+import { ConflictError } from "../errors/conflictError.js";
 
 const PATENTE_REGEX = /^([A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/;
 
