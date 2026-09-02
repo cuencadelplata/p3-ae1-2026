@@ -1,3 +1,28 @@
+export enum TipoDocumento {
+  LICENCIA_CONDUCIR = "LICENCIA_CONDUCIR",
+  SEGURO_VEHICULO = "SEGURO_VEHICULO",
+  CEDULA_VEHICULO = "CEDULA_VEHICULO",
+}
+
+export enum EstadoDocumento {
+  PENDIENTE = "PENDIENTE",
+  APROBADO = "APROBADO",
+  RECHAZADO = "RECHAZADO",
+}
+
+export interface Documento {
+  id: string;
+  driverId: string;
+  vehicleId: string | null;
+  tipoDocumento: TipoDocumento;
+  numeroDocumento: string;
+  fechaVencimiento: Date;
+  archivoUrl: string;
+  estado: EstadoDocumento;
+  createdAt: Date;
+}
+
+////////////////////////
 enum TipoDocumento {
   LICENCIA_CONDUCIR = "LICENCIA_CONDUCIR",
   SEGURO_VEHICULO = "SEGURO_VEHICULO",
