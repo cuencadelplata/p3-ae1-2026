@@ -1,4 +1,4 @@
-import { TipoServicio, type Vehiculo } from "./vehiculo.model.js";
+import { TipoServicio, type Vehiculo } from "./vehiculo-model.js";
 import type {
   VehiculoRequestDTO,
   VehiculoParaInsertar,
