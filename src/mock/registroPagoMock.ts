@@ -7,12 +7,12 @@ export const registrosDeEjemplo: RegistroPago[] = [
     idOrden: "o1",
     idViaje: "v1",
     monto: 5000,
-    fecha: new Date("20-08-26"),
+    fecha: new Date("2026-08-31"),
   },
   {
     idOrden: "o2",
     idViaje: "v2",
     monto: 4530,
-    fecha: new Date("20-08-26"),
+    fecha: new Date("2026-08-31"),
   },
 ];
