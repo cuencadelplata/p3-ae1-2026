@@ -51,6 +51,7 @@ segundo endpoint: asignar conductor
 
 curl.exe -X POST "http://localhost:3000/api/viajes/id/asignar" -H "Content-Type: application/json" -d "{\"conductorId\":\"conductor-001\"}"
 
+
 tercer endpoint: registrar arribo 
 
 curl -X PUT http://localhost:3000/api/viajes/id/arribo
@@ -58,6 +59,8 @@ curl -X PUT http://localhost:3000/api/viajes/id/arribo
 cuarto endpoint: iniciar viaje
 
 curl.exe -X POST "http://localhost:3000/api/viajes/id/iniciar" -H "Content-Type: application/json" -d "{\"codigoVerificacion\":\"AB3K8F\"}"
+
+
 
 codigodeverificacion está en el primer endpoint (texto largo por el qr)
 
