@@ -1,0 +1,92 @@
+openapi: 3.0.0
+info:
+  title: M7 - Tarifas, Pagos y Liquidaciones
+  description: >
+    API del módulo M7, correspondiente a los requerimientos RF-7.5
+    (Reintegro) y RF-7.6 (Idempotencia de pago).
+  version: 1.0.0
+
+paths:
+  /reintegro:
+    post:
+      summary: Calcula el reintegro correspondiente a una cancelación
+      description: >
+        RF-7.5. Recibe el monto que se cobró como cargo de cancelación
+        y devuelve el monto que corresponde reintegrar al cliente,
+        aplicando un porcentaje fijo del 95%.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - montoCancelacion
+                - viajeId
+              properties:
+                montoCancelacion:
+                  type: number
+                  description: Monto que se cobró por la cancelación del viaje
+                  example: 1000
+                viajeId:
+                  type: string
+                  description: Identificador del viaje cancelado
+                  example: "v1"
+      responses:
+        '200':
+          description: Reintegro calculado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  monto:
+                    type: number
+                    description: Monto calculado a reintegrar (95% del monto de cancelación)
+                    example: 950
+                  viajeId:
+                    type: string
+                    example: "v1"
+        '400':
+          description: Datos inválidos o faltantes en la solicitud
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "montoCancelacion y viajeId son requeridos"
+
+  /pagos/{idOrden}/duplicado:
+    get:
+      summary: Verifica si una orden de pago ya fue procesada
+      description: >
+        RF-7.6 (Idempotencia). Permite consultar si una orden ya tiene
+        un pago registrado, para evitar cobros duplicados. En el flujo
+        real, esta verificación se usa internamente antes de capturar
+        un cobro (RF-7.3); este endpoint se expone además para poder
+        consultarlo y probarlo de forma independiente.
+      parameters:
+        - name: idOrden
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Identificador de la orden de pago a verificar
+          example: "o1"
+      responses:
+        '200':
+          description: Resultado de la verificación
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  idOrden:
+                    type: string
+                    example: "o1"
+                  esDuplicado:
+                    type: boolean
+                    description: true si la orden ya fue procesada antes
+                    example: true
