@@ -1,4 +1,5 @@
 {
+  
   "name": "p3-ae1-2026",
   "version": "1.0.0",
   "description": "Paradigmas 3 AE1 2026",
@@ -6,6 +7,7 @@
   "scripts": {
     "dev": "ts-node src/index.ts",
     "build": "tsc",
+    "start": "node dist/index.js",
     "test": "playwright test",
     "test:unit": "vitest"
   },

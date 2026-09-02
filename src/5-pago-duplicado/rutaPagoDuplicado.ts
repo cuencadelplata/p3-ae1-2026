@@ -4,10 +4,10 @@ import { registrosDeEjemplo } from "../mock/registroPagoMock"; // mock compartid
 
 const router = Router();
 
-router.get("/pagos/:ordenId/duplicado", (req, res) => {
-  const { ordenId } = req.params;
-  const esDuplicado = esPagoDuplicado(ordenId, registrosDeEjemplo);
-  res.json({ ordenId, esDuplicado });
+router.get("/pagos/:idOrden/duplicado", (req, res) => {
+  const { idOrden } = req.params;
+  const esDuplicado = esPagoDuplicado(idOrden, registrosDeEjemplo);
+  res.json({ idOrden, esDuplicado });
 });
 
 export default router;
