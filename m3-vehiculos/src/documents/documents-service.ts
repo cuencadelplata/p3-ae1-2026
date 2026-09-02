@@ -44,7 +44,7 @@ export async function registrarDocumento(
   if (datos.vehicleId) {
     const vehiculo = await buscarVehiculoDeConductor(driverId, datos.vehicleId);
     if (!vehiculo) {
-      throw new AppError("El vehículo no existe o no es de este conductor");
+      throw new AppError("El vehículo no existe o no es de este conductor", 404);
     }
   }
 
