@@ -1,16 +1,17 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+
 import {
     createUser,
     findUserByEmail
 } from "../repositories/user.repository";
-import { UserRole } from "../types/user.types";
 
-const ROLES_VALIDOS: UserRole[] = [
-    "CLIENTE",
-    "CONDUCTOR",
-    "OPERADOR"
-];
+import {
+    esEmailValido,
+    esPasswordValida,
+    esRolValido,
+    normalizarEmail
+} from "../utils/auth.validators";
 
 export class AuthError extends Error {
     constructor(
@@ -48,25 +49,24 @@ export async function registerUser(
         );
     }
 
-    const emailNormalizado = email
-        .trim()
-        .toLowerCase();
+    const emailNormalizado =
+        normalizarEmail(email);
 
-    if (!emailNormalizado.includes("@")) {
+    if (!esEmailValido(emailNormalizado)) {
         throw new AuthError(
             400,
             "El email no es válido"
         );
     }
 
-    if (password.length < 6) {
+    if (!esPasswordValida(password)) {
         throw new AuthError(
             400,
             "La contraseña debe tener al menos 6 caracteres"
         );
     }
 
-    if (!ROLES_VALIDOS.includes(rol as UserRole)) {
+    if (!esRolValido(rol)) {
         throw new AuthError(
             400,
             "El rol debe ser CLIENTE, CONDUCTOR u OPERADOR"
@@ -91,7 +91,7 @@ export async function registerUser(
     const id = createUser(
         emailNormalizado,
         passwordHash,
-        rol as UserRole
+        rol
     );
 
     return {
@@ -117,9 +117,8 @@ export async function loginUser(
         );
     }
 
-    const emailNormalizado = email
-        .trim()
-        .toLowerCase();
+    const emailNormalizado =
+        normalizarEmail(email);
 
     const usuario =
         findUserByEmail(emailNormalizado);
@@ -138,10 +137,11 @@ export async function loginUser(
         );
     }
 
-    const passwordCorrecto = await bcrypt.compare(
-        password,
-        usuario.password_hash
-    );
+    const passwordCorrecto =
+        await bcrypt.compare(
+            password,
+            usuario.password_hash
+        );
 
     if (!passwordCorrecto) {
         throw new AuthError(

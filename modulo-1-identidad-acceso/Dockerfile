@@ -21,11 +21,12 @@ ENV NODE_ENV=production
 ENV PORT=3001
 
 COPY package.json package-lock.json ./
+COPY openapi.yaml ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 
 RUN mkdir -p /app/data \
-    && chown -R node:node /app
+    && chown -R node:node /app/data
 
 USER node
 

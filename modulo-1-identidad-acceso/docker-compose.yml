@@ -1,5 +1,7 @@
 services:
   m1-identidad-acceso:
+    image: francok10/m1-identidad-acceso:2
+
     build:
       context: .
       dockerfile: Dockerfile
@@ -30,6 +32,31 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  e2e-tests:
+    image: node:24-alpine
+
+    working_dir: /tests
+
+    environment:
+      BASE_URL: http://m1-identidad-acceso:3001
+
+    volumes:
+      - ./tests/e2e:/tests:ro
+
+    command:
+      [
+        "node",
+        "--test",
+        "identidad-acceso.e2e.test.mjs"
+      ]
+
+    depends_on:
+      m1-identidad-acceso:
+        condition: service_healthy
+
+    profiles:
+      - test
 
 volumes:
   identity_data:
