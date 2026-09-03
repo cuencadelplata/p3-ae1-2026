@@ -5,7 +5,11 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test:front": "npx serve public"
+    "test:front": "npx serve public",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -13,5 +17,8 @@
     "express": "^4.19.2",
     "ioredis": "^5.4.1",
     "supabase": "^2.116.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
   }
 }
