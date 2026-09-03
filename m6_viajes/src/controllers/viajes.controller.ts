@@ -3,6 +3,7 @@ import type { Viaje } from '../models/viaje.model.js';
 import { EstadoViaje } from '../models/viaje.model.js';
 import QRCode from 'qrcode';
 
+
 let viajesDb: Viaje[] = [];
 
 // Funcion para resetear la BD de viajes  
