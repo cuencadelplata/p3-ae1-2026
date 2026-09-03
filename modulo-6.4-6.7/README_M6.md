@@ -49,6 +49,12 @@ Cuando se hayan descargado todos los archivos, vaya arriba a la izquierda `Termi
 
 ### Paso 3
 
+ahora tenesmos que ubicarnos en la raiz del proyecto, para eso ejecute el siguiente comando
+
+```sh
+cd modulo-6.4-6.7 
+```
+### Paso 4
 Desde la terminal de Visual Studio Code, ubicada en la raíz del proyecto:
 
 ```sh
