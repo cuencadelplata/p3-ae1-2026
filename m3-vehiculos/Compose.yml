@@ -1,0 +1,14 @@
+services:
+  m3-vehiculos:
+    build: .
+    container_name: m3-vehiculos
+    env_file:
+      - .env
+    ports:
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
