@@ -19,10 +19,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: p3-m3-api
     container_name: p3-m3-api
     restart: unless-stopped
     ports:
-      - "4000:3000"
+      - "5000:3000"
     environment:
       PORT: 3000
       REDIS_HOST: redis
@@ -30,6 +31,19 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+
+  # Frontend Web - Módulo 3 (Test Runner & Swagger UI)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    image: p3-m3-frontend
+    container_name: p3-m3-frontend
+    restart: unless-stopped
+    ports:
+      - "4000:80"
+    depends_on:
+      - api
 
 volumes:
   redis_data:
