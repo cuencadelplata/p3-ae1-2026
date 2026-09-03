@@ -4,7 +4,7 @@
   "description": "Paradigmas 3 AE1 2026",
   "main": "index.js",
   "scripts": {
-    "test": "npm run build && node --test dist/test/*.test.js",
+    "test": "npm run build && node --test \"dist/test/**/*.test.js\"",
     "build": "tsc && node scripts/copy-assets.mjs",
     "check": "tsc --noEmit",
     "start": "node dist/src/server.js"

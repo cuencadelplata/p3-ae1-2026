@@ -3,6 +3,9 @@ import type { ErrorRequestHandler } from 'express';
 
 import { ServicioClientes } from './application/clientes-service.js';
 import type { RepositorioClientes } from './application/ports.js';
+import { ServicioCalificaciones } from './application/calificaciones-service.js';
+import type { ConsultaViajes, RepositorioCalificaciones } from './application/calificaciones-ports.js';
+import { ViajesSimulados } from './infrastructure/viajes-simulados.js';
 
 import swaggerUi from 'swagger-ui-express';
 import { documentoOpenApi } from './openapi.js';
@@ -13,17 +16,19 @@ import {
 } from './domain/errores.js';
 
 export function crearAplicacion(
-  repositorio: RepositorioClientes,
-  clienteSimulado = 'cliente-1'
+  repositorio: RepositorioClientes & RepositorioCalificaciones,
+  clienteSimulado = 'cliente-1',
+  consultaViajes: ConsultaViajes = new ViajesSimulados(clienteSimulado)
 ) {
   const aplicacion = express();
   const servicio = new ServicioClientes(repositorio);
+  const calificaciones = new ServicioCalificaciones(repositorio, consultaViajes);
 
   aplicacion.use(express.json({ limit: '16kb' }));
 
   aplicacion.get('/openapi.json', (_solicitud, respuesta) => {
-  respuesta.json(documentoOpenApi);
-});
+    respuesta.json(documentoOpenApi);
+  });
 
   aplicacion.use(
     '/docs',
@@ -50,7 +55,7 @@ export function crearAplicacion(
     });
   });
 
-  // Identidad simulada para AE1.
+  // Identidad simulada.
   aplicacion.use(
     '/clientes/:clienteId',
     (solicitud, _respuesta, siguiente) => {
@@ -58,7 +63,7 @@ export function crearAplicacion(
         throw new ErrorAplicacion(
           403,
           'ACCESO_DENEGADO',
-          'Solo podés administrar tus propias direcciones.'
+          'Solo podés administrar tus propios datos.'
         );
       }
 
@@ -86,7 +91,7 @@ export function crearAplicacion(
     }
   );
 
-  // Listar direcciones, con filtro opcional por tipo.
+  // Listar direcciones, con filtro.
   aplicacion.get(
     '/clientes/:clienteId/direcciones',
     (solicitud, respuesta) => {
@@ -138,6 +143,25 @@ export function crearAplicacion(
       respuesta.status(204).send();
     }
   );
+
+  aplicacion.post('/clientes/:clienteId/calificaciones', async (solicitud, respuesta) => {
+    const { clienteId } = solicitud.params;
+    const calificacion = await calificaciones.crearCalificacion(clienteId, solicitud.body);
+    respuesta
+      .location(`/clientes/${encodeURIComponent(clienteId)}/calificaciones/${calificacion.id}`)
+      .status(201)
+      .json(calificacion);
+  });
+
+  aplicacion.get('/clientes/:clienteId/calificaciones', (solicitud, respuesta) => {
+    respuesta.json(calificaciones.listarCalificaciones(solicitud.params.clienteId));
+  });
+
+  aplicacion.get('/clientes/:clienteId/calificaciones/:id', (solicitud, respuesta) => {
+    respuesta.json(calificaciones.obtenerCalificacion(
+      solicitud.params.clienteId, solicitud.params.id
+    ));
+  });
 
   // Responder cuando la ruta solicitada no existe.
   aplicacion.use((_solicitud, _respuesta) => {

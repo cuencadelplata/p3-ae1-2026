@@ -1,3 +1,5 @@
+import { rutasCalificaciones, esquemasCalificaciones } from './openapi-calificaciones.js';
+
 function respuestaJson(descripcion: string, esquema: object) {
   return {
     description: descripcion,
@@ -69,10 +71,11 @@ export const documentoOpenApi = {
   openapi: '3.0.3',
 
   info: {
-    title: 'Módulo 2 — Direcciones frecuentes',
+    title: 'Módulo 2 — Clientes',
     version: '1.0.0',
     description:
-      'AE1 · RF-2.2. Identidad simulada configurada en el servidor ' +
+      'AE1 · RF-2.2 y RF-2.4. Identidad y viajes simulados para esta entrega. ' +
+      'Identidad simulada configurada en el servidor ' +
       '(cliente-1 por defecto). No implementa autenticación real. ' +
       'PUT reemplaza los datos editables: los opcionales omitidos ' +
       'vuelven a sus valores por defecto.'
@@ -83,6 +86,7 @@ export const documentoOpenApi = {
   ],
 
   paths: {
+    ...rutasCalificaciones,
     '/salud': {
       get: {
         summary: 'Comprobar disponibilidad',
@@ -242,6 +246,7 @@ export const documentoOpenApi = {
     },
 
     schemas: {
+      ...esquemasCalificaciones,
       DatosDireccion: {
         type: 'object',
         additionalProperties: false,
