@@ -59,7 +59,7 @@ paths:
         "404":
           description: Vehículo no encontrado
 
-  /api/v1/drivers/{driverId}/vehicles/{vehicleId}/activate:
+  /api/v1/drivers/{driverId}/vehicles/{vehicleId}/activar:
     patch:
       summary: Activar un vehículo para la jornada (desactiva los demás del conductor)
       parameters:

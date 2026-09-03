@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { describe, jest, beforeEach, it, expect } from "@jest/globals";
 
 jest.unstable_mockModule("../src/vehiculos/vehiculo-repository.js", () => ({
   existePatente: jest.fn(),
@@ -17,7 +17,7 @@ const { TipoServicio } = await import("../src/vehiculos/vehiculo-model.js");
 describe("Vehiculo Service Tests", () => {
   const driverId = "driver-abc-123";
 
-  const mockVehiculoValido = {
+  const mockVehiculoValido: any = {
     id: "veh-uuid-1",
     driverId,
     patente: "AB123CD",
