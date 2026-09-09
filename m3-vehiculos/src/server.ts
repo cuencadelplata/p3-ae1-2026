@@ -37,6 +37,7 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   console.log(`🚀 m3-drivers corriendo en http://localhost:${PORT}`);
   console.log(`   Health check: http://localhost:${PORT}/health`);
+  console.log(`   Docs (Swagger UI): http://localhost:${PORT}/docs`);
 });
 
 // TODO: montar acá los Routess cuando existan
