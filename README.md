@@ -83,23 +83,22 @@ Descargar e instalar desde: https://nodejs.org (versión 18 o superior)
 ### Paso 2: descargar el código del repositorio
 
 En la terminal, ubicado en la carpeta donde quiera guardar el proyecto:
-    git clone https://github.com/cuencadelplata/p3-ae1-2026.git
+    git clone --single-branch --branch "M7--Tarifas,-Pagos-y-Liquidaciones" https://github.com/cuencadelplata/p3-ae1-2026.git
     cd p3-ae1-2026
-- git checkout "M7--Tarifas,-Pagos-y-Liquidaciones"
+    git checkout "M7--Tarifas,-Pagos-y-Liquidaciones"
 
 ### Paso 3: instalar las dependencias del proyecto
 Parado dentro de la carpeta del proyecto, en la terminal:
-- npm install
+    npm install
 
 ### Paso 4: correr los tests unitarios y de integración
-- npm run test:unit
+    npm run test:unit
 
 ### Paso 5: correr los tests End-to-End (requiere el contenedor corriendo)
-
 Con el contenedor ya levantado (Pasos 2-3 de la sección anterior):
-- npx playwright test
+    npx playwright test
 
 ### Paso 6: ver cobertura de tests (opcional)
-- npm run test:coverage
+    npm run test:coverage
 
 Cobertura actual: 100% de los 4 RF implementados
