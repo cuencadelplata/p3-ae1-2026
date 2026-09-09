@@ -1,6 +1,9 @@
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import fs from "node:fs";
+import swaggerUi from "swagger-ui-express";
+import YAML from "yaml";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { vehiculoRoutes } from "./vehiculos/vehiculo-routes.js";
 import { documentoRoutes } from "./documents/documents-routes.js";
@@ -20,6 +23,10 @@ app.get("/health", (_req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Documentación interactiva de la API (Swagger UI), leída desde openapi.yaml
+const openapiDoc = YAML.parse(fs.readFileSync("./openapi.yaml", "utf8"));
+app.use("/docs", swaggerUi.serve, swaggerUi.setup(openapiDoc));
 
 app.use("/api/v1/drivers/:driverId/vehicles", vehiculoRoutes);
 app.use("/api/v1/drivers/:driverId/documents", documentoRoutes);
