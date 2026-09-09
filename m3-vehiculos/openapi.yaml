@@ -6,9 +6,14 @@ info:
 servers:
   - url: http://localhost:8083
 
+tags:
+  - name: Vehículos
+  - name: Documentos
+
 paths:
   /api/v1/drivers/{driverId}/vehicles:
     post:
+      tags: [Vehículos]
       summary: Registrar un vehículo
       parameters:
         - $ref: "#/components/parameters/driverId"
@@ -45,6 +50,7 @@ paths:
 
   /api/v1/drivers/{driverId}/vehicles/{vehicleId}:
     get:
+      tags: [Vehículos]
       summary: Consultar un vehículo puntual
       parameters:
         - $ref: "#/components/parameters/driverId"
@@ -61,6 +67,7 @@ paths:
 
   /api/v1/drivers/{driverId}/vehicles/{vehicleId}/activar:
     patch:
+      tags: [Vehículos]
       summary: Activar un vehículo para la jornada (desactiva los demás del conductor)
       parameters:
         - $ref: "#/components/parameters/driverId"
@@ -77,6 +84,7 @@ paths:
 
   /api/v1/drivers/{driverId}/documents:
     post:
+      tags: [Documentos]
       summary: Registrar un documento (licencia, seguro o cédula verde)
       parameters:
         - $ref: "#/components/parameters/driverId"
@@ -96,6 +104,7 @@ paths:
         "400":
           description: Datos inválidos (fecha no futura, vehicleId faltante o inválido según tipo)
     get:
+      tags: [Documentos]
       summary: Listar documentos de un conductor
       parameters:
         - $ref: "#/components/parameters/driverId"
@@ -111,6 +120,7 @@ paths:
 
   /api/v1/drivers/{driverId}/documents/{documentId}:
     get:
+      tags: [Documentos]
       summary: Consultar un documento puntual
       parameters:
         - $ref: "#/components/parameters/driverId"
