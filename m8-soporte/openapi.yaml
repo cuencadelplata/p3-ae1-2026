@@ -8,6 +8,31 @@ servers:
     description: Servidor de desarrollo local
 
 paths:
+  /health:
+    get:
+      summary: Verifica el estado de salud del servicio (Health Check)
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Servicio funcionando correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "OK"
+                  service:
+                    type: string
+                    example: "m8-soporte"
+                  timestamp:
+                    type: string
+                    format: date-time
+                  uptime:
+                    type: number
+                    example: 124.5
+
   /tickets:
     post:
       summary: Crea un nuevo ticket de soporte asociado a un viaje

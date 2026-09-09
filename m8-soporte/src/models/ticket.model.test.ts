@@ -4,7 +4,7 @@ import { ticketRepository } from './ticket.model.js';
 describe('TicketRepository', () => {
   it('debe crear un nuevo ticket correctamente', () => {
     const ticket = ticketRepository.crear('viaje-101', 'El conductor no llegó');
-    
+
     expect(ticket).toBeDefined();
     expect(ticket.id).toBeDefined();
     expect(ticket.viajeId).toBe('viaje-101');

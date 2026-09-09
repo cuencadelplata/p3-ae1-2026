@@ -22,12 +22,24 @@ app.get('/', (req, res) => {
     servicio: 'M8 - Soporte, Notificaciones y RabbitMQ',
     estado: 'ACTIVO',
     documentacion: '/api-docs',
+    health: '/health',
     endpoints: [
+      'GET /health',
       'POST /tickets',
       'GET /tickets',
       'GET /tickets/:id',
       'PATCH /tickets/:id/estado'
     ]
+  });
+});
+
+// Endpoint de Health Check
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    service: 'm8-soporte',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
   });
 });
 

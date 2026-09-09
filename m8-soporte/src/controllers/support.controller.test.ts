@@ -6,12 +6,23 @@ import { SupportController } from './support.controller.js';
 const app = express();
 app.use(express.json());
 
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'OK', service: 'm8-soporte' });
+});
 app.post('/tickets', SupportController.crearTicket);
 app.get('/tickets/:id', SupportController.obtenerTicket);
 app.patch('/tickets/:id/estado', SupportController.actualizarEstado);
 app.get('/tickets', SupportController.listarTodos);
 
 describe('SupportController', () => {
+
+  describe('GET /health', () => {
+    it('debe devolver status 200 y OK', async () => {
+      const res = await request(app).get('/health');
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('OK');
+    });
+  });
 
   describe('POST /tickets', () => {
     it('debe crear un ticket con status 201 si los datos son válidos', async () => {
