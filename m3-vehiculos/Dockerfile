@@ -17,6 +17,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
+COPY openapi.yaml ./openapi.yaml
 
 EXPOSE 8083
 
