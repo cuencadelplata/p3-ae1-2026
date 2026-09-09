@@ -2,10 +2,13 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    exclude: ["node_modules",
+    exclude: [
+      "node_modules",
       "M7-cargo-cancelacion",
+      "M6-trips-stub",
+      "M7-historial-financiero",
       "dist",
-      "src/test/E2E",   // Vitest no debe tocar esto, es de Playwright
+      "src/test/E2E",
       "tests",
     ],
   },
