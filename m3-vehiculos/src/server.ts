@@ -35,9 +35,9 @@ app.use("/api/v1/drivers/:driverId/documents", documentoRoutes);
 app.use(errorHandler);
 
 app.listen(PORT, () => {
-  console.log(`🚀 m3-drivers corriendo en http://localhost:${PORT}`);
-  console.log(`   Health check: http://localhost:${PORT}/health`);
-  console.log(`   Docs (Swagger UI): http://localhost:${PORT}/docs`);
+  console.log(`🚀 m3-drivers corriendo en http://localhost:8083`);
+  console.log(`   Health check: http://localhost:8083/health`);
+  console.log(`   Docs (Swagger UI): http://localhost:8083/docs`);
 });
 
 // TODO: montar acá los Routess cuando existan
