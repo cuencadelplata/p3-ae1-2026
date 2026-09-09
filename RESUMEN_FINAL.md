@@ -35,4 +35,4 @@ Tests       47 passed
 Tests       0 failed
 ```
 
-La documentación de la API está en `modulo-1-identidad-acceso/openapi.yaml`.
+La documentación de la API está en `modulo-1-identidad-acceso/openapi.yaml`

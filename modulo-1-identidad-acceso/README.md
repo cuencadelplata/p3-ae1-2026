@@ -79,11 +79,31 @@ Las variables `SMTP_*` son necesarias para enviar correos reales. Con Gmail se d
 Instalar dependencias y levantar el servidor:
 
 ```bash
-npm install --ignore-scripts
+npm ci
 npm start
 ```
 
 El servicio queda disponible en `http://localhost:3001`.
+
+## OpenAPI y Swagger UI
+
+El proyecto tiene una única especificación OpenAPI 3.0.3 en `openapi.yaml`. El servidor la expone en formato YAML y también la muestra mediante Swagger UI:
+
+```text
+Especificación: http://localhost:3001/openapi.yaml
+Swagger UI:    http://localhost:3001/docs/
+Estado:        http://localhost:3001/health
+```
+
+Desde PowerShell se puede comprobar que las tres rutas responden correctamente:
+
+```powershell
+Invoke-WebRequest http://localhost:3001/health -UseBasicParsing
+Invoke-WebRequest http://localhost:3001/openapi.yaml -UseBasicParsing
+Invoke-WebRequest http://localhost:3001/docs/ -UseBasicParsing
+```
+
+La ruta `/docs` redirige a `/docs/`; por eso conviene abrir Swagger UI con la barra final.
 
 ## Pruebas
 
