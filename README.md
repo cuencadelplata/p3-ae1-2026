@@ -26,17 +26,17 @@ Abrir "cmd" o "PowerShell" en el menú de inicio y abrirlo
 
 ### Paso 2: descargar la imagen desde Docker Hub
 Escribir el comando en la terminal:
-    docker pull aylen0/m7-tarifas:4.0
+- docker pull aylen0/m7-tarifas:4.0
 
 ### Paso 3: levantar el contenedor
 Nuevamente en la terminal colocar:
-    docker run -d -p 3000:3000 --name m7-tarifas aylen0/m7-tarifas:4.0
+- docker run -d -p 3000:3000 --name m7-tarifas aylen0/m7-tarifas:4.0
 
 ### Paso 4: verificar que está vivo
 CMD:
-    curl -X POST http://localhost:3000/reintegro -H "Content-Type: application/json" -d "{\"montoCancelacion\": 1000, \"viajeId\": \"v1\"}"
+- curl -X POST http://localhost:3000/reintegro -H "Content-Type: application/json" -d "{\"montoCancelacion\": 1000, \"viajeId\": \"v1\"}"
 PowerShell:
-    curl.exe -X POST http://localhost:3000/reintegro -H "Content-Type: application/json" -d '{\"montoCancelacion\": 1000, \"viajeId\": \"v1\"}'
+- curl.exe -X POST http://localhost:3000/reintegro -H "Content-Type: application/json" -d '{\"montoCancelacion\": 1000, \"viajeId\": \"v1\"}'
 
 Respuesta esperada:
 ```json
@@ -48,24 +48,33 @@ Respuesta esperada:
 
 ### Paso 6: probar el resto de los endpoints (opcional)
 CMD:
-    curl http://localhost:3000/pagos/o1/duplicado
+- curl http://localhost:3000/pagos/o1/duplicado
+
 PowerShell:
-    curl.exe http://localhost:3000/pagos/o1/duplicado
+- curl.exe http://localhost:3000/pagos/o1/duplicado
+
 
 CMD:
-    curl -X POST http://localhost:3000/metodo-pago -H "Content-Type: application/json" -d "{\"clienteId\": \"cliente1\", \"viajeId\": \"v1\", \"tipo\": \"efectivo\"}"
+- curl -X POST http://localhost:3000/metodo-pago -H "Content-Type: application/json" -d "{\"clienteId\": \"cliente1\", \"viajeId\": \"v1\", \"tipo\": \"efectivo\"}"
+
 PowerShell:
-    curl.exe -X POST http://localhost:3000/metodo-pago -H "Content-Type: application/json" -d '{\"clienteId\": \"cliente1\", \"viajeId\": \"v1\", \"tipo\": \"efectivo\"}'
+- curl.exe -X POST http://localhost:3000/metodo-pago -H "Content-Type: application/json" -d '{\"clienteId\": \"cliente1\", \"viajeId\": \"v1\", \"tipo\": \"efectivo\"}'
+
 
 CMD:
-    curl http://localhost:3000/metodo-pago/v1
+- curl http://localhost:3000/metodo-pago/v1
+
 PowerShell:
-    curl.exe http://localhost:3000/metodo-pago/v1
+- curl.exe http://localhost:3000/metodo-pago/v1
+
 
 CMD:
-    curl -X POST http://localhost:3000/metodo-pago/v1/autorizar -H "Content-Type: application/json" -d "{\"idOrden\": \"orden-1\"}"
+- curl -X POST http://localhost:3000/metodo-pago/v1/autorizar -H "Content-Type: application/json" -d "{\"idOrden\": \"orden-1\"}"
+
 PowerShell:
-    curl.exe -X POST http://localhost:3000/metodo-pago/v1/autorizar -H "Content-Type: application/json" -d '{\"idOrden\": \"orden-1\"}'
+- curl.exe -X POST http://localhost:3000/metodo-pago/v1/autorizar -H "Content-Type: application/json" -d '{\"idOrden\": \"orden-1\"}'
+
+
 
 ### Paso 7: apagar y borrar el contenedor
 En terminal:
@@ -83,22 +92,22 @@ Descargar e instalar desde: https://nodejs.org (versión 18 o superior)
 ### Paso 2: descargar el código del repositorio
 
 En la terminal, ubicado en la carpeta donde quiera guardar el proyecto:
-    git clone --single-branch --branch "M7--Tarifas,-Pagos-y-Liquidaciones" https://github.com/cuencadelplata/p3-ae1-2026.git
-    cd p3-ae1-2026
-    git checkout "M7--Tarifas,-Pagos-y-Liquidaciones"
+- git clone --single-branch --branch "M7--Tarifas,-Pagos-y-Liquidaciones" https://github.com/cuencadelplata/p3-ae1-2026.git
+- cd p3-ae1-2026
+- git checkout "M7--Tarifas,-Pagos-y-Liquidaciones"
 
 ### Paso 3: instalar las dependencias del proyecto
 Parado dentro de la carpeta del proyecto, en la terminal:
-    npm install
+- npm install
 
 ### Paso 4: correr los tests unitarios y de integración
-    npm run test:unit
+- npm run test:unit
 
 ### Paso 5: correr los tests End-to-End (requiere el contenedor corriendo)
 Con el contenedor ya levantado (Pasos 2-3 de la sección anterior):
-    npx playwright test
+- npx playwright test
 
 ### Paso 6: ver cobertura de tests (opcional)
-    npm run test:coverage
+- npm run test:coverage
 
 Cobertura actual: 100% de los 4 RF implementados
