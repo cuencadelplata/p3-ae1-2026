@@ -29,7 +29,8 @@
     "express": "^5.2.1",
     "express-validator": "^7.3.2",
     "swagger-jsdoc": "^6.3.0",
-    "swagger-ui-express": "^5.0.1"
+    "swagger-ui-express": "^5.0.1",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
