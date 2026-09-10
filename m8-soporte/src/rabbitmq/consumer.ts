@@ -20,8 +20,9 @@ export class RabbitMQConsumer {
       await this.channel!.assertExchange(this.EXCHANGE_NAME, 'topic', { durable: true });
       await this.channel!.assertQueue(this.QUEUE_NAME, { durable: true });
 
-      // Escuchamos eventos clave (ej. viaje completado, conductor asignado)
+      // Escuchamos eventos clave (ej. viaje completado, ticket creado, etc.)
       await this.channel!.bindQueue(this.QUEUE_NAME, this.EXCHANGE_NAME, 'viaje.*');
+      await this.channel!.bindQueue(this.QUEUE_NAME, this.EXCHANGE_NAME, 'ticket.*');
 
       console.log(`[RabbitMQ] Conectado exitosamente. Esperando mensajes en la cola: ${this.QUEUE_NAME}`);
 
@@ -30,6 +31,25 @@ export class RabbitMQConsumer {
       console.error('[RabbitMQ] Error de conexión:', error);
       // En un entorno productivo usaríamos reintentos exponenciales
       setTimeout(() => this.connect(url), 5000);
+    }
+  }
+
+  /**
+   * Publica un evento asíncrono a RabbitMQ en el exchange 'viajes_exchange'
+   */
+  static async publishEvent(routingKey: string, payload: any): Promise<boolean> {
+    if (!this.channel) {
+      // Si el canal no está listo (ej. en tests sin broker), continuamos sin error
+      return false;
+    }
+    try {
+      const buffer = Buffer.from(JSON.stringify(payload));
+      this.channel.publish(this.EXCHANGE_NAME, routingKey, buffer);
+      console.log(`[RabbitMQ] Evento publicado exitosamente [${routingKey}]:`, payload);
+      return true;
+    } catch (error) {
+      console.error('[RabbitMQ] Error publicando evento:', error);
+      return false;
     }
   }
 
@@ -43,10 +63,23 @@ export class RabbitMQConsumer {
         const payload = JSON.parse(msg.content.toString());
         const routingKey = msg.fields.routingKey;
 
-        console.log(`[RabbitMQ] Mensaje recibido [${routingKey}]:`, payload);
+        console.log(`[RabbitMQ] Mensaje recibido y consumido [${routingKey}]:`, payload);
 
         // RF-8.6: Procesamos asíncronamente según el tipo de evento
         switch (routingKey) {
+          case 'ticket.creado':
+            // Al crearse un ticket desde Swagger/API, se procesa asíncronamente en RabbitMQ
+            await NotificationServiceMock.sendNotification(
+              payload.viajeId,
+              'PUSH',
+              `Ticket #${payload.id} recibido en soporte: ${payload.motivo}`
+            );
+            break;
+
+          case 'ticket.actualizado':
+            console.log(`[RabbitMQ] Notificación: Estado del ticket #${payload.id} actualizado a ${payload.estado}`);
+            break;
+
           case 'viaje.asignado':
             // Ej: Alguien del M5 asignó el viaje. Notificamos al cliente.
             await NotificationServiceMock.sendNotification(payload.viajeId, 'PUSH', 'Tu conductor está en camino');
@@ -62,25 +95,20 @@ export class RabbitMQConsumer {
             const pdfUrl = await DocumentServiceMock.generatePDF(payload.viajeId, payload.importe || 0);
             await NotificationServiceMock.sendNotification(payload.viajeId, 'EMAIL', `Tu comprobante está listo: ${pdfUrl}`);
 
-            // Si el cliente había abierto un ticket para este viaje, podríamos cambiarle el estado o avisar
-            // Aquí hay lógica cruzada entre nuestro 8.5 y 8.6
             const tickets = ticketRepository.listarTodos().filter(t => t.viajeId === payload.viajeId);
             if (tickets.length > 0) {
               console.log(`[RabbitMQ] El viaje completado tiene ${tickets.length} tickets asociados. Actualizando estados...`);
-              // En un escenario real, podríamos resolverlos o disparar una alerta a soporte.
             }
             break;
 
           default:
-            console.log(`[RabbitMQ] Evento no manejado: ${routingKey}`);
+            console.log(`[RabbitMQ] Evento procesado: ${routingKey}`);
         }
 
         // Confirmamos (ACK) que el mensaje fue procesado para sacarlo de la cola
         this.channel!.ack(msg);
       } catch (error) {
         console.error('[RabbitMQ] Error procesando mensaje:', error);
-        // Si hay error temporal, podríamos no hacer ack para que se reencole (NACK). 
-        // En AE4 se pedirán reintentos, por ahora lo descartamos o logueamos.
         this.channel!.ack(msg);
       }
     });

@@ -16,6 +16,16 @@ const swaggerDocument = YAML.parse(fileContent);
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
+// Servir la especificación OpenAPI en formato crudo (YAML y JSON)
+app.get('/openapi.yaml', (req, res) => {
+  res.setHeader('Content-Type', 'text/yaml');
+  res.send(fileContent);
+});
+
+app.get('/openapi.json', (req, res) => {
+  res.json(swaggerDocument);
+});
+
 // Ruta raíz (Estado del servicio)
 app.get('/', (req, res) => {
   res.json({
@@ -25,6 +35,8 @@ app.get('/', (req, res) => {
     health: '/health',
     endpoints: [
       'GET /health',
+      'GET /openapi.yaml',
+      'GET /openapi.json',
       'POST /tickets',
       'GET /tickets',
       'GET /tickets/:id',

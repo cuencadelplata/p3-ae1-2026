@@ -1,21 +1,24 @@
 import { Request, Response } from 'express';
 import { ticketRepository, TicketStatus } from '../models/ticket.model.js';
+import { RabbitMQConsumer } from '../rabbitmq/consumer.js';
 
 export class SupportController {
   
   // Endpoint: POST /tickets
-  static crearTicket(req: Request, res: Response) {
+  static async crearTicket(req: Request, res: Response) {
     const { viajeId, motivo } = req.body;
 
     // Validación básica
     if (!viajeId || !motivo) {
-      // En Express 5 no necesitamos retornar explícitamente res.status(...), 
-      // pero es buena práctica hacer un return temprano.
       res.status(400).json({ error: 'viajeId y motivo son requeridos' });
       return;
     }
 
     const nuevoTicket = ticketRepository.crear(viajeId, motivo);
+
+    // Disparar evento asíncrono a RabbitMQ
+    await RabbitMQConsumer.publishEvent('ticket.creado', nuevoTicket);
+
     res.status(201).json(nuevoTicket);
   }
 
@@ -33,7 +36,7 @@ export class SupportController {
   }
 
   // Endpoint: PATCH /tickets/:id/estado
-  static actualizarEstado(req: Request, res: Response) {
+  static async actualizarEstado(req: Request, res: Response) {
     const id = req.params.id as string;
     const { estado } = req.body;
 
@@ -49,6 +52,9 @@ export class SupportController {
       res.status(404).json({ error: 'Ticket no encontrado' });
       return;
     }
+
+    // Disparar evento asíncrono a RabbitMQ
+    await RabbitMQConsumer.publishEvent('ticket.actualizado', ticketActualizado);
 
     res.json(ticketActualizado);
   }
