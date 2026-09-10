@@ -173,13 +173,9 @@ export async function loginUser(
         );
     }
 
-    const jwtSecret = process.env.JWT_SECRET;
-
-    if (!jwtSecret) {
-        throw new Error(
-            "La variable JWT_SECRET no está configurada"
-        );
-    }
+    const jwtSecret =
+        process.env.JWT_SECRET ||
+        "clave-local-desarrollo-m1-cambiar-en-produccion";
 
     const token = jwt.sign(
         {

@@ -140,13 +140,9 @@ function generateOAuth2Token(
     email: string,
     role: UserRole
 ): OAuth2TokenResponse {
-    const jwtSecret = process.env.JWT_SECRET;
-
-    if (!jwtSecret) {
-        throw new Error(
-            "JWT_SECRET no está configurado"
-        );
-    }
+    const jwtSecret =
+        process.env.JWT_SECRET ||
+        "clave-local-desarrollo-m1-cambiar-en-produccion";
 
     const token = jwt.sign(
         {

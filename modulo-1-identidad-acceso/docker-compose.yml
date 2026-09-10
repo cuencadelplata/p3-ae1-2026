@@ -1,6 +1,6 @@
 services:
   m1-identidad-acceso:
-    image: francok10/m1-identidad-acceso:2
+    image: matsir/m1-identidad-acceso:latest
 
     build:
       context: .
@@ -27,13 +27,7 @@ services:
     restart: unless-stopped
 
     healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://localhost:3001/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
-        ]
+      test: [ "CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -50,12 +44,7 @@ services:
     volumes:
       - ./tests/e2e:/tests:ro
 
-    command:
-      [
-        "node",
-        "--test",
-        "identidad-acceso.e2e.test.mjs"
-      ]
+    command: [ "node", "--test", "identidad-acceso.e2e.test.mjs" ]
 
     depends_on:
       m1-identidad-acceso:

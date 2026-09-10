@@ -44,15 +44,9 @@ export function authenticateToken(
         return;
     }
 
-    const jwtSecret = process.env.JWT_SECRET;
-
-    if (!jwtSecret) {
-        res.status(500).json({
-            valid: false,
-            error: "JWT_SECRET no está configurado"
-        });
-        return;
-    }
+    const jwtSecret =
+        process.env.JWT_SECRET ||
+        "clave-local-desarrollo-m1-cambiar-en-produccion";
 
     try {
         const decoded = jwt.verify(
