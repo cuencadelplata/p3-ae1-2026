@@ -6,8 +6,6 @@ Esta guía detalla los comandos exactos para revisar imágenes de Docker, levant
 
 ## 📌 Paso 0: Ubicación en la Terminal
 
-Asegúrate de ejecutar todos los comandos estando dentro de la carpeta del módulo `m8-soporte`:
-
 ```powershell
 cd c:\Users\Usuario\Documents\GitHub\p3-ae1-2026\m8-soporte
 ```
@@ -66,9 +64,9 @@ curl.exe http://localhost:3000/
 ```
 
 ### 3.3 Crear un nuevo ticket de prueba (`POST /tickets`)
+###Comando recomendado en PowerShell (`Invoke-RestMethod`)
 ```powershell
-curl.exe -X POST http://localhost:3000/tickets -H "Content-Type: application/json" -d "{\"viajeId\":\"viaje-demo-999\", \"motivo\":\"Problema con el cobro\"}"
-```
+Invoke-RestMethod -Uri "http://localhost:3000/tickets" -Method Post -ContentType "application/json" -Body '{"viajeId":"viaje-demo","motivo":"Prueba de RabbitMQ"}'
 
 ### 3.4 Listar todos los tickets (`GET /tickets`)
 ```powershell
@@ -81,8 +79,7 @@ curl.exe http://localhost:3000/tickets
 * **Ver archivo RAW en formato JSON por HTTP:** [http://localhost:3000/openapi.json](http://localhost:3000/openapi.json)
 * **Leer archivo YAML local por terminal:**
 ```powershell
-curl.exe http://localhost
-:3000/openapi.yaml
+curl.exe http://localhost:3000/openapi.yaml
 ```
 
 ---
@@ -94,19 +91,5 @@ Para ejecutar los 15 casos de prueba unitarios e integrales:
 ```powershell
 pnpm test
 ```
-*Alternativas si prefieres usarlas:*
-```powershell
-npm test
-# o
-npx vitest run
-```
-
 ---
 
-## 🛑 5. Detener los Contenedores
-
-Al finalizar la prueba, puedes apagar los servicios ejecutando:
-
-```powershell
-docker compose down
-```
