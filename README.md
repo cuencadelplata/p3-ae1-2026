@@ -39,7 +39,11 @@ Docker es opcional. En Windows, si `better-sqlite3` no puede compilarse por falt
 
 ## Ejecución
 
-Se necesitan dos terminales.
+Se necesitan dos terminales. Ejecutar los comandos desde la carpeta raíz del repositorio:
+
+```powershell
+cd "C:\Users\HP\Desktop\Nueva carpeta\p3-ae1-2026"
+```
 
 ### Backend
 
@@ -47,11 +51,32 @@ Usar el backend consolidado:
 
 ```bash
 cd modulo-1-identidad-acceso
-npm install --ignore-scripts
+npm ci
 npm start
 ```
 
 El backend queda disponible en `http://localhost:3001`.
+
+Al dejar esta terminal abierta quedan disponibles:
+
+- OpenAPI YAML: `http://localhost:3001/openapi.yaml`
+- Swagger UI: `http://localhost:3001/docs/`
+- Estado del servicio: `http://localhost:3001/health`
+
+Para comprobarlo desde PowerShell:
+
+```powershell
+Invoke-WebRequest http://localhost:3001/health -UseBasicParsing
+Invoke-WebRequest http://localhost:3001/openapi.yaml -UseBasicParsing
+Invoke-WebRequest http://localhost:3001/docs/ -UseBasicParsing
+```
+
+También se pueden abrir directamente en el navegador:
+
+```text
+http://localhost:3001/docs/
+http://localhost:3001/openapi.yaml
+```
 
 ### Frontend
 
@@ -64,6 +89,49 @@ npm run dev
 ```
 
 La interfaz queda disponible en la dirección que indique Vite, normalmente `http://localhost:5173`.
+
+En Windows, para permitir el acceso desde otros dispositivos de la red local:
+
+```powershell
+npm run dev -- --host 0.0.0.0
+```
+
+Abrir la interfaz en `http://localhost:5173/`. La UI utiliza el backend en `http://localhost:3001`.
+
+Si Vite muestra errores como `Could not resolve ... in lucide-react`, detener Vite y reinstalar las dependencias:
+
+```powershell
+cd modulo-1-identidad-acceso-ui
+Remove-Item -Recurse -Force node_modules
+npm ci
+npm run dev
+```
+
+## Verificación completa
+
+Con el backend levantado, ejecutar desde otra terminal:
+
+```powershell
+cd modulo-1-identidad-acceso
+npm run build
+npm test
+```
+
+Para verificar que la UI puede compilarse:
+
+```powershell
+cd ..\modulo-1-identidad-acceso-ui
+npm run build
+```
+
+Si todos los servicios están levantados, las direcciones principales son:
+
+| Servicio | URL |
+|---|---|
+| Aplicación web | `http://localhost:5173/` |
+| Swagger UI | `http://localhost:3001/docs/` |
+| Especificación OpenAPI | `http://localhost:3001/openapi.yaml` |
+| Health check | `http://localhost:3001/health` |
 
 ## Configuración
 
