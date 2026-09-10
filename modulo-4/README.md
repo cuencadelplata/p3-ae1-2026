@@ -22,6 +22,10 @@ npm run dev
 
 El servicio queda disponible en `http://localhost:3004` y el health check en `GET /health`.
 
+- Panel de demostracion: `http://localhost:3004/`
+- Documentacion interactiva Scalar: `http://localhost:3004/docs` (visor servido por la propia aplicacion)
+- Contrato OpenAPI YAML: `http://localhost:3004/openapi/openapi-m4.yaml`
+
 Para compilar y probar:
 
 ```bash
@@ -62,4 +66,4 @@ curl -X DELETE http://localhost:3004/api/v1/drivers/driver-1/location
 
 La busqueda acepta `maxCandidates` (nombre usado por M5) y conserva `limit` como alias compatible.
 
-La especificacion completa esta en `openapi/openapi-m4.yaml`.
+La especificacion completa esta en `openapi/openapi-m4.yaml` y se visualiza localmente con Scalar. No es necesario copiarla a Swagger Online.

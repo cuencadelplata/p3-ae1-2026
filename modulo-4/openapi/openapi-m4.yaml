@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Modulo 4 - Ubicacion y Disponibilidad
-  version: 1.1.0
+  version: 1.2.0
   description: API REST simple para ubicaciones temporales, conductores cercanos, geocodificacion y ETA.
 servers:
   - url: http://localhost:3004/api/v1
@@ -133,10 +133,10 @@ components:
       allOf:
         - $ref: '#/components/schemas/Coordinates'
         - type: object
-          required: [vehicleType, available]
+          required: [vehicleType]
           properties:
             vehicleType: { type: string, enum: [AUTO, MOTO] }
-            available: { type: boolean }
+            available: { type: boolean, default: true }
             timestamp: { type: string, format: date-time }
     NearbyDriver:
       allOf:

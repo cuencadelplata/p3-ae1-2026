@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>M4 - Ubicacion y disponibilidad</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Plataforma de movilidad urbana · AE1</p>
+        <h1>M4 - Ubicacion y disponibilidad</h1>
+        <p class="subtitle">Panel simple para demostrar ubicaciones temporales y conductores cercanos.</p>
+      </div>
+      <nav aria-label="Enlaces del servicio">
+        <span id="health" class="status pending">Comprobando API...</span>
+        <a class="secondary" href="/docs">Abrir Scalar</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="card intro">
+        <div>
+          <p class="eyebrow">Recorrido sugerido</p>
+          <h2>Publicar, buscar y retirar</h2>
+          <p>Registrá dos conductores, buscá candidatos cerca de la facultad y cambiá su disponibilidad. Los datos se conservan en memoria y vencen por TTL.</p>
+        </div>
+        <div class="steps" aria-label="Pasos del recorrido">
+          <span><b>1</b> Publicar</span><span><b>2</b> Buscar</span><span><b>3</b> Actualizar</span>
+        </div>
+      </section>
+
+      <div class="grid">
+        <section class="card">
+          <div class="section-title"><div><p class="eyebrow">RF-4.1</p><h2>Ubicacion del conductor</h2></div><span class="tag">TTL 60 s</span></div>
+          <form id="location-form">
+            <label>ID del conductor<input id="driver-id" value="driver-1" required /></label>
+            <div class="two-columns">
+              <label>Latitud<input id="latitude" type="number" step="any" value="-27.4692" required /></label>
+              <label>Longitud<input id="longitude" type="number" step="any" value="-58.8306" required /></label>
+            </div>
+            <div class="two-columns">
+              <label>Vehiculo<select id="vehicle-type"><option>AUTO</option><option>MOTO</option></select></label>
+              <label>Estado<select id="available"><option value="true">Disponible</option><option value="false">No disponible</option></select></label>
+            </div>
+            <div class="actions"><button type="submit">Publicar ubicacion</button><button id="load-demo" type="button" class="secondary">Cargar 2 demos</button></div>
+          </form>
+        </section>
+
+        <section class="card">
+          <div class="section-title"><div><p class="eyebrow">RF-4.2 y RF-4.3</p><h2>Conductores cercanos</h2></div><span class="tag">AUTO / MOTO</span></div>
+          <form id="search-form">
+            <div class="two-columns">
+              <label>Latitud de origen<input id="search-latitude" type="number" step="any" value="-27.4692" required /></label>
+              <label>Longitud de origen<input id="search-longitude" type="number" step="any" value="-58.8306" required /></label>
+            </div>
+            <div class="two-columns">
+              <label>Vehiculo<select id="search-vehicle"><option>AUTO</option><option>MOTO</option></select></label>
+              <label>Radio (km)<input id="radius" type="number" min="0.1" max="50" step="0.1" value="5" required /></label>
+            </div>
+            <button type="submit">Buscar candidatos</button>
+          </form>
+          <div id="candidates" class="empty">Todavia no se realizo una busqueda.</div>
+        </section>
+      </div>
+
+      <section class="card result-card">
+        <div class="section-title"><div><p class="eyebrow">Respuesta del servicio</p><h2>Ultima operacion</h2></div><span id="response-status" class="tag">Sin solicitudes</span></div>
+        <pre id="output" aria-live="polite">Usá uno de los formularios para probar la API.</pre>
+      </section>
+    </main>
+  </body>
+</html>

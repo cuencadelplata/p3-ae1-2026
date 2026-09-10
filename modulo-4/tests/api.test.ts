@@ -99,4 +99,22 @@ describe('API M4', () => {
 
     expect(response.body.provider).toBe('SIMULATED');
   });
+
+  it('publica el panel de demostracion', async () => {
+    const response = await request(app).get('/').expect(200);
+
+    expect(response.headers['content-type']).toContain('text/html');
+    expect(response.text).toContain('M4 - Ubicacion y disponibilidad');
+  });
+
+  it('publica la documentacion local con Scalar', async () => {
+    const response = await request(app).get('/docs').expect(200);
+
+    expect(response.text).toContain('M4 - Documentacion API');
+    expect(response.text).toContain('/openapi/openapi-m4.yaml');
+    expect(response.text).toContain('/scalar/standalone.js');
+
+    const scalarAsset = await request(app).get('/scalar/standalone.js').expect(200);
+    expect(scalarAsset.headers['content-type']).toContain('javascript');
+  });
 });
