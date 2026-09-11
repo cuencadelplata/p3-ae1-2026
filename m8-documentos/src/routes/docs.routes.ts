@@ -1,13 +1,12 @@
 import { Router, type Request, type Response } from 'express';
 import path from 'node:path';
-import swaggerUi from 'swagger-ui-express';
+import fs from 'node:fs';
 import YAML from 'yamljs';
+import { apiReference } from '@scalar/express-api-reference';
 
 export const docsRouter = Router();
 
 // Carga la especificacion OpenAPI buscando en distintas rutas posibles
-import fs from 'node:fs';
-
 const candidatePaths = [
   path.resolve(__dirname, '../openapi/openapi.yaml'),
   path.resolve(__dirname, '../../src/openapi/openapi.yaml'),
@@ -45,8 +44,14 @@ docsRouter.get('/openapi.yaml', (_req: Request, res: Response) => {
   res.sendFile(openapiPath);
 });
 
-// Swagger UI interactivo
-docsRouter.use('/', swaggerUi.serve, swaggerUi.setup(openapiDocument, {
-  customSiteTitle: 'M8 - Documentación OpenAPI (Comprobantes PDF)',
-  customCss: '.swagger-ui .topbar { display: block; }',
-}));
+// Scalar UI interactivo
+docsRouter.use(
+  '/',
+  apiReference({
+    theme: 'purple',
+    pageTitle: 'M8 - Documentación OpenAPI (Comprobantes PDF)',
+    spec: {
+      content: openapiDocument,
+    },
+  }),
+);
