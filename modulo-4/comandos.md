@@ -15,10 +15,10 @@ Este comando posiciona la terminal dentro de la carpeta del Modulo 4. Los siguie
 ## 2. Construir la imagen y ejecutar los tests
 
 ```powershell
-docker build --no-cache --progress=plain -t p3-m4:1.2.0 .
+docker build --no-cache --progress=plain -t segocodee/p3-m4-ubicacion:1.3.0 .
 ```
 
-Docker instala las dependencias, ejecuta automaticamente los 17 tests, compila el codigo TypeScript y crea la imagen `p3-m4:1.2.0`.
+Docker instala las dependencias, ejecuta automaticamente los tests, compila el codigo TypeScript y crea la imagen de la API `segocodee/p3-m4-ubicacion:1.3.0`.
 
 La opcion `--no-cache` obliga a Docker a ejecutar nuevamente todos los pasos, aunque la imagen se haya construido antes. La opcion `--progress=plain` muestra la salida completa en la terminal. De esta manera, los resultados de los tests quedan visibles para la demostracion y la captura. Este proceso puede tardar algunos minutos.
 
@@ -26,44 +26,39 @@ Antes de continuar, comprobar que aparezca un resultado similar a este:
 
 ```text
 Test Files  2 passed (2)
-Tests       17 passed (17)
+Tests       19 passed (19)
 ```
 
 Este es el mejor momento para sacar la captura de los tests aprobados.
 
-Si aparece `CACHED [build 11/12] RUN pnpm test`, se ejecuto el comando sin `--no-cache`. En ese caso, repetir exactamente el comando indicado arriba para que Docker vuelva a correr los tests y muestre el resultado.
+Si el paso `RUN pnpm test` aparece como `CACHED`, se ejecuto el comando sin `--no-cache`. En ese caso, repetir exactamente el comando indicado arriba para que Docker vuelva a correr los tests y muestre el resultado.
 
-## 3. Iniciar el contenedor
+## 3. Iniciar la API y la UI separadas
+
+Para demostrar que las imagenes estan publicadas y se pueden descargar desde Docker Hub:
 
 ```powershell
-docker run --rm -d --name modulo-4 -p 3004:3004 p3-m4:1.2.0
+docker compose pull
+docker compose up -d --no-build
 ```
 
-Este comando inicia el servicio en segundo plano:
+El primer comando descarga las versiones publicadas. El segundo inicia exactamente esas imagenes, sin construirlas desde el codigo local.
 
-- `--name modulo-4` le asigna un nombre facil de reconocer.
-- `-p 3004:3004` conecta el puerto del contenedor con el puerto de la computadora.
-- `--rm` hace que el contenedor temporal se elimine al detenerlo.
+Como alternativa, durante el desarrollo se pueden reconstruir ambas imagenes localmente:
+
+```powershell
+docker compose up --build -d
+```
+
+Este comando crea e inicia dos aplicaciones en segundo plano: `m4-api` para la API REST y `m4-ui` para la interfaz grafica. Cada una utiliza su propio proyecto, imagen y contenedor.
 
 ## 4. Comprobar el estado del contenedor
 
 ```powershell
-docker ps
+docker compose ps
 ```
 
-Muestra los contenedores activos. Debe aparecer uno llamado `modulo-4`.
-
-Esperar unos segundos y ejecutar:
-
-```powershell
-docker inspect --format '{{.State.Health.Status}}' modulo-4
-```
-
-Consulta el control de salud configurado en Docker. El resultado esperado es:
-
-```text
-healthy
-```
+Muestra los contenedores activos. Deben aparecer `m4-api` y `m4-ui` con estado saludable.
 
 Tambien se puede consultar directamente la salud de la API:
 
@@ -78,10 +73,10 @@ Debe responder con estado `ok` y el nombre `m4-location-service`.
 Abrir en el navegador:
 
 ```text
-http://localhost:3004
+http://localhost:8084
 ```
 
-La interfaz consume los endpoints reales del Modulo 4. Para hacer una demostracion rapida:
+La interfaz se ejecuta en un contenedor independiente y consume los endpoints reales de la API por HTTP. Para hacer una demostracion rapida:
 
 1. Presionar **Cargar 2 demos** para registrar un auto y una moto.
 2. Presionar **Buscar candidatos** para buscar autos cercanos.
@@ -144,7 +139,7 @@ Llama al endpoint `PATCH /drivers/{driverId}/availability`. El conductor conserv
 ## 8. Mostrar los logs
 
 ```powershell
-docker logs modulo-4
+docker compose logs
 ```
 
 Muestra la salida generada por el servicio dentro del contenedor.
@@ -152,10 +147,10 @@ Muestra la salida generada por el servicio dentro del contenedor.
 ## 9. Finalizar la demostracion
 
 ```powershell
-docker stop modulo-4
+docker compose down
 ```
 
-Detiene el servicio. Como se inicio con `--rm`, Docker elimina automaticamente el contenedor temporal, pero conserva la imagen `p3-m4:1.2.0`.
+Detiene y elimina los dos contenedores y su red interna, pero conserva las imagenes construidas.
 
 ## Resumen para explicar oralmente
 

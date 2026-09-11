@@ -19,8 +19,6 @@ app.get('/scalar/standalone.js', (_req, res) => {
     path.join(projectDirectory, 'node_modules', '@scalar', 'api-reference', 'dist', 'browser', 'standalone.js')
   );
 });
-app.use(express.static(path.join(projectDirectory, 'public')));
-
 app.get(
   '/docs',
   apiReference({
@@ -30,6 +28,15 @@ app.get(
     cdn: '/scalar/standalone.js'
   })
 );
+
+app.get('/', (_req, res) => {
+  res.status(200).json({
+    service: 'm4-location-service',
+    version: '1.3.0',
+    health: '/health',
+    documentation: '/docs'
+  });
+});
 
 app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', service: 'm4-location-service' });

@@ -1,56 +1,66 @@
 openapi: 3.0.3
 info:
   title: Modulo 4 - Ubicacion y Disponibilidad
-  version: 1.2.0
-  description: API REST simple para ubicaciones temporales, conductores cercanos, geocodificacion y ETA.
+  version: 1.3.0
+  description: API REST para ubicaciones temporales, disponibilidad, cercania, geocodificacion simulada y ETA.
 servers:
   - url: http://localhost:3004/api/v1
+    description: API local directa
+  - url: http://localhost:8084/api/v1
+    description: API a traves de la UI independiente
+tags:
+  - name: Ubicaciones
+  - name: Busqueda
+  - name: Calculos
 paths:
   /drivers/{driverId}/location:
+    parameters:
+      - $ref: '#/components/parameters/DriverId'
     put:
+      tags: [Ubicaciones]
       summary: Actualizar ubicacion del conductor (RF-4.1)
-      parameters:
-        - in: path
-          name: driverId
-          required: true
-          schema: { type: string }
+      description: Rechaza con 409 una marca temporal anterior a la ultima registrada.
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/LocationUpdate'
+            schema: { $ref: '#/components/schemas/LocationUpdate' }
+            example: { latitude: -27.4692, longitude: -58.8306, vehicleType: AUTO, available: true }
       responses:
-        '200': { description: Ubicacion actualizada }
-        '400': { description: Datos invalidos }
+        '200':
+          description: Ubicacion actualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriverLocation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409':
+          description: La actualizacion es anterior a la ubicacion vigente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { code: STALE_LOCATION_UPDATE, message: La ubicacion recibida es anterior a la ultima ubicacion registrada }
     get:
+      tags: [Ubicaciones]
       summary: Consultar ubicacion activa
-      parameters:
-        - in: path
-          name: driverId
-          required: true
-          schema: { type: string }
       responses:
-        '200': { description: Ubicacion vigente }
-        '404': { description: No existe o vencio por TTL }
+        '200':
+          description: Ubicacion vigente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriverLocation' }
+        '404': { $ref: '#/components/responses/NotFound' }
     delete:
-      summary: Eliminar ubicacion del conductor (ej. cierre de sesion)
-      parameters:
-        - in: path
-          name: driverId
-          required: true
-          schema: { type: string }
+      tags: [Ubicaciones]
+      summary: Eliminar ubicacion del conductor
       responses:
         '204': { description: Ubicacion eliminada }
-        '404': { description: No existe o ya vencio por TTL }
+        '404': { $ref: '#/components/responses/NotFound' }
   /drivers/{driverId}/availability:
     patch:
+      tags: [Ubicaciones]
       summary: Cambiar disponibilidad del conductor
       parameters:
-        - in: path
-          name: driverId
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/DriverId'
       requestBody:
         required: true
         content:
@@ -60,39 +70,36 @@ paths:
               required: [available]
               properties:
                 available: { type: boolean }
+            example: { available: false }
       responses:
-        '200': { description: Disponibilidad actualizada }
-        '404': { description: Ubicacion activa no encontrada }
+        '200':
+          description: Disponibilidad actualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriverLocation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /drivers/nearby:
     get:
+      tags: [Busqueda]
       summary: Buscar conductores cercanos (RF-4.2 y RF-4.3)
       parameters:
-        - { in: query, name: latitude, required: true, schema: { type: number } }
-        - { in: query, name: longitude, required: true, schema: { type: number } }
+        - { in: query, name: latitude, required: true, schema: { type: number, minimum: -90, maximum: 90 }, example: -27.4692 }
+        - { in: query, name: longitude, required: true, schema: { type: number, minimum: -180, maximum: 180 }, example: -58.8306 }
         - { in: query, name: vehicleType, required: true, schema: { type: string, enum: [AUTO, MOTO] } }
-        - { in: query, name: radiusKm, schema: { type: number, default: 5 } }
-        - { in: query, name: limit, schema: { type: integer, default: 10 }, description: Limite generico conservado por compatibilidad }
-        - { in: query, name: maxCandidates, schema: { type: integer, default: 10 }, description: Cantidad maxima de candidatos solicitada por M5 }
+        - { in: query, name: radiusKm, schema: { type: number, minimum: 0.1, maximum: 50, default: 5 } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 50, default: 10 }, description: Alias conservado por compatibilidad }
+        - { in: query, name: maxCandidates, schema: { type: integer, minimum: 1, maximum: 50, default: 10 }, description: Cantidad maxima solicitada por M5 }
       responses:
         '200':
           description: Conductores vigentes, disponibles y ordenados por distancia
           content:
             application/json:
-              schema:
-                type: object
-                required: [vehicleType, searchRadiusKm, candidatesCount, searchTimestamp, count, drivers]
-                properties:
-                  vehicleType: { type: string, enum: [AUTO, MOTO] }
-                  searchRadiusKm: { type: number }
-                  candidatesCount: { type: integer }
-                  searchTimestamp: { type: string, format: date-time }
-                  count: { type: integer }
-                  drivers:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/NearbyDriver'
+              schema: { $ref: '#/components/schemas/NearbyResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
   /geocode:
     post:
+      tags: [Calculos]
       summary: Geocodificar direccion con proveedor simulado (RF-4.4)
       requestBody:
         required: true
@@ -102,12 +109,19 @@ paths:
               type: object
               required: [address]
               properties:
-                address: { type: string }
+                address: { type: string, minLength: 3, maxLength: 200 }
+            example: { address: Facultad Cuenca del Plata }
       responses:
-        '200': { description: Coordenadas encontradas }
-        '404': { description: Direccion no incluida en el simulador }
+        '200':
+          description: Coordenadas encontradas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GeocodeResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /estimate:
     post:
+      tags: [Calculos]
       summary: Estimar distancia y ETA (RF-4.5)
       requestBody:
         required: true
@@ -119,9 +133,35 @@ paths:
               properties:
                 origin: { $ref: '#/components/schemas/Coordinates' }
                 destination: { $ref: '#/components/schemas/Coordinates' }
+            example:
+              origin: { latitude: -27.4692, longitude: -58.8306 }
+              destination: { latitude: -27.4875, longitude: -58.7896 }
       responses:
-        '200': { description: Distancia y tiempo aproximados }
+        '200':
+          description: Distancia y tiempo aproximados
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DistanceEstimate' }
+        '400': { $ref: '#/components/responses/BadRequest' }
 components:
+  parameters:
+    DriverId:
+      in: path
+      name: driverId
+      required: true
+      schema: { type: string, minLength: 1 }
+      example: driver-1
+  responses:
+    BadRequest:
+      description: Datos invalidos
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Recurso inexistente o vencido por TTL
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
   schemas:
     Coordinates:
       type: object
@@ -138,16 +178,53 @@ components:
             vehicleType: { type: string, enum: [AUTO, MOTO] }
             available: { type: boolean, default: true }
             timestamp: { type: string, format: date-time }
-    NearbyDriver:
+    DriverLocation:
       allOf:
         - $ref: '#/components/schemas/Coordinates'
         - type: object
-          required: [driverId, vehicleType, available, updatedAt, expiresAt, distanceKm, estimatedEtaMinutes]
+          required: [driverId, vehicleType, available, updatedAt, expiresAt]
           properties:
             driverId: { type: string }
             vehicleType: { type: string, enum: [AUTO, MOTO] }
             available: { type: boolean }
             updatedAt: { type: string, format: date-time }
             expiresAt: { type: string, format: date-time }
-            distanceKm: { type: number }
-            estimatedEtaMinutes: { type: integer }
+    NearbyDriver:
+      allOf:
+        - $ref: '#/components/schemas/DriverLocation'
+        - $ref: '#/components/schemas/DistanceEstimate'
+    NearbyResponse:
+      type: object
+      required: [vehicleType, searchRadiusKm, candidatesCount, searchTimestamp, count, drivers]
+      properties:
+        vehicleType: { type: string, enum: [AUTO, MOTO] }
+        searchRadiusKm: { type: number }
+        candidatesCount: { type: integer }
+        searchTimestamp: { type: string, format: date-time }
+        count: { type: integer }
+        drivers:
+          type: array
+          items: { $ref: '#/components/schemas/NearbyDriver' }
+    GeocodeResponse:
+      allOf:
+        - $ref: '#/components/schemas/Coordinates'
+        - type: object
+          required: [address, provider]
+          properties:
+            address: { type: string }
+            provider: { type: string, enum: [SIMULATED] }
+    DistanceEstimate:
+      type: object
+      required: [distanceKm, estimatedEtaMinutes]
+      properties:
+        distanceKm: { type: number, minimum: 0 }
+        estimatedEtaMinutes: { type: integer, minimum: 1 }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: string }

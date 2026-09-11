@@ -100,11 +100,34 @@ describe('API M4', () => {
     expect(response.body.provider).toBe('SIMULATED');
   });
 
-  it('publica el panel de demostracion', async () => {
+  it('responde 409 y conserva el dato nuevo ante una actualizacion atrasada', async () => {
+    const recent = new Date(Date.now() - 5_000).toISOString();
+    const stale = new Date(Date.now() - 10_000).toISOString();
+
+    await request(app).put('/api/v1/drivers/driver-1/location').send({
+      latitude: -27.4692,
+      longitude: -58.8306,
+      vehicleType: 'AUTO',
+      timestamp: recent
+    }).expect(200);
+
+    const response = await request(app).put('/api/v1/drivers/driver-1/location').send({
+      latitude: -27.5,
+      longitude: -58.9,
+      vehicleType: 'AUTO',
+      timestamp: stale
+    }).expect(409);
+
+    expect(response.body.code).toBe('STALE_LOCATION_UPDATE');
+    const location = await request(app).get('/api/v1/drivers/driver-1/location').expect(200);
+    expect(location.body.latitude).toBe(-27.4692);
+  });
+
+  it('publica informacion del servicio sin integrar la interfaz grafica', async () => {
     const response = await request(app).get('/').expect(200);
 
-    expect(response.headers['content-type']).toContain('text/html');
-    expect(response.text).toContain('M4 - Ubicacion y disponibilidad');
+    expect(response.headers['content-type']).toContain('application/json');
+    expect(response.body).toMatchObject({ service: 'm4-location-service', version: '1.3.0' });
   });
 
   it('publica la documentacion local con Scalar', async () => {

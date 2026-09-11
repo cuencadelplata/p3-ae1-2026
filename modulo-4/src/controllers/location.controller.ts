@@ -10,7 +10,8 @@ import {
 import {
   LocationService,
   LocationValidationError,
-  NotFoundError
+  NotFoundError,
+  StaleLocationError
 } from '../services/location.service.js';
 
 export class LocationController {
@@ -106,6 +107,10 @@ export class LocationController {
       }
       if (error instanceof NotFoundError) {
         res.status(404).json({ code: 'NOT_FOUND', message: error.message });
+        return;
+      }
+      if (error instanceof StaleLocationError) {
+        res.status(409).json({ code: 'STALE_LOCATION_UPDATE', message: error.message });
         return;
       }
       res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Error interno del servicio' });

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   LocationService,
   LocationValidationError,
-  NotFoundError
+  NotFoundError,
+  StaleLocationError
 } from '../src/services/location.service.js';
 
 describe('LocationService', () => {
@@ -60,6 +61,31 @@ describe('LocationService', () => {
         new Date(31_001).toISOString()
       )
     ).toThrow(LocationValidationError);
+  });
+
+  it('impide que una actualizacion atrasada sobrescriba una ubicacion mas reciente', () => {
+    const now = new Date('2026-09-10T12:00:30.000Z').getTime();
+    const service = new LocationService(60, () => now);
+
+    service.updateLocation(
+      'driver-1',
+      { latitude: -27.4692, longitude: -58.8306 },
+      'AUTO',
+      true,
+      '2026-09-10T12:00:20.000Z'
+    );
+
+    expect(() =>
+      service.updateLocation(
+        'driver-1',
+        { latitude: -27.5000, longitude: -58.9000 },
+        'AUTO',
+        true,
+        '2026-09-10T12:00:10.000Z'
+      )
+    ).toThrow(StaleLocationError);
+
+    expect(service.getActiveLocation('driver-1').latitude).toBe(-27.4692);
   });
 
   it('elimina una ubicacion activa', () => {

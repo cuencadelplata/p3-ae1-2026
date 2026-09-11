@@ -8,6 +8,7 @@ import type {
 
 export class NotFoundError extends Error {}
 export class LocationValidationError extends Error {}
+export class StaleLocationError extends Error {}
 
 export class LocationService {
   private readonly locations = new Map<string, DriverLocation>();
@@ -34,6 +35,13 @@ export class LocationService {
     if (updatedAtMs > this.now() + maximumClockSkewMs) {
       throw new LocationValidationError(
         'La marca temporal de la ubicacion no puede estar mas de 30 segundos en el futuro'
+      );
+    }
+
+    const currentLocation = this.locations.get(driverId);
+    if (currentLocation && updatedAtMs < Date.parse(currentLocation.updatedAt)) {
+      throw new StaleLocationError(
+        'La ubicacion recibida es anterior a la ultima ubicacion registrada'
       );
     }
 
