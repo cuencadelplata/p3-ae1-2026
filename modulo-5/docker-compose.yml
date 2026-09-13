@@ -1,4 +1,4 @@
-﻿version: '3.9'
+version: '3.9'
 
 services:
   dispatch-service:
@@ -13,9 +13,28 @@ services:
       - NODE_ENV=production
       - PORT=3005
     restart: unless-stopped
+    volumes:
+      - ./openapi:/app/openapi:ro
+      - ./public:/app/public:ro
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://localhost:3005/health']
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  scalar-docs:
+    build:
+      context: .
+      dockerfile: scalar/Dockerfile
+    image: p3-ae1/m5-scalar-docs:latest
+    container_name: m5-scalar-docs
+    ports:
+      - '3006:80'
+    volumes:
+      - ./openapi:/usr/share/nginx/html/openapi:ro
+      - ./scalar/index.html:/usr/share/nginx/html/index.html:ro
+    depends_on:
+      - dispatch-service
+    restart: unless-stopped
+

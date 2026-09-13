@@ -32,6 +32,37 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'UP', service: 'm5-dispatch-service', timestamp: new Date() });
 });
 
+// Documentación de la API interactiva con Scalar
+app.get(['/docs', '/reference'], (_req, res) => {
+  res.send(`<!doctype html>
+<html lang="es">
+  <head>
+    <title>Módulo 5: Solicitud y Despacho — Documentación Scalar</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚗</text></svg>">
+  </head>
+  <body>
+    <script
+      id="api-reference"
+      data-url="/openapi/openapi-m5.yaml"
+      data-configuration='{
+        "theme": "purple",
+        "darkMode": true,
+        "layout": "modern",
+        "showSidebar": true,
+        "searchHotKey": "k",
+        "metaData": {
+          "title": "Módulo 5: Solicitud y Despacho - API Reference"
+        }
+      }'>
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+  </body>
+</html>`);
+});
+
+
 // Rutas API v1 - Solicitudes de Viaje
 app.post('/api/v1/ride-requests', rideRequestController.create);
 app.get('/api/v1/ride-requests/:requestId', rideRequestController.getById);
@@ -53,8 +84,10 @@ app.get('/api/v1/drivers/:driverId/offers', rideRequestController.getOffersForDr
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
     console.log(`[M5 Solicitud y Despacho] Servicio ejecutándose en http://localhost:${PORT}`);
+    console.log(`[M5] Documentación Scalar interactiva en http://localhost:${PORT}/docs`);
     console.log(`[M5] OpenAPI spec disponible en /openapi/openapi-m5.yaml`);
   });
 }
+
 
 export { app, rideRequestService };

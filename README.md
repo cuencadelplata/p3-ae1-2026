@@ -42,22 +42,28 @@ El microservicio se encarga de gestionar el ciclo de vida completo de las solici
 
 ## Instrucciones de Instalación y Ejecución
 
-Para poder ver en producción este módulo a través de Docker, se deben seguir los siguientes pasos:
+Para levantar el microservicio y su documentación interactiva a través de Docker:
 
-1- Tener Docker desktop instalado y corriendo.  
-2- Hacer login o crearse una cuenta (en caso de no tener).  
-3- A través de Powershell (abierto como administrador), descargar la imagen a través del siguiente comando:  
+#### Opción Recomendada: Docker Compose (Despliegue multi-contenedor)
 ```powershell
-docker pull agustinq19/m5-dispatch-service:latest
+# Dentro de la carpeta modulo-5:
+cd modulo-5
+docker compose up --build -d
 ```
-4- Luego ejecutar el contenedor:  
+
+#### Opción Alternativa: Docker Run individual
 ```powershell
-docker run -p 3005:3005 agustinq19/m5-dispatch-service:latest
+# 1. Microservicio de Despacho
+docker run -d -p 3005:3005 --name m5-dispatch agustinq19/m5-dispatch-service:latest
 ```
-5- Abrir el localhost con la dirección dada:
+
+Una vez iniciado, podés acceder a:
 - **Simulador y Dashboard:** `http://localhost:3005`
-- **Healthcheck:** `http://localhost:3005/health`
-- **Especificación OpenAPI:** `http://localhost:3005/openapi/openapi-m5.yaml`
+- **Documentación Interactiva (Scalar - Contenedor dedicado):** `http://localhost:3006` *(con Docker Compose)*
+- **Documentación Interactiva (Scalar - Ruta integrada):** `http://localhost:3005/docs`
+- **Healthcheck del Servicio:** `http://localhost:3005/health`
+- **Especificación OpenAPI en YAML:** `http://localhost:3005/openapi/openapi-m5.yaml`
+
 
 ---
 
@@ -66,7 +72,7 @@ docker run -p 3005:3005 agustinq19/m5-dispatch-service:latest
 #### Prerrequisitos
 - **Node.js**: v20.x o superior.
 - **npm**: v10.x o superior.
-- **Docker & Docker Compose** *(opcional para despliegue en contenedores)*.
+- **Docker & Docker Compose** *(para despliegue desacoplado en contenedores)*.
 
 #### 1. Ejecución Local (Desarrollo)
 
@@ -83,6 +89,7 @@ npm run dev
 
 El servicio estará disponible en:
 - **API Base:** `http://localhost:3005`
+- **Documentación Interactiva (Scalar):** `http://localhost:3005/docs` (o `/reference`)
 - **Healthcheck:** `http://localhost:3005/health`
 - **Simulador Interactivo:** `http://localhost:3005/`
 - **OpenAPI Spec:** `http://localhost:3005/openapi/openapi-m5.yaml`
@@ -101,19 +108,31 @@ npm start
 
 ---
 
-### 3. Ejecución con Docker y Docker Compose
+### 3. Ejecución Desacoplada con Docker Compose (Contenedores Separados)
+
+La arquitectura con Docker Compose implementa desacoplamiento total en dos contenedores independientes:
+1. **`m5-dispatch-service`** (`puerto 3005`): Microservicio de backend y lógica de negocio.
+2. **`m5-scalar-docs`** (`puerto 3006`): Servidor Nginx Alpine ultraligero que aloja la interfaz gráfica de Scalar para explorar y probar los endpoints.
 
 ```bash
-# Levantar el contenedor en segundo plano
+# Ingresar a modulo-5 (o ejecutar apuntando al compose)
+cd modulo-5
+
+# Levantar todos los servicios en segundo plano
 docker compose up --build -d
 
-# Verificar logs del servicio
+# URLs disponibles:
+# - API & Simulador:     http://localhost:3005
+# - Scalar Docs UI:      http://localhost:3006
+# - Healthcheck:         http://localhost:3005/health
+
+# Verificar logs de ambos contenedores
 docker compose logs -f
 
-# Comprobar el estado del contenedor
+# Comprobar el estado de los contenedores
 docker compose ps
 
-# Detener el contenedor
+# Detener los servicios
 docker compose down
 ```
 
