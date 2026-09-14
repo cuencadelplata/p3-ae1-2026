@@ -2,7 +2,6 @@ import { datosInvalidos } from './errores.js';
 import type { DatosDireccion } from './modelos.js';
 
 export function validarDireccion(cuerpo: unknown): DatosDireccion {
-  // Comprobamos que recibimos un objeto.
   if (
     cuerpo === null ||
     typeof cuerpo !== 'object' ||
@@ -32,7 +31,6 @@ export function validarDireccion(cuerpo: unknown): DatosDireccion {
     );
   }
 
-  // Validamos los textos opcionales.
   const alias = validarTextoOpcional(datos.alias, 'alias', 50);
 
   const direccion = validarTextoOpcional(
@@ -41,7 +39,6 @@ export function validarDireccion(cuerpo: unknown): DatosDireccion {
     250
   );
 
-  // Las coordenadas deben enviarse juntas.
   const tieneLatitud = datos.latitud !== undefined;
   const tieneLongitud = datos.longitud !== undefined;
 
