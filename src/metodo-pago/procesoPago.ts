@@ -24,17 +24,16 @@ const nuevoMetodo: MetodoPago={
     estado: "pendiente", 
 };
 metodosPago.push(nuevoMetodo);  //.push() agrega un elemento de metodoNuevo y lo coloca al final de la lista de MétododePago
-
     return nuevoMetodo;
 };
+
 
 //buscar el pago de in vieja seggun su id
 export function buscarPagoPorViaje(viajeId: string): MetodoPago | undefined{ //la forma de pago de un viaje en particular 
 
    return metodosPago.find( (metodoPago) => metodoPago.viajeId === viajeId );
-}
+} // .find()  busca dentro de un array un elemento en particular, es utiliza para BD 
 
-// .find()  busca dentro de un array un elemento en particular, es utiliza para BD 
 
 export function autorizarPago(viajeId: string, idOrden: string): MetodoPago {
 
@@ -66,7 +65,6 @@ export function autorizarPago(viajeId: string, idOrden: string): MetodoPago {
     });
 
     return metodoPago;
-
 }
 
 export function rechazarPago(viajeId: string): MetodoPago {
@@ -76,11 +74,9 @@ export function rechazarPago(viajeId: string): MetodoPago {
     if (!metodoPago) {
         throw new Error("no existe un tipo de pago registrado que este asociado para dicho viaje");
     }
-
     if (metodoPago.estado !== "pendiente") {
         throw new Error("El pago no fue procesado aún");
     }
-
     metodoPago.estado = "rechazado";
 
     return metodoPago;

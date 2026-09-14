@@ -4,7 +4,7 @@ import {
   buscarPagoPorViaje,
 } from "../metodo-pago/procesoPago";
 
-describe("registrarMetodoPago (RF-7.2 - Método de pago)", () => {
+describe("registrarMetodoPago", () => {
   it("registra un método de pago válido con estado inicial 'pendiente'", () => {
     const metodo = registrarMetodoPago("cliente1", "viajeA", "efectivo");
     expect(metodo.clienteId).toBe("cliente1");
@@ -13,11 +13,13 @@ describe("registrarMetodoPago (RF-7.2 - Método de pago)", () => {
     expect(metodo.estado).toBe("pendiente");
   });
 
+
   it("genera un pagoId distinto en cada registro", () => {
     const metodo1 = registrarMetodoPago("cliente1", "viajeB", "efectivo");
     const metodo2 = registrarMetodoPago("cliente1", "viajeC", "efectivo");
     expect(metodo1.pagoId).not.toBe(metodo2.pagoId);
   });
+
 
   it("lanza error si clienteId está vacío", () => {
     expect(() => registrarMetodoPago("", "viajeD", "efectivo")).toThrow(
@@ -25,11 +27,13 @@ describe("registrarMetodoPago (RF-7.2 - Método de pago)", () => {
     );
   });
 
+
   it("lanza error si viajeId está vacío", () => {
     expect(() => registrarMetodoPago("cliente1", "", "efectivo")).toThrow(
       "clienteId y viajeId debe existir"
     );
   });
+
 
   it("acepta distintos tipos de pago válidos", () => {
     const efectivo = registrarMetodoPago("cliente1", "viajeE", "efectivo");
@@ -37,6 +41,7 @@ describe("registrarMetodoPago (RF-7.2 - Método de pago)", () => {
     expect(efectivo.tipo).toBe("efectivo");
     expect(tarjeta.tipo).toBe("tarjeta");
   });
+
 
   it("queda registrado y se puede volver a buscar por viajeId", () => {
     registrarMetodoPago("cliente1", "viajeG", "efectivo");
@@ -46,11 +51,13 @@ describe("registrarMetodoPago (RF-7.2 - Método de pago)", () => {
   });
 });
 
+
 describe("buscarPagoPorViaje", () => {
   it("devuelve undefined si no existe un pago para ese viaje", () => {
     const resultado = buscarPagoPorViaje("viaje-que-no-existe-123");
     expect(resultado).toBeUndefined();
   });
+  
 
   it("encuentra el pago correcto entre varios registrados", () => {
     registrarMetodoPago("clienteX", "viajeH", "efectivo");

@@ -1,4 +1,4 @@
-import{Request, Response} from "express";
+import{Request, Response} from "express"; 
 import { registrarMetodoPago, buscarPagoPorViaje, autorizarPago, rechazarPago } from "./procesoPago";
 
 export function crearMetodoPago(req: Request, res: Response) {
@@ -18,7 +18,7 @@ export function crearMetodoPago(req: Request, res: Response) {
 
     } catch (error) {
 
-        res.status(400).json({
+        res.status(400).json({ //status= fija la peticion http 
             mensaje: "No se pudo registrar el método de pago"
         });
     }
