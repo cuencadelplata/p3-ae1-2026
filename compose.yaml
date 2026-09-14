@@ -35,26 +35,19 @@ services:
       - pruebas
 
   e2e:
-      build:
-        context: .
-        target: pruebas
+    build:
+      context: .
+      target: pruebas
 
-      profiles:
-        - e2e
+    profiles:
+      - e2e
 
-      network_mode: "service:clientes"
+    entrypoint:
+      - node
+      - scripts/ejecutar-e2e.mjs
 
-      environment:
-        API_URL: http://127.0.0.1:3000
-
-      depends_on:
-        clientes:
-          condition: service_healthy
-
-      command:
-        - node
-        - --test
-        - dist/test/e2e/*.test.js
+    command:
+      - dist/test/e2e/*.test.js
       
 volumes:
   datos-clientes:
