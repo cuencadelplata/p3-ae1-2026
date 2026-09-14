@@ -61,18 +61,46 @@ docker compose down
 
 ---
 
-## Comandos de Test y Calidad de Código
+## Ejecución de Pruebas con Docker
 
-El proyecto cuenta con una suite completa de pruebas unitarias, de integración y scripts de verificación de concurrencia:
+No se requiere tener instalado Node.js ni npm en la computadora anfitriona. Toda la suite de pruebas se puede ejecutar directamente a través de Docker:
 
-| Comando | Tipo de Prueba / Tarea | Descripción |
-| --- | --- | --- |
-| `npm test` | **Tests Automatizados** | Ejecuta la suite de 22 tests (unitarios y de integración con el runner nativo de `node:test`). |
-| `npm run prueba:concurrencia` | **Prueba de Concurrencia** | Lanza 8 solicitudes simultáneas sobre el mismo `tripId` para verificar idempotencia (1 x `201` y 7 x `200`). |
-| `npm run typecheck` | **Chequeo de Tipos** | Ejecuta el compilador de TypeScript (`tsc --noEmit`) para validar la consistencia de tipos sin compilar archivos. |
-| `npm run build` | **Compilación** | Compila el TypeScript a JavaScript dentro de `dist/` y empaqueta los archivos de OpenAPI. |
-| `npm start` | **Producción Local** | Ejecuta el artefacto compilado en `dist/index.js`. |
-| `npm run clean` | **Limpieza** | Elimina el directorio `dist/` generado. |
+### 1. Ejecutar todas las pruebas juntas (Recomendado):
+```bash
+# Situado dentro de la carpeta m8-documentos
+docker compose run test
+```
+*(Si realizaste modificaciones en el código o en la configuración, agrega la bandera `--build`: `docker compose run --build test`).*
+
+Este comando unificado ejecuta en secuencia:
+1. **Chequeo de Tipos (`typecheck`):** Valida la consistencia de tipos con TypeScript.
+2. **Tests Automatizados (`test`):** Corre los 22 tests (unitarios y de integración HTTP con `node:test`).
+3. **Prueba de Concurrencia (`prueba:concurrencia`):** Levanta el microservicio y dispara 8 solicitudes paralelas sobre el mismo `tripId` para validar la idempotencia (1 x `201` y 7 x `200`).
+
+---
+
+### 2. Ejecutar pruebas individuales de forma manual:
+
+Si deseas correr una sola prueba específica sin tener Node instalado en tu PC, puedes pasarle el comando deseado a Docker Compose:
+
+```bash
+# A) Correr únicamente los 22 tests unitarios y de integración:
+docker compose run test npm test
+
+# B) Correr únicamente la prueba de concurrencia e idempotencia:
+docker compose run test npm run prueba:concurrencia
+
+# C) Correr únicamente la verificación de tipos de TypeScript:
+docker compose run test npm run typecheck
+```
+
+---
+
+### 3. Detener los contenedores:
+Una vez finalizadas las pruebas o el uso del servicio, detén los contenedores con:
+```bash
+docker compose down
+```
 
 ---
 

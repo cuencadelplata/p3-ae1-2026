@@ -12,7 +12,18 @@ RUN npm ci
 
 COPY tsconfig.json ./
 COPY src ./src
+COPY tests ./tests
+COPY scripts ./scripts
 RUN npm run build
+
+
+# ---------- Etapa de pruebas ----------
+FROM build AS test
+
+ENV NODE_ENV=development \
+    BASE_URL=http://m8-documentos:3008
+
+CMD ["npm", "run", "test:all"]
 
 
 # ---------- Etapa de ejecucion ----------

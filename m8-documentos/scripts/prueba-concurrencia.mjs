@@ -50,13 +50,27 @@ const cuerpo = {
   payment: { method: 'TARJETA', status: 'APROBADO', authorizationCode: 'AUTH-77321' },
 };
 
+async function waitForHealth(baseUrl, maxRetries = 15, delayMs = 1000) {
+  for (let i = 1; i <= maxRetries; i++) {
+    try {
+      const res = await fetch(`${baseUrl}/health`);
+      if (res.ok) return;
+    } catch {
+      // esperando a que el servicio esté listo
+    }
+    if (i < maxRetries) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw new Error(`El servicio no respondió OK en ${baseUrl}/health tras ${maxRetries} intentos.`);
+}
+
 async function main() {
   try {
-    const salud = await fetch(`${BASE}/health`);
-    if (!salud.ok) throw new Error(`estado ${salud.status}`);
+    await waitForHealth(BASE);
   } catch (error) {
     console.error(`\nNo se pudo contactar el servicio en ${BASE} (${error.message}).`);
-    console.error('Levantalo con "npm run dev" en otra terminal y volve a ejecutar esta prueba.\n');
+    console.error('Asegurate de que el contenedor m8-documentos este levantado.\n');
     process.exit(1);
   }
 
