@@ -1,4 +1,4 @@
-﻿# Arquitectura y Diagrama de Componentes - Módulo 8 (Comprobantes PDF)
+# Arquitectura y Diagrama de Componentes - Módulo 8 (Comprobantes PDF)
 
 **Grupo 14:** Juan Gualtieri, Lucas Cremaschi, Meza Santiago  
 **Módulo:** M8 - Notificaciones, Documentos y Soporte  
@@ -14,7 +14,7 @@ graph TD
     subgraph EXT["Clientes Externos"]
         M6["M6 - Viajes y Ciclo de Vida"]
         M7["M7 - Tarifas y Pagos"]
-        DOC["Docente / Alumno / Swagger UI"]
+        DOC["Docente / Alumno / Scalar UI"]
     end
 
     subgraph M8["M8 - Microservicio de Comprobantes (m8-documentos :3008)"]
@@ -22,7 +22,7 @@ graph TD
 
         subgraph RUTAS["Capa de Rutas y Documentacion"]
             R_REC["/api/v1/receipts - Routes"]
-            R_DOC["/api/v1/docs - Swagger UI (OpenAPI)"]
+            R_DOC["/api/v1/docs - Scalar API Reference (OpenAPI)"]
             R_HLT["/health - HealthCheck"]
         end
 
@@ -132,5 +132,5 @@ sequenceDiagram
 
 * **Naturaleza del Módulo 8:** M8 es un microservicio backend de procesamiento y generación de documentos. La interacción de usuario final (solicitar viaje, aceptar, ver estado) es responsabilidad de las interfaces de cliente (M2), conductor (M3) y despacho (M5/M6).
 * **Evidencias interactivas de M8:** Para evaluación, demostración y pruebas, M8 provee:
-  1. **Swagger UI interactivo (`/api/v1/docs`):** Permite emitir, consultar, reenviar y descargar comprobantes en vivo desde cualquier navegador web responsivo.
+  1. **Scalar API Reference interactivo (`/api/v1/docs`):** Permite emitir, consultar, reenviar y descargar comprobantes en vivo desde cualquier navegador web responsivo.
   2. **Descarga y visualización directa de PDF:** El comprobante es un documento A4 de tamaño fijo, que se visualiza nativamente en cualquier visor de PDF de escritorio o móvil sin requerir la aplicación.

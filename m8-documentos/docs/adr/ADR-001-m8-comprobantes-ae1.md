@@ -1,4 +1,4 @@
-﻿# ADR-001: Arquitectura y Estrategia de Implementación de Comprobantes PDF (AE1)
+# ADR-001: Arquitectura y Estrategia de Implementación de Comprobantes PDF (AE1)
 
 * **Estado:** Aceptado
 * **Fecha:** 2026-09-01
@@ -31,9 +31,9 @@ El Módulo 8 (Notificaciones, Documentos y Soporte) debe proveer en la entrega A
 * Se implementa un candado en memoria por identificador de viaje (`withLock(tripId)`) junto con escrituras atómicas en disco (flag `wx` y rename de archivo temporal).
 * **Justificación:** Si dos llamadas concurrentes intentan emitir el comprobante para el mismo `tripId`, la primera emite el documento (`201 Created`) y la segunda devuelve el documento existente (`200 OK`), evitando duplicación o corrupción de archivos.
 
-### 5. Contrato OpenAPI y Swagger UI (RNF-05)
-* Se define el contrato formal en `src/openapi/openapi.yaml` (OpenAPI 3.0) y se expone la interfaz Swagger UI en `http://localhost:3008/api/v1/docs`.
-* **Justificación:** Permite la interoperabilidad desacoplada entre módulos y brinda una consola interactiva para demostración y evaluación.
+### 5. Contrato OpenAPI y Scalar API Reference (RNF-05)
+* Se define el contrato formal en `src/openapi/openapi.yaml` (OpenAPI 3.0) y se expone la interfaz interactiva con Scalar API Reference en `http://localhost:3008/api/v1/docs` (y acceso directo en `/docs`).
+* **Justificación:** Permite la interoperabilidad desacoplada entre módulos y brinda una consola interactiva moderna para demostración y evaluación.
 
 ### 6. Estrategia de Testing (RNF-17)
 * Se utiliza el ejecutor de pruebas nativo `node:test` y `node:assert/strict` de Node.js ejecutado vía `tsx --test`.

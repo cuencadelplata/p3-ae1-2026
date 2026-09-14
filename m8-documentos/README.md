@@ -78,12 +78,12 @@ El proyecto cuenta con una suite completa de pruebas unitarias, de integración 
 
 ## Verificación de Salud y Documentación Interactiva
 
-Una vez que el servicio esté corriendo (sea por Docker o Node.js):
+Una vez que el servicio esté corriendo con Docker:
 
 * **Healthcheck (Estado de salud):**  
   Abre en tu navegador o ejecuta en terminal:  
   `http://localhost:3008/health` (debe responder `200 OK` con `{ "status": "ok" }`).
-* **Swagger UI / Documentación interactiva:**  
+* **Documentación interactiva (Scalar API Reference):**  
   `http://localhost:3008/docs` o `http://localhost:3008/api/v1/docs`.
 * **Especificación OpenAPI (JSON/YAML):**  
   `http://localhost:3008/api/v1/docs/openapi.json`  
@@ -248,7 +248,7 @@ src/
 ├── middlewares/             manejo de errores y rutas inexistentes
 ├── routes/                  definicion de endpoints
 ├── errors/                  error de aplicacion con codigo y estado HTTP
-├── openapi/openapi.yaml     contrato REST publicado en Swagger UI
+├── openapi/openapi.yaml     contrato REST publicado en Scalar API Reference
 └── utils/                   formato, identificadores y candado por clave
 
 tests/
