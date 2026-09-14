@@ -17,44 +17,77 @@ Alcance implementado en AE1:
 | RF-8.5 | Soporte asociado a viaje | Módulo M8 | Previsto para AE2 |
 | RF-8.6 | Consumo asincrono (RabbitMQ) | Módulo M8 | Previsto para AE2 |
 
-## Requisitos
+## Requerimientos Mínimos del Sistema
 
-- Node.js 22 o superior (LTS)
-- npm 10 o superior
+Para clonar, desplegar y operar este microservicio, únicamente se requiere:
 
-## Puesta en marcha
+- **Git** (v2.x o superior): Para el control de versiones y clonado de ramas.
+- **Docker Desktop** (v24.x o superior): Con soporte para contenedores Linux y motor WSL2 habilitado (en Windows).
+- **Docker Compose** (v2.x o superior): Incluido por defecto con Docker Desktop.
 
+---
+
+## Programas que deben estar abiertos antes de iniciar
+
+Antes de ejecutar los comandos del proyecto, asegúrate de tener abiertos:
+
+1. **Docker Desktop**:
+   - **Indispensable:** Debe estar abierto y en ejecución.
+   - Verifica que el ícono en la esquina inferior izquierda esté en verde (**"Engine running"**). Si Docker Desktop está cerrado o iniciando, los comandos de Docker fallarán indicando que no se puede conectar al daemon.
+2. **Terminal o Editor de Código**:
+   - PowerShell / Git Bash o tu editor (VS Code, Cursor, Antigravity) posicionado en la carpeta `m8-documentos`.
+
+---
+
+## Puesta en marcha con Docker
+
+La puesta en marcha del microservicio se realiza exclusivamente mediante **Docker Compose**:
+
+### 1. Iniciar el servicio:
 ```bash
-cd m8-documentos
-npm install
-cp .env.example .env
-npm run dev
+# Situado dentro de la carpeta m8-documentos
+docker compose up -d
 ```
 
-El servicio queda escuchando en `http://localhost:3008`.
+### 2. Ver registros (logs) en tiempo real:
+```bash
+docker compose logs -f
+```
 
-### Documentación Interactiva OpenAPI (Swagger UI)
+### 3. Detener el contenedor:
+```bash
+docker compose down
+```
 
-Una vez levantado el servidor, se puede acceder a la consola interactiva Swagger UI desde cualquier navegador web en:
-- **Swagger UI:** `http://localhost:3008/api/v1/docs` (o acceso directo en `http://localhost:3008/docs`)
-- **OpenAPI JSON:** `http://localhost:3008/api/v1/docs/openapi.json`
-- **OpenAPI YAML:** `http://localhost:3008/api/v1/docs/openapi.yaml`
+---
 
-### Scripts Disponibles
+## Comandos de Test y Calidad de Código
 
-| Script | Descripcion |
-| --- | --- |
-| `npm run dev` | Ejecuta el servicio en modo desarrollo con recarga automatica |
-| `npm test` | Ejecuta la suite de 22 tests automatizados (unitarios y de integración con `node:test`) |
-| `npm run build` | Compila TypeScript a `dist/` |
-| `npm start` | Ejecuta el servicio ya compilado para producción |
-| `npm run typecheck` | Verifica tipos estáticos con TypeScript sin generar salida |
-| `npm run clean` | Elimina el directorio `dist/` |
+El proyecto cuenta con una suite completa de pruebas unitarias, de integración y scripts de verificación de concurrencia:
 
-### Documentación de Arquitectura
+| Comando | Tipo de Prueba / Tarea | Descripción |
+| --- | --- | --- |
+| `npm test` | **Tests Automatizados** | Ejecuta la suite de 22 tests (unitarios y de integración con el runner nativo de `node:test`). |
+| `npm run prueba:concurrencia` | **Prueba de Concurrencia** | Lanza 8 solicitudes simultáneas sobre el mismo `tripId` para verificar idempotencia (1 x `201` y 7 x `200`). |
+| `npm run typecheck` | **Chequeo de Tipos** | Ejecuta el compilador de TypeScript (`tsc --noEmit`) para validar la consistencia de tipos sin compilar archivos. |
+| `npm run build` | **Compilación** | Compila el TypeScript a JavaScript dentro de `dist/` y empaqueta los archivos de OpenAPI. |
+| `npm start` | **Producción Local** | Ejecuta el artefacto compilado en `dist/index.js`. |
+| `npm run clean` | **Limpieza** | Elimina el directorio `dist/` generado. |
 
-- **Diagramas de Componentes y Secuencia (Mermaid):** [`docs/arquitectura/componentes-m8.md`](docs/arquitectura/componentes-m8.md)
-- **Registro de Decisiones de Arquitectura (ADR):** [`docs/adr/ADR-001-m8-comprobantes-ae1.md`](docs/adr/ADR-001-m8-comprobantes-ae1.md)
+---
+
+## Verificación de Salud y Documentación Interactiva
+
+Una vez que el servicio esté corriendo (sea por Docker o Node.js):
+
+* **Healthcheck (Estado de salud):**  
+  Abre en tu navegador o ejecuta en terminal:  
+  `http://localhost:3008/health` (debe responder `200 OK` con `{ "status": "ok" }`).
+* **Swagger UI / Documentación interactiva:**  
+  `http://localhost:3008/docs` o `http://localhost:3008/api/v1/docs`.
+* **Especificación OpenAPI (JSON/YAML):**  
+  `http://localhost:3008/api/v1/docs/openapi.json`  
+  `http://localhost:3008/api/v1/docs/openapi.yaml`
 
 ## Configuracion
 
@@ -190,20 +223,13 @@ Todas las respuestas de error comparten la misma estructura (RNF-05):
 | `DELIVERY_DESTINATION_REQUIRED` | 422 | El reenvio no tiene destino registrado ni informado |
 | `INTERNAL_ERROR` | 500 | Error no controlado |
 
-## Ejecucion en contenedor
+## Detalles del Contenedor Docker
 
-```bash
-cd m8-documentos
-docker build -t m8-documentos:1.0.0 .
-docker run --rm -p 3008:3008 \
-  -e PUBLIC_BASE_URL=http://localhost:3008 \
-  -v m8-storage:/app/storage \
-  m8-documentos:1.0.0
-```
-
-La imagen usa construccion multietapa, corre con el usuario `node` sin
-privilegios y expone un `HEALTHCHECK` contra `/health`. El volumen `m8-storage`
-conserva los comprobantes emitidos entre ejecuciones.
+La imagen del microservicio está optimizada para producción:
+- **Construcción multietapa (`multi-stage build`):** Compila TypeScript con `node:22-slim` (Debian con glibc) y genera una imagen de ejecución liviana con `node:22-alpine`.
+- **Seguridad:** Corre con el usuario estándar sin privilegios `node` (`USER node`).
+- **Healthcheck nativo:** Comprueba la salud del microservicio consultando internamente `http://127.0.0.1:3008/health` cada 30 segundos.
+- **Persistencia:** El volumen `m8-storage` conserva los comprobantes emitidos (`/app/storage`) de manera independiente al ciclo de vida del contenedor.
 
 ## Estructura
 

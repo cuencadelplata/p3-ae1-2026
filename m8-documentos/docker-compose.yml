@@ -1,0 +1,20 @@
+services:
+  m8-documentos:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: m8-documentos:1.0.0
+    container_name: m8-app
+    ports:
+      - "3008:3008"
+    environment:
+      - NODE_ENV=production
+      - PORT=3008
+      - PUBLIC_BASE_URL=http://localhost:3008
+    volumes:
+      - m8-storage:/app/storage
+    restart: unless-stopped
+
+volumes:
+  m8-storage:
+    name: m8-storage
