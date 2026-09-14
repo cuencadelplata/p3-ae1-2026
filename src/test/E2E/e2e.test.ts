@@ -1,6 +1,7 @@
 // src/test/E2E/m7Endpoints.e2e.test.ts
 import { test, expect } from "@playwright/test";
 
+// Requerimiento 7.5 - Reintegro
 test.describe("RF-7.5 - Reintegro (POST /reintegro)", () => {
 
   test("calcula el 95% con datos válidos", async ({ request }) => {
@@ -46,7 +47,9 @@ test.describe("RF-7.5 - Reintegro (POST /reintegro)", () => {
   });
 
 });
+//
 
+// Requerimiento 7.6 - Idempotencia
 test.describe("RF-7.6 - Idempotencia (GET /pagos/:idOrden/duplicado)", () => {
 
   test("detecta como duplicado una orden que ya existe en el mock (o1)", async ({ request }) => {
@@ -71,7 +74,9 @@ test.describe("RF-7.6 - Idempotencia (GET /pagos/:idOrden/duplicado)", () => {
   });
 
 });
+//
 
+// Requerimiento 7.2 - Método de pago
 test.describe("RF-7.2 - Método de pago (POST y GET /metodo-pago)", () => {
 
   test("registra un método de pago y queda en estado 'pendiente'", async ({ request }) => {
@@ -118,7 +123,9 @@ test.describe("RF-7.2 - Método de pago (POST y GET /metodo-pago)", () => {
   });
 
 });
+//
 
+// Requerimiento 7.3 - Autorización y rechazo
 test.describe("RF-7.3 - Autorización y rechazo (POST /metodo-pago/:viajeId/autorizar y /rechazar)", () => {
 
   test("flujo completo: registrar -> autorizar -> confirmar por GET", async ({ request }) => {
@@ -214,7 +221,9 @@ test.describe("RF-7.3 - Autorización y rechazo (POST /metodo-pago/:viajeId/auto
   });
 
 });
+//
 
+// Completo
 test.describe("Flujo de negocio completo (varios RF encadenados)", () => {
 
   test("un viaje se paga, se autoriza y luego se cancela con reintegro", async ({ request }) => {
