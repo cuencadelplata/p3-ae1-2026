@@ -1,7 +1,7 @@
 services:
   m8-documentos:
     build: .
-    image: m8-documentos:1.0.0
+    image: arkeoff/m8-documentos:1.0.0
     container_name: m8-app
     ports:
       - "3008:3008"
@@ -14,7 +14,7 @@ services:
     restart: unless-stopped
 
   test:
-    image: m8-documentos:1.0.0
+    image: arkeoff/m8-documentos:1.0.0
     container_name: m8-tests
     command: npm run test:all
     environment:
