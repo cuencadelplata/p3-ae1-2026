@@ -122,6 +122,40 @@ paths:
         '404':
           description: Ticket no encontrado
 
+  /events/publish:
+    post:
+      summary: Publica un evento o ráfaga de eventos en RabbitMQ para pruebas y monitoreo
+      operationId: publicarEvento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - routingKey
+                - payload
+              properties:
+                routingKey:
+                  type: string
+                  description: Clave de enrutamiento (ej. viaje.completado, viaje.asignado, ticket.creado)
+                  example: "viaje.completado"
+                payload:
+                  type: object
+                  description: Objeto JSON con los datos del evento
+                  example:
+                    viajeId: "viaje-100"
+                    importe: 2500
+                count:
+                  type: integer
+                  description: Número de mensajes a publicar consecutivamente (por defecto 1, máximo 50)
+                  example: 5
+      responses:
+        '200':
+          description: Evento(s) publicado(s) en RabbitMQ exitosamente
+        '400':
+          description: Parámetros inválidos
+
 components:
   schemas:
     Ticket:

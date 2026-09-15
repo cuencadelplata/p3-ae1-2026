@@ -40,7 +40,8 @@ app.get('/', (req, res) => {
       'POST /tickets',
       'GET /tickets',
       'GET /tickets/:id',
-      'PATCH /tickets/:id/estado'
+      'PATCH /tickets/:id/estado',
+      'POST /events/publish'
     ]
   });
 });
@@ -60,6 +61,9 @@ app.post('/tickets', SupportController.crearTicket);
 app.get('/tickets/:id', SupportController.obtenerTicket);
 app.patch('/tickets/:id/estado', SupportController.actualizarEstado);
 app.get('/tickets', SupportController.listarTodos); // Para pruebas
+
+// Endpoint RF-8.6 / Pruebas de RabbitMQ
+app.post('/events/publish', SupportController.publicarEvento);
 
 const PORT = process.env.PORT || 3000;
 const RABBIT_URL = process.env.RABBITMQ_URL || 'amqp://localhost:5672';

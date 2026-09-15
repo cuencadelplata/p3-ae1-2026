@@ -68,12 +68,19 @@ curl.exe http://localhost:3000/
 ```powershell
 Invoke-RestMethod -Uri "http://localhost:3000/tickets" -Method Post -ContentType "application/json" -Body '{"viajeId":"viaje-demo","motivo":"Prueba de RabbitMQ"}'
 
-### 3.4 Listar todos los tickets (`GET /tickets`)
+### 3.4 Publicar eventos a RabbitMQ para Monitorear la Cola (`POST /events/publish`)
+Para enviar eventos o ráfagas de mensajes (ej. 10 mensajes juntos) y visualizar la curva de actividad en el gráfico de **Queued messages** en RabbitMQ Management (`http://localhost:15672`):
+
+```powershell
+Invoke-RestMethod -Uri "http://localhost:3000/events/publish" -Method Post -ContentType "application/json" -Body '{"routingKey":"viaje.completado","payload":{"viajeId":"viaje-burst-100","importe":2500},"count":10}'
+```
+
+### 3.5 Listar todos los tickets (`GET /tickets`)
 ```powershell
 curl.exe http://localhost:3000/tickets
 ```
 
-### 3.5 Consultar la especificación OpenAPI (Swagger)
+### 3.6 Consultar la especificación OpenAPI (Swagger)
 * **Interfaz visual (Swagger UI):** [http://localhost:3000/api-docs](http://localhost:3000/api-docs)
 * **Ver archivo RAW en formato YAML por HTTP:** [http://localhost:3000/openapi.yaml](http://localhost:3000/openapi.yaml)
 * **Ver archivo RAW en formato JSON por HTTP:** [http://localhost:3000/openapi.json](http://localhost:3000/openapi.json)
@@ -84,9 +91,21 @@ curl.exe http://localhost:3000/openapi.yaml
 
 ---
 
-## 4. 🧪 Ejecutar la Suite de Tests por Terminal
+## 4. 📊 Monitoreo en RabbitMQ Management Console
 
-Para ejecutar los 15 casos de prueba unitarios e integrales:
+1. Abrir en el navegador: [http://localhost:15672](http://localhost:15672) (Usuario: `guest` | Clave: `guest`).
+2. Ir a la pestaña **Queues and Streams** -> seleccionar `m8_async_events`.
+3. Ejecutar la ráfaga de prueba con `Invoke-RestMethod` (ver punto 3.4).
+4. Se observará que:
+   - 1 mensaje entra en estado **Unacknowledged** durante 3 segundos (del valor simulado en `consumer.ts`).
+   - Los otros 9 mensajes permanecen en estado **Ready** en la cola.
+   - El gráfico **Queued messages** mostrará una curva clara de 10 -> 9 -> 8 -> ... -> 0 a lo largo de 30 segundos.
+
+---
+
+## 5. 🧪 Ejecutar la Suite de Tests por Terminal
+
+Para ejecutar los 17 casos de prueba unitarios e integrales:
 
 ```powershell
 pnpm test

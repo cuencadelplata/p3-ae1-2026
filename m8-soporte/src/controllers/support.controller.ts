@@ -64,4 +64,35 @@ export class SupportController {
     const tickets = ticketRepository.listarTodos();
     res.json(tickets);
   }
+
+  // Endpoint: POST /events/publish
+  // Permite publicar eventos en RabbitMQ (ej: viaje.completado, viaje.asignado, ticket.creado)
+  // Permite incluir 'count' para emitir ráfagas de mensajes y observar la actividad en el panel de RabbitMQ.
+  static async publicarEvento(req: Request, res: Response) {
+    const { routingKey, payload, count } = req.body;
+
+    if (!routingKey || !payload) {
+      res.status(400).json({ error: 'routingKey y payload son requeridos' });
+      return;
+    }
+
+    const cantidad = Math.max(1, Math.min(Number(count) || 1, 50));
+    let exitosos = 0;
+
+    for (let i = 0; i < cantidad; i++) {
+      const ok = await RabbitMQConsumer.publishEvent(routingKey, {
+        ...payload,
+        _secuencia: i + 1,
+        _timestamp: new Date().toISOString()
+      });
+      if (ok) exitosos++;
+    }
+
+    res.status(200).json({
+      mensaje: 'Eventos enviados a RabbitMQ',
+      routingKey,
+      solicitados: cantidad,
+      enviadosExitosamente: exitosos
+    });
+  }
 }

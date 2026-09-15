@@ -21,8 +21,8 @@ export class RabbitMQConsumer {
       await this.channel!.assertQueue(this.QUEUE_NAME, { durable: true });
 
       // Escuchamos eventos clave (ej. viaje completado, ticket creado, etc.)
-      await this.channel!.bindQueue(this.QUEUE_NAME, this.EXCHANGE_NAME, 'viaje.*');
-      await this.channel!.bindQueue(this.QUEUE_NAME, this.EXCHANGE_NAME, 'ticket.*');
+      await this.channel!.bindQueue(this.QUEUE_NAME, this.EXCHANGE_NAME, 'viaje.#');
+      await this.channel!.bindQueue(this.QUEUE_NAME, this.EXCHANGE_NAME, 'ticket.#');
 
       console.log(`[RabbitMQ] Conectado exitosamente. Esperando mensajes en la cola: ${this.QUEUE_NAME}`);
 
@@ -56,6 +56,10 @@ export class RabbitMQConsumer {
   private static async startConsuming() {
     if (!this.channel) return;
 
+    // Prefetch(1) asegura que RabbitMQ entregue solo 1 mensaje a la vez al consumidor,
+    // manteniendo el resto en la cola ("Queued messages") para poderlos monitorear en el Dashboard.
+    await this.channel.prefetch(1);
+
     this.channel.consume(this.QUEUE_NAME, async (msg: any) => {
       if (!msg) return;
 
@@ -63,7 +67,18 @@ export class RabbitMQConsumer {
         const payload = JSON.parse(msg.content.toString());
         const routingKey = msg.fields.routingKey;
 
-        console.log(`[RabbitMQ] Mensaje recibido y consumido [${routingKey}]:`, payload);
+        console.log(`[RabbitMQ] 📥 Mensaje recibido [${routingKey}]:`, payload);
+
+        // Retardo simulado para permitir monitorear el mensaje procesado en RabbitMQ Management.
+        // Por defecto: 3000ms (3s). Desactivado en entorno de pruebas (0ms).
+        const delayMs = process.env.NODE_ENV === 'test'
+          ? 0
+          : (Number(process.env.PROCESSING_DELAY_MS) || 3000);
+
+        if (delayMs > 0) {
+          console.log(`[RabbitMQ] ⏳ Procesando mensaje durante ${delayMs / 1000}s para monitoreo en RabbitMQ...`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
 
         // RF-8.6: Procesamos asíncronamente según el tipo de evento
         switch (routingKey) {
@@ -105,10 +120,11 @@ export class RabbitMQConsumer {
             console.log(`[RabbitMQ] Evento procesado: ${routingKey}`);
         }
 
+        console.log(`[RabbitMQ] ✅ Mensaje procesado exitosamente [${routingKey}] - Enviando ACK`);
         // Confirmamos (ACK) que el mensaje fue procesado para sacarlo de la cola
         this.channel!.ack(msg);
       } catch (error) {
-        console.error('[RabbitMQ] Error procesando mensaje:', error);
+        console.error('[RabbitMQ] ❌ Error procesando mensaje:', error);
         this.channel!.ack(msg);
       }
     });

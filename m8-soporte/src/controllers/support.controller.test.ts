@@ -13,6 +13,7 @@ app.post('/tickets', SupportController.crearTicket);
 app.get('/tickets/:id', SupportController.obtenerTicket);
 app.patch('/tickets/:id/estado', SupportController.actualizarEstado);
 app.get('/tickets', SupportController.listarTodos);
+app.post('/events/publish', SupportController.publicarEvento);
 
 describe('SupportController', () => {
 
@@ -112,6 +113,31 @@ describe('SupportController', () => {
       const res = await request(app).get('/tickets');
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
+    });
+  });
+
+  describe('POST /events/publish', () => {
+    it('debe devolver 200 al publicar un evento', async () => {
+      const res = await request(app)
+        .post('/events/publish')
+        .send({
+          routingKey: 'viaje.completado',
+          payload: { viajeId: 'v-100', importe: 1200 },
+          count: 2
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.solicitados).toBe(2);
+      expect(res.body.routingKey).toBe('viaje.completado');
+    });
+
+    it('debe devolver 400 si falta routingKey o payload', async () => {
+      const res = await request(app)
+        .post('/events/publish')
+        .send({ routingKey: 'viaje.completado' });
+
+      expect(res.status).toBe(400);
+      expect(res.body).toHaveProperty('error');
     });
   });
 });
