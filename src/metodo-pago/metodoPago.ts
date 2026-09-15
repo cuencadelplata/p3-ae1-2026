@@ -10,3 +10,4 @@ export interface MetodoPago{
     fecha: string; 
     estado: estadoPago; 
 }
+
