@@ -2,8 +2,7 @@ import { test as prueba } from 'node:test';
 import type { TestContext } from 'node:test';
 import verificar from 'node:assert/strict';
 
-const origen = process.env.API_URL;
-if (!origen) throw new Error('Falta API_URL: indicá la URL de la API de pruebas.');
+const origen = process.env.API_URL ?? 'http://localhost:3000';
 const ruta = '/clientes/cliente-1/direcciones';
 
 const datosValidos = {

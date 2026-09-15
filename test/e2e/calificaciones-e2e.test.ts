@@ -1,8 +1,7 @@
 import { test as prueba, before as antes } from 'node:test';
 import verificar from 'node:assert/strict';
 
-const origen = process.env.API_URL;
-if (!origen) throw new Error('Falta API_URL: ejecutá los E2E con Docker.');
+const origen = process.env.API_URL ?? 'http://localhost:3000';
 
 const ruta = '/clientes/cliente-1/calificaciones';
 const datosValidos = {
