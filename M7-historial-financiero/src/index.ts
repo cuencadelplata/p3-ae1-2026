@@ -31,9 +31,31 @@ class FinancialHistory {
 }
 
 import express from "express";
+import { apiReference } from "@scalar/express-api-reference";
+import { readFileSync } from "fs";
+import { parse } from "yaml";
 
 const app = express();
 app.use(express.json());
+const historialDoc = parse(readFileSync("./openapi.yaml", "utf8"));
+const cargoCancelacionDoc = parse(readFileSync("./openApi-Cancelacion.yaml", "utf8"));
+
+const combinedDoc = {
+  openapi: "3.0.3",
+  info: { title: "M7 - Tarifas, Pagos y Liquidaciones", version: "1.0.0" },
+  paths: {
+    ...historialDoc.paths,
+    ...cargoCancelacionDoc.paths,
+  },
+  components: {
+    schemas: {
+      ...(historialDoc.components?.schemas ?? {}),
+      ...(cargoCancelacionDoc.components?.schemas ?? {}),
+    },
+  },
+};
+
+app.use("/docs", apiReference({ content: combinedDoc }));
 
 const historial = new FinancialHistory();
 
@@ -46,7 +68,6 @@ app.post("/operations", (req, res) => {
     res.status(400).json({ error: "El campo amount debe ser un número" });
     return; 
     }
-
     if (
   req.body.type !== "payment" && req.body.type !== "refund" && req.body.type !== "transfer" && req.body.type !== "payout") {
   res.status(400).json({ error: "El campo type no es válido" });

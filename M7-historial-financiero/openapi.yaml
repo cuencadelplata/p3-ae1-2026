@@ -10,20 +10,115 @@ paths:
       responses:
         "200":
           description: Lista de operaciones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FinancialOperation"
     post:
       summary: Registrar una nueva operación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, amount]
+              properties:
+                type:
+                  type: string
+                  enum: [payment, refund, transfer, payout]
+                  example: payment
+                amount:
+                  type: number
+                  example: 1500
       responses:
         "201":
           description: Operación creada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje:
+                    type: string
+                    example: Operación creada
         "400":
           description: Datos inválidos (amount o type incorrectos)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /operations/{id}/status:
     patch:
       summary: Actualizar el estado de una operación
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: op_1788308157067
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [pending, completed, failed, cancelled]
+                  example: completed
       responses:
         "200":
           description: Estado actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinancialOperation"
         "400":
           description: El nuevo estado no es válido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "404":
           description: Operación no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    FinancialOperation:
+      type: object
+      properties:
+        id:
+          type: string
+          example: op_1788308157067
+        type:
+          type: string
+          enum: [payment, refund, transfer, payout]
+          example: payment
+        amount:
+          type: number
+          example: 1500
+        status:
+          type: string
+          enum: [pending, completed, failed, cancelled]
+          example: pending
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-09-02T00:15:57.067Z"
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: El campo amount debe ser un número

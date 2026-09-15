@@ -21,6 +21,8 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "express": "^5.2.1"
+    "@scalar/express-api-reference": "^0.10.18",
+    "express": "^5.2.1",
+    "yaml": "^2.9.1"
   }
 }

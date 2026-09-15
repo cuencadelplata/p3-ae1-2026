@@ -55,6 +55,18 @@ docker run -p 3000:3000 historial-financiero
 
 La documentación completa de la API está en [`openapi.yaml`](./openapi.yaml).
 
+## Documentación interactiva (Scalar)
+
+Con el servidor corriendo, se puede explorar y probar la API de forma interactiva en:
+
+```
+http://localhost:3000/docs
+```
+
+Esta vista se genera automáticamente a partir de `openapi.yaml` usando [Scalar](https://scalar.com/), y permite ver ejemplos de request/response de cada endpoint y ejecutar pedidos de prueba directamente desde el navegador.
+
+**Importante:** si se edita `openapi.yaml`, hay que reiniciar el servidor (`Ctrl+C` y `npm start` de nuevo) para que los cambios se reflejen, ya que el archivo se lee una sola vez al arrancar.
+
 ### Ejemplo — crear una operación
 
 ```bash
