@@ -1,9 +1,6 @@
 services:
   m8-documentos:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: runtime
+    build: .
     image: m8-documentos:1.0.0
     container_name: m8-app
     ports:
@@ -17,12 +14,11 @@ services:
     restart: unless-stopped
 
   test:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: test
+    image: m8-documentos:1.0.0
     container_name: m8-tests
+    command: npm run test:all
     environment:
+      - NODE_ENV=development
       - BASE_URL=http://m8-documentos:3008
     depends_on:
       - m8-documentos

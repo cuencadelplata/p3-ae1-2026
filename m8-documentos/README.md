@@ -253,8 +253,9 @@ Todas las respuestas de error comparten la misma estructura (RNF-05):
 
 ## Detalles del Contenedor Docker
 
-La imagen del microservicio está optimizada para producción:
-- **Construcción multietapa (`multi-stage build`):** Compila TypeScript con `node:22-slim` (Debian con glibc) y genera una imagen de ejecución liviana con `node:22-alpine`.
+El microservicio utiliza una única imagen unificada (`m8-documentos:1.0.0`):
+- **Base Node.js 22 LTS (`node:22-slim`):** Basada en Debian con soporte para glibc y TypeScript 7.
+- **Unificada para ejecución y testing:** Contiene tanto el servidor de producción compilado como la suite completa de pruebas, permitiendo operar la app y ejecutar los tests desde la misma imagen sin generar imágenes adicionales.
 - **Seguridad:** Corre con el usuario estándar sin privilegios `node` (`USER node`).
 - **Healthcheck nativo:** Comprueba la salud del microservicio consultando internamente `http://127.0.0.1:3008/health` cada 30 segundos.
 - **Persistencia:** El volumen `m8-storage` conserva los comprobantes emitidos (`/app/storage`) de manera independiente al ciclo de vida del contenedor.
