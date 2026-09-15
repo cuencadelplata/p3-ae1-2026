@@ -105,7 +105,7 @@ Parado dentro de la carpeta del proyecto, en la terminal:
 
 ### Paso 5: correr los tests End-to-End (requiere el contenedor corriendo)
 Con el contenedor ya levantado (Pasos 2-3 de la sección anterior):
-- npx playwright test
+- npx playwright test --project=m7-tarifas
 
 ### Paso 6: ver cobertura de tests (opcional)
 - npm run test:coverage

@@ -1,8 +1,6 @@
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
-  testDir: "./tests",
-
   timeout: 10000,
 
   use: {
@@ -10,4 +8,15 @@ export default defineConfig({
   },
 
   reporter: "list",
+
+  projects: [
+    {
+      name: "historial-financiero",
+      testDir: "./tests",
+    },
+    {
+      name: "m7-tarifas",
+      testDir: "./src/test/E2E",
+    },
+  ],
 });
