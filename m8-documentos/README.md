@@ -285,8 +285,12 @@ tests/
 └── integration/             API HTTP de punta a punta
 
 docs/
-├── adr/                     registro de decisiones de arquitectura
-└── arquitectura/            diagramas de componentes y secuencia
+├── README.md                 índice general de documentación técnica
+├── adr/                     registros de decisiones de arquitectura (ADR-001, ADR-002)
+├── arquitectura/            diagramas de componentes y secuencia (Mermaid)
+├── despliegue/              manual de operación y despliegue con Docker
+├── pruebas/                 reporte de tests automatizados y prueba de concurrencia
+└── api/                     especificación de endpoints y contratos de error
 ```
 
 El `build` copia `src/openapi/openapi.yaml` dentro de `dist/`, de modo que el
