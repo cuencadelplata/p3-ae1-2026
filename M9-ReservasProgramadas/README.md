@@ -1,0 +1,271 @@
+# M9 – Reservas Programadas
+
+## Integrantes
+
+- Codermatz, Valentino
+- Parra Ingaramo, Ignacio
+
+Microservicio de AE1 para crear, consultar, modificar, cancelar y activar reservas de viajes futuros. El trabajo se realiza exclusivamente en la rama `M9-ReservasProgramadas` y se ejecuta de forma local, sin despliegue cloud.
+
+## Alcance implementado
+
+- CRUD REST con cancelación lógica.
+- UI responsive para operar reservas.
+- Validación estricta con Zod y errores de dominio estables.
+- Persistencia temporal en memoria durante la ejecución del proceso.
+- Estimación de tarifa mediante M7 con degradación controlada.
+- Scheduler con reclamo atómico `PROGRAMADA → ACTIVANDO`.
+- Activación en M5 y almacenamiento de `idSolicitud`.
+- Stubs M5/M7 y red interna de Docker Compose.
+- OpenAPI portable, Swagger UI y pruebas unitarias, de integración y E2E.
+
+## Requisitos previos
+
+- Node.js 22 o superior.
+- npm.
+- Docker Desktop con Docker Compose para ejecutar la solución en contenedores.
+
+No se necesitan cuentas externas ni credenciales privadas.
+
+## Preparación desde un entorno limpio
+
+Este README usa rutas relativas a la carpeta `M9-ReservasProgramadas/`. Para trabajar
+directamente dentro del módulo, entrar primero con `cd M9-ReservasProgramadas` desde
+la raíz del repositorio. También se conservan todos los comandos npm desde la raíz
+mediante scripts que los delegan a esta carpeta.
+
+El `.gitignore` compartido está en la raíz; el `.dockerignore`, el `Dockerfile`, la
+configuración `.env` y el contexto de construcción están dentro de M9. El Compose raíz
+incluye esta composición (requiere Compose 2.20 o superior). Ambas ubicaciones usan
+el proyecto `m9-reservas-programadas`.
+
+```bash
+npm install
+npm run local:up
+```
+
+La instalación inicial con `npm install` prepara las dependencias locales. El segundo comando construye las imágenes locales e inicia M9, M5 stub y M7 stub.
+
+Si se quiere una instalación reproducible a partir del lockfile, también puede usarse:
+
+```bash
+npm ci
+npm run local:up
+```
+
+`npm ci` instala exactamente las versiones registradas en `package-lock.json`. El segundo comando construye la imagen local e inicia coordinadamente M9, M5 stub y M7 stub mediante Docker Compose.
+
+Si se necesita personalizar un valor, copiar `.env.example` como `.env` antes de iniciar. Para la evaluación estándar no es necesario modificarlo porque Compose incluye valores predeterminados.
+
+## Accesos locales
+
+| Recurso         | Dirección                        |
+| --------------- | -------------------------------- |
+| UI              | `http://localhost:3000/`         |
+| API de reservas | `http://localhost:3000/reservas` |
+| Swagger UI      | `http://localhost:3000/docs/`    |
+| Salud de M9     | `http://localhost:3000/health`   |
+
+M5 y M7 son dependencias internas de `reservas-network` y no publican puertos al host. La solución no define volúmenes porque la persistencia actual es en memoria.
+
+## Verificación de salud
+
+Después de iniciar los contenedores, comprobar su estado:
+
+```bash
+docker compose ps
+curl -i http://localhost:3000/health
+```
+
+El estado de M9 debe ser `healthy` y `GET /health` debe devolver `HTTP 200` con `{"service":"m9-reservas-programadas","status":"ok"}`. M5 y M7 se validan mediante sus health checks internos; también pueden comprobarse desde M9:
+
+```bash
+docker compose exec -T m9-reservas wget -qO- http://m5-stub:3001/health
+docker compose exec -T m9-reservas wget -qO- http://m7-stub:3002/health
+```
+
+## Variables de entorno
+
+Los valores de Compose ya están preparados para la ejecución coordinada. `.env.example` sirve como referencia para ejecutar M9 directamente con npm.
+
+| Variable                   | Default                 | Descripción                   |
+| -------------------------- | ----------------------- | ----------------------------- |
+| `PORT`                     | `3000`                  | Puerto HTTP de M9.            |
+| `NODE_ENV`                 | `development`           | Entorno de Node.js.           |
+| `M5_URL`                   | `http://localhost:3001` | URL del servicio de despacho. |
+| `M7_URL`                   | `http://localhost:3002` | URL del servicio de tarifas.  |
+| `RESERVATION_JOB_INTERVAL` | `*/30 * * * * *`        | Expresión cron del scheduler. |
+
+## API
+
+| Método | Ruta            | Propósito                                                     |
+| ------ | --------------- | ------------------------------------------------------------- |
+| GET    | `/health`       | Consultar salud básica.                                       |
+| GET    | `/openapi.json` | Descargar la especificación OpenAPI utilizada por Swagger UI. |
+| POST   | `/reservas`     | Crear una reserva `PROGRAMADA` y consultar M7.                |
+| GET    | `/reservas`     | Listar reservas por fecha ascendente.                         |
+| GET    | `/reservas/:id` | Obtener una reserva por UUID.                                 |
+| PATCH  | `/reservas/:id` | Modificar una reserva `PROGRAMADA`.                           |
+| DELETE | `/reservas/:id` | Cancelar lógicamente una reserva `PROGRAMADA`.                |
+| GET    | `/docs/`        | Abrir Swagger UI.                                             |
+
+La especificación completa está versionada en `openapi/openapi.yaml`.
+
+Ejemplo de creación:
+
+```json
+{
+  "clienteId": "00000000-0000-4000-8000-000000000001",
+  "origen": "Terminal de Ómnibus",
+  "destino": "Aeropuerto",
+  "vehiculo": "AUTO",
+  "fechaHoraProgramada": "2099-01-01T14:30:00-03:00"
+}
+```
+
+## Persistencia temporal
+
+Las reservas se guardan en un `Map` privado del proceso M9. La implementación conserva el contrato `ReservaRepository`, por lo que una base de datos podrá incorporarse después sin cambiar controladores, servicios ni rutas.
+
+Consecuencias actuales:
+
+- los datos se conservan mientras M9 esté ejecutándose;
+- reiniciar o recrear el contenedor elimina todas las reservas;
+- no se comparten datos entre varias réplicas de M9;
+- el reclamo de una reserva sigue siendo atómico dentro de una única instancia.
+
+## Pruebas
+
+### Verificaciones del código
+
+```bash
+npm run typecheck
+npm run build
+npm test
+```
+
+`npm test` ejecuta las pruebas unitarias y de integración. No incluye el E2E, ya que este necesita la solución iniciada en contenedores.
+
+### Cobertura de pruebas
+
+Generar el resumen de cobertura y el informe HTML:
+
+```bash
+npm run test:coverage
+```
+
+El porcentaje por archivo se muestra en la terminal. El informe navegable se genera en `coverage/index.html` dentro del módulo (`M9-ReservasProgramadas/coverage/index.html` desde la raíz); puede abrirse desde esta carpeta con:
+
+```powershell
+start coverage/index.html
+```
+
+En Linux:
+
+```bash
+xdg-open coverage/index.html
+```
+
+La carpeta `coverage/` es un resultado generado y está excluida del repositorio mediante `.gitignore`. La cobertura corresponde a las pruebas unitarias y de integración; las pruebas E2E se informan por separado porque consumen los servicios reales de Compose.
+
+### End-to-End contra contenedores
+
+Con Docker Desktop iniciado, ejecutar:
+
+```bash
+npm run test:e2e
+```
+
+El comando es autocontenido: construye la imagen, levanta M9 y los stubs, espera sus health checks, ejecuta las pruebas por HTTP contra `http://127.0.0.1:3909` y desmonta Compose al finalizar, incluso si una prueba falla. No accede directamente al repositorio ni a una base de datos.
+
+Escenarios automatizados:
+
+- disponibilidad de la UI pública;
+- creación, consulta, listado, modificación y cancelación lógica de una reserva;
+- estimación de tarifa mediante M7;
+- activación de una reserva vencida mediante el scheduler y M5;
+- salud de M9, M5 y M7 antes de comenzar las pruebas.
+
+Para evitar que la ejecución E2E reemplace una composición iniciada manualmente, detenerla primero con `npm run local:down`. Si se desea seguir usando la aplicación después de las pruebas, ejecutar nuevamente `npm run local:up`.
+
+### Secuencia completa recomendada para la evaluación
+
+```bash
+npm ci
+npm run typecheck
+npm run build
+npm test
+npm run test:coverage
+npm run test:e2e
+npm run local:up
+```
+
+Luego verificar `http://localhost:3000/health`, abrir `http://localhost:3000/docs/` y operar la UI en `http://localhost:3000/`. Al terminar, ejecutar `npm run local:down`.
+
+## Imágenes Docker y registry
+
+La solución utiliza una única imagen multirol para M9 y los stubs M5/M7. La imagen de la entrega está publicada de forma pública en Docker Hub:
+
+```text
+ignacioparra1902/m9-reservas-programadas:v1.0.0
+```
+
+Enlace público: [Docker Hub – M9 Reservas Programadas](https://hub.docker.com/r/ignacioparra1902/m9-reservas-programadas)
+
+Descargar la versión exacta de la entrega:
+
+```bash
+docker pull ignacioparra1902/m9-reservas-programadas:v1.0.0
+```
+
+Después de descargarla, iniciar la solución completa sin reconstruir el código:
+
+```bash
+docker compose up -d
+```
+
+Compose utiliza la imagen publicada como valor predeterminado para los tres contenedores. El comando `npm run local:up` mantiene la alternativa de construirla desde el código fuente mediante `--build`.
+
+La etiqueta `v1.0.0` fue verificada públicamente y corresponde al digest:
+
+```text
+sha256:040ba2505836eb2c0d47c3a2f739127a77a26a946ddf2112848f7ab267409ff4
+```
+
+## Detención y limpieza
+
+Detener la solución:
+
+```bash
+npm run local:down
+```
+
+Detener y eliminar recursos locales de Compose:
+
+```bash
+npm run local:clean
+```
+
+La limpieza elimina los contenedores, la red y los volúmenes asociados a esta composición. La implementación actual no define volúmenes de datos porque utiliza persistencia en memoria.
+
+## Preparación del archivo de entrega
+
+Para el Campus Virtual se debe incluir una copia `.zip` del repositorio dentro del archivo principal de entrega. Antes de comprimir, verificar que no se incluyan:
+
+- `node_modules/`;
+- `dist/`;
+- `coverage/`;
+- `.env` u otros archivos con secretos;
+- logs y archivos temporales.
+
+Sí deben incluirse el código fuente, las pruebas, `Dockerfile`, `docker-compose.yml`, `package.json`, `package-lock.json`, `.env.example`, `.gitignore`, `README.md` y `openapi/openapi.yaml`.
+
+## Documentación
+
+- `openapi/openapi.yaml`: contrato OpenAPI portable.
+- `http://localhost:3000/openapi.json`: contrato OpenAPI servido por la aplicación.
+- `http://localhost:3000/docs/`: visualización interactiva mediante Swagger UI.
+
+## Límites de seguridad
+
+En AE1 M9 no implementa autenticación propia: `clienteId` es declarado por el consumidor. La autenticación pertenece a M1 – Identidad y Acceso y su integración queda fuera del alcance actual del módulo. El servicio no debe exponerse a Internet sin autenticación, autorización, persistencia durable y rate limiting.
