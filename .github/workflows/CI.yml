@@ -1,0 +1,23 @@
+name: CI - m3-vehiculos (Docker build)
+
+on:
+  push:
+    branches:
+      - m3-vehiculos
+    paths:
+      - "m3-vehiculos/**"
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repo
+        uses: actions/checkout@v4
+
+      - name: Build de la imagen (sin publicar)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./m3-vehiculos
+          file: ./m3-vehiculos/Dockerfile
+          push: false
+          tags: m3-vehiculos:ci-${{ github.sha }}
