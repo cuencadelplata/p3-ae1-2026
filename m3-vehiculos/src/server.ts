@@ -7,6 +7,7 @@ import YAML from "yaml";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { vehiculoRoutes } from "./vehiculos/vehiculo-routes.js";
 import { documentoRoutes } from "./documents/documents-routes.js";
+import { redis } from "./config/redisClient.js";
 
 dotenv.config();
 
@@ -33,6 +34,9 @@ app.use("/api/v1/drivers/:driverId/documents", documentoRoutes);
 
 // Siempre al final, después de todas las rutas
 app.use(errorHandler);
+
+await redis.connect();
+console.log(" Conectado a Redis");
 
 app.listen(PORT, () => {
   console.log(`🚀 m3-drivers corriendo en http://localhost:8083`);
