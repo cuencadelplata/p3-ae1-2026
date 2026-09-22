@@ -6,11 +6,13 @@ import {
   obtenerDocumento,
 } from "./documents-service.js";
 
+import  { idempotencia }  from  "../middlewares/idempotencia.js";
+
 export const documentoRoutes = Router({ mergeParams: true });
 
 // POST /api/v1/drivers/:driverId/documents
 // RF-3.4: registrar documentación
-documentoRoutes.post("/", async (req: Request, res: Response) => {
+documentoRoutes.post("/", idempotencia, async (req: Request, res: Response) => {
   const documento = await registrarDocumento(
     req.params.driverId as string,
     req.body,

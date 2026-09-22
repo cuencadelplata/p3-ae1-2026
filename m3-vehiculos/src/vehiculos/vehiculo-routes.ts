@@ -5,6 +5,7 @@ import {
   obtenerVehiculo,
   activarVehiculo,
 } from "./vehiculo-service.js";
+import { idempotencia } from "../middlewares/idempotencia.js";
 
 // mergeParams: true es necesario porque :driverId se define en el path
 // de montaje (app.use("/api/v1/drivers/:driverId/vehicles", vehiculoRoutes)),
@@ -12,7 +13,7 @@ import {
 export const vehiculoRoutes = Router({ mergeParams: true });
 
 // POST /api/v1/drivers/:driverId/vehicles — RF-3.2: registrar un vehículo
-vehiculoRoutes.post("/", async (req: Request, res: Response) => {
+vehiculoRoutes.post("/", idempotencia, async (req: Request, res: Response) => {
   const vehiculo = await registrarVehiculo(
     req.params.driverId as string,
     req.body,
