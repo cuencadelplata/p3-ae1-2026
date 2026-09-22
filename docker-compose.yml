@@ -1,9 +1,7 @@
 services:
   # Backend - Módulo 2 (Clientes)
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: leangau/m2-perfilhistorialestado:api
     container_name: p3-api
     restart: always
     ports:
@@ -22,9 +20,7 @@ services:
 
   # Frontend - React + Vite (servido por nginx)
   client:
-    build:
-      context: ./client
-      dockerfile: Dockerfile
+    image: leangau/m2-perfilhistorialestado:client
     container_name: p3-client
     restart: always
     ports:
