@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import { InMemoryReservaRepository } from '../../src/repositories/in-memory-reserva.repository.js';
+import { asignacionDemo } from '../helpers/asignacion.js';
 
 describe('InMemoryReservaRepository', () => {
   it('permite un solo cambio de estado concurrente', async () => {
@@ -15,6 +16,7 @@ describe('InMemoryReservaRepository', () => {
       fechaHoraProgramada: new Date(Date.now() + 60_000).toISOString(),
     });
 
+    await repository.actualizarProgramada(reserva.id, { asignacion: asignacionDemo() });
     const resultados = await Promise.all([
       repository.cambiarEstado(reserva.id, 'PROGRAMADA', 'ACTIVANDO'),
       repository.cambiarEstado(reserva.id, 'PROGRAMADA', 'ACTIVANDO'),
@@ -36,6 +38,6 @@ describe('InMemoryReservaRepository', () => {
 
     reserva.estado = 'CANCELADA';
 
-    expect((await repository.obtenerPorId(reserva.id))?.estado).toBe('PROGRAMADA');
+    expect((await repository.obtenerPorId(reserva.id))?.estado).toBe('PENDIENTE_ASIGNACION');
   });
 });

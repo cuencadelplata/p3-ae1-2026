@@ -50,6 +50,7 @@ paths:
     post:
       tags: [Reservas]
       summary: Crear una reserva programada
+      description: Guarda la reserva y solicita a M5 el chofer apto y disponible de mayor valoración. Devuelve PROGRAMADA con asignación o PENDIENTE_ASIGNACION sin chofer, también si M5 no responde.
       operationId: crearReserva
       requestBody:
         required: true
@@ -60,12 +61,13 @@ paths:
               reservaValida: { $ref: '#/components/examples/CrearReservaValida' }
       responses:
         '201':
-          description: Reserva creada.
+          description: Reserva guardada con chofer o pendiente de asignación.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Reserva' }
               examples:
                 creada: { $ref: '#/components/examples/ReservaProgramada' }
+                pendiente: { $ref: '#/components/examples/ReservaPendiente' }
         '400': { $ref: '#/components/responses/SolicitudInvalida' }
         '500': { $ref: '#/components/responses/ErrorPersistencia' }
     get:
@@ -111,7 +113,8 @@ paths:
         '500': { $ref: '#/components/responses/ErrorPersistencia' }
     patch:
       tags: [Reservas]
-      summary: Modificar una reserva PROGRAMADA
+      summary: Modificar una reserva PROGRAMADA o PENDIENTE_ASIGNACION
+      description: Libera la asignación previa y reevalúa el chofer con los datos actualizados. Puede conservar al mismo chofer o quedar pendiente. Si M5 no confirma la liberación, responde 503 sin aplicar cambios locales; reintentar.
       operationId: actualizarReserva
       requestBody:
         required: true
@@ -131,10 +134,12 @@ paths:
         '400': { $ref: '#/components/responses/SolicitudInvalida' }
         '404': { $ref: '#/components/responses/ReservaNoEncontrada' }
         '409': { $ref: '#/components/responses/ConflictoEstado' }
+        '503': { $ref: '#/components/responses/ErrorAsignacion' }
         '500': { $ref: '#/components/responses/ErrorPersistencia' }
     delete:
       tags: [Reservas]
-      summary: Cancelar lógicamente una reserva PROGRAMADA
+      summary: Cancelar una reserva PROGRAMADA o PENDIENTE_ASIGNACION
+      description: Libera la asignación en M5 antes de cancelar localmente. Si M5 no responde, devuelve 503 y se debe reintentar.
       operationId: cancelarReserva
       responses:
         '200':
@@ -147,9 +152,17 @@ paths:
         '400': { $ref: '#/components/responses/SolicitudInvalida' }
         '404': { $ref: '#/components/responses/ReservaNoEncontrada' }
         '409': { $ref: '#/components/responses/ReservaNoCancelable' }
+        '503': { $ref: '#/components/responses/ErrorAsignacion' }
         '500': { $ref: '#/components/responses/ErrorPersistencia' }
 components:
   responses:
+    ErrorAsignacion:
+      description: No se pudo confirmar la liberación en M5.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            fallo: { $ref: '#/components/examples/ErrorAsignacion' }
     SolicitudInvalida:
       description: Datos, fecha o identificador inválidos.
       content:
@@ -186,6 +199,29 @@ components:
           examples:
             interno: { $ref: '#/components/examples/ErrorInterno' }
   examples:
+    ErrorAsignacion:
+      summary: M5 no confirmó la liberación de la asignación
+      value:
+        error:
+          codigo: SERVICIO_EXTERNO_NO_DISPONIBLE
+          mensaje: No se pudo confirmar la asignación con M5. Reintente la operación.
+    ReservaPendiente:
+      summary: Guardada sin chofer confirmado
+      value:
+        id: '10000000-0000-4000-8000-000000000001'
+        clienteId: '20000000-0000-4000-8000-000000000001'
+        origen: Terminal de Ómnibus
+        destino: Aeropuerto
+        vehiculo: AUTO
+        fechaHoraProgramada: '2099-01-01T17:30:00.000Z'
+        estado: PENDIENTE_ASIGNACION
+        asignacion: null
+        tarifaEstimada: 2500
+        moneda: ARS
+        criterioAsignacion: MEJOR_CALIFICACION
+        idSolicitud: null
+        creadoEn: '2099-01-01T14:00:00.000Z'
+        actualizadoEn: '2099-01-01T14:00:00.000Z'
     HealthOk:
       summary: Servicio disponible
       value: { service: m9-reservas-programadas, status: ok }
@@ -210,6 +246,11 @@ components:
         vehiculo: AUTO
         fechaHoraProgramada: '2099-01-01T17:30:00.000Z'
         estado: PROGRAMADA
+        asignacion:
+          id: '40000000-0000-4000-8000-000000000001'
+          choferId: '30000000-0000-4000-8000-000000000001'
+          nombreChofer: Chofer Auto A (demo)
+          valoracion: 4.9
         tarifaEstimada: 2500
         moneda: ARS
         criterioAsignacion: MEJOR_CALIFICACION
@@ -226,6 +267,11 @@ components:
         vehiculo: AUTO
         fechaHoraProgramada: '2099-01-01T17:30:00.000Z'
         estado: PROGRAMADA
+        asignacion:
+          id: '40000000-0000-4000-8000-000000000001'
+          choferId: '30000000-0000-4000-8000-000000000001'
+          nombreChofer: Chofer Auto A (demo)
+          valoracion: 4.9
         tarifaEstimada: 2500
         moneda: ARS
         criterioAsignacion: MEJOR_CALIFICACION
@@ -242,6 +288,7 @@ components:
         vehiculo: AUTO
         fechaHoraProgramada: '2099-01-01T17:30:00.000Z'
         estado: CANCELADA
+        asignacion: null
         tarifaEstimada: 2500
         moneda: ARS
         criterioAsignacion: MEJOR_CALIFICACION
@@ -259,6 +306,11 @@ components:
             vehiculo: AUTO
             fechaHoraProgramada: '2099-01-01T17:30:00.000Z'
             estado: PROGRAMADA
+            asignacion:
+              id: '40000000-0000-4000-8000-000000000001'
+              choferId: '30000000-0000-4000-8000-000000000001'
+              nombreChofer: Chofer Auto A (demo)
+              valoracion: 4.9
             tarifaEstimada: 2500
             moneda: ARS
             criterioAsignacion: MEJOR_CALIFICACION
@@ -285,7 +337,7 @@ components:
           error:
             {
               codigo: RESERVA_NO_MODIFICABLE,
-              mensaje: Solo se pueden modificar reservas en estado PROGRAMADA.,
+              mensaje: Solo se pueden modificar reservas PROGRAMADA o PENDIENTE_ASIGNACION.,
             },
         }
     ErrorNoCancelable:
@@ -295,7 +347,7 @@ components:
           error:
             {
               codigo: RESERVA_NO_CANCELABLE,
-              mensaje: Solo se pueden cancelar reservas en estado PROGRAMADA.,
+              mensaje: Solo se pueden cancelar reservas PROGRAMADA o PENDIENTE_ASIGNACION.,
             },
         }
     ErrorInterno:
@@ -363,6 +415,7 @@ components:
         - vehiculo
         - fechaHoraProgramada
         - estado
+        - asignacion
         - tarifaEstimada
         - moneda
         - criterioAsignacion
@@ -378,7 +431,19 @@ components:
         fechaHoraProgramada: { type: string, format: date-time }
         estado:
           type: string
-          enum: [PROGRAMADA, ACTIVANDO, ACTIVADA, CANCELADA, FALLIDA]
+          enum: [PENDIENTE_ASIGNACION, PROGRAMADA, ACTIVANDO, ACTIVADA, CANCELADA, FALLIDA]
+        asignacion:
+          type: object
+          nullable: true
+          readOnly: true
+          description: Chofer confirmado por M5. Null cuando no existe asignación.
+          required: [id, choferId, nombreChofer, valoracion]
+          additionalProperties: false
+          properties:
+            id: { type: string, format: uuid }
+            choferId: { type: string, format: uuid }
+            nombreChofer: { type: string }
+            valoracion: { type: number, minimum: 0, maximum: 5 }
         tarifaEstimada: { type: number, nullable: true }
         moneda: { type: string, nullable: true }
         criterioAsignacion: { type: string, nullable: true }

@@ -1,4 +1,5 @@
 export const ESTADOS_RESERVA = [
+  'PENDIENTE_ASIGNACION',
   'PROGRAMADA',
   'ACTIVANDO',
   'ACTIVADA',
@@ -11,6 +12,13 @@ export type EstadoReserva = (typeof ESTADOS_RESERVA)[number];
 export const TIPOS_VEHICULO = ['AUTO', 'MOTO'] as const;
 export type TipoVehiculo = (typeof TIPOS_VEHICULO)[number];
 
+export interface AsignacionChofer {
+  id: string;
+  choferId: string;
+  nombreChofer: string;
+  valoracion: number;
+}
+
 export interface Reserva {
   id: string;
   clienteId: string;
@@ -19,6 +27,7 @@ export interface Reserva {
   vehiculo: TipoVehiculo;
   fechaHoraProgramada: string;
   estado: EstadoReserva;
+  asignacion: AsignacionChofer | null;
   tarifaEstimada: number | null;
   moneda: string | null;
   criterioAsignacion: string | null;
@@ -45,6 +54,7 @@ export interface ActualizarReserva {
 }
 
 export interface CambiosReserva extends ActualizarReserva {
+  asignacion?: AsignacionChofer | null;
   tarifaEstimada?: number | null;
   moneda?: string | null;
 }

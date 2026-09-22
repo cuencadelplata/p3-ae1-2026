@@ -7,6 +7,7 @@ import { createApp } from '../../src/app.js';
 import type { TarifaClient } from '../../src/clients/tarifa.client.js';
 import { InMemoryReservaRepository } from '../../src/repositories/in-memory-reserva.repository.js';
 import { ReservaService } from '../../src/services/reserva.service.js';
+import { asignacionClientDemo } from '../helpers/asignacion.js';
 
 const bodyValido = () => ({
   clienteId: randomUUID(),
@@ -25,7 +26,11 @@ describe('API /reservas', () => {
     repository = new InMemoryReservaRepository();
     estimarTarifa = vi.fn(async () => ({ tarifaEstimada: 3_250, moneda: 'ARS' }));
     app = createApp({
-      reservaService: new ReservaService(repository, { estimar: estimarTarifa }),
+      reservaService: new ReservaService(
+        repository,
+        { estimar: estimarTarifa },
+        asignacionClientDemo(),
+      ),
     });
   });
 

@@ -14,6 +14,8 @@ Microservicio de AE1 para crear, consultar, modificar, cancelar y activar reserv
 - Validación estricta con Zod y errores de dominio estables.
 - Persistencia temporal en memoria durante la ejecución del proceso.
 - Estimación de tarifa mediante M7 con degradación controlada.
+- Asignación de chofer al crear y reevaluación al editar mediante M5.
+- Estado `PENDIENTE_ASIGNACION` cuando no hay chofer confirmado; reintentos antes del horario.
 - Scheduler con reclamo atómico `PROGRAMADA → ACTIVANDO`.
 - Activación en M5 y almacenamiento de `idSolicitud`.
 - Stubs M5/M7 y red interna de Docker Compose.
@@ -98,16 +100,16 @@ Los valores de Compose ya están preparados para la ejecución coordinada. `.env
 
 ## API
 
-| Método | Ruta            | Propósito                                                     |
-| ------ | --------------- | ------------------------------------------------------------- |
-| GET    | `/health`       | Consultar salud básica.                                       |
-| GET    | `/openapi.json` | Descargar la especificación OpenAPI utilizada por Swagger UI. |
-| POST   | `/reservas`     | Crear una reserva `PROGRAMADA` y consultar M7.                |
-| GET    | `/reservas`     | Listar reservas por fecha ascendente.                         |
-| GET    | `/reservas/:id` | Obtener una reserva por UUID.                                 |
-| PATCH  | `/reservas/:id` | Modificar una reserva `PROGRAMADA`.                           |
-| DELETE | `/reservas/:id` | Cancelar lógicamente una reserva `PROGRAMADA`.                |
-| GET    | `/docs/`        | Abrir Swagger UI.                                             |
+| Método | Ruta            | Propósito                                                           |
+| ------ | --------------- | ------------------------------------------------------------------- |
+| GET    | `/health`       | Consultar salud básica.                                             |
+| GET    | `/openapi.json` | Descargar la especificación OpenAPI utilizada por Swagger UI.       |
+| POST   | `/reservas`     | Consultar tarifa e intentar asignar chofer; puede quedar pendiente. |
+| GET    | `/reservas`     | Listar reservas por fecha ascendente.                               |
+| GET    | `/reservas/:id` | Obtener una reserva por UUID.                                       |
+| PATCH  | `/reservas/:id` | Modificar una reserva programada o pendiente y reevaluar chofer.    |
+| DELETE | `/reservas/:id` | Liberar chofer y cancelar una reserva programada o pendiente.       |
+| GET    | `/docs/`        | Abrir Swagger UI.                                                   |
 
 La especificación completa está versionada en `openapi/openapi.yaml`.
 
@@ -123,7 +125,54 @@ Ejemplo de creación:
 }
 ```
 
-## Persistencia temporal
+## Asignación de choferes
+
+Al crear una reserva, M9 la guarda y consulta M5. Si obtiene un chofer, devuelve
+`PROGRAMADA` con `asignacion` (id, choferId, nombreChofer y valoracion); si no hay
+disponibilidad o M5 falla, devuelve `PENDIENTE_ASIGNACION` con `asignacion: null`.
+Ambos resultados responden HTTP 201. El consumidor no puede enviar estado ni asignación.
+
+El M5 local es un **simulador** con dos autos (4.9 y 4.7) y una moto (4.8), todos
+ficticios. Selecciona por mayor valoración y, en empates, por ID. Considera cada
+viaje como un bloque de una hora desde el horario programado e impide solapamientos
+para el mismo chofer. No calcula distancias ni duración real, y no integra todavía
+los módulos reales de conductores o despacho.
+
+Un PATCH de origen, destino, vehículo o fecha libera la asignación anterior y la
+reevalúa. Puede conservar al mismo chofer; el identificador de asignación puede cambiar.
+Si no consigue chofer, queda pendiente. DELETE libera la ocupación y cancela lógicamente.
+Se pueden editar y cancelar reservas PROGRAMADA o PENDIENTE_ASIGNACION.
+Si M5 no confirma la liberación, PATCH/DELETE responden 503 sin aplicar cambios locales;
+el consumidor debe reintentar. Una liberación remota puede haber ocurrido aunque se
+pierda la respuesta: esta versión no proporciona transacciones distribuidas.
+
+Cada ciclo del scheduler reintenta hasta 100 reservas pendientes **futuras**, ordenadas
+por horario. Una pendiente cuyo horario ya llegó no se despacha ni se marca FALLIDA
+automáticamente: debe reprogramarse con una fecha futura o cancelarse. Todavía no se
+definió un período de tolerancia. Para ver cambios del scheduler, actualizar el listado.
+
+La activación usa la asignación vigente; M5 rechaza recorridos/asignaciones obsoletos
+y devuelve la misma solicitud ante un despacho repetido de esa reserva. Edición,
+cancelación, asignación y activación se serializan por reserva dentro de la instancia M9.
+El repositorio y las ocupaciones de M5 siguen en memoria; reiniciar alguno pierde su
+estado. La persistencia, reconciliación y garantías distribuidas quedan para la integración
+de PostgreSQL/RabbitMQ.
+
+Contrato HTTP del simulador M5 (red interna):
+
+| Operación                         | Entrada                                                 | Resultado                                                                            |
+| --------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `PUT /asignaciones/:reservaId`    | `{ reserva }` con id, origen, destino, vehículo y fecha | 200 `{ asignacion }`, objeto o null. 400 si inválida; 409 si ya despachada.          |
+| `DELETE /asignaciones/:reservaId` | Sin cuerpo                                              | 204, incluso si ya estaba libre. 409 si ya despachada.                               |
+| `POST /solicitudes`               | `{ reserva }` incluyendo asignación vigente             | 201 `{ solicitudId, estado }`. 400 sin asignación válida; 409 si no coincide con M5. |
+
+Para probarlo: crear tres reservas AUTO con el mismo horario futuro. Las primeras dos
+obtienen chofer y la tercera queda pendiente. Cancelar una y esperar el siguiente ciclo
+(30 segundos por defecto): la pendiente obtiene el chofer libre. Cambiar AUTO por MOTO
+permite observar la reevaluación. Usar `npm run local:up` para reconstruir este código:
+la imagen publicada `v1.0.0` corresponde a la entrega anterior y no incluye este cambio.
+
+## Persistencia en memoria
 
 Las reservas se guardan en un `Map` privado del proceso M9. La implementación conserva el contrato `ReservaRepository`, por lo que una base de datos podrá incorporarse después sin cambiar controladores, servicios ni rutas.
 

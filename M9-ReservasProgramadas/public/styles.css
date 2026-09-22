@@ -449,6 +449,12 @@ tbody tr:hover {
   letter-spacing: 0.025em;
 }
 
+.status-pendiente_asignacion {
+  color: #854d0e;
+  background: #fef9c3;
+  white-space: normal;
+}
+
 .status-programada {
   color: var(--blue);
   background: var(--blue-soft);

@@ -151,10 +151,11 @@ const renderReservations = () => {
 
     const status = document.createElement('span');
     status.className = `status status-${reserva.estado.toLowerCase()}`;
-    status.textContent = reserva.estado;
+    status.textContent =
+      reserva.estado === 'PENDIENTE_ASIGNACION' ? 'Pendiente de asignación' : reserva.estado;
 
     const actions = document.createElement('div');
-    if (reserva.estado === 'PROGRAMADA') {
+    if (reserva.estado === 'PROGRAMADA' || reserva.estado === 'PENDIENTE_ASIGNACION') {
       actions.append(
         createActionButton('Editar', '', () => beginEdit(reserva)),
         createActionButton('Cancelar', 'danger', () => void cancelReservation(reserva)),
@@ -170,6 +171,14 @@ const renderReservations = () => {
       createCell('Viaje', trip),
       createCell('Fecha', formatDate(reserva.fechaHoraProgramada), 'date-cell'),
       createCell('Vehículo', reserva.vehiculo === 'AUTO' ? 'Auto' : 'Moto'),
+      createCell(
+        'Chofer',
+        reserva.asignacion
+          ? `${reserva.asignacion.nombreChofer} · ${reserva.asignacion.valoracion}/5`
+          : reserva.estado === 'PENDIENTE_ASIGNACION'
+            ? 'Todavía no hay chofer confirmado'
+            : 'Sin asignación',
+      ),
       createCell('Estado', status),
       createCell('Tarifa', formatFare(reserva)),
       createCell('Acciones', actions, 'action-cell'),
@@ -215,15 +224,21 @@ form.addEventListener('submit', async (event) => {
         body: JSON.stringify({ clienteId: clienteInput.value.trim(), ...payload }),
       });
       showToast(
-        `Reserva creada correctamente. El viaje ${created.id.slice(0, 8)} ha sido programado.`,
+        created.estado === 'PENDIENTE_ASIGNACION'
+          ? 'Reserva guardada, pendiente de asignación: todavía no hay chofer confirmado.'
+          : `Reserva creada con ${created.asignacion.nombreChofer}.`,
       );
     } else {
-      await requestJson(`/reservas/${editingId}`, {
+      const updated = await requestJson(`/reservas/${editingId}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      showToast('La reserva fue actualizada correctamente.');
+      showToast(
+        updated.estado === 'PENDIENTE_ASIGNACION'
+          ? 'Reserva actualizada, pendiente de asignación: todavía no hay chofer confirmado.'
+          : `Reserva actualizada. Chofer: ${updated.asignacion.nombreChofer}.`,
+      );
     }
 
     resetForm();

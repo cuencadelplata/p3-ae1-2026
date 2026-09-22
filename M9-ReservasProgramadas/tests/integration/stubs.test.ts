@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { HttpDespachoClient } from '../../src/clients/despacho.client.js';
+import { HttpAsignacionClient } from '../../src/clients/asignacion.client.js';
 import { HttpTarifaClient } from '../../src/clients/tarifa.client.js';
 import type { Reserva } from '../../src/domain/reserva.js';
 import { createM5StubApp } from '../../src/stubs/m5/app.js';
@@ -43,6 +44,7 @@ describe('stubs M5 y M7', () => {
       vehiculo: 'AUTO',
       fechaHoraProgramada: new Date().toISOString(),
       estado: 'ACTIVANDO',
+      asignacion: null,
       tarifaEstimada: null,
       moneda: 'ARS',
       criterioAsignacion: 'MEJOR_CALIFICACION',
@@ -51,6 +53,7 @@ describe('stubs M5 y M7', () => {
       actualizadoEn: new Date().toISOString(),
     };
 
+    reserva.asignacion = await new HttpAsignacionClient(m5Url).asignar(reserva);
     const response = await new HttpDespachoClient(m5Url).crearSolicitud(reserva);
     expect(response.estado).toBe('CREADA');
     expect(response.solicitudId).toMatch(/^[0-9a-f-]{36}$/);

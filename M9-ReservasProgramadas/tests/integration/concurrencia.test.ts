@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ReservasScheduler } from '../../src/jobs/reservas.scheduler.js';
 import { InMemoryReservaRepository } from '../../src/repositories/in-memory-reserva.repository.js';
 import { ActivacionReservaService } from '../../src/services/activacion-reserva.service.js';
+import { asignacionDemo } from '../helpers/asignacion.js';
 
 describe('concurrencia entre componentes de activación', () => {
   it('permite que un solo scheduler active una reserva compartida', async () => {
@@ -16,6 +17,7 @@ describe('concurrencia entre componentes de activación', () => {
       vehiculo: 'AUTO',
       fechaHoraProgramada: new Date(Date.now() - 60_000).toISOString(),
     });
+    await repository.actualizarProgramada(reserva.id, { asignacion: asignacionDemo() });
     const crearSolicitud = vi.fn(async () => ({
       solicitudId: randomUUID(),
       estado: 'CREADA',

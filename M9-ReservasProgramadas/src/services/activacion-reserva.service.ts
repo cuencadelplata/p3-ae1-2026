@@ -1,5 +1,6 @@
 import type { DespachoClient } from '../clients/despacho.client.js';
 import type { ReservaRepository } from '../repositories/reserva.repository.js';
+import { conReservaExclusiva } from './reserva-lock.js';
 
 export interface ResultadoActivacion {
   reservaId: string;
@@ -13,6 +14,18 @@ export class ActivacionReservaService {
   ) {}
 
   public async activar(reservaId: string): Promise<ResultadoActivacion> {
+    return conReservaExclusiva(this.repository, reservaId, () => this.activarExclusiva(reservaId));
+  }
+
+  private async activarExclusiva(reservaId: string): Promise<ResultadoActivacion> {
+    const actual = await this.repository.obtenerPorId(reservaId);
+    if (
+      actual === null ||
+      actual.asignacion === null ||
+      Date.parse(actual.fechaHoraProgramada) > Date.now()
+    ) {
+      return { reservaId, activada: false };
+    }
     const reclamada = await this.repository.cambiarEstado(reservaId, 'PROGRAMADA', 'ACTIVANDO');
     if (reclamada === null) {
       return { reservaId, activada: false };

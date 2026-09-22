@@ -42,6 +42,7 @@ describe('E2E local contra contenedores', () => {
       }),
     });
     expect(creada).toMatchObject({ estado: 'PROGRAMADA', tarifaEstimada: 2_500, moneda: 'ARS' });
+    expect(creada.asignacion).toMatchObject({ valoracion: 4.9 });
 
     expect((await requestJson<Reserva>(`/reservas/${creada.id}`)).id).toBe(creada.id);
     expect((await requestJson<{ reservas: Reserva[] }>('/reservas')).reservas).toEqual(
@@ -54,9 +55,59 @@ describe('E2E local contra contenedores', () => {
       body: JSON.stringify({ destino: 'Destino E2E actualizado' }),
     });
     expect(actualizada.destino).toBe('Destino E2E actualizado');
+    expect(actualizada.asignacion?.choferId).toBe(creada.asignacion?.choferId);
 
     const cancelada = await requestJson<Reserva>(`/reservas/${creada.id}`, { method: 'DELETE' });
     expect(cancelada.estado).toBe('CANCELADA');
+    expect(cancelada.asignacion).toBeNull();
+  });
+
+  it('deja pendiente sin chofer, reasigna al editar y recupera disponibilidad al cancelar', async () => {
+    const body = {
+      clienteId: crypto.randomUUID(),
+      origen: 'Origen E2E asignación',
+      destino: 'Destino E2E asignación',
+      vehiculo: 'AUTO',
+      fechaHoraProgramada: new Date(Date.now() + 86_400_000).toISOString(),
+    };
+    const ids: string[] = [];
+    try {
+      const reservas: Reserva[] = [];
+      for (let i = 0; i < 3; i++) {
+        const reserva = await requestJson<Reserva>('/reservas', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        ids.push(reserva.id);
+        reservas.push(reserva);
+      }
+      const [primera, segunda, tercera] = reservas as [Reserva, Reserva, Reserva];
+      expect(tercera).toMatchObject({ estado: 'PENDIENTE_ASIGNACION', asignacion: null });
+      expect(primera.asignacion?.choferId).not.toBe(segunda.asignacion?.choferId);
+      const modificada = await requestJson<Reserva>(`/reservas/${segunda.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ vehiculo: 'MOTO' }),
+      });
+      expect(modificada.asignacion?.choferId).not.toBe(segunda.asignacion?.choferId);
+      await requestJson(`/reservas/${primera.id}`, { method: 'DELETE' });
+      const deadline = Date.now() + 15_000;
+      let pendiente = tercera;
+      while (pendiente.estado === 'PENDIENTE_ASIGNACION' && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        pendiente = await requestJson<Reserva>(`/reservas/${tercera.id}`);
+      }
+      expect(pendiente.estado).toBe('PROGRAMADA');
+      expect(pendiente.asignacion).not.toBeNull();
+    } finally {
+      for (const id of ids) {
+        const reserva = await requestJson<Reserva>(`/reservas/${id}`);
+        if (reserva.estado === 'PROGRAMADA' || reserva.estado === 'PENDIENTE_ASIGNACION') {
+          await requestJson(`/reservas/${id}`, { method: 'DELETE' });
+        }
+      }
+    }
   });
 
   it('activa una reserva vencida mediante scheduler y M5', async () => {
@@ -74,6 +125,7 @@ describe('E2E local contra contenedores', () => {
     const activada = await waitForActivated(creada.id);
     expect(activada.estado).toBe('ACTIVADA');
     expect(activada.idSolicitud).toMatch(/^[0-9a-f-]{36}$/);
+    expect(activada.asignacion).toEqual(creada.asignacion);
     expect(activada.tarifaEstimada).toBe(1_500);
   }, 25_000);
 });

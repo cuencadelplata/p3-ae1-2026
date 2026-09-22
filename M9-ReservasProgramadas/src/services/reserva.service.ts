@@ -1,4 +1,6 @@
 import type { TarifaClient } from '../clients/tarifa.client.js';
+import type { AsignacionClient } from '../clients/asignacion.client.js';
+import { conReservaExclusiva } from './reserva-lock.js';
 import type {
   ActualizarReserva,
   CambiosReserva,
@@ -15,6 +17,7 @@ export class ReservaService {
   public constructor(
     private readonly repository: ReservaRepository,
     private readonly tarifaClient: TarifaClient,
+    private readonly asignacionClient: AsignacionClient,
   ) {}
 
   public async crear(input: CrearReserva): Promise<Reserva> {
@@ -32,11 +35,12 @@ export class ReservaService {
       // La política de degradación permite crear la reserva sin tarifa.
     }
 
-    return this.repository.crear({
+    const creada = await this.repository.crear({
       ...input,
       tarifaEstimada: tarifa?.tarifaEstimada ?? null,
       moneda: tarifa?.moneda ?? 'ARS',
     });
+    return this.reintentarAsignacion(creada.id);
   }
 
   public async listar(): Promise<Reserva[]> {
@@ -52,12 +56,16 @@ export class ReservaService {
   }
 
   public async actualizar(id: string, input: ActualizarReserva): Promise<Reserva> {
+    return conReservaExclusiva(this.repository, id, () => this.actualizarExclusiva(id, input));
+  }
+
+  private async actualizarExclusiva(id: string, input: ActualizarReserva): Promise<Reserva> {
     const actual = await this.obtenerPorId(id);
-    if (actual.estado !== 'PROGRAMADA') {
+    if (actual.estado !== 'PROGRAMADA' && actual.estado !== 'PENDIENTE_ASIGNACION') {
       throw new AppError(
         409,
         'RESERVA_NO_MODIFICABLE',
-        'Solo se pueden modificar reservas en estado PROGRAMADA.',
+        'Solo se pueden modificar reservas PROGRAMADA o PENDIENTE_ASIGNACION.',
       );
     }
 
@@ -86,6 +94,10 @@ export class ReservaService {
       }
     }
 
+    // Liberar primero evita conservar una asignación incompatible ante una edición.
+    // Si M5 no confirma la liberación, la edición se rechaza y puede reintentarse.
+    await this.asignacionClient.liberar(id);
+    cambios.asignacion = null;
     const actualizada = await this.repository.actualizarProgramada(id, cambios);
     if (actualizada === null) {
       throw new AppError(
@@ -94,19 +106,24 @@ export class ReservaService {
         'La reserva dejó de estar disponible para modificación.',
       );
     }
-    return actualizada;
+    return this.asignarExclusiva(actualizada);
   }
 
   public async cancelar(id: string): Promise<Reserva> {
+    return conReservaExclusiva(this.repository, id, () => this.cancelarExclusiva(id));
+  }
+
+  private async cancelarExclusiva(id: string): Promise<Reserva> {
     const actual = await this.obtenerPorId(id);
-    if (actual.estado !== 'PROGRAMADA') {
+    if (actual.estado !== 'PROGRAMADA' && actual.estado !== 'PENDIENTE_ASIGNACION') {
       throw new AppError(
         409,
         'RESERVA_NO_CANCELABLE',
-        'Solo se pueden cancelar reservas en estado PROGRAMADA.',
+        'Solo se pueden cancelar reservas PROGRAMADA o PENDIENTE_ASIGNACION.',
       );
     }
 
+    await this.asignacionClient.liberar(id);
     const cancelada = await this.repository.cancelarProgramada(id);
     if (cancelada === null) {
       throw new AppError(
@@ -116,6 +133,29 @@ export class ReservaService {
       );
     }
     return cancelada;
+  }
+
+  public async reintentarAsignacion(id: string): Promise<Reserva> {
+    return conReservaExclusiva(this.repository, id, async () => {
+      const reserva = await this.obtenerPorId(id);
+      if (
+        reserva.estado !== 'PENDIENTE_ASIGNACION' ||
+        Date.parse(reserva.fechaHoraProgramada) <= Date.now()
+      )
+        return reserva;
+      return this.asignarExclusiva(reserva);
+    });
+  }
+
+  private async asignarExclusiva(reserva: Reserva): Promise<Reserva> {
+    let asignacion;
+    try {
+      asignacion = await this.asignacionClient.asignar(reserva);
+    } catch {
+      // La reserva ya está guardada: el scheduler reintentará mientras sea futura.
+      return reserva;
+    }
+    return (await this.repository.actualizarProgramada(reserva.id, { asignacion })) ?? reserva;
   }
 
   private validarFechaFutura(fecha: string): void {

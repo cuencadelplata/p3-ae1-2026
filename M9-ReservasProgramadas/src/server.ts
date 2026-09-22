@@ -1,5 +1,6 @@
 import { createApp } from './app.js';
 import { HttpDespachoClient } from './clients/despacho.client.js';
+import { HttpAsignacionClient } from './clients/asignacion.client.js';
 import { HttpTarifaClient } from './clients/tarifa.client.js';
 import { env } from './config/env.js';
 import { ReservasScheduler } from './jobs/reservas.scheduler.js';
@@ -8,7 +9,11 @@ import { ActivacionReservaService } from './services/activacion-reserva.service.
 import { ReservaService } from './services/reserva.service.js';
 
 const repository = new InMemoryReservaRepository();
-const reservaService = new ReservaService(repository, new HttpTarifaClient(env.M7_URL));
+const reservaService = new ReservaService(
+  repository,
+  new HttpTarifaClient(env.M7_URL),
+  new HttpAsignacionClient(env.M5_URL),
+);
 const activacionService = new ActivacionReservaService(
   repository,
   new HttpDespachoClient(env.M5_URL),
@@ -17,6 +22,8 @@ const scheduler = new ReservasScheduler(
   repository,
   activacionService,
   env.RESERVATION_JOB_INTERVAL,
+  console.error,
+  reservaService,
 );
 const app = createApp({ reservaService });
 

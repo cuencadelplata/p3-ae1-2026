@@ -1,4 +1,11 @@
-const examples = {
+const asignacionEjemplo = {
+  id: '40000000-0000-4000-8000-000000000001',
+  choferId: '30000000-0000-4000-8000-000000000001',
+  nombreChofer: 'Chofer Auto A (demo)',
+  valoracion: 4.9,
+};
+
+const examplesBase = {
   HealthOk: {
     summary: 'Servicio disponible',
     value: { service: 'm9-reservas-programadas', status: 'ok' },
@@ -27,6 +34,7 @@ const examples = {
       vehiculo: 'AUTO',
       fechaHoraProgramada: '2099-01-01T17:30:00.000Z',
       estado: 'PROGRAMADA',
+      asignacion: asignacionEjemplo,
       tarifaEstimada: 2500,
       moneda: 'ARS',
       criterioAsignacion: 'MEJOR_CALIFICACION',
@@ -45,6 +53,7 @@ const examples = {
       vehiculo: 'AUTO',
       fechaHoraProgramada: '2099-01-01T17:30:00.000Z',
       estado: 'PROGRAMADA',
+      asignacion: asignacionEjemplo,
       tarifaEstimada: 2500,
       moneda: 'ARS',
       criterioAsignacion: 'MEJOR_CALIFICACION',
@@ -63,6 +72,7 @@ const examples = {
       vehiculo: 'AUTO',
       fechaHoraProgramada: '2099-01-01T17:30:00.000Z',
       estado: 'CANCELADA',
+      asignacion: null,
       tarifaEstimada: 2500,
       moneda: 'ARS',
       criterioAsignacion: 'MEJOR_CALIFICACION',
@@ -83,6 +93,7 @@ const examples = {
           vehiculo: 'AUTO',
           fechaHoraProgramada: '2099-01-01T17:30:00.000Z',
           estado: 'PROGRAMADA',
+          asignacion: asignacionEjemplo,
           tarifaEstimada: 2500,
           moneda: 'ARS',
           criterioAsignacion: 'MEJOR_CALIFICACION',
@@ -111,7 +122,7 @@ const examples = {
     value: {
       error: {
         codigo: 'RESERVA_NO_MODIFICABLE',
-        mensaje: 'Solo se pueden modificar reservas en estado PROGRAMADA.',
+        mensaje: 'Solo se pueden modificar reservas PROGRAMADA o PENDIENTE_ASIGNACION.',
       },
     },
   },
@@ -120,13 +131,34 @@ const examples = {
     value: {
       error: {
         codigo: 'RESERVA_NO_CANCELABLE',
-        mensaje: 'Solo se pueden cancelar reservas en estado PROGRAMADA.',
+        mensaje: 'Solo se pueden cancelar reservas PROGRAMADA o PENDIENTE_ASIGNACION.',
       },
     },
   },
   ErrorInterno: {
     summary: 'Error no controlado',
     value: { error: { codigo: 'ERROR_INTERNO', mensaje: 'Ocurrió un error interno.' } },
+  },
+} as const;
+
+const examples = {
+  ...examplesBase,
+  ReservaPendiente: {
+    summary: 'Guardada sin chofer confirmado; se reintenta antes del horario',
+    value: {
+      ...examplesBase.ReservaProgramada.value,
+      estado: 'PENDIENTE_ASIGNACION',
+      asignacion: null,
+    },
+  },
+  ErrorAsignacion: {
+    summary: 'M5 no confirmó la liberación de la asignación',
+    value: {
+      error: {
+        codigo: 'SERVICIO_EXTERNO_NO_DISPONIBLE',
+        mensaje: 'No se pudo confirmar la asignación con M5. Reintente la operación.',
+      },
+    },
   },
 } as const;
 
@@ -214,13 +246,26 @@ export const openApiDocument = {
       post: {
         tags: ['Reservas'],
         summary: 'Crear una reserva programada',
+        description:
+          'Guarda la reserva y solicita a M5 el chofer apto y disponible de mayor valoración. Devuelve PROGRAMADA con asignación o PENDIENTE_ASIGNACION sin chofer, también si M5 no responde. Los campos de asignación y estado son administrados por el servidor.',
         operationId: 'crearReserva',
         requestBody: {
           required: true,
           ...jsonSchema('#/components/schemas/CrearReservaRequest', 'CrearReservaValida'),
         },
         responses: {
-          '201': reservaResponse('Reserva creada.', 'ReservaProgramada'),
+          '201': {
+            description: 'Reserva guardada con chofer o pendiente de asignación.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Reserva' },
+                examples: {
+                  asignada: { $ref: '#/components/examples/ReservaProgramada' },
+                  pendiente: { $ref: '#/components/examples/ReservaPendiente' },
+                },
+              },
+            },
+          },
           '400': errorResponse('Datos o fecha inválidos.', 'ErrorValidacion'),
           '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
         },
@@ -275,7 +320,9 @@ export const openApiDocument = {
       },
       patch: {
         tags: ['Reservas'],
-        summary: 'Modificar una reserva PROGRAMADA',
+        summary: 'Modificar una reserva PROGRAMADA o PENDIENTE_ASIGNACION',
+        description:
+          'Libera la asignación previa y reevalúa el chofer con los datos actualizados. Puede conservar el mismo chofer o quedar pendiente. Recalcula tarifa si recibe origen, destino o vehículo. Si M5 no confirma la liberación, responde 503 sin aplicar los cambios locales; reintentar.',
         operationId: 'actualizarReserva',
         requestBody: {
           required: true,
@@ -286,18 +333,22 @@ export const openApiDocument = {
           '400': errorResponse('Datos, fecha o identificador inválidos.', 'ErrorValidacion'),
           '404': errorResponse('Reserva no encontrada.', 'ErrorNoEncontrada'),
           '409': errorResponse('Reserva no modificable.', 'ErrorNoModificable'),
+          '503': errorResponse('No se pudo confirmar la liberación en M5.', 'ErrorAsignacion'),
           '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
         },
       },
       delete: {
         tags: ['Reservas'],
-        summary: 'Cancelar lógicamente una reserva PROGRAMADA',
+        summary: 'Cancelar una reserva PROGRAMADA o PENDIENTE_ASIGNACION',
+        description:
+          'Libera la asignación en M5 antes de cancelar localmente. Si M5 no responde, devuelve 503 y se debe reintentar.',
         operationId: 'cancelarReserva',
         responses: {
           '200': reservaResponse('Reserva cancelada.', 'ReservaCancelada'),
           '400': errorResponse('Identificador inválido.', 'ErrorValidacion'),
           '404': errorResponse('Reserva no encontrada.', 'ErrorNoEncontrada'),
           '409': errorResponse('Reserva no cancelable.', 'ErrorNoCancelable'),
+          '503': errorResponse('No se pudo confirmar la liberación en M5.', 'ErrorAsignacion'),
           '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
         },
       },
@@ -377,6 +428,7 @@ export const openApiDocument = {
           'vehiculo',
           'fechaHoraProgramada',
           'estado',
+          'asignacion',
           'tarifaEstimada',
           'moneda',
           'criterioAsignacion',
@@ -393,7 +445,28 @@ export const openApiDocument = {
           fechaHoraProgramada: { type: 'string', format: 'date-time' },
           estado: {
             type: 'string',
-            enum: ['PROGRAMADA', 'ACTIVANDO', 'ACTIVADA', 'CANCELADA', 'FALLIDA'],
+            enum: [
+              'PENDIENTE_ASIGNACION',
+              'PROGRAMADA',
+              'ACTIVANDO',
+              'ACTIVADA',
+              'CANCELADA',
+              'FALLIDA',
+            ],
+          },
+          asignacion: {
+            type: 'object',
+            nullable: true,
+            readOnly: true,
+            description: 'Chofer confirmado por M5. Null cuando no existe asignación.',
+            required: ['id', 'choferId', 'nombreChofer', 'valoracion'],
+            additionalProperties: false,
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              choferId: { type: 'string', format: 'uuid' },
+              nombreChofer: { type: 'string' },
+              valoracion: { type: 'number', minimum: 0, maximum: 5 },
+            },
           },
           tarifaEstimada: { type: 'number', nullable: true },
           moneda: { type: 'string', nullable: true },

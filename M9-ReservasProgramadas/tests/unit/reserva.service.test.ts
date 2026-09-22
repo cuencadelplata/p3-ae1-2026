@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { TarifaClient } from '../../src/clients/tarifa.client.js';
 import { InMemoryReservaRepository } from '../../src/repositories/in-memory-reserva.repository.js';
 import { ReservaService } from '../../src/services/reserva.service.js';
+import { asignacionClientDemo } from '../helpers/asignacion.js';
 
 describe('ReservaService', () => {
   it('crea la reserva sin tarifa cuando M7 no está disponible', async () => {
@@ -12,7 +13,7 @@ describe('ReservaService', () => {
     const unavailableClient: TarifaClient = {
       estimar: async () => Promise.reject(new Error('M7 caído')),
     };
-    const service = new ReservaService(repository, unavailableClient);
+    const service = new ReservaService(repository, unavailableClient, asignacionClientDemo());
 
     const reserva = await service.crear({
       clienteId: randomUUID(),

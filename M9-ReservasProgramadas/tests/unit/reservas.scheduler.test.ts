@@ -6,15 +6,19 @@ import type { DespachoClient } from '../../src/clients/despacho.client.js';
 import { ReservasScheduler } from '../../src/jobs/reservas.scheduler.js';
 import { InMemoryReservaRepository } from '../../src/repositories/in-memory-reserva.repository.js';
 import { ActivacionReservaService } from '../../src/services/activacion-reserva.service.js';
+import { asignacionDemo } from '../helpers/asignacion.js';
 
-const crearVencida = (repository: InMemoryReservaRepository) =>
-  repository.crear({
+const crearVencida = async (repository: InMemoryReservaRepository) => {
+  const reserva = await repository.crear({
     clienteId: randomUUID(),
     origen: 'A',
     destino: 'B',
     vehiculo: 'AUTO',
     fechaHoraProgramada: new Date(Date.now() - 60_000).toISOString(),
   });
+  await repository.actualizarProgramada(reserva.id, { asignacion: asignacionDemo() });
+  return reserva;
+};
 
 describe('activación programada', () => {
   it('activa una reserva vencida y persiste el id de solicitud M5', async () => {

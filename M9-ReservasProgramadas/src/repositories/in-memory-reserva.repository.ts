@@ -9,7 +9,13 @@ import type {
 } from '../domain/reserva.js';
 import type { ReservaRepository } from './reserva.repository.js';
 
-const clone = (reserva: Reserva): Reserva => ({ ...reserva });
+const clone = (reserva: Reserva): Reserva => ({
+  ...reserva,
+  asignacion: reserva.asignacion === null ? null : { ...reserva.asignacion },
+});
+
+const editable = (reserva: Reserva): boolean =>
+  reserva.estado === 'PROGRAMADA' || reserva.estado === 'PENDIENTE_ASIGNACION';
 
 export class InMemoryReservaRepository implements ReservaRepository {
   private readonly reservas = new Map<string, Reserva>();
@@ -23,7 +29,8 @@ export class InMemoryReservaRepository implements ReservaRepository {
       destino: input.destino,
       vehiculo: input.vehiculo,
       fechaHoraProgramada: input.fechaHoraProgramada,
-      estado: 'PROGRAMADA',
+      estado: 'PENDIENTE_ASIGNACION',
+      asignacion: null,
       tarifaEstimada: input.tarifaEstimada ?? null,
       moneda: input.moneda ?? 'ARS',
       criterioAsignacion: 'MEJOR_CALIFICACION',
@@ -49,14 +56,23 @@ export class InMemoryReservaRepository implements ReservaRepository {
 
   public async actualizarProgramada(id: string, input: CambiosReserva): Promise<Reserva | null> {
     const reserva = this.reservas.get(id);
-    if (reserva === undefined || reserva.estado !== 'PROGRAMADA') return null;
+    if (reserva === undefined || !editable(reserva)) return null;
 
     Object.assign(reserva, input, { actualizadoEn: new Date().toISOString() });
+    if (input.asignacion !== undefined) {
+      reserva.asignacion = input.asignacion === null ? null : { ...input.asignacion };
+      reserva.estado = reserva.asignacion === null ? 'PENDIENTE_ASIGNACION' : 'PROGRAMADA';
+    }
     return clone(reserva);
   }
 
   public async cancelarProgramada(id: string): Promise<Reserva | null> {
-    return this.cambiarEstado(id, 'PROGRAMADA', 'CANCELADA');
+    const reserva = this.reservas.get(id);
+    if (reserva === undefined || !editable(reserva)) return null;
+    reserva.estado = 'CANCELADA';
+    reserva.asignacion = null;
+    reserva.actualizadoEn = new Date().toISOString();
+    return clone(reserva);
   }
 
   public async buscarPendientes(fechaLimite: Date, limite = 100): Promise<Reserva[]> {
@@ -64,6 +80,7 @@ export class InMemoryReservaRepository implements ReservaRepository {
       .filter(
         (reserva) =>
           reserva.estado === 'PROGRAMADA' &&
+          reserva.asignacion !== null &&
           Date.parse(reserva.fechaHoraProgramada) <= fechaLimite.getTime(),
       )
       .sort((a, b) => a.fechaHoraProgramada.localeCompare(b.fechaHoraProgramada))
