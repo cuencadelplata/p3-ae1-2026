@@ -7,9 +7,4 @@ export default defineConfig({
     baseURL: "http://localhost:8083",
   },
 
-  webServer: {
-    command: "npm run dev",
-    url: "http://localhost:8083/health",
-    reuseExistingServer: true,
-  },
 });
