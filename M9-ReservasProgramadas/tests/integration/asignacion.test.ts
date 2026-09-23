@@ -12,7 +12,7 @@ import { InMemoryReservaRepository } from '../../src/repositories/in-memory-rese
 import { ReservaService } from '../../src/services/reserva.service.js';
 import { ActivacionReservaService } from '../../src/services/activacion-reserva.service.js';
 import { ReservasScheduler } from '../../src/jobs/reservas.scheduler.js';
-import { CHOFERES_DEMO, createM5StubApp } from '../../src/stubs/m5/app.js';
+import { CHOFERES_DEMO, createM5StubApp, type ChoferStub } from '../../src/stubs/m5/app.js';
 import type { CrearReserva } from '../../src/domain/reserva.js';
 
 const input = (hours = 2, vehiculo: 'AUTO' | 'MOTO' = 'AUTO'): CrearReserva => ({
@@ -30,10 +30,12 @@ describe('asignación de chofer desde la creación con M5 HTTP', () => {
   let client: HttpAsignacionClient;
   let despacho: HttpDespachoClient;
   let scheduler: ReservasScheduler;
+  let conductores: ChoferStub[];
 
   beforeEach(async () => {
+    conductores = CHOFERES_DEMO.map((c) => ({ ...c }));
     server = await new Promise<Server>((resolve) => {
-      const started = createM5StubApp().listen(0, () => resolve(started));
+      const started = createM5StubApp(conductores).listen(0, () => resolve(started));
     });
     const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     repository = new InMemoryReservaRepository();
@@ -106,6 +108,12 @@ describe('asignación de chofer desde la creación con M5 HTTP', () => {
     const creada = await service.crear(input());
     const recorrido = await service.actualizar(creada.id, { destino: 'Puerto' });
     expect(recorrido.asignacion?.choferId).toBe(creada.asignacion?.choferId);
+    expect(recorrido.asignacion?.id).not.toBe(creada.asignacion?.id);
+    const historyResponse = await fetch(
+      `http://127.0.0.1:${(server.address() as AddressInfo).port}/asignaciones/${creada.id}/ofertas`,
+    );
+    const ofertas = (await historyResponse.json()) as { ofertas: { estado: string }[] };
+    expect(ofertas.ofertas.filter((o) => o.estado === 'ACEPTADA')).toHaveLength(2);
     const moto = await service.actualizar(creada.id, { vehiculo: 'MOTO' });
     expect(moto.asignacion?.choferId).toBe(CHOFERES_DEMO[2]!.id);
     const ocupada = await service.crear(input(5, 'MOTO'));
@@ -119,6 +127,33 @@ describe('asignación de chofer desde la creación con M5 HTTP', () => {
       fechaHoraProgramada: input(8).fechaHoraProgramada,
     });
     expect(editada.estado).toBe('PROGRAMADA');
+  });
+
+  it('el CRUD cambia al chofer si el anterior rechaza, queda pendiente si nadie acepta y reintenta', async () => {
+    const app = createApp({ reservaService: service });
+    const creada = await request(app).post('/reservas').send(input());
+    expect(creada.body.asignacion.choferId).toBe(conductores[0]!.id);
+    conductores[0]!.respuestaSimulada = 'RECHAZAR';
+    const editada = await request(app)
+      .patch(`/reservas/${creada.body.id as string}`)
+      .send({ destino: 'Puerto' });
+    expect(editada.status).toBe(200);
+    expect(editada.body.asignacion.choferId).toBe(conductores[1]!.id);
+    expect(editada.body.asignacion.id).not.toBe(creada.body.asignacion.id);
+    conductores[1]!.respuestaSimulada = 'RECHAZAR';
+    const pendiente = await request(app)
+      .patch(`/reservas/${creada.body.id as string}`)
+      .send({ origen: 'Campus' });
+    expect(pendiente.body).toMatchObject({ estado: 'PENDIENTE_ASIGNACION', asignacion: null });
+    conductores[0]!.respuestaSimulada = 'ACEPTAR';
+    await scheduler.ejecutar();
+    expect(await service.obtenerPorId(creada.body.id as string)).toMatchObject({
+      estado: 'PROGRAMADA',
+      asignacion: { choferId: conductores[0]!.id },
+    });
+    expect((await request(app).delete(`/reservas/${creada.body.id as string}`)).body).toMatchObject(
+      { estado: 'CANCELADA', asignacion: null },
+    );
   });
 
   it('permite cancelar pendientes sin eliminar otras asignaciones', async () => {

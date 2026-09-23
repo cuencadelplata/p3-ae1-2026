@@ -50,7 +50,7 @@ paths:
     post:
       tags: [Reservas]
       summary: Crear una reserva programada
-      description: Guarda la reserva y solicita a M5 el chofer apto y disponible de mayor valoración. Devuelve PROGRAMADA con asignación o PENDIENTE_ASIGNACION sin chofer, también si M5 no responde.
+      description: Guarda la reserva y solicita ofertas secuenciales a M5 por valoración descendente. Solo confirma al chofer que acepta; si rechaza o vence, pasa al siguiente. Devuelve PROGRAMADA con aceptación o PENDIENTE_ASIGNACION si nadie acepta o M5 falla. Las respuestas del conductor se simulan explícitamente en AE1.
       operationId: crearReserva
       requestBody:
         required: true
@@ -114,7 +114,7 @@ paths:
     patch:
       tags: [Reservas]
       summary: Modificar una reserva PROGRAMADA o PENDIENTE_ASIGNACION
-      description: Libera la asignación previa y reevalúa el chofer con los datos actualizados. Puede conservar al mismo chofer o quedar pendiente. Si M5 no confirma la liberación, responde 503 sin aplicar cambios locales; reintentar.
+      description: Invalida la ronda y asignación anteriores y solicita nuevas ofertas. El mismo chofer debe aceptar nuevamente; respuestas a ofertas antiguas no son válidas. Puede quedar pendiente. Recalcula tarifa al recibir origen, destino o vehículo. Si M5 no confirma liberación, responde 503 sin cambios locales.
       operationId: actualizarReserva
       requestBody:
         required: true
@@ -436,7 +436,7 @@ components:
           type: object
           nullable: true
           readOnly: true
-          description: Chofer confirmado por M5. Null cuando no existe asignación.
+          description: Chofer que aceptó una oferta vigente en M5. El id corresponde a la oferta aceptada. En AE1 la aceptación es simulada. Null cuando no existe asignación.
           required: [id, choferId, nombreChofer, valoracion]
           additionalProperties: false
           properties:

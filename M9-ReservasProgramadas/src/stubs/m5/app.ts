@@ -5,12 +5,14 @@ import { z } from 'zod';
 
 import { asignacionSchema } from '../../clients/asignacion.client.js';
 import type { AsignacionChofer, TipoVehiculo } from '../../domain/reserva.js';
+import { Ofertas, type RespuestaSimulada } from './ofertas.js';
 
 export interface ChoferStub {
   id: string;
   nombre: string;
   valoracion: number;
   vehiculo: TipoVehiculo;
+  respuestaSimulada?: RespuestaSimulada;
 }
 
 export const CHOFERES_DEMO: ChoferStub[] = [
@@ -40,6 +42,7 @@ const reservaSchema = z.object({
   destino: z.string().min(1),
   vehiculo: z.enum(['AUTO', 'MOTO']),
   fechaHoraProgramada: z.string().datetime({ offset: true }),
+  criterioAsignacion: z.literal('MEJOR_CALIFICACION'),
 });
 type DatosReserva = z.infer<typeof reservaSchema>;
 interface Ocupacion {
@@ -52,14 +55,101 @@ const mismoViaje = (a: DatosReserva, b: DatosReserva): boolean =>
   a.vehiculo === b.vehiculo &&
   Date.parse(a.fechaHoraProgramada) === Date.parse(b.fechaHoraProgramada);
 
-export const createM5StubApp = (choferes: readonly ChoferStub[] = CHOFERES_DEMO) => {
+export const createM5StubApp = (
+  choferes: readonly ChoferStub[] = CHOFERES_DEMO,
+  opciones: { plazoOfertaMs?: number; demoraRespuestaMs?: number } = {},
+) => {
+  const plazo = opciones.plazoOfertaMs ?? 200;
+  const demora = opciones.demoraRespuestaMs ?? 10;
+  if (!Number.isFinite(plazo) || plazo <= 0 || !Number.isFinite(demora) || demora < 0)
+    throw new Error('Los tiempos de oferta deben ser válidos.');
   const app = express();
+  const ofertas = new Ofertas();
   const ocupaciones = new Map<string, Ocupacion>();
+  const rondas = new Map<
+    string,
+    { id: string; reserva: DatosReserva; resultado: Promise<AsignacionChofer | null> }
+  >();
+  const enOferta = new Map<string, { choferId: string; reserva: DatosReserva }>();
   const solicitudes = new Map<string, { solicitudId: string; estado: string }>();
+  const solapa = (a: DatosReserva, b: DatosReserva) =>
+    Math.abs(Date.parse(a.fechaHoraProgramada) - Date.parse(b.fechaHoraProgramada)) < 3_600_000;
+  const invalidar = (id: string) => {
+    const ronda = rondas.get(id);
+    rondas.delete(id);
+    ocupaciones.delete(id);
+    if (ronda) {
+      ofertas.cancelarRonda(ronda.id);
+      enOferta.delete(ronda.id);
+    }
+  };
+  const buscar = async (
+    reserva: DatosReserva,
+    rondaId: string,
+  ): Promise<AsignacionChofer | null> => {
+    const candidatos = choferes
+      .filter((c) => c.vehiculo === reserva.vehiculo)
+      .sort((a, b) => b.valoracion - a.valoracion || a.id.localeCompare(b.id));
+    for (const chofer of candidatos) {
+      if (rondas.get(reserva.id)?.id !== rondaId) return null;
+      if (
+        [...enOferta.values()].some(
+          (o) => o.choferId === chofer.id && solapa(o.reserva, reserva),
+        ) ||
+        [...ocupaciones.values()].some(
+          (o) => o.asignacion.choferId === chofer.id && solapa(o.reserva, reserva),
+        )
+      )
+        continue;
+      // La toma del candidato no contiene await: evita ofertas simultáneas solapadas.
+      enOferta.set(rondaId, { choferId: chofer.id, reserva });
+      const oferta = await ofertas.abrir(
+        reserva.id,
+        rondaId,
+        chofer.id,
+        chofer.respuestaSimulada ?? 'ACEPTAR',
+        plazo,
+        demora,
+      );
+      enOferta.delete(rondaId);
+      if (rondas.get(reserva.id)?.id !== rondaId) return null;
+      if (oferta.estado !== 'ACEPTADA') continue;
+      const asignacion = {
+        id: oferta.id,
+        choferId: chofer.id,
+        nombreChofer: chofer.nombre,
+        valoracion: chofer.valoracion,
+      };
+      ocupaciones.set(reserva.id, { reserva, asignacion });
+      return asignacion;
+    }
+    return null;
+  };
   app.disable('x-powered-by');
   app.use(express.json());
   app.get('/health', (_request, response) => response.status(200).json({ status: 'ok' }));
-  app.put('/asignaciones/:id', (request, response) => {
+  app.get('/asignaciones/:id/ofertas', (request, response) => {
+    response.json({ ofertas: ofertas.listar(request.params.id) });
+  });
+  app.post('/ofertas/:id/respuesta', (request, response) => {
+    const parsed = z
+      .object({ choferId: z.string().uuid(), decision: z.enum(['ACEPTAR', 'RECHAZAR']) })
+      .strict()
+      .safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: 'Respuesta inválida.' });
+      return;
+    }
+    const oferta = ofertas.responder(request.params.id, parsed.data.choferId, parsed.data.decision);
+    if (!oferta) {
+      response
+        .status(409)
+        .json({ error: 'La oferta no está vigente o no pertenece al conductor.' });
+      return;
+    }
+    response.json({ oferta });
+  });
+  app.put('/asignaciones/:id', async (request, response) => {
     const parsed = reservaSchema.safeParse(request.body?.reserva);
     if (!parsed.success || parsed.data.id !== request.params.id) {
       response.status(400).json({ error: 'Reserva inválida.' });
@@ -70,34 +160,22 @@ export const createM5StubApp = (choferes: readonly ChoferStub[] = CHOFERES_DEMO)
       response.status(409).json({ error: 'El despacho ya fue activado.' });
       return;
     }
-    // Simulación: cada viaje ocupa una hora desde su inicio; no estima duración real.
-    const inicio = Date.parse(reserva.fechaHoraProgramada);
-    const candidatos = choferes
-      .filter(
-        (chofer) =>
-          chofer.vehiculo === reserva.vehiculo &&
-          ![...ocupaciones.entries()].some(
-            ([id, ocupacion]) =>
-              id !== reserva.id &&
-              ocupacion.asignacion.choferId === chofer.id &&
-              Math.abs(Date.parse(ocupacion.reserva.fechaHoraProgramada) - inicio) < 3_600_000,
-          ),
-      )
-      .sort((a, b) => b.valoracion - a.valoracion || a.id.localeCompare(b.id));
-    const chofer = candidatos[0];
-    if (chofer === undefined) {
-      ocupaciones.delete(reserva.id);
-      response.json({ asignacion: null });
+    const anterior = rondas.get(reserva.id);
+    if (anterior && mismoViaje(anterior.reserva, reserva)) {
+      response.json({ asignacion: await anterior.resultado });
       return;
     }
-    const anterior = ocupaciones.get(reserva.id);
-    const asignacion: AsignacionChofer = {
-      id: anterior?.asignacion.choferId === chofer.id ? anterior.asignacion.id : randomUUID(),
-      choferId: chofer.id,
-      nombreChofer: chofer.nombre,
-      valoracion: chofer.valoracion,
+    invalidar(reserva.id);
+    const ronda = {
+      id: randomUUID(),
+      reserva,
+      resultado: Promise.resolve<AsignacionChofer | null>(null),
     };
-    ocupaciones.set(reserva.id, { reserva, asignacion });
+    rondas.set(reserva.id, ronda);
+    ronda.resultado = buscar(reserva, ronda.id);
+    const asignacion = await ronda.resultado;
+    // Sin aceptación, un próximo ciclo puede abrir otra ronda con nueva disponibilidad.
+    if (asignacion === null && rondas.get(reserva.id) === ronda) rondas.delete(reserva.id);
     response.json({ asignacion });
   });
   app.delete('/asignaciones/:id', (request, response) => {
@@ -105,7 +183,7 @@ export const createM5StubApp = (choferes: readonly ChoferStub[] = CHOFERES_DEMO)
       response.status(409).json({ error: 'El despacho ya fue activado.' });
       return;
     }
-    ocupaciones.delete(request.params.id);
+    invalidar(request.params.id);
     response.sendStatus(204);
   });
   app.post('/solicitudes', (request, response) => {

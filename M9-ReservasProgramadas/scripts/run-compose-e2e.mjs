@@ -53,6 +53,7 @@ try {
   const dockerEnvironment = {
     ...process.env,
     PORT: '3909',
+    M5_OFERTAS_ESCENARIO: 'ACEPTAN',
     RESERVATION_JOB_INTERVAL: '*/1 * * * * *',
   };
   composeStarted = true;

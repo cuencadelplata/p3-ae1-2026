@@ -1,0 +1,221 @@
+openapi: 3.0.3
+info:
+  title: M5 simulado - ofertas y despacho para M9
+  version: 1.0.0
+  description: >-
+    Contrato local de demostración, no contrato aprobado del M5 real.
+    Sin autenticación: solo red interna. Las respuestas automáticas son simuladas.
+    Las ofertas se ordenan por valoración descendente y luego ID. Cada viaje ocupa
+    una hora. Solo una oferta aceptada vigente produce asignación. Los datos e
+    idempotencia se conservan únicamente durante la vida del proceso.
+servers:
+  - url: http://m5-stub:3001
+security: []
+paths:
+  /health:
+    get:
+      summary: Salud del proceso
+      responses:
+        '200':
+          description: Proceso disponible
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [ok] }
+  /asignaciones/{reservaId}:
+    parameters:
+      - $ref: '#/components/parameters/ReservaId'
+    put:
+      summary: Ofrecer secuencialmente hasta aceptación o agotamiento
+      description: >-
+        Espera el resultado de la ronda. Un PUT idéntico comparte la ronda en curso
+        o devuelve la asignación vigente. Cambiar el viaje invalida la ronda anterior.
+        Sin aceptación devuelve null; otro PUT puede abrir una ronda nueva.
+        La respuesta demo se obtiene dentro de 200 ms por candidato sin respuesta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reserva]
+              properties:
+                reserva: { $ref: '#/components/schemas/Reserva' }
+      responses:
+        '200':
+          description: Asignación aceptada o candidatos agotados
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [asignacion]
+                properties:
+                  asignacion: { $ref: '#/components/schemas/AsignacionNullable' }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+    delete:
+      summary: Invalidar ofertas y liberar asignación antes del despacho
+      responses:
+        '204': { description: Liberada o ya inexistente }
+        '409': { $ref: '#/components/responses/Conflicto' }
+  /asignaciones/{reservaId}/ofertas:
+    parameters:
+      - $ref: '#/components/parameters/ReservaId'
+    get:
+      summary: Consultar historial efímero de ofertas de todas las rondas
+      responses:
+        '200':
+          description: Lista vacía si no hay ofertas
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ofertas]
+                properties:
+                  ofertas:
+                    type: array
+                    items: { $ref: '#/components/schemas/Oferta' }
+  /ofertas/{ofertaId}/respuesta:
+    parameters:
+      - name: ofertaId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      summary: Aceptar o rechazar una oferta vigente en el simulador
+      description: >-
+        Solo se admite la primera respuesta antes del vencimiento, del conductor
+        indicado en la oferta. choferId es un dato de simulación, no prueba identidad.
+        Una respuesta repetida no modifica efectos y devuelve 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [choferId, decision]
+              properties:
+                choferId: { type: string, format: uuid }
+                decision: { type: string, enum: [ACEPTAR, RECHAZAR] }
+            examples:
+              aceptar:
+                value: { choferId: '30000000-0000-4000-8000-000000000001', decision: ACEPTAR }
+              rechazar:
+                value: { choferId: '30000000-0000-4000-8000-000000000001', decision: RECHAZAR }
+      responses:
+        '200':
+          description: Primera decisión registrada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [oferta]
+                properties:
+                  oferta: { $ref: '#/components/schemas/Oferta' }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+  /solicitudes:
+    post:
+      summary: Activar despacho con asignación previamente aceptada
+      description: Repetir la misma reserva vigente devuelve el mismo solicitudId; después del despacho no puede liberarse ni reasignarse.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reserva]
+              properties:
+                reserva:
+                  allOf:
+                    - $ref: '#/components/schemas/Reserva'
+                    - type: object
+                      required: [asignacion]
+                      properties:
+                        asignacion: { $ref: '#/components/schemas/Asignacion' }
+      responses:
+        '201':
+          description: Solicitud creada o recuperada idempotentemente
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [solicitudId, estado]
+                properties:
+                  solicitudId: { type: string, format: uuid }
+                  estado: { type: string, enum: [CREADA] }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+components:
+  parameters:
+    ReservaId:
+      name: reservaId
+      in: path
+      required: true
+      description: Identificador de reserva; PUT exige UUID coincidente con el cuerpo.
+      schema: { type: string }
+  responses:
+    Invalida:
+      description: Datos inválidos o asignación ausente
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflicto:
+      description: Oferta no vigente, conductor incorrecto, asignación obsoleta o despacho ya activado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    Reserva:
+      type: object
+      required: [id, origen, destino, vehiculo, fechaHoraProgramada, criterioAsignacion]
+      properties:
+        id: { type: string, format: uuid }
+        origen: { type: string, minLength: 1 }
+        destino: { type: string, minLength: 1 }
+        vehiculo: { type: string, enum: [AUTO, MOTO] }
+        fechaHoraProgramada: { type: string, format: date-time }
+        criterioAsignacion: { type: string, enum: [MEJOR_CALIFICACION] }
+      example:
+        id: '10000000-0000-4000-8000-000000000001'
+        origen: Terminal
+        destino: Aeropuerto
+        vehiculo: AUTO
+        fechaHoraProgramada: '2099-01-01T12:00:00Z'
+        criterioAsignacion: MEJOR_CALIFICACION
+    Asignacion:
+      type: object
+      required: [id, choferId, nombreChofer, valoracion]
+      properties:
+        id: { type: string, format: uuid, description: Identificador de oferta aceptada }
+        choferId: { type: string, format: uuid }
+        nombreChofer: { type: string, minLength: 1 }
+        valoracion: { type: number, minimum: 0, maximum: 5 }
+    AsignacionNullable:
+      type: object
+      nullable: true
+      required: [id, choferId, nombreChofer, valoracion]
+      properties:
+        id: { type: string, format: uuid }
+        choferId: { type: string, format: uuid }
+        nombreChofer: { type: string, minLength: 1 }
+        valoracion: { type: number, minimum: 0, maximum: 5 }
+    Oferta:
+      type: object
+      required: [id, reservaId, rondaId, choferId, estado, venceEn]
+      properties:
+        id: { type: string, format: uuid }
+        reservaId: { type: string, format: uuid }
+        rondaId: { type: string, format: uuid }
+        choferId: { type: string, format: uuid }
+        estado: { type: string, enum: [PENDIENTE, ACEPTADA, RECHAZADA, VENCIDA, CANCELADA] }
+        venceEn: { type: string, format: date-time }

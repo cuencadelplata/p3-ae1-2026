@@ -133,13 +133,19 @@ disponibilidad o M5 falla, devuelve `PENDIENTE_ASIGNACION` con `asignacion: null
 Ambos resultados responden HTTP 201. El consumidor no puede enviar estado ni asignación.
 
 El M5 local es un **simulador** con dos autos (4.9 y 4.7) y una moto (4.8), todos
-ficticios. Selecciona por mayor valoración y, en empates, por ID. Considera cada
+ficticios. Ofrece por mayor valoración y, en empates, por ID. Solo confirma al conductor
+que acepta una oferta vigente. Si rechaza o no responde antes del vencimiento, continúa
+con el siguiente candidato. Si ninguno acepta, M9 conserva la reserva pendiente.
+Considera cada
 viaje como un bloque de una hora desde el horario programado e impide solapamientos
 para el mismo chofer. No calcula distancias ni duración real, y no integra todavía
 los módulos reales de conductores o despacho.
 
-Un PATCH de origen, destino, vehículo o fecha libera la asignación anterior y la
-reevalúa. Puede conservar al mismo chofer; el identificador de asignación puede cambiar.
+Un PATCH de origen, destino, vehículo o fecha invalida la ronda de ofertas y libera
+la asignación anterior, y abre una ronda nueva con los datos modificados.
+Puede conservar al mismo chofer, pero debe aceptar de nuevo: el identificador de
+asignación es el de la nueva oferta aceptada. Una respuesta antigua no puede confirmar
+la nueva ronda. DELETE invalida las ofertas pendientes y libera la asignación.
 Si no consigue chofer, queda pendiente. DELETE libera la ocupación y cancela lógicamente.
 Se pueden editar y cancelar reservas PROGRAMADA o PENDIENTE_ASIGNACION.
 Si M5 no confirma la liberación, PATCH/DELETE responden 503 sin aplicar cambios locales;
@@ -165,6 +171,47 @@ Contrato HTTP del simulador M5 (red interna):
 | `PUT /asignaciones/:reservaId`    | `{ reserva }` con id, origen, destino, vehículo y fecha | 200 `{ asignacion }`, objeto o null. 400 si inválida; 409 si ya despachada.          |
 | `DELETE /asignaciones/:reservaId` | Sin cuerpo                                              | 204, incluso si ya estaba libre. 409 si ya despachada.                               |
 | `POST /solicitudes`               | `{ reserva }` incluyendo asignación vigente             | 201 `{ solicitudId, estado }`. 400 sin asignación válida; 409 si no coincide con M5. |
+
+El contrato completo está versionado en `openapi/m5-stub.yaml`. También incluye
+`GET /asignaciones/:reservaId/ofertas` (historial de ofertas simulado) y
+`POST /ofertas/:ofertaId/respuesta` con `{ choferId, decision }`, donde `decision`
+es `ACEPTAR` o `RECHAZAR`. Respuestas vencidas, repetidas, de otro conductor o de una
+ronda invalidada se rechazan con 409. La asignación nunca se confirma solo por ranking.
+
+### Corrección funcional posterior al informe AE1
+
+El informe del 02/09 proponía ofertas al activar. Esta versión aplica la corrección
+posterior comunicada por el grupo: ofertas desde la creación y nuevamente al editar.
+No se modifica el PDF histórico. M5 conserva la responsabilidad de ofertas y aceptación;
+M9 conserva la reserva y activa el despacho al llegar el horario con la asignación confirmada.
+
+### Demostración de aceptación, rechazo y vencimiento
+
+En `.env`, configurar `M5_OFERTAS_ESCENARIO` y ejecutar `npm run local:up`:
+
+| Valor            | Resultado al crear una reserva AUTO sin ocupaciones previas |
+| ---------------- | ----------------------------------------------------------- |
+| `ACEPTAN`        | Auto A (4.9) acepta. Valor predeterminado.                  |
+| `RECHAZA_MEJOR`  | Auto A rechaza; Auto B (4.7) acepta.                        |
+| `VENCE_MEJOR`    | Auto A no responde; vence su oferta y Auto B acepta.        |
+| `RECHAZAN_TODOS` | Ninguno acepta; la reserva queda pendiente.                 |
+
+Para cambiar de escenario, detener primero con `npm run local:down`; esto descarta
+reservas y ofertas en memoria. No cambiar solamente M5 mientras se conservan reservas
+de M9: esta versión no reconcilia reinicios independientes. Después restaurar `ACEPTAN`.
+Los escenarios `RECHAZA_MEJOR` y `VENCE_MEJOR` afectan al Auto A; la moto acepta.
+
+El plazo demo es 200 ms por oferta y las respuestas automáticas llegan a los 10 ms.
+Son tiempos acelerados para pruebas, **no una interfaz para conductores reales**.
+Los tests también usan el modo `MANUAL` del simulador para enviar decisiones HTTP,
+comprobar aceptación/rechazo concurrentes y rechazar respuestas antiguas. No existe
+autenticación de conductores en estos endpoints internos: `choferId` no es una credencial.
+No exponerlos a Internet. El historial es efímero y no constituye auditoría durable.
+
+Una ronda sin aceptación puede reintentarse por el scheduler mientras la reserva sea
+futura. En esta versión un rechazo vale para esa ronda, no bloquea permanentemente al
+conductor en rondas posteriores. La integración real deberá acordar tiempos, identidad,
+notificaciones, política de reoferta y contrato asíncrono con M5.
 
 Para probarlo: crear tres reservas AUTO con el mismo horario futuro. Las primeras dos
 obtienen chofer y la tercera queda pendiente. Cancelar una y esperar el siguiente ciclo

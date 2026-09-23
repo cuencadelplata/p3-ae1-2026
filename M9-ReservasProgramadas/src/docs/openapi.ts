@@ -247,7 +247,7 @@ export const openApiDocument = {
         tags: ['Reservas'],
         summary: 'Crear una reserva programada',
         description:
-          'Guarda la reserva y solicita a M5 el chofer apto y disponible de mayor valoración. Devuelve PROGRAMADA con asignación o PENDIENTE_ASIGNACION sin chofer, también si M5 no responde. Los campos de asignación y estado son administrados por el servidor.',
+          'Guarda la reserva y solicita a M5 ofertas secuenciales a los conductores elegibles, por valoración descendente. Solo confirma asignación tras aceptación; rechazo o vencimiento pasa al siguiente. Devuelve PROGRAMADA con aceptación confirmada o PENDIENTE_ASIGNACION si se agotan candidatos o M5 no responde. En AE1 las respuestas de conductores se simulan explícitamente. Estado y asignación son administrados por el servidor.',
         operationId: 'crearReserva',
         requestBody: {
           required: true,
@@ -322,7 +322,7 @@ export const openApiDocument = {
         tags: ['Reservas'],
         summary: 'Modificar una reserva PROGRAMADA o PENDIENTE_ASIGNACION',
         description:
-          'Libera la asignación previa y reevalúa el chofer con los datos actualizados. Puede conservar el mismo chofer o quedar pendiente. Recalcula tarifa si recibe origen, destino o vehículo. Si M5 no confirma la liberación, responde 503 sin aplicar los cambios locales; reintentar.',
+          'Invalida la ronda y asignación previas y solicita nuevas ofertas con los datos actualizados. El mismo chofer debe aceptar de nuevo; las respuestas a ofertas anteriores no son válidas. Puede quedar pendiente si nadie acepta. Recalcula tarifa si recibe origen, destino o vehículo. Si M5 no confirma la liberación, responde 503 sin aplicar cambios locales; reintentar.',
         operationId: 'actualizarReserva',
         requestBody: {
           required: true,
@@ -458,7 +458,8 @@ export const openApiDocument = {
             type: 'object',
             nullable: true,
             readOnly: true,
-            description: 'Chofer confirmado por M5. Null cuando no existe asignación.',
+            description:
+              'Chofer que aceptó una oferta vigente en M5. El id corresponde a la oferta aceptada. En AE1 la aceptación es simulada. Null cuando no existe asignación.',
             required: ['id', 'choferId', 'nombreChofer', 'valoracion'],
             additionalProperties: false,
             properties: {

@@ -174,7 +174,7 @@ const renderReservations = () => {
       createCell(
         'Chofer',
         reserva.asignacion
-          ? `${reserva.asignacion.nombreChofer} · ${reserva.asignacion.valoracion}/5`
+          ? `${reserva.asignacion.nombreChofer} · ${reserva.asignacion.valoracion}/5 · Aceptó`
           : reserva.estado === 'PENDIENTE_ASIGNACION'
             ? 'Todavía no hay chofer confirmado'
             : 'Sin asignación',
@@ -209,14 +209,16 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
   submitButton.disabled = true;
 
-  const payload = {
-    origen: origenInput.value.trim(),
-    destino: destinoInput.value.trim(),
-    vehiculo: form.elements.vehiculo.value,
-    fechaHoraProgramada: new Date(fechaInput.value).toISOString(),
-  };
-
   try {
+    const fecha = new Date(fechaInput.value);
+    if (!Number.isFinite(fecha.getTime())) throw new Error('Indicá una fecha y hora válidas.');
+    const payload = {
+      origen: origenInput.value.trim(),
+      destino: destinoInput.value.trim(),
+      vehiculo: form.elements.vehiculo.value,
+      fechaHoraProgramada: fecha.toISOString(),
+    };
+
     if (editingId === null) {
       const created = await requestJson('/reservas', {
         method: 'POST',
@@ -226,7 +228,7 @@ form.addEventListener('submit', async (event) => {
       showToast(
         created.estado === 'PENDIENTE_ASIGNACION'
           ? 'Reserva guardada, pendiente de asignación: todavía no hay chofer confirmado.'
-          : `Reserva creada con ${created.asignacion.nombreChofer}.`,
+          : `Reserva creada. ${created.asignacion.nombreChofer} aceptó la oferta (simulación M5).`,
       );
     } else {
       const updated = await requestJson(`/reservas/${editingId}`, {
@@ -237,7 +239,7 @@ form.addEventListener('submit', async (event) => {
       showToast(
         updated.estado === 'PENDIENTE_ASIGNACION'
           ? 'Reserva actualizada, pendiente de asignación: todavía no hay chofer confirmado.'
-          : `Reserva actualizada. Chofer: ${updated.asignacion.nombreChofer}.`,
+          : `Reserva actualizada. ${updated.asignacion.nombreChofer} aceptó la nueva oferta (simulación M5).`,
       );
     }
 

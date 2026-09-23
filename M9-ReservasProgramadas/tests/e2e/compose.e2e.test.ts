@@ -56,6 +56,7 @@ describe('E2E local contra contenedores', () => {
     });
     expect(actualizada.destino).toBe('Destino E2E actualizado');
     expect(actualizada.asignacion?.choferId).toBe(creada.asignacion?.choferId);
+    expect(actualizada.asignacion?.id).not.toBe(creada.asignacion?.id);
 
     const cancelada = await requestJson<Reserva>(`/reservas/${creada.id}`, { method: 'DELETE' });
     expect(cancelada.estado).toBe('CANCELADA');

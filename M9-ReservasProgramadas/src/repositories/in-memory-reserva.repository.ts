@@ -50,7 +50,7 @@ export class InMemoryReservaRepository implements ReservaRepository {
 
   public async listar(): Promise<Reserva[]> {
     return [...this.reservas.values()]
-      .sort((a, b) => a.fechaHoraProgramada.localeCompare(b.fechaHoraProgramada))
+      .sort((a, b) => Date.parse(a.fechaHoraProgramada) - Date.parse(b.fechaHoraProgramada))
       .map(clone);
   }
 
@@ -83,7 +83,7 @@ export class InMemoryReservaRepository implements ReservaRepository {
           reserva.asignacion !== null &&
           Date.parse(reserva.fechaHoraProgramada) <= fechaLimite.getTime(),
       )
-      .sort((a, b) => a.fechaHoraProgramada.localeCompare(b.fechaHoraProgramada))
+      .sort((a, b) => Date.parse(a.fechaHoraProgramada) - Date.parse(b.fechaHoraProgramada))
       .slice(0, limite)
       .map(clone);
   }

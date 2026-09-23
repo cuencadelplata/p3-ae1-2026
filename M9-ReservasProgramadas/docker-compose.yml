@@ -33,6 +33,7 @@ services:
     command: ['node', 'dist/stubs/m5/server.js']
     environment:
       PORT: 3001
+      M5_OFERTAS_ESCENARIO: ${M5_OFERTAS_ESCENARIO:-ACEPTAN}
     expose:
       - '3001'
     healthcheck:
