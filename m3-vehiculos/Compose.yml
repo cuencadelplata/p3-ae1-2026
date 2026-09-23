@@ -26,3 +26,10 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - "5672:5672"    # protocolo AMQP (lo usa tu app)
+      - "15672:15672"  # panel web de administración
+    restart: unless-stopped
