@@ -10,10 +10,11 @@ const redis = new Redis({
   port: redisPort,
   password: redisPassword,
   retryStrategy(times) {
-    const delay = Math.min(times * 200, 2000);
-    return delay;
+    if (times > 1) return null;
+    return 50;
   },
-  maxRetriesPerRequest: 3,
+  maxRetriesPerRequest: 1,
+  enableOfflineQueue: false
 });
 
 redis.on("connect", () => {

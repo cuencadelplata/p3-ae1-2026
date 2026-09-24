@@ -136,4 +136,36 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
     expect(body.error).toContain('entre 1 y 5');
   });
 
+  test('GET /api/conductor/:id/estado debe responder estado del conductor', async ({ request }) => {
+    const response = await request.get('/api/conductor/cond_001/estado');
+    expect(response.status()).toBe(200);
+
+    const body = await response.json();
+    expect(body.usuarioID).toBe('cond_001');
+    expect(body.habilitado).toBe(true);
+    expect(body.disponible).toBe(true);
+  });
+
+  test('GET /api/conductor/:id/habilitado y /disponible deben responder con la misma estructura', async ({ request }) => {
+    const resHab = await request.get('/api/conductor/cond_001/habilitado');
+    expect(resHab.status()).toBe(200);
+    const bodyHab = await resHab.json();
+    expect(bodyHab.usuarioID).toBe('cond_001');
+    expect(typeof bodyHab.habilitado).toBe('boolean');
+    expect(typeof bodyHab.disponible).toBe('boolean');
+
+    const resDisp = await request.get('/api/conductor/cond_001/disponible');
+    expect(resDisp.status()).toBe(200);
+    const bodyDisp = await resDisp.json();
+    expect(bodyDisp.usuarioID).toBe('cond_001');
+    expect(typeof bodyDisp.disponible).toBe('boolean');
+  });
+
+  test('GET /api/conductor/:id/estado responde 404 si no existe', async ({ request }) => {
+    const response = await request.get('/api/conductor/cond_inexistente_99/estado');
+    expect(response.status()).toBe(404);
+    const body = await response.json();
+    expect(body).toHaveProperty('error');
+  });
+
 });

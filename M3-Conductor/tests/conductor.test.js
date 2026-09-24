@@ -195,4 +195,58 @@ describe('Controlador Conductores (conductoresController)', () => {
       });
     });
   });
+
+  describe('obtenerEstadoConductor / habilitado / disponible', () => {
+    test('debe retornar 404 si el conductor no existe', async () => {
+      req.params = { id: 'no_existe' };
+      redisRepository.obtenerConductorPorId.mockResolvedValue(null);
+
+      await conductoresController.obtenerEstadoConductor(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: "Conductor con ID 'no_existe' no encontrado" });
+    });
+
+    test('debe retornar el estado con habilitado=true y disponible=true si cumple las condiciones', async () => {
+      req.params = { id: 'u123' };
+      const conductorMock = {
+        usuarioID: 'u123',
+        habilitado: 'activo',
+        estado_conexion: 'conectado'
+      };
+      redisRepository.obtenerConductorPorId.mockResolvedValue(conductorMock);
+
+      await conductoresController.obtenerEstadoConductor(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        usuarioID: 'u123',
+        habilitado: true,
+        disponible: true,
+        estado: 'activo',
+        estado_conexion: 'conectado'
+      });
+    });
+
+    test('debe retornar disponible=false si está desconectado', async () => {
+      req.params = { id: 'u123' };
+      const conductorMock = {
+        usuarioID: 'u123',
+        habilitado: 'activo',
+        estado_conexion: 'desconectado'
+      };
+      redisRepository.obtenerConductorPorId.mockResolvedValue(conductorMock);
+
+      await conductoresController.obtenerDisponibleConductor(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        usuarioID: 'u123',
+        habilitado: true,
+        disponible: false,
+        estado: 'activo',
+        estado_conexion: 'desconectado'
+      });
+    });
+  });
 });
