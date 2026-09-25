@@ -1,6 +1,23 @@
 version: '3.8'
 
 services:
+  tripdb:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=m6
+      - POSTGRES_PASSWORD=m6pass
+      - POSTGRES_DB=tripdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - tripdb_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U m6 -d tripdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   m6-viajes:
     image: noeediez/m6-viajes:1.0
     ports:
@@ -8,6 +25,16 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - M8_URL=${M8_URL:-http://m8:4001}
+      - M8_TIMEOUT_MS=${M8_TIMEOUT_MS:-3000}
+      - DB_HOST=tripdb
+      - DB_PORT=5432
+      - DB_USER=m6
+      - DB_PASSWORD=m6pass
+      - DB_NAME=tripdb
+    depends_on:
+      tripdb:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
       interval: 10s
@@ -15,3 +42,6 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  tripdb_data:
