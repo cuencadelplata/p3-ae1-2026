@@ -15,7 +15,9 @@
   "type": "module",
   "dependencies": {
     "express": "^5.2.1",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "axios": "^1.20.0",
+    "pg": "^8.13.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
@@ -27,5 +29,5 @@
     "tsx": "^4.23.12",
     "typescript": "^5.0.0",
     "vitest": "^4.1.11"
-}
+  }
 }
