@@ -23,7 +23,7 @@ describe('E2E Tests - Docker Container', () => {
 
     console.log('Iniciando contenedor de Docker...');
     try {
-      const result = execSync('docker run -d -p 3000:3000 m6-viajes:e2e', {
+      const result = execSync('docker run -d --network m6_viajes_default --add-host host.docker.internal:host-gateway -p 3000:3000 m6-viajes:e2e', {
         cwd: PROJECT_ROOT,
         encoding: 'utf-8',
       }).trim();
