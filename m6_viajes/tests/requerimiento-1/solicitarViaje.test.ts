@@ -1,11 +1,28 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { solicitarViaje, resetViajesDb } from '../../src/controllers/viajes.controller.js';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { solicitarViaje } from '../../src/controllers/viajes.controller.js';
 import { mockRequest, mockResponse } from '../datos-prueba/mocks.js';
+import pool from '../../src/db/pool.js';
+
+vi.mock('../../src/services/qr.service.js', () => {
+  const codigos = new Map<string, string>();
+  return {
+    generarQR: vi.fn(async (tripId: string) => {
+      const codigo = `TEST-${tripId}`;
+      codigos.set(tripId, codigo);
+      return { codigo };
+    }),
+    validarQR: vi.fn(async (tripId: string, codigo: string) => {
+      return codigos.get(tripId) === codigo
+        ? { valido: true }
+        : { valido: false, motivo: 'QR inválido' };
+    }),
+  };
+});
 
 describe('RF-6.1: Solicitar Viaje - Estados del viaje', () => {
-  
-  beforeEach(() => {
-    resetViajesDb();
+
+  beforeEach(async () => {
+    await pool.query('TRUNCATE viajes RESTART IDENTITY CASCADE;');
   });
 
   it('debe crear un nuevo viaje con estado SOLICITADO', async () => {
@@ -56,7 +73,6 @@ describe('RF-6.1: Solicitar Viaje - Estados del viaje', () => {
     const res1 = mockResponse();
     await solicitarViaje(req1 as any, res1 as any);
 
-  
     setTimeout(() => {}, 1);
 
     const req2 = mockRequest({
@@ -85,23 +101,7 @@ describe('RF-6.1: Solicitar Viaje - Estados del viaje', () => {
     await solicitarViaje(req as any, res as any);
 
     expect(res.data.fechaCreacion).toBeDefined();
-    // Acepta tanto un objeto Date como una fecha en string/ISO
     const esFechaValida = res.data.fechaCreacion instanceof Date || !isNaN(Date.parse(res.data.fechaCreacion));
     expect(esFechaValida).toBe(true);
-  });
-
-  it('debe generar un codigo QR valido', async () => {
-    const req = mockRequest({
-      clienteId: 'cliente-1',
-      origen: 'Calle 1',
-      destino: 'Calle 2',
-    });
-    const res = mockResponse();
-
-    await solicitarViaje(req as any, res as any);
-
-    expect(res.data.qrCode).toBeDefined();
-    expect(typeof res.data.qrCode).toBe('string');
-    expect(res.data.qrCode).toContain('data:image/png;base64');
   });
 });

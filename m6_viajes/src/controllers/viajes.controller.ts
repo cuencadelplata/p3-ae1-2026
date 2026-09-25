@@ -3,16 +3,18 @@ import type { Viaje } from '../models/viaje.model.js';
 import { EstadoViaje } from '../models/viaje.model.js';
 import { generarQR, validarQR } from '../services/qr.service.js';
 import * as viajeRepo from '../repositories/viaje.repository.js';
+import { randomUUID } from 'node:crypto';
 
 export const solicitarViaje = async (req: Request, res: Response): Promise<any> => {
     const { clienteId, origen, destino } = req.body;
-    const id = Date.now().toString();
+    const id = randomUUID();
 
     let codigoVerificacion: string;
     try {
         const respuesta = await generarQR(id);
         codigoVerificacion = respuesta.codigo;
     } catch (error) {
+        console.error('ERROR EN generarQR:', error);
         return res.status(503).json({ error: 'Servicio de QR no disponible, intente más tarde' });
     }
 
@@ -29,6 +31,7 @@ export const solicitarViaje = async (req: Request, res: Response): Promise<any> 
     try {
         await viajeRepo.crear(nuevoViaje);
     } catch (error) {
+        console.error('ERROR EN viajeRepo.crear:', error);
         return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
     }
 
@@ -37,6 +40,9 @@ export const solicitarViaje = async (req: Request, res: Response): Promise<any> 
 
 export const asignarConductor = async (req: Request, res: Response): Promise<any> => {
     const { id } = req.params;
+    if (typeof id !== 'string') {
+        return res.status(400).json({ error: 'Falta el id del viaje en la URL' });
+    }
     const { conductorId } = req.body;
 
     let viaje;
@@ -64,6 +70,9 @@ export const asignarConductor = async (req: Request, res: Response): Promise<any
 
 export const registrarArribo = async (req: Request, res: Response): Promise<any> => {
     const { id } = req.params;
+    if (typeof id !== 'string') {
+        return res.status(400).json({ error: 'Falta el id del viaje en la URL' });
+    }
 
     let viaje;
     try {
@@ -77,8 +86,6 @@ export const registrarArribo = async (req: Request, res: Response): Promise<any>
         return res.status(400).json({ error: `Transición inválida. El estado actual es ${viaje.estado}` });
     }
 
-    // TODO (RF-6.2): acá va la validación con M3 antes de confirmar el arribo
-
     try {
         await viajeRepo.actualizarEstado(id, EstadoViaje.ARRIBADO);
     } catch (error) {
@@ -91,6 +98,9 @@ export const registrarArribo = async (req: Request, res: Response): Promise<any>
 
 export const iniciarViaje = async (req: Request, res: Response): Promise<any> => {
     const { id } = req.params;
+    if (typeof id !== 'string') {
+        return res.status(400).json({ error: 'Falta el id del viaje en la URL' });
+    }
     const { codigoVerificacion } = req.body;
 
     let viaje;
