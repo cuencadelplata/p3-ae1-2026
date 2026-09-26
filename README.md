@@ -1,113 +1,184 @@
-# M7 - Tarifas, Pagos y Liquidaciones
-Paradigmas 3 - AE1 2026
+# Historial Financiero — RF-7.7
 
-Implementa el cálculo de reintegros por cancelación (RF-7.5), la verificación de
-idempotencia de pagos (RF-7.6), el registro de métodos de pago (RF-7.2)
-y la autorización/rechazo de cobros (RF-7.3).
-
-Repositorio: https://github.com/cuencadelplata/p3-ae1-2026
-Rama: M7--Tarifas,-Pagos-y-Liquidaciones
+API que mantiene la trazabilidad de operaciones financieras y su estado (pendiente, completada, fallida, cancelada).
 
 ## Requisitos
-- Docker Desktop instalado y corriendo
-- Proyecto descargado (clonado o descomprimido)
-- Terminal para comando (CMD o PowerShell)
 
-## Imagen publicada en Docker Hub
-- Nombre: `aylen0/m7-tarifas`
-- Enlace: https://hub.docker.com/r/aylen0/m7-tarifas
-- Versión: `4.0`
+- [Node.js](https://nodejs.org/) v20 o superior
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (opcional, para correr en contenedor)
 
+## Instalación
 
-## Levantar con Docker Hub
+Clonar el repositorio e instalar las dependencias:
 
-### Paso 1: abrir la terminal
-Abrir "cmd" o "PowerShell" en el menú de inicio y abrirlo
-
-### Paso 2: descargar la imagen desde Docker Hub
-Escribir el comando en la terminal:
-- docker pull aylen0/m7-tarifas:4.0
-
-### Paso 3: levantar el contenedor
-Nuevamente en la terminal colocar:
-- docker run -d -p 3000:3000 --name m7-tarifas aylen0/m7-tarifas:4.0
-
-### Paso 4: verificar que está vivo
-CMD:
-- curl -X POST http://localhost:3000/reintegro -H "Content-Type: application/json" -d "{\"montoCancelacion\": 1000, \"viajeId\": \"v1\"}"
-PowerShell:
-- curl.exe -X POST http://localhost:3000/reintegro -H "Content-Type: application/json" -d '{\"montoCancelacion\": 1000, \"viajeId\": \"v1\"}'
-
-Respuesta esperada:
-```json
-{"monto":950,"viajeId":"v1"}
+```bash
+npm install
 ```
 
-### Paso 5: ver documentación interactiva de la API
-    Abrir Google/Edge/Brave/etc. y entrar a: http://localhost:3000/docs 
+## Ejecutar en local
 
-### Paso 6: probar el resto de los endpoints (opcional)
-CMD:
-- curl http://localhost:3000/pagos/o1/duplicado
+Compilar el proyecto TypeScript:
 
-PowerShell:
-- curl.exe http://localhost:3000/pagos/o1/duplicado
+```bash
+npm run build
+```
 
+Levantar el servidor:
 
-CMD:
-- curl -X POST http://localhost:3000/metodo-pago -H "Content-Type: application/json" -d "{\"clienteId\": \"cliente1\", \"viajeId\": \"v1\", \"tipo\": \"efectivo\"}"
+```bash
+npm start
+```
 
-PowerShell:
-- curl.exe -X POST http://localhost:3000/metodo-pago -H "Content-Type: application/json" -d '{\"clienteId\": \"cliente1\", \"viajeId\": \"v1\", \"tipo\": \"efectivo\"}'
+El servidor queda escuchando en `http://localhost:3000`.
 
+## Ejecutar con Docker
 
-CMD:
-- curl http://localhost:3000/metodo-pago/v1
+La aplicación y PostgreSQL se ejecutan en contenedores separados. Compose crea además un volumen persistente para que los datos no se pierdan al recrear los contenedores.
 
-PowerShell:
-- curl.exe http://localhost:3000/metodo-pago/v1
+```bash
+docker compose up --build
+```
 
+La API queda disponible en `http://localhost:3000`. Para detener los servicios:
 
-CMD:
-- curl -X POST http://localhost:3000/metodo-pago/v1/autorizar -H "Content-Type: application/json" -d "{\"idOrden\": \"orden-1\"}"
+```bash
+docker compose down
+```
 
-PowerShell:
-- curl.exe -X POST http://localhost:3000/metodo-pago/v1/autorizar -H "Content-Type: application/json" -d '{\"idOrden\": \"orden-1\"}'
+Para eliminar también los datos persistidos de PostgreSQL:
 
+```bash
+docker compose down -v
+```
 
+Cuando `DATABASE_URL` está definida, la API crea automáticamente la tabla `financial_operations` al iniciar y persiste allí las operaciones. Si se ejecuta localmente sin esa variable, conserva el modo en memoria para facilitar el desarrollo.
 
-### Paso 7: apagar y borrar el contenedor
-En terminal:
-    docker stop m7-tarifas
-    docker rm m7-tarifas
+## Endpoints
 
+| Método | Ruta                        | Descripción                          |
+|--------|-----------------------------|---------------------------------------|
+| GET    | `/operations`                | Consultar el historial de operaciones |
+| POST   | `/operations`                | Registrar una nueva operación         |
+| PATCH  | `/operations/{id}/status`    | Actualizar el estado de una operación |
 
+La documentación completa de la API está en [`openapi.yaml`](./openapi.yaml).
 
-## Cómo correr los tests (requiere el código fuente y Node.js)
-Para probar esta parte es necesario tener el código descargado y Node.js instalado
+## Documentación interactiva (Scalar)
 
-### Paso 1: instalar Node.js
-Descargar e instalar desde: https://nodejs.org (versión 18 o superior)
+Con el servidor corriendo, se puede explorar y probar la API de forma interactiva en:
 
-### Paso 2: descargar el código del repositorio
+```
+http://localhost:3000/docs
+```
 
-En la terminal, ubicado en la carpeta donde quiera guardar el proyecto:
-- git clone --single-branch --branch "M7--Tarifas,-Pagos-y-Liquidaciones" https://github.com/cuencadelplata/p3-ae1-2026.git
-- cd p3-ae1-2026
-- git checkout "M7--Tarifas,-Pagos-y-Liquidaciones"
+Esta vista se genera automáticamente a partir de `openapi.yaml` usando [Scalar](https://scalar.com/), y permite ver ejemplos de request/response de cada endpoint y ejecutar pedidos de prueba directamente desde el navegador.
 
-### Paso 3: instalar las dependencias del proyecto
-Parado dentro de la carpeta del proyecto, en la terminal:
-- npm install
+**Importante:** si se edita `openapi.yaml`, hay que reiniciar el servidor (`Ctrl+C` y `npm start` de nuevo) para que los cambios se reflejen, ya que el archivo se lee una sola vez al arrancar.
 
-### Paso 4: correr los tests unitarios y de integración
-- npm run test:unit
+### Ejemplo — crear una operación
 
-### Paso 5: correr los tests End-to-End (requiere el contenedor corriendo)
-Con el contenedor ya levantado (Pasos 2-3 de la sección anterior):
-- npx playwright test --project=m7-tarifas
+```bash
+curl -X POST http://localhost:3000/operations \
+  -H "Content-Type: application/json" \
+  -d '{"type":"payment","amount":1500}'
+```
 
-### Paso 6: ver cobertura de tests (opcional)
-- npm run test:coverage
+### Ejemplo — actualizar el estado
 
-Cobertura actual: 100% de los 4 RF implementados
+```bash
+curl -X PATCH http://localhost:3000/operations/op_123/status \
+  -H "Content-Type: application/json" \
+  -d '{"status":"completed"}'
+```
+
+## Tests
+
+Los tests automatizados usan [Playwright](https://playwright.dev/) y prueban la API real contra un servidor corriendo en `http://localhost:3000`. Cubren las 3 rutas (`GET`, `POST`, `PATCH`) con casos válidos e inválidos.
+
+### Ejecutar los tests en local
+
+1. Instalar las dependencias del proyecto (si no se hizo antes):
+
+```bash
+npm install
+```
+
+2. Instalar los navegadores que necesita Playwright (solo la primera vez):
+
+```bash
+npx playwright install
+```
+
+3. Compilar el proyecto:
+
+```bash
+npm run build
+```
+
+4. Ejecutar los tests:
+
+```bash
+npm test
+```
+
+Los tests esperan que la API ya esté disponible en `http://localhost:3000`.
+
+### Ejecutar los tests en Docker
+
+Construir la imagen:
+
+```bash
+docker build -f dockerfile -t historial-financiero:test .
+```
+
+Levantar la API en segundo plano:
+
+```bash
+docker run -d --name historial-financiero -p 3000:3000 lautaro0910/ae1repo:latest
+```
+
+Ejecutar los tests desde otra terminal:
+
+```bash
+npm test
+```
+
+Si se detiene el contenedor, `npm test` debe fallar por conexión rechazada. Para detenerlo:
+
+```bash
+docker stop historial-financiero
+```
+
+### Resultado esperado
+
+Los 8 tests deberían pasar, cubriendo:
+- Consulta del historial (inicial y tras registrar operaciones)
+- Registro de una operación válida
+- Rechazo de `amount` inválido (no numérico)
+- Rechazo de `type` inválido
+- Actualización de estado válida
+- Rechazo de un nuevo estado inválido
+- Actualización sobre un `id` inexistente (`404`)
+
+### Reportes adicionales
+
+Para ver los tests corriendo con más detalle visual, o generar un reporte HTML:
+
+```bash
+npm run test:headed
+npm run test:report
+```
+
+## Estructura del proyecto
+
+```
+historial-financiero/
+├── src/
+│   └── index.ts          # Lógica + servidor Express
+├── tests/
+│   └── financialHistory.spec.ts
+├── openapi.yaml           # Contrato de la API
+├── Dockerfile
+├── package.json
+└── tsconfig.json
+```

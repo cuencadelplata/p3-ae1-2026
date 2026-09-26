@@ -1,6 +1,0 @@
-# Archivos compilados accidentales en tests
-tests/*.js
-tests/*.d.ts*
-tests/*.js.map
-playwright.config.js*
-playwright.config.d.ts*

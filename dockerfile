@@ -11,3 +11,5 @@ RUN npx tsc
 EXPOSE 3000
 
 CMD ["node", "dist/index.js"]
+
+# Uso: docker run --rm historial-financiero npm test

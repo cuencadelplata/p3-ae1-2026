@@ -1,8 +1,34 @@
+# Dependencias
+node_modules/
+
+# Build de TypeScript
+dist/
+
+# Resultados y reportes de Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
 # Archivos compilados accidentales en tests
 tests/*.js
 tests/*.d.ts*
 tests/*.js.map
 playwright.config.js*
 playwright.config.d.ts*
-node_modules/
-dist/
+
+# Variables de entorno / secretos
+.env
+.env.local
+.env.*.local
+
+# Logs
+npm-debug.log*
+*.log
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md
