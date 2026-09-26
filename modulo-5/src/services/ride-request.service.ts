@@ -18,6 +18,8 @@ import {
 } from '../types/ride-request.types';
 import { RideRequestValidator } from '../schemas/ride-request.schema';
 import { randomUUID } from 'node:crypto';
+import { RedisService } from './redis.service';
+import { RabbitMQService } from './rabbitmq.service';
 
 export class ConflictError extends Error {
   public code: string;
@@ -56,6 +58,23 @@ export class RideRequestService {
   private requests: Map<string, RideRequest> = new Map();
   private idempotencyStore: Map<string, RideRequest> = new Map();
   private offers: Map<string, RideOffer> = new Map();
+
+  // Servicios de soporte para AE2 (RNF-06 y RNF-07)
+  private redisService: RedisService;
+  private rabbitMQService: RabbitMQService;
+
+  constructor(redisService?: RedisService, rabbitMQService?: RabbitMQService) {
+    this.redisService = redisService || new RedisService();
+    this.rabbitMQService = rabbitMQService || new RabbitMQService();
+  }
+
+  public getRedisService(): RedisService {
+    return this.redisService;
+  }
+
+  public getRabbitMQService(): RabbitMQService {
+    return this.rabbitMQService;
+  }
 
 
   /**
@@ -354,6 +373,24 @@ export class RideRequestService {
 
       this.offers.set(offer.id, offer);
       createdOffers.push(offer);
+
+      // RF-5.3 / RNF-06: Persistir oferta en Redis con expiración automática (TTL)
+      await this.redisService.saveOfferWithTtl(offer, ttlSeconds);
+
+      // RF-5.3 / RNF-07: Publicar mensaje asíncrono a RabbitMQ para avisar al conductor
+      await this.rabbitMQService.publishOfferCreated({
+        eventType: 'OFFER_CREATED',
+        offerId: offer.id,
+        requestId: request.id,
+        driverId,
+        ttlSeconds,
+        expiresAt: offer.expiresAt,
+        origin: offer.origin,
+        destination: offer.destination,
+        vehicleType: offer.vehicleType,
+        estimatedFare: offer.estimatedFare,
+        timestamp: now.toISOString()
+      });
     }
 
     // 5. Transicionar estado de la solicitud a OFFERED
@@ -362,14 +399,14 @@ export class RideRequestService {
     this.requests.set(requestId, request);
 
     console.log(
-      `[RF-5.3] Ofertas despachadas: Solicitud=${request.id} | Cantidad=${createdOffers.length} | TTL=${ttlSeconds}s (Expira: ${expiresAt.toISOString()}) | Conductores=[${createdOffers.map((o) => `${o.driverId} (Oferta: ${o.id})`).join(', ')}]`
+      `[RF-5.3] Ofertas despachadas con Redis TTL (${ttlSeconds}s) y RabbitMQ: Solicitud=${request.id} | Cantidad=${createdOffers.length} | Conductores=[${createdOffers.map((o) => `${o.driverId} (Oferta: ${o.id})`).join(', ')}]`
     );
 
     return {
       requestId: request.id,
       offersSentCount: createdOffers.length,
       offers: createdOffers,
-      message: `Oferta enviada exitosamente a ${createdOffers.length} conductor(es) con TTL de ${ttlSeconds}s.`
+      message: `Oferta enviada exitosamente a ${createdOffers.length} conductor(es) con TTL de ${ttlSeconds}s (Redis + RabbitMQ).`
     };
   }
 
@@ -425,14 +462,16 @@ export class RideRequestService {
       );
     }
 
-    // 4. Verificar vigencia por tiempo (TTL)
+    // 4. Verificar vigencia por tiempo (TTL con Redis)
+    const remainingTtl = await this.redisService.getRemainingTtl(offerId);
     const now = new Date();
     const nowTime = now.getTime();
     const expiresAtTime = new Date(offer.expiresAt).getTime();
 
-    if (nowTime > expiresAtTime || offer.status === 'EXPIRED') {
+    if (remainingTtl === -2 || nowTime > expiresAtTime || offer.status === 'EXPIRED') {
       offer.status = 'EXPIRED';
       this.offers.set(offerId, offer);
+      await this.redisService.deleteOffer(offerId);
       throw new ConflictError(
         'La oferta ha expirado y ya no está vigente',
         'OFFER_EXPIRED'
@@ -456,6 +495,8 @@ export class RideRequestService {
     if (action === 'REJECT') {
       offer.status = 'REJECTED';
       this.offers.set(offerId, offer);
+      // Eliminar de Redis ya que no está disponible
+      await this.redisService.deleteOffer(offerId);
 
       // Si todas las ofertas para esta solicitud fueron rechazadas o expiraron
       const relatedOffers = Array.from(this.offers.values()).filter(
@@ -488,6 +529,7 @@ export class RideRequestService {
     if (request.status === 'ASSIGNED') {
       offer.status = 'EXPIRED'; // La oferta queda revocada porque ya se asignó a otro
       this.offers.set(offerId, offer);
+      await this.redisService.deleteOffer(offerId);
       throw new ConflictError(
         'La solicitud de viaje ya fue asignada a otro conductor',
         'REQUEST_ALREADY_ASSIGNED'
@@ -497,6 +539,7 @@ export class RideRequestService {
     if (request.status === 'CANCELLED') {
       offer.status = 'EXPIRED';
       this.offers.set(offerId, offer);
+      await this.redisService.deleteOffer(offerId);
       throw new ConflictError(
         'La solicitud de viaje fue cancelada por el cliente y ya no se encuentra disponible',
         'REQUEST_CANCELLED'
@@ -506,6 +549,7 @@ export class RideRequestService {
     if (request.status === 'EXPIRED') {
       offer.status = 'EXPIRED';
       this.offers.set(offerId, offer);
+      await this.redisService.deleteOffer(offerId);
       throw new ConflictError(
         `La solicitud de viaje no está disponible para ser aceptada (estado: ${request.status})`,
         'REQUEST_NOT_AVAILABLE'
@@ -515,6 +559,7 @@ export class RideRequestService {
     // 8. Asignar la solicitud y marcar la oferta como ACCEPTED
     offer.status = 'ACCEPTED';
     this.offers.set(offerId, offer);
+    await this.redisService.deleteOffer(offerId);
 
     request.status = 'ASSIGNED';
     request.assignedDriverId = offer.driverId;
@@ -522,15 +567,16 @@ export class RideRequestService {
     this.requests.set(request.id, request);
 
     // 9. Cancelar / expirar automáticamente las demás ofertas pendientes para esta misma solicitud
-    Array.from(this.offers.values())
-      .filter((o) => o.requestId === request.id && o.id !== offer.id && o.status === 'PENDING')
-      .forEach((otherOffer) => {
-        otherOffer.status = 'EXPIRED';
-        this.offers.set(otherOffer.id, otherOffer);
-      });
+    for (const otherOffer of Array.from(this.offers.values()).filter(
+      (o) => o.requestId === request.id && o.id !== offer.id && o.status === 'PENDING'
+    )) {
+      otherOffer.status = 'EXPIRED';
+      this.offers.set(otherOffer.id, otherOffer);
+      await this.redisService.deleteOffer(otherOffer.id);
+    }
 
     console.log(
-      `[RF-5.4 / RF-5.5] Oferta ${offer.id} ACEPTADA por conductor ${offer.driverId}. Solicitud ${request.id} ASIGNADA exclusivamente a ${offer.driverId}.`
+      `[RF-5.4 / RF-5.5] Oferta ${offer.id} ACEPTADA por conductor ${offer.driverId}. Solicitud ${request.id} ASIGNADA exclusivamente a ${offer.driverId}. Ofertas restantes limpiadas de Redis.`
     );
 
     return {
@@ -597,15 +643,16 @@ export class RideRequestService {
     this.requests.set(request.id, request);
 
     // 5. Invalidar/expirar inmediatamente todas las ofertas asociadas que sigan pendientes
-    Array.from(this.offers.values())
-      .filter((o) => o.requestId === request.id && o.status === 'PENDING')
-      .forEach((pendingOffer) => {
-        pendingOffer.status = 'EXPIRED';
-        this.offers.set(pendingOffer.id, pendingOffer);
-      });
+    for (const pendingOffer of Array.from(this.offers.values()).filter(
+      (o) => o.requestId === request.id && o.status === 'PENDING'
+    )) {
+      pendingOffer.status = 'EXPIRED';
+      this.offers.set(pendingOffer.id, pendingOffer);
+      await this.redisService.deleteOffer(pendingOffer.id);
+    }
 
     console.log(
-      `[RF-5.6] Solicitud de viaje ${request.id} CANCELADA por cliente ${clientId}. Motivo="${request.cancellationReason || 'Sin motivo especificado'}"`
+      `[RF-5.6] Solicitud de viaje ${request.id} CANCELADA por cliente ${clientId}. Motivo="${request.cancellationReason || 'Sin motivo especificado'}". Ofertas en Redis eliminadas.`
     );
 
     return {
@@ -619,17 +666,19 @@ export class RideRequestService {
   }
 
   /**
-   * Obtiene una oferta por su ID
+   * Obtiene una oferta por su ID (consultando Redis para TTL dinámico)
    */
   public async getOfferById(offerId: string): Promise<RideOffer> {
     const offer = this.offers.get(offerId);
     if (!offer) {
       throw new NotFoundError('Oferta no encontrada', 'OFFER_NOT_FOUND');
     }
+    const remainingTtl = await this.redisService.getRemainingTtl(offerId);
     const now = new Date().getTime();
-    if (offer.status === 'PENDING' && new Date(offer.expiresAt).getTime() < now) {
+    if (offer.status === 'PENDING' && (remainingTtl === -2 || new Date(offer.expiresAt).getTime() < now)) {
       offer.status = 'EXPIRED';
       this.offers.set(offerId, offer);
+      await this.redisService.deleteOffer(offerId);
     }
     return offer;
   }

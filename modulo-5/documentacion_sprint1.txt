@@ -1,0 +1,46 @@
+DOCUMENTACIÓN SPRINT 1 - MÓDULO 5 (SOLICITUD Y DESPACHO)
+Responsable: Romer
+
+REQUERIMIENTOS ASIGNADOS:
+1. Búsqueda de candidatos (Seleccionar conductores por proximidad y tipo de vehículo)
+2. Oferta con vencimiento (Enviar oferta a conductores con tiempo máximo de respuesta)
+
+================================================================================
+REQUERIMIENTO 1: BÚSQUEDA DE CANDIDATOS
+================================================================================
+
+Objetivo:
+Filtrar y seleccionar conductores disponibles cerca del punto de origen del pasajero, que tengan el tipo de vehículo solicitado.
+
+Conexión con otros Módulos:
+- Módulo 4 (Gestión de Conductores / Ubicación): Necesitamos saber dónde están los conductores. 
+
+Servidor Externo / Backing Service a utilizar:
+- REDIS (Estructura de datos espaciales - GEO)
+
+Cómo funciona la integración:
+No nos vamos a conectar directamente al Módulo 4 mediante una API HTTP. En su lugar, usaremos Redis como punto de encuentro (caché de ubicaciones).
+1. El Módulo 4 actualizará constantemente la ubicación de sus conductores en Redis usando comandos GEO (ej. GEOADD).
+2. Mi módulo (Módulo 5) consultará directamente a Redis usando comandos de búsqueda espacial (ej. GEOSEARCH) para obtener la lista de conductores cercanos en milisegundos.
+
+
+================================================================================
+REQUERIMIENTO 2: OFERTA CON VENCIMIENTO
+================================================================================
+
+Objetivo:
+Enviar la solicitud de viaje a los conductores seleccionados, dándoles un tiempo límite (TTL) para aceptar o rechazar. Si nadie acepta a tiempo, la oferta expira automáticamente.
+
+Conexión con otros Módulos:
+- Este flujo es principalmente interno del Módulo 5, aunque el envío final de la notificación al celular del conductor podría depender de un servicio de notificaciones genérico (si existe en la arquitectura global).
+
+Servidor Externo / Backing Service a utilizar:
+- REDIS (Manejo de TTL - Expiración de claves)
+- RABBITMQ (Asincronía para notificaciones)
+
+Cómo funciona la integración:
+1. REDIS para el vencimiento (TTL): 
+   Cuando se genera la oferta, se guarda en Redis con un tiempo de expiración automático (comando EXPIRE). Redis se encarga de borrar la oferta sola cuando el tiempo se acaba. Usaremos "Keyspace Notifications" para enterarnos cuando Redis borre la clave y así marcar la solicitud como "Sin conductores disponibles".
+
+2. RABBITMQ para no bloquear al usuario:
+   Cuando se crean las ofertas, en lugar de intentar mandarle el aviso al celular del conductor de forma síncrona (lo que haría esperar de más al pasajero), publicamos un mensaje en una cola de RabbitMQ. Un proceso de fondo (worker) leerá esa cola y se encargará de avisarle al conductor. Así, le respondemos rápido al pasajero ("Buscando conductor...") mientras el sistema trabaja por atrás.

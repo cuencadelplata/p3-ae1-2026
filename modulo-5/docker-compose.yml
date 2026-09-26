@@ -12,6 +12,14 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3005
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - M4_SERVICE_URL=http://m4-service:3004
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     restart: unless-stopped
     volumes:
       - ./openapi:/app/openapi:ro
@@ -22,6 +30,35 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: m5-redis
+    ports:
+      - '6379:6379'
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: m5-rabbitmq
+    ports:
+      - '5672:5672'    # Puerto AMQP para publicación/consumo
+      - '15672:15672'  # Panel web de gestión de RabbitMQ
+    restart: unless-stopped
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   scalar-docs:
     build:
@@ -37,4 +74,3 @@ services:
     depends_on:
       - dispatch-service
     restart: unless-stopped
-
