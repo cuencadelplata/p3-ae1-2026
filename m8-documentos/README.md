@@ -1,0 +1,347 @@
+# M8 - Notificaciones, Documentos y Soporte (Comprobantes PDF)
+
+**Grupo 14:** Juan Gualtieri, Lucas Cremaschi, Meza Santiago  
+**Materia:** ISI - Paradigmas de Programación 3 (2026)  
+**Alcance Asignado:** RF-8.3 (Comprobante PDF) y RF-8.4 (Reenvío de Comprobante)  
+
+Microservicio responsable de la emisión, consulta, descarga y reenvío del comprobante de viaje en PDF con soporte de concurrencia e idempotencia.
+
+Alcance implementado en AE1:
+
+| RF | Titulo | Responsables | Estado |
+| --- | --- | --- | --- |
+| **RF-8.3** | **Comprobante PDF** | **Juan Gualtieri, Lucas Cremaschi, Meza Santiago** | **Implementado y Probado** |
+| **RF-8.4** | **Reenvio de comprobante** | **Juan Gualtieri, Lucas Cremaschi, Meza Santiago** | **Implementado y Probado** |
+| RF-8.1 | Notificaciones de viaje | Grupo 6 (Subgrupo Notificaciones) | Rama `feature/m8-r81-notifications-grupo6` |
+| RF-8.2 | QR de verificacion | Grupo 6 (Subgrupo QR) | Rama `feature/m8-r82-qr-grupo6` |
+| RF-8.5 | Soporte asociado a viaje | Módulo M8 | Previsto para AE2 |
+| RF-8.6 | Consumo asincrono (RabbitMQ) | Módulo M8 | Previsto para AE2 |
+
+## Requerimientos Mínimos del Sistema
+
+Para clonar, desplegar y operar este microservicio, únicamente se requiere:
+
+- **Git** (v2.x o superior): Para el control de versiones y clonado de ramas.
+- **Docker Desktop** (v24.x o superior): Con soporte para contenedores Linux y motor WSL2 habilitado (en Windows).
+- **Docker Compose** (v2.x o superior): Incluido por defecto con Docker Desktop.
+
+---
+
+## Programas que deben estar abiertos antes de iniciar
+
+Antes de ejecutar los comandos del proyecto, asegúrate de tener abiertos:
+
+1. **Docker Desktop**:
+   - **Indispensable:** Debe estar abierto y en ejecución.
+   - Verifica que el ícono en la esquina inferior izquierda esté en verde (**"Engine running"**). Si Docker Desktop está cerrado o iniciando, los comandos de Docker fallarán indicando que no se puede conectar al daemon.
+2. **Terminal o Editor de Código**:
+   - PowerShell / Git Bash o tu editor (VS Code, Cursor, Antigravity) posicionado en la carpeta `m8-documentos`.
+
+---
+
+## Puesta en marcha con Docker
+
+La puesta en marcha del microservicio se realiza exclusivamente mediante **Docker Compose**:
+
+### 1. Iniciar el servicio:
+```bash
+# Situado dentro de la carpeta m8-documentos
+docker compose up -d
+```
+
+### 2. Ver registros (logs) en tiempo real:
+```bash
+docker compose logs -f
+```
+
+### 3. Detener el contenedor:
+```bash
+docker compose down
+```
+
+---
+
+## Ejecución de Pruebas con Docker
+
+No se requiere tener instalado Node.js ni npm en la computadora anfitriona. Toda la suite de pruebas se puede ejecutar directamente a través de Docker:
+
+### 1. Ejecutar todas las pruebas juntas (Recomendado):
+```bash
+# Situado dentro de la carpeta m8-documentos
+docker compose run test
+```
+*(Si realizaste modificaciones en el código o en la configuración, agrega la bandera `--build`: `docker compose run --build test`).*
+
+Este comando unificado ejecuta en secuencia:
+1. **Chequeo de Tipos (`typecheck`):** Valida la consistencia de tipos con TypeScript.
+2. **Tests Automatizados (`test`):** Corre los 22 tests (unitarios y de integración HTTP con `node:test`).
+3. **Prueba de Concurrencia (`prueba:concurrencia`):** Levanta el microservicio y dispara 8 solicitudes paralelas sobre el mismo `tripId` para validar la idempotencia (1 x `201` y 7 x `200`).
+
+---
+
+### 2. Ejecutar pruebas individuales de forma manual:
+
+Si deseas correr una sola prueba específica sin tener Node instalado en tu PC, puedes pasarle el comando deseado a Docker Compose:
+
+```bash
+# A) Correr únicamente los 22 tests unitarios y de integración:
+docker compose run test npm test
+
+# B) Correr únicamente la prueba de concurrencia e idempotencia:
+docker compose run test npm run prueba:concurrencia
+
+# C) Correr únicamente la verificación de tipos de TypeScript:
+docker compose run test npm run typecheck
+```
+
+---
+
+### 3. Detener los contenedores:
+Una vez finalizadas las pruebas o el uso del servicio, detén los contenedores con:
+```bash
+docker compose down
+```
+
+---
+
+## Verificación de Salud y Documentación Interactiva
+
+Una vez que el servicio esté corriendo con Docker:
+
+* **Healthcheck (Estado de salud):**  
+  Abre en tu navegador o ejecuta en terminal:  
+  `http://localhost:3008/health` (debe responder `200 OK` con `{ "status": "ok" }`).
+* **Documentación interactiva (Scalar API Reference):**  
+  `http://localhost:3008/docs` o `http://localhost:3008/api/v1/docs`.
+* **Especificación OpenAPI (JSON/YAML):**  
+  `http://localhost:3008/api/v1/docs/openapi.json`  
+  `http://localhost:3008/api/v1/docs/openapi.yaml`
+
+## Configuracion
+
+Todas las variables se leen del entorno; ninguna clave ni cadena de conexion se
+versiona en el repositorio (RNF-11). El detalle completo esta en `.env.example`.
+
+| Variable | Valor por defecto | Descripcion |
+| --- | --- | --- |
+| `NODE_ENV` | `development` | Entorno de ejecucion |
+| `PORT` | `3008` | Puerto HTTP del servicio |
+| `SERVICE_VERSION` | `1.0.0` | Version reportada por `/health` |
+| `API_PREFIX` | `/api/v1` | Prefijo de la API REST |
+| `STATIC_PREFIX` | `/files/receipts` | Ruta publica de descarga directa de PDF |
+| `PUBLIC_BASE_URL` | `http://localhost:3008` | URL base usada para construir los enlaces |
+| `CORS_ORIGIN` | `*` | Origenes permitidos, o lista separada por comas |
+| `STORAGE_DIR` | `storage/receipts` | Directorio de persistencia |
+| `RECEIPT_ISSUER_NAME` | `Plataforma de Movilidad Urbana` | Encabezado del comprobante |
+| `RECEIPT_ISSUER_TEAM` | `Grupo 14 - Modulo 8` | Subtitulo impreso en el PDF |
+| `RECEIPT_TIMEZONE` | `America/Argentina/Buenos_Aires` | Zona horaria de las fechas del PDF |
+| `RECEIPT_LOCALE` | `es-AR` | Formato de importes y fechas |
+
+## API
+
+Base: `http://localhost:3008/api/v1`
+
+### `POST /receipts`
+
+Emite el comprobante de un viaje finalizado. Es **idempotente por `tripId`**:
+responde `201` cuando emite el comprobante y `200` cuando ya existia.
+
+```bash
+curl -X POST http://localhost:3008/api/v1/receipts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tripId": "trip-2026-000123",
+    "customer": {
+      "id": "cli-0091",
+      "fullName": "Lucia Fernandez",
+      "email": "lucia.fernandez@example.com",
+      "documentId": "38.442.019"
+    },
+    "driver": {
+      "id": "cnd-0457",
+      "fullName": "Martin Rodriguez",
+      "vehicle": { "type": "AUTO", "plate": "AB123CD", "model": "Toyota Etios 2021" }
+    },
+    "trip": {
+      "origin": "Av. Colon 1250, Cordoba",
+      "destination": "Aeropuerto Ambrosio Taravella",
+      "startedAt": "2026-08-28T13:05:00.000Z",
+      "finishedAt": "2026-08-28T13:36:00.000Z",
+      "distanceKm": 14.8,
+      "durationMin": 31
+    },
+    "fare": {
+      "currency": "ARS",
+      "baseFare": 1200,
+      "distanceAmount": 5920,
+      "timeAmount": 1550,
+      "surcharges": 430,
+      "discounts": 600,
+      "total": 8500
+    },
+    "payment": { "method": "TARJETA", "status": "APROBADO", "authorizationCode": "AUTH-77321" }
+  }'
+```
+
+Reglas de validacion relevantes:
+
+- `tripId`: letras, numeros, guion y guion bajo, hasta 64 caracteres.
+- `driver.vehicle.type`: `AUTO` o `MOTO`.
+- `payment.method`: `EFECTIVO`, `TARJETA` o `BILLETERA`.
+- `payment.status`: `APROBADO`, `PENDIENTE` o `RECHAZADO`.
+- `fare.total` es obligatorio. El desglose es opcional, pero si se informa debe
+  cerrar con el total (`baseFare + distanceAmount + timeAmount + surcharges - discounts`).
+
+### `GET /receipts/:tripId`
+
+Devuelve los metadatos del comprobante, su historial de entregas y los enlaces
+de descarga.
+
+### `GET /receipts/:tripId/pdf`
+
+Descarga controlada del PDF, con `Content-Disposition: attachment`.
+
+### `POST /receipts/:tripId/resend`
+
+Vuelve a solicitar el envio del comprobante (RF-8.4). Sin cuerpo utiliza el
+email registrado del cliente; opcionalmente admite `{ "channel": "EMAIL", "destination": "..." }`
+con `channel` en `EMAIL`, `SMS` o `PUSH`. Responde `202` y registra la entrega.
+
+En AE1 el envio se simula: se deja constancia en el historial del comprobante y
+se devuelve el enlace de descarga. En AE2 este punto pasa a publicar un evento
+en RabbitMQ hacia el canal de notificaciones.
+
+### `GET /health`
+
+Estado del servicio y de su almacenamiento. Devuelve `503` cuando el directorio
+de persistencia no esta disponible.
+
+Es el unico endpoint que **no** cuelga del prefijo `/api/v1`: se expone en la
+raiz (`http://localhost:3008/health`) para que el `HEALTHCHECK` del contenedor y
+un eventual balanceador no dependan de la version de la API.
+
+### Descarga estatica
+
+Los PDF tambien se publican como archivos estaticos en
+`http://localhost:3008/files/receipts/<tripId>.pdf`.
+
+### Formato de error
+
+Todas las respuestas de error comparten la misma estructura (RNF-05):
+
+```json
+{
+  "error": {
+    "code": "RECEIPT_NOT_FOUND",
+    "message": "No existe un comprobante emitido para el viaje trip-000",
+    "path": "/api/v1/receipts/trip-000",
+    "timestamp": "2026-08-28T10:55:36.653Z"
+  }
+}
+```
+
+| Codigo | HTTP | Situacion |
+| --- | --- | --- |
+| `VALIDATION_ERROR` | 422 | El cuerpo no cumple el contrato; `details` lista cada campo |
+| `INVALID_TRIP_ID` | 400 | El `tripId` de la ruta no respeta el formato admitido |
+| `MALFORMED_JSON` | 400 | El cuerpo no es JSON valido |
+| `RECEIPT_NOT_FOUND` | 404 | No hay comprobante emitido para ese viaje |
+| `ROUTE_NOT_FOUND` | 404 | La ruta solicitada no existe |
+| `RECEIPT_PDF_UNAVAILABLE` | 409 | El comprobante existe pero su PDF no esta disponible |
+| `DELIVERY_DESTINATION_REQUIRED` | 422 | El reenvio no tiene destino registrado ni informado |
+| `INTERNAL_ERROR` | 500 | Error no controlado |
+
+## Detalles del Contenedor Docker
+
+El microservicio utiliza una única imagen unificada (`m8-documentos:1.0.0`):
+- **Base Node.js 22 LTS (`node:22-slim`):** Basada en Debian con soporte para glibc y TypeScript 7.
+- **Unificada para ejecución y testing:** Contiene tanto el servidor de producción compilado como la suite completa de pruebas, permitiendo operar la app y ejecutar los tests desde la misma imagen sin generar imágenes adicionales.
+- **Seguridad:** Corre con el usuario estándar sin privilegios `node` (`USER node`).
+- **Healthcheck nativo:** Comprueba la salud del microservicio consultando internamente `http://127.0.0.1:3008/health` cada 30 segundos.
+- **Persistencia:** El volumen `m8-storage` conserva los comprobantes emitidos (`/app/storage`) de manera independiente al ciclo de vida del contenedor.
+
+## Estructura
+
+```
+src/
+├── index.ts                 arranque del proceso y apagado ordenado
+├── app.ts                   construccion de la aplicacion Express
+├── config/env.ts            lectura y validacion de variables de entorno
+├── models/receipt.ts        contratos de entrada y modelo del comprobante
+├── validators/              validacion del cuerpo de las solicitudes
+├── controllers/             traduccion HTTP <-> dominio
+├── services/
+│   ├── receipt.service.ts   emision idempotente, consulta y reenvio
+│   └── pdf.service.ts       maquetado del comprobante con pdfkit
+├── repositories/            persistencia de metadatos y archivos PDF
+├── middlewares/             manejo de errores y rutas inexistentes
+├── routes/                  definicion de endpoints
+├── errors/                  error de aplicacion con codigo y estado HTTP
+├── openapi/openapi.yaml     contrato REST publicado en Scalar API Reference
+└── utils/                   formato, identificadores y candado por clave
+
+tests/
+├── unit/                    servicio de emision y validador
+└── integration/             API HTTP de punta a punta
+
+docs/
+├── README.md                 índice general de documentación técnica
+├── adr/                     registros de decisiones de arquitectura (ADR-001, ADR-002)
+├── arquitectura/            diagramas de componentes y secuencia (Mermaid)
+├── despliegue/              manual de operación y despliegue con Docker
+├── pruebas/                 reporte de tests automatizados y prueba de concurrencia
+└── api/                     especificación de endpoints y contratos de error
+```
+
+El `build` copia `src/openapi/openapi.yaml` dentro de `dist/`, de modo que el
+directorio compilado es autocontenido y la imagen del contenedor no necesita
+llevar tambien el codigo fuente.
+
+## Propiedad de datos (RNF-04)
+
+M8 no consulta bases de datos de otros servicios. Recibe por REST los datos del
+viaje finalizado (M6) junto con la tarifa y el pago (M7) y persiste su propia
+copia del comprobante.
+
+En AE1 la persistencia es transitoria sobre el sistema de archivos, con los
+metadatos y los PDF en directorios separados:
+
+```
+storage/receipts/
+├── metadata/<tripId>.json   datos del comprobante (nunca se publica)
+└── pdf/<tripId>.pdf         archivo descargable (publicado como estatico)
+```
+
+La separacion es deliberada: solo el directorio `pdf/` se monta como contenido
+estatico, de modo que los metadatos con datos personales no quedan accesibles
+por URL. En AE2 el repositorio se reemplaza por `CommunicationsDB` mas
+almacenamiento de objetos, manteniendo la interfaz actual.
+
+## Concurrencia e idempotencia (RNF-09)
+
+La emision esta protegida en dos niveles para que un mismo viaje no genere dos
+comprobantes distintos:
+
+1. Un candado por `tripId` dentro del proceso serializa las solicitudes
+   concurrentes; la segunda encuentra el comprobante ya emitido y lo devuelve.
+2. El metadato se escribe con el flag `wx` (creacion exclusiva). Si dos
+   instancias del servicio compiten, solo una gana; la otra relee el
+   comprobante existente y responde con el mismo documento.
+
+El PDF se escribe primero en un archivo temporal y se renombra recien despues de
+que el metadato quedo confirmado, para que nunca exista un PDF sin comprobante
+asociado.
+
+Verificacion: ocho solicitudes simultaneas de emision sobre el mismo `tripId`
+devuelven un unico `201` y siete `200`, todas con el mismo `receiptId`.
+
+## Decisiones tecnicas
+
+- **Express 5 + TypeScript**: contratos REST explicitos y tipado del dominio
+  compartido entre modulos.
+- **pdfkit**: generacion del PDF en memoria, sin binarios externos ni fuentes
+  adicionales, lo que mantiene liviana la imagen del contenedor.
+- **tsx en desarrollo**: `ts-node-dev` no es compatible con TypeScript 7, que ya
+  no expone la API de compilador que esa herramienta necesita.
+- **Sin pasarela de pago real**: el comprobante es de demostracion y lo declara
+  en su pie, segun el alcance S2-AE1.6 del escenario.
