@@ -1,0 +1,142 @@
+openapi: 3.0.3
+info:
+  title: M8 - API aggregate
+  version: 1.0.0
+  description: |
+    Índice de los contratos HTTP reales de los cuatro servicios M8. No existe
+    un gateway único: cada operación declara el servidor que la expone.
+tags:
+  - name: Notifications
+  - name: QR
+  - name: Receipts
+  - name: Support
+paths:
+  /health:
+    get:
+      tags: [Notifications, QR, Receipts, Support]
+      summary: Health check de cada servicio M8
+      description: Consultar este path en uno de los cuatro servidores declarados.
+      servers:
+        - url: http://localhost:3101
+          description: Notifications
+        - url: http://localhost:3103
+          description: QR
+        - url: http://localhost:3008
+          description: Receipts
+        - url: http://localhost:3000
+          description: Support
+      responses:
+        '200':
+          description: Servicio disponible.
+  /notifications:
+    post:
+      tags: [Notifications]
+      summary: Procesar una notificación de viaje
+      servers:
+        - url: http://localhost:3101
+      responses:
+        '201': { description: Notificación procesada. }
+        '400': { description: Solicitud inválida. }
+        '415': { description: Content-Type no admitido. }
+  /qr:
+    post:
+      tags: [QR]
+      summary: Generar un QR temporal
+      servers:
+        - url: http://localhost:3103
+      responses:
+        '201': { description: QR generado. }
+        '400': { description: Solicitud inválida. }
+  /qr/validate:
+    post:
+      tags: [QR]
+      summary: Validar y consumir un QR
+      servers:
+        - url: http://localhost:3103
+      responses:
+        '200': { description: QR válido y consumido. }
+        '404': { description: QR no encontrado. }
+        '409': { description: QR ya utilizado. }
+  /api/v1/receipts:
+    post:
+      tags: [Receipts]
+      summary: Emitir un comprobante
+      servers:
+        - url: http://localhost:3008
+      responses:
+        '201': { description: Comprobante creado. }
+        '200': { description: Comprobante existente por idempotencia. }
+  /api/v1/receipts/{tripId}:
+    get:
+      tags: [Receipts]
+      summary: Consultar un comprobante
+      servers:
+        - url: http://localhost:3008
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Comprobante encontrado. }
+        '404': { description: Comprobante no encontrado. }
+  /api/v1/receipts/{tripId}/pdf:
+    get:
+      tags: [Receipts]
+      summary: Descargar PDF del comprobante
+      servers:
+        - url: http://localhost:3008
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: PDF, content type application/pdf. }
+  /tickets:
+    post:
+      tags: [Support]
+      summary: Crear un ticket de soporte
+      servers:
+        - url: http://localhost:3000
+      responses:
+        '201': { description: Ticket creado. }
+        '400': { description: Solicitud inválida. }
+  /tickets/{id}:
+    get:
+      tags: [Support]
+      summary: Consultar un ticket
+      servers:
+        - url: http://localhost:3000
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Ticket encontrado. }
+        '404': { description: Ticket no encontrado. }
+  /tickets/{id}/estado:
+    patch:
+      tags: [Support]
+      summary: Actualizar el estado de un ticket
+      servers:
+        - url: http://localhost:3000
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Ticket actualizado. }
+        '400': { description: Estado inválido. }
+        '404': { description: Ticket no encontrado. }
+  /events/publish:
+    post:
+      tags: [Support]
+      summary: Publicar eventos AE1 en RabbitMQ
+      servers:
+        - url: http://localhost:3000
+      responses:
+        '200': { description: Evento publicado. }
+        '400': { description: Solicitud inválida. }
