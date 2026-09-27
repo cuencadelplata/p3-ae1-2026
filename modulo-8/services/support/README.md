@@ -39,7 +39,7 @@ docker compose up --build -d
 ### Puertos y Servicios Expuestos
 
 - **Estado del Servicio / API Raíz:** [http://localhost:3000](http://localhost:3000)
-- **Documentación Interactiva OpenAPI (Swagger UI):** [http://localhost:3000/api-docs](http://localhost:3000/api-docs)
+- **Documentación Interactiva OpenAPI (Scalar):** [http://localhost:3000/api-docs](http://localhost:3000/api-docs)
 - **Panel de Administración RabbitMQ (Management):** [http://localhost:15672](http://localhost:15672)  
   *(Credenciales por defecto: Usuario: `guest` | Contraseña: `guest`)*
 - **Broker RabbitMQ (Puerto AMQP):** `amqp://localhost:5672`

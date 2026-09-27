@@ -80,8 +80,8 @@ Invoke-RestMethod -Uri "http://localhost:3000/events/publish" -Method Post -Cont
 curl.exe http://localhost:3000/tickets
 ```
 
-### 3.6 Consultar la especificación OpenAPI (Swagger)
-* **Interfaz visual (Swagger UI):** [http://localhost:3000/api-docs](http://localhost:3000/api-docs)
+### 3.6 Consultar la especificación OpenAPI (Scalar)
+* **Interfaz visual (Scalar):** [http://localhost:3000/api-docs](http://localhost:3000/api-docs)
 * **Ver archivo RAW en formato YAML por HTTP:** [http://localhost:3000/openapi.yaml](http://localhost:3000/openapi.yaml)
 * **Ver archivo RAW en formato JSON por HTTP:** [http://localhost:3000/openapi.json](http://localhost:3000/openapi.json)
 * **Leer archivo YAML local por terminal:**
