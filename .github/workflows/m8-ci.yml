@@ -4,11 +4,11 @@ on:
   push:
     paths:
       - 'modulo-8/**'
-      - '.github/workflows/ci.yml'
+      - '.github/workflows/m8-ci.yml'
   pull_request:
     paths:
       - 'modulo-8/**'
-      - '.github/workflows/ci.yml'
+      - '.github/workflows/m8-ci.yml'
   workflow_dispatch:
 
 permissions:
