@@ -1,0 +1,21 @@
+{
+  "name": "@m8/notifications-processing",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": { "express": "^5.2.1" },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.13.3",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.2.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}
