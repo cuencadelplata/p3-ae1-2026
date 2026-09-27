@@ -1,8 +1,8 @@
 import express from 'express';
-import swaggerUi from 'swagger-ui-express';
 import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
+import { apiReference } from '@scalar/express-api-reference';
 import { SupportController } from './controllers/support.controller.js';
 import { RabbitMQConsumer } from './rabbitmq/consumer.js';
 
@@ -12,9 +12,13 @@ app.use(express.json());
 // Configuración de Swagger (OpenAPI)
 const openapiPath = path.resolve(process.cwd(), 'openapi.yaml');
 const fileContent = fs.readFileSync(openapiPath, 'utf8');
-const swaggerDocument = YAML.parse(fileContent);
+const openapiDocument = YAML.parse(fileContent);
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+app.use('/api-docs', apiReference({
+  pageTitle: 'M8 - Soporte API Reference',
+  theme: 'purple',
+  spec: { content: openapiDocument },
+}));
 
 // Servir la especificación OpenAPI en formato crudo (YAML y JSON)
 app.get('/openapi.yaml', (req, res) => {
@@ -23,7 +27,7 @@ app.get('/openapi.yaml', (req, res) => {
 });
 
 app.get('/openapi.json', (req, res) => {
-  res.json(swaggerDocument);
+  res.json(openapiDocument);
 });
 
 // Ruta raíz (Estado del servicio)
