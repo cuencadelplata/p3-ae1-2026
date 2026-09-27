@@ -10,6 +10,7 @@ COPY services/notifications/package.json services/notifications/package.json
 COPY services/qr/package.json services/qr/package.json
 COPY services/receipts/package.json services/receipts/package.json
 COPY services/support/package.json services/support/package.json
+COPY openapi/receipts.openapi.yaml openapi/receipts.openapi.yaml
 
 RUN pnpm install --frozen-lockfile
 
@@ -27,6 +28,7 @@ WORKDIR /app
 
 COPY --from=build /opt/deploy ./
 COPY --from=build /workspace/services/receipts/dist ./dist
+COPY --from=build /workspace/openapi/receipts.openapi.yaml ./openapi/receipts.openapi.yaml
 
 RUN mkdir -p /app/storage/receipts/metadata /app/storage/receipts/pdf \
     && chown -R node:node /app/storage

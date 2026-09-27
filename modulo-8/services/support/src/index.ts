@@ -10,7 +10,15 @@ const app = express();
 app.use(express.json());
 
 // Configuración de Swagger (OpenAPI)
-const openapiPath = path.resolve(process.cwd(), 'openapi.yaml');
+const openapiPath = [
+  path.resolve(process.cwd(), 'openapi.yaml'),
+  path.resolve(process.cwd(), '../../openapi/support.openapi.yaml'),
+  path.resolve(process.cwd(), 'openapi/support.openapi.yaml'),
+].find((candidate) => fs.existsSync(candidate));
+
+if (!openapiPath) {
+  throw new Error('No se encontro el contrato OpenAPI canónico de Support.');
+}
 const fileContent = fs.readFileSync(openapiPath, 'utf8');
 const openapiDocument = YAML.parse(fileContent);
 

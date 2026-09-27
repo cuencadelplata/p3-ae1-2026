@@ -13,7 +13,7 @@ COPY services/support/package.json services/support/package.json
 RUN pnpm install --frozen-lockfile
 
 COPY services/support/tsconfig.json services/support/tsconfig.json
-COPY services/support/openapi.yaml services/support/openapi.yaml
+COPY openapi/support.openapi.yaml services/support/openapi.yaml
 COPY services/support/src services/support/src
 
 RUN pnpm --filter m8-soporte run build
