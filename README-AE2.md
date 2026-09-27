@@ -29,7 +29,6 @@ Cuando M6 termina el viaje, manda un mensaje a M7 avisando que terminó el viaje
 - RF-7.2: agregar idempotencia y documentar el contrato en OpenAPI.
 
 ## Requerimientos no funcionales relacionados
-- RNF-06: Redis para [completar]
 - RNF-07: RabbitMQ para al menos dos flujos asíncronos
 - RNF-08: Idempotencia en operaciones críticas (registro de método de pago y cobro)
 
