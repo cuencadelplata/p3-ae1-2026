@@ -1,2 +1,6 @@
 packages:
   - "services/*"
+
+allowBuilds:
+  esbuild: true
+  "@scarf/scarf": false
