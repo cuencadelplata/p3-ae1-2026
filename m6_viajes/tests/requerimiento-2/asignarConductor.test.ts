@@ -3,6 +3,7 @@ import { solicitarViaje, asignarConductor } from '../../src/controllers/viajes.c
 import { mockRequest, mockResponse } from '../datos-prueba/mocks.js';
 import pool from '../../src/db/pool.js';
 
+// 1. Mock para simular la API de M8 (QR Service)
 vi.mock('../../src/services/qr.service.js', () => {
   const codigos = new Map<string, string>();
   return {
@@ -14,10 +15,19 @@ vi.mock('../../src/services/qr.service.js', () => {
     validarQR: vi.fn(async (tripId: string, codigo: string) => {
       return codigos.get(tripId) === codigo
         ? { valido: true }
-        : { valido: false, motivo: 'QR invÃ¡lido' };
+        : { valido: false, motivo: 'QR inválido' };
     }),
   };
 });
+
+// 2. Mock para simular la API de M3 (Conductor Service) 
+vi.mock('../../src/services/conductor.service.js', () => ({
+  consultarEstadoConductor: vi.fn(async () => ({
+    conductorId: 'mock',
+    habilitado: true,
+  })),
+}));
+
 
 describe('RF-6.2: Arribo del Conductor', () => {
   beforeEach(async () => {

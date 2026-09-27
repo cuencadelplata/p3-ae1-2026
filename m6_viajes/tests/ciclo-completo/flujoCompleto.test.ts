@@ -3,6 +3,12 @@ import { solicitarViaje, asignarConductor, registrarArribo, iniciarViaje } from 
 import { mockRequest, mockResponse } from '../datos-prueba/mocks.js';
 import pool from '../../src/db/pool.js';
 
+vi.mock('../../src/services/conductor.service', () => ({
+  consultarEstadoConductor: vi.fn(async () => ({
+    conductorId: 'mock',
+    habilitado: true,
+  })),
+}));
 vi.mock('../../src/services/qr.service.js', () => {
   const codigos = new Map<string, string>();
   return {

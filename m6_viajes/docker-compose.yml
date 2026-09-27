@@ -27,6 +27,8 @@ services:
       - PORT=3000
       - M8_URL=${M8_URL:-http://m8:4001}
       - M8_TIMEOUT_MS=${M8_TIMEOUT_MS:-3000}
+      - M3_URL=${M3_URL:-http://m3:4003}
+      - M3_TIMEOUT_MS=${M3_TIMEOUT_MS:-3000}
       - DB_HOST=tripdb
       - DB_PORT=5432
       - DB_USER=m6

@@ -4,6 +4,7 @@ import { EstadoViaje } from '../models/viaje.model.js';
 import { generarQR, validarQR } from '../services/qr.service.js';
 import * as viajeRepo from '../repositories/viaje.repository.js';
 import { randomUUID } from 'node:crypto';
+import { consultarEstadoConductor } from '../services/conductor.service.js';
 
 export const solicitarViaje = async (req: Request, res: Response): Promise<any> => {
     const { clienteId, origen, destino } = req.body;
@@ -70,30 +71,83 @@ export const asignarConductor = async (req: Request, res: Response): Promise<any
 
 export const registrarArribo = async (req: Request, res: Response): Promise<any> => {
     const { id } = req.params;
+
     if (typeof id !== 'string') {
-        return res.status(400).json({ error: 'Falta el id del viaje en la URL' });
+        return res.status(400).json({
+            error: 'Falta el id del viaje en la URL'
+        });
     }
 
     let viaje;
+
     try {
         viaje = await viajeRepo.buscarPorId(id);
     } catch (error) {
-        return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
+        console.error('ERROR EN viajeRepo.buscarPorId:', error);
+
+        return res.status(503).json({
+            error: 'Base de datos no disponible, intente más tarde'
+        });
     }
 
-    if (!viaje) return res.status(404).json({ error: 'Viaje no encontrado' });
+    if (!viaje) {
+        return res.status(404).json({
+            error: 'Viaje no encontrado'
+        });
+    }
+
     if (viaje.estado !== EstadoViaje.CONDUCTOR_EN_CAMINO) {
-        return res.status(400).json({ error: `Transición inválida. El estado actual es ${viaje.estado}` });
+        return res.status(400).json({
+            error: `Transición inválida. El estado actual es ${viaje.estado}`
+        });
+    }
+
+    if (!viaje.conductorId) {
+        return res.status(400).json({
+            error: 'El viaje no tiene conductor asignado'
+        });
+    }
+
+    // RF-6.2:
+    // Antes de registrar el arribo, M6 consulta a M3
+    // para verificar el estado del conductor asignado.
+    try {
+        const estadoConductor = await consultarEstadoConductor(
+            viaje.conductorId
+        );
+
+        if (!estadoConductor.habilitado) {
+            return res.status(403).json({
+                error: 'El conductor no está habilitado'
+            });
+        }
+    } catch (error) {
+        console.error('ERROR EN consultarEstadoConductor:', error);
+
+        return res.status(503).json({
+            error: 'Servicio de conductores (M3) no disponible, intente más tarde'
+        });
     }
 
     try {
-        await viajeRepo.actualizarEstado(id, EstadoViaje.ARRIBADO);
+        await viajeRepo.actualizarEstado(
+            id,
+            EstadoViaje.ARRIBADO
+        );
     } catch (error) {
-        return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
+        console.error('ERROR EN viajeRepo.actualizarEstado:', error);
+
+        return res.status(503).json({
+            error: 'Base de datos no disponible, intente más tarde'
+        });
     }
 
     viaje.estado = EstadoViaje.ARRIBADO;
-    return res.json({ mensaje: 'El conductor ha arribado', viaje });
+
+    return res.json({
+        mensaje: 'El conductor ha arribado',
+        viaje
+    });
 };
 
 export const iniciarViaje = async (req: Request, res: Response): Promise<any> => {
@@ -107,7 +161,11 @@ export const iniciarViaje = async (req: Request, res: Response): Promise<any> =>
     try {
         viaje = await viajeRepo.buscarPorId(id);
     } catch (error) {
-        return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
+        console.error('ERROR EN viajeRepo.buscarPorId:', error);
+
+        return res.status(503).json({
+            error: 'Base de datos no disponible, intente más tarde'
+        });
     }
 
     if (!viaje) return res.status(404).json({ error: 'Viaje no encontrado' });

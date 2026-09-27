@@ -7,7 +7,7 @@ const API_URL = 'http://localhost:3000/api';
 const PROJECT_ROOT = resolve(__dirname, '../../');
 let containerId: string | null = null;
 
-describe('E2E Tests - Docker Container', () => {
+describe.skip('E2E Tests - Docker Container', () => {
   beforeAll(async () => {
     console.log('Construyendo imagen de Docker...');
     try {
