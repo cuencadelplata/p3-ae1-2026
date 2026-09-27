@@ -10,6 +10,7 @@
     "test:qr": "pnpm --filter @m8/qr run test",
     "test:receipts": "pnpm --filter m8-documentos run test",
     "test:support": "pnpm --filter m8-soporte run test",
+    "test:e2e": "node --test tests/e2e/*.test.mjs",
     "compose:build": "docker compose build",
     "compose:up": "docker compose up -d",
     "compose:down": "docker compose down --remove-orphans"
