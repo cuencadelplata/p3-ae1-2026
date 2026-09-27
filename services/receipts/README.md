@@ -1,5 +1,18 @@
 # M8 - Notificaciones, Documentos y Soporte (Comprobantes PDF)
 
+## Runbook canónico
+
+Responsabilidad: RF8.3 (emisión/consulta/PDF) y RF8.4 (reenvío simulado). Requiere Node 24 compatible, PNPM 10.33.0 y filesystem en `STORAGE_DIR` (`/app/storage/receipts` en Docker). Desde `modulo-8/`:
+
+```powershell
+pnpm --filter m8-documentos run build
+pnpm --filter m8-documentos run test
+pnpm --filter m8-documentos run start
+docker build -f services/receipts/Dockerfile -t m8-receipts .
+```
+
+Variables: `PORT` (3008), `PUBLIC_BASE_URL`, `API_PREFIX` y `STORAGE_DIR`. Compose publica 3008 y monta `m8-storage`. Endpoints: health, emisión, consulta, PDF y reenvío de receipts. Scalar se sirve en `/docs` y `/api/v1/docs`. La fuente OpenAPI única es `../../openapi/receipts.openapi.yaml`; las copias runtime no son fuentes. AE2 debe separar delivery/persistencia durable sin perder idempotencia.
+
 **Grupo 14:** Juan Gualtieri, Lucas Cremaschi, Meza Santiago  
 **Materia:** ISI - Paradigmas de Programación 3 (2026)  
 **Alcance Asignado:** RF-8.3 (Comprobante PDF) y RF-8.4 (Reenvío de Comprobante)  

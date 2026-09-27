@@ -31,11 +31,18 @@ usa el volumen persistente `m8-storage`.
 
 - El índice OpenAPI agregado está en `openapi/m8-openapi.yaml`; enumera los
   servicios sin fingir un endpoint único.
+- Los contratos canónicos por servicio están en `openapi/`; consultar los
+  runbooks de [Notifications](services/notifications/README.md),
+  [QR](services/qr/README.md), [Receipts](services/receipts/README.md) y
+  [Support](services/support/README.md).
+- El estado explícito de RF8.1 a RF8.7 está en `docs/rf-status.md`.
 - Cada servicio publica su propia UI Scalar: Support en `/api-docs` y Receipts
   en `/docs` (redirige a `/api/v1/docs`).
 - El contrato RabbitMQ ejecutable de AE1 está en
   `contracts/events/rabbitmq-ae1.md`.
 - La documentación histórica y de migración preservada está en `docs/`.
+- `tests/e2e/` contiene la regresión API global; `.github/workflows/m8-ci.yml`
+  ejecuta build, tests, Compose, health y esa suite en CI.
 
 ## Estado AE1 y siguiente etapa
 
