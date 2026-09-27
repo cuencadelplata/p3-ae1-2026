@@ -18,12 +18,13 @@ services:
 
   m8-soporte:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: services/support/Dockerfile
     container_name: m8-soporte-app
     ports:
       - "3000:3000"
     environment:
+      - NODE_ENV=production
       - PORT=3000
       - RABBITMQ_URL=amqp://rabbitmq:5672
     depends_on:
