@@ -1,27 +1,24 @@
-openapi: 3.0.3
+﻿openapi: 3.0.3
 
 info:
   title: M8 - Notificaciones, Documentos y Soporte API
   version: 0.2.0
   description: |
-    Contrato HTTP del servicio M8. Esta versión documenta RF-8.1,
-    Notificaciones de viaje, y RF-8.2, QR de verificación.
+    Contrato HTTP del servicio M8. Esta versiÃ³n documenta RF-8.1,
+    Notificaciones de viaje, y RF-8.2, QR de verificaciÃ³n.
 
 tags:
   - name: Health
-    description: Disponibilidad técnica básica del servicio M8.
-  - name: Notifications
-    description: Procesamiento de notificaciones asociadas a acontecimientos de viaje.
+    description: Disponibilidad técnica básica del servicio QR.
   - name: QR Verification
     description: Generación y validación de QR temporales asociados a viajes.
-
 paths:
   /health:
     get:
       tags:
         - Health
       summary: Consultar disponibilidad del servicio
-      description: Comprobación técnica sin efectos secundarios ni acceso a reglas de negocio.
+      description: ComprobaciÃ³n tÃ©cnica sin efectos secundarios ni acceso a reglas de negocio.
       operationId: getHealth
       responses:
         '200':
@@ -36,100 +33,14 @@ paths:
                     status: ok
                     service: m8
 
-  /notifications:
-    post:
-      tags:
-        - Notifications
-      summary: Procesar una notificación de viaje
-      description: |
-        Recibe un acontecimiento de viaje ya ocurrido, valida sus datos y genera
-        la notificación correspondiente para el destinatario indicado. M8 no
-        decide ni modifica el estado del viaje.
-      operationId: processNotification
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NotificationRequest'
-            examples:
-              driverAssigned:
-                summary: Notificación de asignación de conductor
-                value:
-                  tripId: trip-123
-                  recipientId: user-456
-                  eventType: DRIVER_ASSIGNED
-                  channels:
-                    - PUSH
-      responses:
-        '201':
-          description: Notificación generada y procesada correctamente por M8.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Notification'
-              examples:
-                processedNotification:
-                  summary: Notificación PUSH procesada
-                  value:
-                    notificationId: notification-789
-                    tripId: trip-123
-                    recipientId: user-456
-                    eventType: DRIVER_ASSIGNED
-                    channels:
-                      - PUSH
-                    message: Se asignó un conductor a tu viaje.
-                    status: PROCESSED
-                    createdAt: '2026-08-31T15:20:00Z'
-        '400':
-          description: Solicitud inválida.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                unsupportedChannel:
-                  summary: Canal no soportado en esta etapa
-                  value:
-                    error:
-                      code: VALIDATION_ERROR
-                      message: La solicitud contiene datos inválidos.
-                      details:
-                        - field: channels
-                          reason: Solo se admite PUSH en AE1.
-        '415':
-          description: El tipo de contenido no es application/json.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                unsupportedMediaType:
-                  value:
-                    error:
-                      code: UNSUPPORTED_MEDIA_TYPE
-                      message: El tipo de contenido debe ser application/json.
-        '500':
-          description: Error interno al procesar la notificación.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                processingError:
-                  value:
-                    error:
-                      code: NOTIFICATION_PROCESSING_ERROR
-                      message: No fue posible procesar la notificación.
-
   /qr:
     post:
       tags:
         - QR Verification
-      summary: Generar un QR de verificación
+      summary: Generar un QR de verificaciÃ³n
       description: |
         Genera un QR temporal y de un solo uso asociado al viaje indicado. El QR
-        codifica únicamente un token opaco; M8 no modifica el estado del viaje.
+        codifica Ãºnicamente un token opaco; M8 no modifica el estado del viaje.
       operationId: generateQr
       requestBody:
         required: true
@@ -155,7 +66,7 @@ paths:
                     qrDataUrl: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...
                     expiresAt: '2026-09-01T12:05:00.000Z'
         '400':
-          description: Solicitud inválida.
+          description: Solicitud invÃ¡lida.
           content:
             application/json:
               schema:
@@ -165,10 +76,10 @@ paths:
                   value:
                     error:
                       code: VALIDATION_ERROR
-                      message: La solicitud contiene datos inválidos.
+                      message: La solicitud contiene datos invÃ¡lidos.
                       details:
                         - field: tripId
-                          reason: Debe ser un string con longitud mínima de 1.
+                          reason: Debe ser un string con longitud mÃ­nima de 1.
         '415':
           description: El tipo de contenido no es application/json.
           content:
@@ -198,10 +109,10 @@ paths:
     post:
       tags:
         - QR Verification
-      summary: Validar y consumir un QR de verificación
+      summary: Validar y consumir un QR de verificaciÃ³n
       description: |
-        Valida que el token exista, corresponda al viaje indicado, continúe
-        vigente y no haya sido utilizado. Una validación exitosa consume el QR.
+        Valida que el token exista, corresponda al viaje indicado, continÃºe
+        vigente y no haya sido utilizado. Una validaciÃ³n exitosa consume el QR.
         M8 no inicia ni modifica el viaje.
       operationId: validateQr
       requestBody:
@@ -217,7 +128,7 @@ paths:
                   token: valor-opaco-generado-por-m8
       responses:
         '200':
-          description: QR válido y consumido correctamente.
+          description: QR vÃ¡lido y consumido correctamente.
           content:
             application/json:
               schema:
@@ -227,7 +138,7 @@ paths:
                   value:
                     valid: true
         '400':
-          description: Solicitud inválida.
+          description: Solicitud invÃ¡lida.
           content:
             application/json:
               schema:
@@ -237,12 +148,12 @@ paths:
                   value:
                     error:
                       code: VALIDATION_ERROR
-                      message: La solicitud contiene datos inválidos.
+                      message: La solicitud contiene datos invÃ¡lidos.
                       details:
                         - field: token
-                          reason: Debe ser un string con longitud mínima de 1.
+                          reason: Debe ser un string con longitud mÃ­nima de 1.
         '404':
-          description: No se encontró un QR correspondiente al token y viaje indicados.
+          description: No se encontrÃ³ un QR correspondiente al token y viaje indicados.
           content:
             application/json:
               schema:
@@ -252,7 +163,7 @@ paths:
                   value:
                     error:
                       code: QR_NOT_FOUND
-                      message: No se encontró un QR correspondiente al token y viaje indicados.
+                      message: No se encontrÃ³ un QR correspondiente al token y viaje indicados.
         '409':
           description: El QR ya fue utilizado.
           content:
@@ -266,7 +177,7 @@ paths:
                       code: QR_ALREADY_USED
                       message: El QR ya fue utilizado.
         '410':
-          description: El QR venció.
+          description: El QR venciÃ³.
           content:
             application/json:
               schema:
@@ -315,114 +226,12 @@ components:
           type: string
           enum:
             - ok
-          description: Indica que el proceso HTTP de M8 está disponible.
+          description: Indica que el proceso HTTP de M8 estÃ¡ disponible.
         service:
           type: string
           enum:
             - m8
           description: Identificador estable del servicio.
-
-    NotificationRequest:
-      type: object
-      additionalProperties: false
-      required:
-        - tripId
-        - recipientId
-        - eventType
-        - channels
-      properties:
-        tripId:
-          type: string
-          minLength: 1
-          description: Identificador del viaje informado por un módulo externo.
-          example: trip-123
-        recipientId:
-          type: string
-          minLength: 1
-          description: Identificador del usuario destinatario informado externamente.
-          example: user-456
-        eventType:
-          $ref: '#/components/schemas/EventType'
-        channels:
-          type: array
-          minItems: 1
-          uniqueItems: true
-          description: Canales por los que M8 debe procesar la notificación.
-          items:
-            $ref: '#/components/schemas/NotificationChannel'
-
-    EventType:
-      type: string
-      description: Acontecimiento de viaje que M8 recibe para notificar.
-      enum:
-        - TRIP_REQUESTED
-        - DRIVER_ASSIGNED
-        - DRIVER_ARRIVED
-        - TRIP_STARTED
-        - TRIP_CANCELLED
-        - TRIP_COMPLETED
-
-    NotificationChannel:
-      type: string
-      description: |
-        Canal de notificación. PUSH es el único canal soportado en AE1; EMAIL y
-        SMS podrán incorporarse posteriormente sin alterar la lógica central de
-        procesamiento de RF-8.1.
-      enum:
-        - PUSH
-
-    Notification:
-      type: object
-      additionalProperties: false
-      required:
-        - notificationId
-        - tripId
-        - recipientId
-        - eventType
-        - channels
-        - message
-        - status
-        - createdAt
-      properties:
-        notificationId:
-          type: string
-          description: Identificador asignado por M8 a la notificación procesada.
-          example: notification-789
-        tripId:
-          type: string
-          description: Identificador del viaje asociado.
-          example: trip-123
-        recipientId:
-          type: string
-          description: Identificador del usuario destinatario.
-          example: user-456
-        eventType:
-          $ref: '#/components/schemas/EventType'
-        channels:
-          type: array
-          minItems: 1
-          uniqueItems: true
-          description: Canales procesados por M8.
-          items:
-            $ref: '#/components/schemas/NotificationChannel'
-        message:
-          type: string
-          description: Mensaje generado por M8 a partir de eventType.
-          example: Se asignó un conductor a tu viaje.
-        status:
-          type: string
-          enum:
-            - PROCESSED
-          description: |
-            M8 validó el evento, generó la notificación y realizó correctamente
-            el procesamiento correspondiente al canal configurado. Durante AE1,
-            el proveedor PUSH es un mock; por lo tanto, este estado no confirma
-            la entrega real en el dispositivo del destinatario.
-        createdAt:
-          type: string
-          format: date-time
-          description: Fecha y hora de creación asignadas por M8.
-          example: '2026-08-31T15:20:00Z'
 
     QrGenerationRequest:
       type: object
@@ -447,14 +256,14 @@ components:
         token:
           type: string
           minLength: 1
-          description: Token opaco codificado por el QR, sin información sensible.
+          description: Token opaco codificado por el QR, sin informaciÃ³n sensible.
           example: valor-opaco-generado-por-m8
         qrDataUrl:
           $ref: '#/components/schemas/QrDataUrl'
         expiresAt:
           type: string
           format: date-time
-          description: Fecha y hora a partir de la cual el QR deja de ser válido.
+          description: Fecha y hora a partir de la cual el QR deja de ser vÃ¡lido.
           example: '2026-09-01T12:05:00.000Z'
 
     QrValidationRequest:
@@ -485,12 +294,12 @@ components:
           type: boolean
           enum:
             - true
-          description: Indica que M8 validó y consumió correctamente el QR.
+          description: Indica que M8 validÃ³ y consumiÃ³ correctamente el QR.
 
     QrDataUrl:
       type: string
       pattern: '^data:image/png;base64,'
-      description: Data URL PNG de un QR que codifica únicamente el token opaco.
+      description: Data URL PNG de un QR que codifica Ãºnicamente el token opaco.
       example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...
 
     ErrorResponse:
@@ -513,17 +322,17 @@ components:
           $ref: '#/components/schemas/ErrorCode'
         message:
           type: string
-          description: Descripción segura y legible del error.
-          example: La solicitud contiene datos inválidos.
+          description: DescripciÃ³n segura y legible del error.
+          example: La solicitud contiene datos invÃ¡lidos.
         details:
           type: array
-          description: Detalle opcional de los campos inválidos. Se omite en errores internos.
+          description: Detalle opcional de los campos invÃ¡lidos. Se omite en errores internos.
           items:
             $ref: '#/components/schemas/ErrorDetail'
 
     ErrorCode:
       type: string
-      description: Código que identifica el tipo de error.
+      description: CÃ³digo que identifica el tipo de error.
       enum:
         - VALIDATION_ERROR
         - UNSUPPORTED_MEDIA_TYPE
@@ -544,9 +353,9 @@ components:
       properties:
         field:
           type: string
-          description: Campo de la solicitud que originó el error.
+          description: Campo de la solicitud que originÃ³ el error.
           example: channels
         reason:
           type: string
-          description: Motivo de invalidación del campo.
+          description: Motivo de invalidaciÃ³n del campo.
           example: Solo se admite PUSH en AE1.

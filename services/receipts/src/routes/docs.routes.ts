@@ -8,10 +8,8 @@ export const docsRouter = Router();
 
 // Carga la especificacion OpenAPI buscando en distintas rutas posibles
 const candidatePaths = [
-  path.resolve(__dirname, '../openapi/openapi.yaml'),
-  path.resolve(__dirname, '../../src/openapi/openapi.yaml'),
-  path.resolve(process.cwd(), 'src/openapi/openapi.yaml'),
-  path.resolve(process.cwd(), 'dist/openapi/openapi.yaml'),
+  path.resolve(process.cwd(), 'openapi/receipts.openapi.yaml'),
+  path.resolve(process.cwd(), '../../openapi/receipts.openapi.yaml'),
 ];
 
 const openapiPath = candidatePaths.find((p) => fs.existsSync(p)) ?? candidatePaths[0]!;
@@ -21,7 +19,7 @@ try {
   if (fs.existsSync(openapiPath)) {
     openapiDocument = YAML.load(openapiPath);
   } else {
-    throw new Error(`No se encontro openapi.yaml en ninguna de las rutas esperadas: ${candidatePaths.join(', ')}`);
+    throw new Error(`No se encontro receipts.openapi.yaml en ninguna de las rutas esperadas: ${candidatePaths.join(', ')}`);
   }
 } catch (error) {
   console.error('Error al cargar la especificacion OpenAPI:', error);
