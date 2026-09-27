@@ -1,0 +1,47 @@
+{
+  "name": "m8-service",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "description": "Servicio M8 de Notificaciones, Documentos y Soporte.",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "typecheck:test": "tsc --project tsconfig.test.json",
+    "test": "vitest run --project unit --project integration",
+    "test:watch": "vitest --project unit --project integration",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:coverage": "vitest run --project unit --project integration --coverage",
+    "test:e2e": "pnpm test:e2e:api && pnpm test:e2e:ui",
+    "test:unit:notifications": "vitest run --project unit tests/unit/notifications",
+    "test:unit:qr": "vitest run --project unit tests/unit/qr",
+    "test:integration:notifications": "vitest run --project integration tests/integration/notifications",
+    "test:integration:qr": "vitest run --project integration tests/integration/qr",
+    "test:e2e:api": "vitest run --project e2e",
+    "test:e2e:ui": "playwright test"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "qrcode": "^1.5.4",
+    "swagger-ui-dist": "^5.32.14"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.13.3",
+    "@types/pngjs": "^6.0.5",
+    "@types/qrcode": "^1.5.6",
+    "@types/supertest": "^7.2.1",
+    "@vitest/coverage-v8": "^4.1.11",
+    "jsqr": "^1.4.0",
+    "pngjs": "^7.0.0",
+    "supertest": "^7.2.2",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}
