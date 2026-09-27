@@ -2,5 +2,16 @@
   "name": "@m8/workspace",
   "version": "0.0.0",
   "private": true,
-  "packageManager": "pnpm@10.33.0"
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build": "pnpm -r --if-present run build",
+    "test": "pnpm -r --if-present run test",
+    "test:notifications": "pnpm --filter @m8/notifications-processing run test",
+    "test:qr": "pnpm --filter @m8/qr run test",
+    "test:receipts": "pnpm --filter m8-documentos run test",
+    "test:support": "pnpm --filter m8-soporte run test",
+    "compose:build": "docker compose build",
+    "compose:up": "docker compose up -d",
+    "compose:down": "docker compose down --remove-orphans"
+  }
 }
