@@ -36,6 +36,8 @@ usa el volumen persistente `m8-storage`.
   [QR](services/qr/README.md), [Receipts](services/receipts/README.md) y
   [Support](services/support/README.md).
 - El estado explícito de RF8.1 a RF8.7 está en `docs/rf-status.md`.
+- Los acuerdos y decisiones pendientes para coordinar AE2 están en
+  [docs/ae2-intermodule-agreements.md](docs/ae2-intermodule-agreements.md).
 - Cada servicio publica su propia UI Scalar: Support en `/api-docs` y Receipts
   en `/docs` (redirige a `/api/v1/docs`).
 - El contrato RabbitMQ ejecutable de AE1 está en
