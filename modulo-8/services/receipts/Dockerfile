@@ -1,16 +1,32 @@
 # syntax=docker/dockerfile:1
-FROM node:22-slim
+FROM node:22-slim AS build
+
+WORKDIR /workspace
+
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY services/notifications/package.json services/notifications/package.json
+COPY services/qr/package.json services/qr/package.json
+COPY services/receipts/package.json services/receipts/package.json
+COPY services/support/package.json services/support/package.json
+
+RUN pnpm install --frozen-lockfile
+
+COPY services/receipts/tsconfig.json services/receipts/tsconfig.json
+COPY services/receipts/src services/receipts/src
+COPY services/receipts/tests services/receipts/tests
+COPY services/receipts/scripts services/receipts/scripts
+
+RUN pnpm --filter m8-documentos run build
+RUN pnpm --filter m8-documentos deploy --prod --legacy /opt/deploy
+
+FROM node:22-slim AS runtime
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci
-
-COPY tsconfig.json ./
-COPY src ./src
-COPY tests ./tests
-COPY scripts ./scripts
-RUN npm run build
+COPY --from=build /opt/deploy ./
+COPY --from=build /workspace/services/receipts/dist ./dist
 
 RUN mkdir -p /app/storage/receipts/metadata /app/storage/receipts/pdf \
     && chown -R node:node /app/storage

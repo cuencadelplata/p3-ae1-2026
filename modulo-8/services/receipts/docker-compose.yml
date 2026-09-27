@@ -1,6 +1,8 @@
 services:
   m8-documentos:
-    build: .
+    build:
+      context: ../..
+      dockerfile: services/receipts/Dockerfile
     image: arkeoff/m8-documentos:1.0.0
     container_name: m8-app
     ports:
@@ -14,9 +16,13 @@ services:
     restart: unless-stopped
 
   test:
-    image: arkeoff/m8-documentos:1.0.0
+    build:
+      context: ../..
+      dockerfile: services/receipts/Dockerfile
+      target: build
     container_name: m8-tests
-    command: npm run test:all
+    working_dir: /workspace
+    command: pnpm --filter m8-documentos run test:all
     environment:
       - NODE_ENV=development
       - BASE_URL=http://m8-documentos:3008
