@@ -5,10 +5,10 @@
 import type { Request, Response } from "express";
 import { describe, expect, it, vi } from "vitest";
 
-import { createQrHandlers } from "../../../src/qr/qr.controller";
-import type { QrService } from "../../../src/qr/qr.service";
-import type { QrGenerationResponse, QrValidationResponse } from "../../../src/qr/qr.types";
-import { ApiError } from "../../../src/shared/api-error";
+import { createQrHandlers } from "../../src/qr.controller";
+import type { QrService } from "../../src/qr.service";
+import type { QrGenerationResponse, QrValidationResponse } from "../../src/qr.types";
+import { ApiError } from "../../src/http/api-error";
 
 function createReq(body: unknown, isJson = true): Request {
   return {

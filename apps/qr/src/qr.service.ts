@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { ApiError } from "../shared/api-error";
+import { ApiError } from "./http/api-error";
 import type { GeneratedQrToken } from "./qr-generator";
 import type { QrConfig } from "./qr.config";
 import type { QrStore } from "./qr.store";

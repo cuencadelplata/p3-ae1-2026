@@ -6,9 +6,9 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { createQrService, type QrServiceDeps } from "../../../src/qr/qr.service";
-import type { ConsumeOutcome } from "../../../src/qr/qr.store";
-import { ApiError } from "../../../src/shared/api-error";
+import { createQrService, type QrServiceDeps } from "../../src/qr.service";
+import type { ConsumeOutcome } from "../../src/qr.store";
+import { ApiError } from "../../src/http/api-error";
 
 const TRIP_ID = "trip-demo-001";
 const NOW = new Date("2026-09-01T12:00:00.000Z");

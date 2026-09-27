@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { validateQrGenerationRequest, validateQrValidationRequest } from "../../../src/qr/qr.validator";
+import { validateQrGenerationRequest, validateQrValidationRequest } from "../../src/qr.validator";
 
 describe("validateQrGenerationRequest", () => {
   it("acepta un cuerpo válido", () => {

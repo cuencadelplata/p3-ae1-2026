@@ -1,6 +1,6 @@
 import { Router, type Express, type NextFunction, type Request, type Response } from "express";
 
-import { ApiError } from "../shared/api-error";
+import { ApiError } from "./http/api-error";
 import { generateQrDataUrl, generateQrToken } from "./qr-generator";
 import { loadQrConfig } from "./qr.config";
 import { createQrService, type QrService } from "./qr.service";

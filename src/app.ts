@@ -4,27 +4,12 @@ import path from "node:path";
 import { mockPushProvider } from "./notifications/mock-push-provider";
 import { createProcessNotificationController } from "./notifications/notification.controller";
 import type { PushProvider } from "./notifications/push-provider";
-import { registerQrRoutes } from "./qr/qr.controller";
 import { errorHandler } from "./shared/error-handler";
 
 const publicDirectory = path.join(__dirname, "..", "public");
 const swaggerUiDirectory = path.dirname(require.resolve("swagger-ui-dist/package.json"));
 
-type RegisterRoutes = (app: Express) => void;
-
-function isRegisterRoutes(value: PushProvider | RegisterRoutes): value is RegisterRoutes {
-  return typeof value === "function";
-}
-
-export function createApp(
-  pushProviderOrRegisterRoutes: PushProvider | RegisterRoutes = mockPushProvider,
-): Express {
-  const pushProvider = isRegisterRoutes(pushProviderOrRegisterRoutes)
-    ? mockPushProvider
-    : pushProviderOrRegisterRoutes;
-  const registerRoutes = isRegisterRoutes(pushProviderOrRegisterRoutes)
-    ? pushProviderOrRegisterRoutes
-    : registerQrRoutes;
+export function createApp(pushProvider: PushProvider = mockPushProvider): Express {
 
   const app = express();
 
@@ -44,7 +29,6 @@ export function createApp(
     response.sendFile(path.join(publicDirectory, "api-docs.html"));
   });
   app.post("/notifications", createProcessNotificationController(pushProvider));
-  registerRoutes(app);
   app.use(errorHandler);
 
   return app;

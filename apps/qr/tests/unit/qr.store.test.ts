@@ -4,8 +4,8 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { createQrStore } from "../../../src/qr/qr.store";
-import type { QrRecord } from "../../../src/qr/qr.types";
+import { createQrStore } from "../../src/qr.store";
+import type { QrRecord } from "../../src/qr.types";
 
 const TRIP_ID = "trip-demo-001";
 const TOKEN_HASH = "a".repeat(64);

@@ -1,4 +1,4 @@
-import type { ErrorDetail } from "../shared/api-error";
+import type { ErrorDetail } from "./http/api-error";
 
 export interface QrRecord {
   readonly id: string;

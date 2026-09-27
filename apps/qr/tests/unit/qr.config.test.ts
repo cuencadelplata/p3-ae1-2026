@@ -4,7 +4,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { loadQrConfig } from "../../../src/qr/qr.config";
+import { loadQrConfig } from "../../src/qr.config";
 
 describe("loadQrConfig", () => {
   afterEach(() => {

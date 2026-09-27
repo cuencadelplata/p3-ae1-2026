@@ -1,4 +1,4 @@
-import type { ErrorDetail } from "../shared/api-error";
+import type { ErrorDetail } from "./http/api-error";
 import type { QrGenerationRequest, QrValidationRequest, ValidationResult } from "./qr.types";
 
 const NOT_AN_OBJECT_REASON = "El cuerpo debe ser un objeto JSON.";

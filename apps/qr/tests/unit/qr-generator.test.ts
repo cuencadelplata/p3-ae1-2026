@@ -8,7 +8,7 @@ import jsQR from "jsqr";
 import { PNG } from "pngjs";
 import { describe, expect, it } from "vitest";
 
-import { generateQrDataUrl, generateQrToken } from "../../../src/qr/qr-generator";
+import { generateQrDataUrl, generateQrToken } from "../../src/qr-generator";
 
 const BASE64URL_TOKEN_PATTERN = /^[A-Za-z0-9_-]+$/;
 const HEX_SHA256_PATTERN = /^[0-9a-f]{64}$/;

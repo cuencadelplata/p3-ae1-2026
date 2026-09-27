@@ -5,11 +5,10 @@
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../../../src/app";
-import { registerQrRoutes } from "../../../src/qr/qr.controller";
+import { createApp } from "../../src/app";
 
 function buildApp() {
-  return createApp(registerQrRoutes);
+  return createApp();
 }
 
 describe("POST /qr", () => {
