@@ -1,15 +1,12 @@
 import express, { type Express } from "express";
 import path from "node:path";
 
-import { mockPushProvider } from "./notifications/mock-push-provider";
-import { createProcessNotificationController } from "./notifications/notification.controller";
-import type { PushProvider } from "./notifications/push-provider";
 import { errorHandler } from "./shared/error-handler";
 
 const publicDirectory = path.join(__dirname, "..", "public");
 const swaggerUiDirectory = path.dirname(require.resolve("swagger-ui-dist/package.json"));
 
-export function createApp(pushProvider: PushProvider = mockPushProvider): Express {
+export function createApp(): Express {
 
   const app = express();
 
@@ -28,7 +25,6 @@ export function createApp(pushProvider: PushProvider = mockPushProvider): Expres
   app.get("/api-docs/", (_request, response) => {
     response.sendFile(path.join(publicDirectory, "api-docs.html"));
   });
-  app.post("/notifications", createProcessNotificationController(pushProvider));
   app.use(errorHandler);
 
   return app;

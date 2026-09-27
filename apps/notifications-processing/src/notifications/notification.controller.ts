@@ -1,7 +1,7 @@
 import type { RequestHandler } from "express";
 
-import { ApiError } from "../shared/api-error";
-import { isMalformedJsonError } from "../shared/error-handler";
+import { ApiError } from "../http/api-error";
+import { isMalformedJsonError } from "../http/error-handler";
 import { processNotification } from "./notification.service";
 import { validateNotificationRequest } from "./notification.validator";
 import type { PushProvider } from "./push-provider";
