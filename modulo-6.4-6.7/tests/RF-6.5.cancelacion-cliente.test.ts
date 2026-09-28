@@ -36,6 +36,6 @@ describe('RF-6.5 - Cancelación por cliente', () => {
     });
 
     expect(response.status).toBe(400);
-    expect((await response.json()).error).toContain('ya cancelado');
+    expect((await response.json()).error).toContain('estado CANCELADO');
   });
 });

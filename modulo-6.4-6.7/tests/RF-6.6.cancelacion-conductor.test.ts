@@ -38,6 +38,6 @@ describe('RF-6.6 - Cancelación por conductor', () => {
     });
 
     expect(response.status).toBe(400);
-    expect((await response.json()).error).toContain('ya finalizado');
+    expect((await response.json()).error).toContain('estado COMPLETADO');
   });
 });
