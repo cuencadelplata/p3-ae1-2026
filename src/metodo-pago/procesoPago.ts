@@ -14,6 +14,11 @@ export function registrarMetodoPago(clienteId:string, viajeId: string, tipo: Tip
         throw new Error("clienteId y viajeId debe existir"); 
     }
 
+    const tiposValidos: string[] = ["efectivo", "tarjeta", "transferencia"];
+    if (!tiposValidos.includes(tipo)) {
+        throw new Error("tipo de pago inválido");
+    }
+    
 const nuevoMetodo: MetodoPago={
     pagoId: generarId(),
     clienteId: clienteId,

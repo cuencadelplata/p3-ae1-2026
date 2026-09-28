@@ -21,11 +21,18 @@ describe("POST /metodo-pago ruta", () => {  // la petición HTTP se queda ahí, 
     expect(respuesta.body.viajeId).toBe("viaje-http-1");
   });
 
-
   it("devuelve 400 si faltan datos obligatorios", async () => {
     const respuesta = await request(app)
       .post("/metodo-pago")
       .send({ tipo: "efectivo" }); // faltan clienteId y viajeId
+
+    expect(respuesta.status).toBe(400);
+  });
+
+  it("devuelve 400 si el tipo de pago no es válido", async () => {
+    const respuesta = await request(app)
+      .post("/metodo-pago")
+      .send({ clienteId: "cliente1", viajeId: "viaje-tipo-invalido", tipo: "bitcoin" });
 
     expect(respuesta.status).toBe(400);
   });
