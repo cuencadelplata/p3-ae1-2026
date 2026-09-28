@@ -1,0 +1,250 @@
+openapi: 3.0.3
+info:
+  title: M7 - Tarifas, Pagos y Liquidaciones | RF-7.4 Cargo de cancelacion
+  description: >
+    API que implementa el requerimiento funcional RF-7.4 (Cargo de cancelacion)
+    del modulo M7, dentro del escenario "Plataforma distribuida de movilidad
+    urbana bajo demanda" (AE1). Las reglas de negocio para el calculo del
+    cargo fueron inventadas para esta entrega, ya que el escenario no las
+    proveia (ver detalle en el README del proyecto).
+  version: 1.0.0
+  contact:
+    name: Jaz
+    url: https://github.com/jaaaazc
+servers:
+  - url: http://localhost:3007
+    description: Servidor local o contenedor Docker
+
+tags:
+  - name: Salud
+    description: Chequeo de disponibilidad del servicio
+  - name: Cancelacion
+    description: Calculo del cargo de cancelacion (RF-7.4)
+
+paths:
+  /health:
+    get:
+      tags: [Salud]
+      summary: Verifica que el servicio esta activo
+      responses:
+        "200":
+          description: El servicio esta funcionando correctamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+                service: M7-cargo-cancelacion
+
+  /api/m7/cargo-cancelacion:
+    post:
+      tags: [Cancelacion]
+      summary: Calcula el cargo de cancelacion de un viaje (RF-7.4)
+      description: >
+        Recibe los datos del viaje al momento de la cancelacion y devuelve
+        el cargo que corresponde aplicar, junto con el detalle de la regla
+        utilizada para el calculo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CargoCancelacionRequest"
+            examples:
+              sinConductorAsignado:
+                summary: Viaje sin conductor asignado (gratis)
+                value:
+                  tripId: trip-001
+                  requestedBy: cliente
+                  vehicleType: auto
+                  tripStatus: solicitado
+                  estimatedFare: 4000
+              clientePostAsignacion:
+                summary: Cliente cancela pasado el periodo de gracia
+                value:
+                  tripId: trip-003
+                  requestedBy: cliente
+                  vehicleType: auto
+                  tripStatus: asignado
+                  estimatedFare: 4000
+                  assignedAt: "2026-08-27T12:00:00.000Z"
+              conductorArribado:
+                summary: Cliente cancela con el conductor ya arribado
+                value:
+                  tripId: trip-005
+                  requestedBy: cliente
+                  vehicleType: auto
+                  tripStatus: arribado
+                  estimatedFare: 10000
+                  assignedAt: "2026-08-27T11:55:00.000Z"
+                  arrivedAt: "2026-08-27T11:59:00.000Z"
+      responses:
+        "200":
+          description: Cargo de cancelacion calculado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CargoCancelacionResponse"
+              example:
+                tripId: trip-003
+                requestedBy: cliente
+                charge: 800
+                currency: ARS
+                breakdown:
+                  ruleApplied: cliente_cancela_post_asignacion
+                  vehicleMultiplier: 1
+                  baseAmount: 800
+                  minClamp: 300
+                  maxClamp: 1500
+                  elapsedSecondsSinceAssignment: 300
+                  gracePeriodSeconds: 120
+                message: Se calculo un cargo de cancelacion de $800 ARS.
+        "400":
+          description: Datos invalidos en el pedido (ej. tarifa negativa, vehiculo desconocido)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "estimatedFare debe ser un numero >= 0"
+        "409":
+          description: El viaje esta en un estado que no admite cancelacion (en_curso, completado o cancelado)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "No se puede calcular un cargo de cancelacion para un viaje en estado 'completado'"
+        "500":
+          description: Error interno no esperado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        service:
+          type: string
+          example: M7-cargo-cancelacion
+
+    TipoVehiculo:
+      type: string
+      enum: [auto, moto]
+
+    EstadoViaje:
+      type: string
+      enum:
+        - solicitado
+        - asignado
+        - conductor_en_camino
+        - arribado
+        - en_curso
+        - completado
+        - cancelado
+
+    SolicitanteCancelacion:
+      type: string
+      enum: [cliente, conductor]
+
+    CargoCancelacionRequest:
+      type: object
+      required:
+        - tripId
+        - requestedBy
+        - vehicleType
+        - tripStatus
+        - estimatedFare
+      properties:
+        tripId:
+          type: string
+          example: trip-003
+        requestedBy:
+          $ref: "#/components/schemas/SolicitanteCancelacion"
+        vehicleType:
+          $ref: "#/components/schemas/TipoVehiculo"
+        tripStatus:
+          $ref: "#/components/schemas/EstadoViaje"
+        estimatedFare:
+          type: number
+          minimum: 0
+          example: 4000
+          description: Tarifa estimada del viaje (RF-7.1), en ARS
+        assignedAt:
+          type: string
+          format: date-time
+          description: Momento en que el conductor acepto el viaje. Obligatorio si tripStatus es "asignado".
+        arrivedAt:
+          type: string
+          format: date-time
+          description: Momento en que el conductor arribo al punto de retiro.
+        cancelledAt:
+          type: string
+          format: date-time
+          description: Momento de la cancelacion. Si no se envia, se usa el momento actual.
+        reason:
+          type: string
+          description: Motivo de la cancelacion (informativo).
+
+    CargoCancelacionBreakdown:
+      type: object
+      properties:
+        ruleApplied:
+          type: string
+          example: cliente_cancela_post_asignacion
+        vehicleMultiplier:
+          type: number
+          example: 1
+        baseAmount:
+          type: number
+          example: 800
+        minClamp:
+          type: number
+          nullable: true
+          example: 300
+        maxClamp:
+          type: number
+          nullable: true
+          example: 1500
+        elapsedSecondsSinceAssignment:
+          type: number
+          nullable: true
+          example: 300
+        gracePeriodSeconds:
+          type: number
+          nullable: true
+          example: 120
+
+    CargoCancelacionResponse:
+      type: object
+      properties:
+        tripId:
+          type: string
+          example: trip-003
+        requestedBy:
+          $ref: "#/components/schemas/SolicitanteCancelacion"
+        charge:
+          type: number
+          example: 800
+        currency:
+          type: string
+          example: ARS
+        breakdown:
+          $ref: "#/components/schemas/CargoCancelacionBreakdown"
+        message:
+          type: string
+          example: Se calculo un cargo de cancelacion de $800 ARS.
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "estimatedFare debe ser un numero >= 0"
