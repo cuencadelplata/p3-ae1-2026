@@ -1,5 +1,30 @@
 services:
-  m7-tarifas:
-    image: aylen0/m7-tarifas:4.0
+  m7-reintegro:
+    build: .
     ports:
       - "3000:3000"
+    env_file: .env
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      REDIS_URL: redis://redis:6379
+      CARGO_CANCELACION_URL: http://cargo-cancelacion:3007
+    depends_on:
+      - rabbitmq
+      - redis
+      - cargo-cancelacion
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  redis:
+    image: redis:7-alpine
+
+  cargo-cancelacion:
+    image: node:22-alpine
+    ports:
+      - "3007:3007"
+    command: >
+      node -e "require('http').createServer((q,s)=>{let b='';q.on('data',d=>b+=d);q.on('end',()=>{const r=JSON.parse(b||'{}');s.setHeader('Content-Type','application/json');s.end(JSON.stringify({tripId:r.tripId,requestedBy:r.requestedBy,charge:r.requestedBy==='cliente'?1000:0,currency:'ARS'}))})}).listen(3007)"
