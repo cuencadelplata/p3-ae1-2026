@@ -3,6 +3,16 @@ import { solicitarViaje, asignarConductor, registrarArribo } from '../../src/con
 import { mockRequest, mockResponse } from '../datos-prueba/mocks.js';
 import pool from '../../src/db/pool.js';
 
+vi.mock('../../src/services/redis.service.js', () => ({
+  redisClient: {
+    get: vi.fn().mockResolvedValue(null),
+    set: vi.fn().mockResolvedValue('OK'),
+    on: vi.fn()
+  }
+}));
+vi.mock('../../src/services/rabbitmq.service.js', () => ({
+  publicarEvento: vi.fn().mockResolvedValue(true)
+}));
 vi.mock('../../src/services/conductor.service', () => ({
   consultarEstadoConductor: vi.fn(async () => ({
     conductorId: 'mock',

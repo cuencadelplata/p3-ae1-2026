@@ -5,6 +5,7 @@ import { generarQR, validarQR } from '../services/qr.service.js';
 import * as viajeRepo from '../repositories/viaje.repository.js';
 import { randomUUID } from 'node:crypto';
 import { consultarEstadoConductor } from '../services/conductor.service.js';
+import { publicarEvento } from '../services/rabbitmq.service.js';
 
 export const solicitarViaje = async (req: Request, res: Response): Promise<any> => {
     const { clienteId, origen, destino } = req.body;
@@ -71,7 +72,7 @@ export const asignarConductor = async (req: Request, res: Response): Promise<any
 
 export const registrarArribo = async (req: Request, res: Response): Promise<any> => {
     const { id } = req.params;
-
+    
     if (typeof id !== 'string') {
         return res.status(400).json({
             error: 'Falta el id del viaje en la URL'
@@ -84,7 +85,6 @@ export const registrarArribo = async (req: Request, res: Response): Promise<any>
         viaje = await viajeRepo.buscarPorId(id);
     } catch (error) {
         console.error('ERROR EN viajeRepo.buscarPorId:', error);
-
         return res.status(503).json({
             error: 'Base de datos no disponible, intente más tarde'
         });
@@ -108,9 +108,7 @@ export const registrarArribo = async (req: Request, res: Response): Promise<any>
         });
     }
 
-    // RF-6.2:
-    // Antes de registrar el arribo, M6 consulta a M3
-    // para verificar el estado del conductor asignado.
+    // RF-6.2: Antes de registrar el arribo, M6 consulta a M3
     try {
         const estadoConductor = await consultarEstadoConductor(
             viaje.conductorId
@@ -123,7 +121,6 @@ export const registrarArribo = async (req: Request, res: Response): Promise<any>
         }
     } catch (error) {
         console.error('ERROR EN consultarEstadoConductor:', error);
-
         return res.status(503).json({
             error: 'Servicio de conductores (M3) no disponible, intente más tarde'
         });
@@ -136,13 +133,19 @@ export const registrarArribo = async (req: Request, res: Response): Promise<any>
         );
     } catch (error) {
         console.error('ERROR EN viajeRepo.actualizarEstado:', error);
-
         return res.status(503).json({
             error: 'Base de datos no disponible, intente más tarde'
         });
     }
 
     viaje.estado = EstadoViaje.ARRIBADO;
+
+    // RNF-07: Publicar evento asíncrono de arribo
+    await publicarEvento('viajes_exchange', 'viaje.arribado', {
+        viajeId: id,
+        conductorId: viaje.conductorId,
+        fecha: new Date().toISOString()
+    });
 
     return res.json({
         mensaje: 'El conductor ha arribado',
@@ -162,7 +165,6 @@ export const iniciarViaje = async (req: Request, res: Response): Promise<any> =>
         viaje = await viajeRepo.buscarPorId(id);
     } catch (error) {
         console.error('ERROR EN viajeRepo.buscarPorId:', error);
-
         return res.status(503).json({
             error: 'Base de datos no disponible, intente más tarde'
         });
@@ -174,12 +176,26 @@ export const iniciarViaje = async (req: Request, res: Response): Promise<any> =>
     }
 
     try {
-        const { valido, motivo } = await validarQR(id, codigoVerificacion);
-        if (!valido) {
-            return res.status(401).json({ error: motivo || 'Código de verificación inválido' });
+        const qrResponse = await validarQR(id, codigoVerificacion);
+        
+        if (!qrResponse.valido) {
+            return res.status(401).json({ error: qrResponse.motivo || 'Código de verificación inválido' });
         }
-    } catch (error) {
-        return res.status(503).json({ error: 'Servicio de QR no disponible, intente más tarde' });
+    } catch (error: any) {
+        // --- MANEJO DE RESILIENCIA (RNF-14) ---
+        if (error.message.includes('503_SERVICE_UNAVAILABLE')) {
+            return res.status(503).json({ 
+                error: 'Servicio de validación temporalmente no disponible. Intente nuevamente.' 
+            });
+        }
+        if (error.message.includes('400_BAD_REQUEST')) {
+            return res.status(401).json({ 
+                error: 'El código QR proporcionado es inválido o está expirado.' 
+            });
+        }
+        
+        console.error('Error no controlado en iniciarViaje:', error);
+        return res.status(500).json({ error: 'Error interno del servidor al validar el QR.' });
     }
 
     try {
@@ -189,5 +205,12 @@ export const iniciarViaje = async (req: Request, res: Response): Promise<any> =>
     }
 
     viaje.estado = EstadoViaje.EN_CURSO;
+
+    // RNF-07: Publicar evento asíncrono de inicio
+    await publicarEvento('viajes_exchange', 'viaje.iniciado', {
+        viajeId: id,
+        fecha: new Date().toISOString()
+    });
+
     return res.json({ mensaje: 'Viaje iniciado', viaje });
 };
