@@ -1,0 +1,89 @@
+openapi: 3.0.3
+info:
+  title: M7 - Pagos (Método de pago)
+  version: 1.0.0
+  description: >
+    Registro y consulta del método de pago de un viaje (RF-7.2).
+    Comunicación síncrona. El viajeId corresponde al campo `id` del viaje
+    que devuelve M6 en POST /api/viajes (RF-6.1); clienteId coincide en ambos módulos.
+paths:
+  /metodo-pago:
+    post:
+      summary: Registrar el método de pago elegido para un viaje
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarMetodoPagoRequest'
+      responses:
+        '201':
+          description: Método de pago registrado en estado pendiente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetodoPago'
+        '400':
+          description: Faltan datos obligatorios o el tipo de pago no es válido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /metodo-pago/{viajeId}:
+    get:
+      summary: Consultar el método de pago de un viaje
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          description: Id del viaje (campo `id` de M6)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Método de pago encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetodoPago'
+        '404':
+          description: No existe un método de pago para ese viaje
+components:
+  schemas:
+    TipoPago:
+      type: string
+      enum: [efectivo, tarjeta, transferencia]
+    EstadoPago:
+      type: string
+      enum: [pendiente, autorizado, rechazado]
+    RegistrarMetodoPagoRequest:
+      type: object
+      required: [clienteId, viajeId, tipo]
+      properties:
+        clienteId:
+          type: string
+          example: cliente-123
+        viajeId:
+          type: string
+          description: Es el `id` del viaje devuelto por M6
+          example: "1719500000000"
+        tipo:
+          $ref: '#/components/schemas/TipoPago'
+    MetodoPago:
+      type: object
+      properties:
+        pagoId:
+          type: string
+        clienteId:
+          type: string
+        viajeId:
+          type: string
+        tipo:
+          $ref: '#/components/schemas/TipoPago'
+        estado:
+          $ref: '#/components/schemas/EstadoPago'
+    Error:
+      type: object
+      properties:
+        mensaje:
+          type: string
