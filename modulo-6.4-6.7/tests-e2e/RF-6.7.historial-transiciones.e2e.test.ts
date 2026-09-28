@@ -1,4 +1,5 @@
 import { crearViaje, post } from './helpers.js';
+import { execFileSync } from 'node:child_process';
 
 describe('RF-6.7 - Historial de transiciones en Docker', () => {
   it('devuelve la transición real de finalización mediante el endpoint de historial', async () => {
@@ -42,5 +43,23 @@ describe('RF-6.7 - Historial de transiciones en Docker', () => {
 
     expect(response.status).toBe(200);
     expect(body.historial).toEqual([]);
+  });
+
+  it('keeps M6 alive while PostgreSQL is stopped', async () => {
+    const viajeId = `E2E-67-db-outage-${Date.now()}`;
+    await crearViaje({ id: viajeId, estado: 'en curso' });
+    const apiUrl = process.env.E2E_API_URL ?? 'http://127.0.0.1:3000';
+
+    execFileSync('docker', ['compose', 'stop', 'db']);
+    try {
+      const response = await fetch(`${apiUrl}/api/viajes/${viajeId}/historial-transiciones`);
+      const health = await fetch(`${apiUrl}/health`);
+
+      expect(response.status).toBe(503);
+      expect(health.status).toBe(200);
+      expect(await health.json()).toEqual({ status: 'ok' });
+    } finally {
+      execFileSync('docker', ['compose', 'start', 'db']);
+    }
   });
 });

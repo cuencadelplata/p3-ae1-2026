@@ -44,4 +44,44 @@ describe('RF-6.4 - Finalización del viaje', () => {
     expect(response.status).toBe(400);
     expect((await response.json()).error).toContain('ya finalizado');
   });
+
+  it('simula los contratos HTTP de tarifas y pagos de M7', async () => {
+    const running = await startServices(new Map());
+    services.api = running.api;
+    services.simulator = running.simulator;
+    const simulatorPort = (running.simulator.address() as { port: number }).port;
+    const simulatorUrl = `http://127.0.0.1:${simulatorPort}`;
+
+    const fareResponse = await fetch(`${simulatorUrl}/tarifas/estimacion`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        origen: { lat: -34.6, lng: -58.4 },
+        destino: { lat: -34.7, lng: -58.5 },
+        distanciaKm: 18.5,
+        tiempoEstimadoMin: 42,
+        vehicleType: 'auto',
+      }),
+    });
+    const fare = await fareResponse.json() as { estimatedFare: number; currency: string };
+    expect(fareResponse.status).toBe(200);
+    expect(fare).toMatchObject({ estimatedFare: 7225, currency: 'ARS' });
+
+    const paymentResponse = await fetch(`${simulatorUrl}/metodo-pago`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ clienteId: 'C-7', viajeId: 'V-700', tipo: 'tarjeta' }),
+    });
+    const payment = await paymentResponse.json() as { pagoId: string; estado: string };
+    expect(paymentResponse.status).toBe(201);
+    expect(payment).toMatchObject({ pagoId: 'PAY-V-700', estado: 'pendiente' });
+
+    const authorizationResponse = await fetch(`${simulatorUrl}/metodo-pago/V-700/autorizar`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ idOrden: 'ORD-V-700' }),
+    });
+    expect(authorizationResponse.status).toBe(200);
+    expect(await authorizationResponse.json()).toMatchObject({ pagoId: 'PAY-V-700', estado: 'autorizado' });
+  });
 });

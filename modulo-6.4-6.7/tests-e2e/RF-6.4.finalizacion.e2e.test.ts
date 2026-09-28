@@ -1,4 +1,5 @@
 import { crearViaje, post } from './helpers.js';
+import { execFileSync } from 'node:child_process';
 
 describe('RF-6.4 - Finalización del viaje en Docker', () => {
   it('registra la finalización y captura el pago mediante el simulador', async () => {
@@ -33,5 +34,27 @@ describe('RF-6.4 - Finalización del viaje en Docker', () => {
 
     expect(response.status).toBe(400);
     expect(body.error).toContain('ya finalizado');
+  });
+
+  it('keeps API alive while simulator is stopped', async () => {
+    const viajeId = `E2E-64-outage-${Date.now()}`;
+    await crearViaje({ id: viajeId, estado: 'en curso' });
+
+    execFileSync('docker', ['compose', 'stop', 'simulador']);
+    try {
+      const { response } = await post(`/api/viajes/${viajeId}/finalizacion`, {
+        tiempoMinutos: 42,
+        distanciaKm: 18.5,
+        horaFin: '2026-09-01T10:42:00Z',
+        metodoPago: 'tarjeta',
+      });
+      const health = await fetch(`${process.env.E2E_API_URL ?? 'http://127.0.0.1:3000'}/health`);
+
+      expect(response.status).toBe(503);
+      expect(health.status).toBe(200);
+      expect(await health.json()).toEqual({ status: 'ok' });
+    } finally {
+      execFileSync('docker', ['compose', 'start', 'simulador']);
+    }
   });
 });
