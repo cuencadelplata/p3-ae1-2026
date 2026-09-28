@@ -1,4 +1,4 @@
-openapi: 1.0.0
+openapi: 2.0.0
 info:
   title: M7 - Tarifas, Pagos y Liquidaciones
   description: >
@@ -6,7 +6,7 @@ info:
     (Estimación de tarifa), RF-7.2 (Método de pago), RF-7.3 (Autorización/captura),
     RF-7.4 (Cargo de cancelación), RF-7.5 (Reintegro), RF-7.6 (Idempotencia de pago)
     y RF-7.7 (Historial financiero).
-  version: 1.0.0
+  version: 2.0.0
 
 paths:
 
