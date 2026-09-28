@@ -30,7 +30,7 @@ services:
       - "15672:15672" # Panel de administración visual
 
   m6-viajes:
-    image: noeediez/m6-viajes:1.0
+    build: .
     ports:
       - "3000:3000"
     environment:
@@ -40,6 +40,8 @@ services:
       - M8_TIMEOUT_MS=${M8_TIMEOUT_MS:-3000}
       - M3_URL=${M3_URL:-http://m3:4003}
       - M3_TIMEOUT_MS=${M3_TIMEOUT_MS:-3000}
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
       - DB_HOST=tripdb
       - DB_PORT=5432
       - DB_USER=m6
@@ -48,6 +50,10 @@ services:
     depends_on:
       tripdb:
         condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
       interval: 10s

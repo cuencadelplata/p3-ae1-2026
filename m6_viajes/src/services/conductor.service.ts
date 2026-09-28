@@ -24,7 +24,7 @@ export async function consultarEstadoConductor(conductorId: string): Promise<Est
         }
 
         // 2. Si no está en caché, consultamos al servicio síncrono M3
-        const { data } = await cliente.get(`/conductores/${conductorId}/estado`);
+        const { data } = await cliente.get(`/conductor/${conductorId}/estado`);
         
         // 3. RNF-06: Guardamos la respuesta en Redis con expiración (TTL) de 60 segundos
         await redisClient.set(cacheKey, JSON.stringify(data), 'EX', 60);

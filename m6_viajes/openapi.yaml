@@ -1,8 +1,10 @@
 openapi: 3.0.0
 info:
   title: M6 - Viajes y Ciclo de Vida
-  description: API para solicitar viajes, asignar conductores y validar inicio con QR
-  version: 1.0.0
+  description: |
+    API de M6 (Viajes y Ciclo de Vida). AE2: RF-6.1 (estados), RF-6.2 (arribo validado con M3, caché Redis) y RF-6.3 (inicio validado con QR de M8).
+    Eventos asíncronos (RabbitMQ) documentados en AE2-M6-documentacion.md.
+  version: 2.0.0
   contact:
     name: Equipo M6
   license:
@@ -11,8 +13,6 @@ info:
 servers:
   - url: http://localhost:3000
     description: Servidor de desarrollo
-  - url: http://localhost:3000
-    description: Servidor Docker
 
 tags:
   - name: Viajes
@@ -24,7 +24,7 @@ paths:
       tags:
         - Viajes
       summary: "RF-6.1: Solicitar un nuevo viaje"
-      description: Crea una nueva solicitud de viaje con código QR único
+      description: Crea el viaje en estado SOLICITADO. Pide a M8 el código de verificación (QR de un solo uso) y persiste el viaje en TripDB.
       operationId: solicitarViaje
       requestBody:
         required: true
@@ -58,8 +58,15 @@ paths:
                     codigoVerificacion: "AB3K8F"
                     qrCode: "data:image/png;base64/iVBORw0KGgo..."
                     fechaCreacion: "2026-09-01T15:30:00Z"
-        '400':
-          $ref: '#/components/responses/BadRequest'
+        '503':
+          description: M8 (QR) o TripDB no disponibles.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                m8: { value: { error: "Servicio de QR no disponible, intente más tarde" } }
+                db: { value: { error: "Base de datos no disponible, intente más tarde" } }
 
   /api/viajes/{id}/asignar:
     post:
@@ -96,13 +103,18 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DbNoDisponible'
 
   /api/viajes/{id}/arribo:
     put:
       tags:
         - Viajes
-      summary: Registrar arribo del conductor
-      description: Marca que el conductor ha llegado al punto de retiro, cambia a ARRIBADO
+      summary: "RF-6.2: Registrar arribo del conductor"
+      description: |
+        Requiere estado CONDUCTOR_EN_CAMINO y conductor asignado. Consulta a M3 si el conductor está habilitado
+        (GET {M3_URL}/conductores/{id}/estado). La respuesta de M3 se cachea en Redis 60 s (clave conductor:{id}:estado).
+        Si M3 está caído o excede el timeout responde 503. Al éxito pasa a ARRIBADO y publica el evento viaje.arribado.
       operationId: registrarArribo
       parameters:
         - $ref: '#/components/parameters/ViajeId'
@@ -114,20 +126,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/RegistrarArriboResponse'
         '400':
-          description: Error de validación (viaje no en estado CONDUCTOR_EN_CAMINO)
+          description: Transición inválida (viaje no está en CONDUCTOR_EN_CAMINO) o viaje sin conductor asignado.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: M3 informa que el conductor no está habilitado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example: { error: "El conductor no está habilitado" }
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          description: M3 (conductores) o TripDB no disponibles.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example: { error: "Servicio de conductores (M3) no disponible, intente más tarde" }
 
   /api/viajes/{id}/iniciar:
     post:
       tags:
         - Viajes
       summary: "RF-6.3: Iniciar viaje con validación de QR"
-      description: Valida el código de verificación (QR) e inicia el viaje cambiando a EN_CURSO
+      description: |
+        Requiere estado ARRIBADO. Envía el código a M8 (POST /qr/validate); M8 lo consume (un solo uso, con expiración).
+        Si es válido pasa a EN_CURSO y publica el evento viaje.iniciado.
       operationId: iniciarViaje
       parameters:
         - $ref: '#/components/parameters/ViajeId'
@@ -160,13 +188,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Código de verificación inválido
+          description: Código inválido, inexistente, ya usado, expirado o de otro viaje (motivo informado por M8).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                usado: { value: { error: "QR ya utilizado" } }
+                expirado: { value: { error: "QR expirado" } }
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          description: Error inesperado de M8 al validar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: M8 no disponible o timeout, o TripDB no disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example: { error: "Servicio de validación temporalmente no disponible. Intente nuevamente." }
 
 components:
   schemas:
@@ -207,8 +251,8 @@ components:
       properties:
         id:
           type: string
-          description: Identificador único del viaje basado en timestamp
-          example: "1725167854321"
+          description: UUID v4 del viaje
+          example: "3f0c9c1e-6a51-4d0e-9b57-0c2d1a7f4b11"
         clienteId:
           type: string
           description: ID del cliente que solicitó el viaje
@@ -232,8 +276,8 @@ components:
           example: "AB3K8F"
         qrCode:
           type: string
-          description: Código QR como data URL (PNG en base64)
-          example: "data:image/png;base64/iVBORw0KGgoAAAANSUhEUgAAAAUA..."
+          nullable: true
+          description: "Reservado. Actualmente no se devuelve (la imagen QR la resuelve M8/el cliente a partir de codigoVerificacion)."
         fechaCreacion:
           type: string
           format: date-time
@@ -299,19 +343,22 @@ components:
     ViajeId:
       name: id
       in: path
-      description: Identificador único del viaje
+      description: UUID del viaje
       required: true
       schema:
         type: string
-      example: "1725167854321"
+        format: uuid
+      example: "3f0c9c1e-6a51-4d0e-9b57-0c2d1a7f4b11"
 
   responses:
-    BadRequest:
-      description: Solicitud inválida
+    DbNoDisponible:
+      description: TripDB no disponible
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Base de datos no disponible, intente más tarde"
 
     NotFound:
       description: Viaje no encontrado

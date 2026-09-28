@@ -17,12 +17,14 @@
     "amqplib": "^2.2.0",
     "axios": "^1.20.0",
     "express": "^5.2.1",
+    "ioredis": "^6.0.0",
     "pg": "^8.13.0",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/amqplib": "^0.10.8",
     "@types/express": "^5.0.6",
+    "@types/ioredis": "^4.28.10",
     "@types/node": "^26.4.0",
     "@types/pg": "^8.11.0",
     "@types/qrcode": "^1.5.6",
