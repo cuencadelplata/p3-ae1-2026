@@ -48,6 +48,18 @@ npm run docker:down
 
 La suite unitaria usa dobles inyectables para RF-6 y RabbitMQ. No requiere Docker.
 
+Para ejecutar los tests e2e se necesita tener disponible el servicio RF-6 en
+`RF6_API_URL` y RabbitMQ en `RABBITMQ_URL`. Por defecto usan `http://127.0.0.1:3000`
+y `amqp://127.0.0.1:5672`; la API M6 se espera en `E2E_API_URL`, por defecto
+`http://127.0.0.1:3001`.
+
+```sh
+RF6_API_URL=http://127.0.0.1:3000 \
+RABBITMQ_URL=amqp://127.0.0.1:5672 \
+E2E_API_URL=http://127.0.0.1:3001 \
+pnpm test:e2e
+```
+
 ## Endpoints provistos por la API
 
 La especificación completa se encuentra en [openapi.yaml](openapi.yaml).
