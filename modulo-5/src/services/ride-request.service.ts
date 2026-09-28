@@ -19,7 +19,7 @@ import {
 import { RideRequestValidator } from '../schemas/ride-request.schema';
 import { randomUUID } from 'node:crypto';
 import { RedisService } from './redis.service';
-import { RabbitMQService } from './rabbitmq.service';
+import { RabbitMQService, DriverCancellationEvent } from './rabbitmq.service';
 
 export class ConflictError extends Error {
   public code: string;
@@ -66,6 +66,9 @@ export class RideRequestService {
   constructor(redisService?: RedisService, rabbitMQService?: RabbitMQService) {
     this.redisService = redisService || new RedisService();
     this.rabbitMQService = rabbitMQService || new RabbitMQService();
+
+    // Suscribirse a la cola despacho.reabrir para atender cancelaciones de conductor (integración con módulo de cancelaciones)
+    this.rabbitMQService.subscribeToReopenDispatch((event) => this.handleDriverCancellation(event));
   }
 
   public getRedisService(): RedisService {
@@ -724,6 +727,73 @@ export class RideRequestService {
         return offer;
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  /**
+   * Manejador de eventos de RabbitMQ en la cola 'despacho.reabrir'
+   * Procesa la cancelación de un conductor y reabre automáticamente el despacho para nuevos candidatos.
+   */
+  public async handleDriverCancellation(event: DriverCancellationEvent): Promise<void> {
+    const requestId = event.viajeId;
+    const clientId = event.clienteId;
+    const cancelledDriverId = event.conductorId;
+
+    console.log(
+      `[RabbitMQ] Recibido evento '${event.evento}' en 'despacho.reabrir' para Viaje=${requestId} | Cliente=${clientId} | ConductorCanceló=${cancelledDriverId}`
+    );
+
+    const request = this.requests.get(requestId);
+    if (!request) {
+      console.warn(`[RabbitMQ] Solicitud de viaje ${requestId} no encontrada para reapertura de despacho.`);
+      return;
+    }
+
+    // 1. Reabrir estado de la solicitud: quitar asignación y regresar a SEARCHING
+    request.assignedDriverId = null;
+    request.status = 'SEARCHING';
+    request.updatedAt = new Date().toISOString();
+    this.requests.set(requestId, request);
+
+    // 2. Marcar como expiradas las ofertas pendientes asociadas
+    for (const offer of this.offers.values()) {
+      if (offer.requestId === requestId && (offer.status === 'PENDING' || offer.driverId === cancelledDriverId)) {
+        offer.status = 'EXPIRED';
+        this.offers.set(offer.id, offer);
+        await this.redisService.deleteOffer(offer.id);
+      }
+    }
+
+    // 3. Buscar nuevos candidatos excluyendo al conductor que canceló
+    try {
+      const candidatesResult = await this.searchCandidatesForRequest(requestId, clientId, {
+        radiusKm: 5.0,
+        maxCandidates: 5
+      });
+
+      const filteredCandidates = candidatesResult.candidates.filter(
+        (c) => c.driverId !== cancelledDriverId
+      );
+
+      if (filteredCandidates.length > 0) {
+        // 4. Emitir nuevas ofertas con vencimiento (TTL) en Redis y publicar en RabbitMQ
+        await this.sendOffersForRequest(requestId, clientId, {
+          driverIds: filteredCandidates.map((c) => c.driverId),
+          ttlSeconds: 30
+        });
+
+        console.log(
+          `[RabbitMQ] Despacho reabierto exitosamente para viaje ${requestId}. Nuevas ofertas enviadas a: ${filteredCandidates
+            .map((c) => c.driverId)
+            .join(', ')}`
+        );
+      } else {
+        console.warn(
+          `[RabbitMQ] No se encontraron otros conductores disponibles para el viaje ${requestId} (distintos a ${cancelledDriverId}).`
+        );
+      }
+    } catch (err) {
+      console.warn(`[RabbitMQ] No fue posible reasignar candidatos automáticamente: ${(err as Error).message}`);
+    }
   }
 }
 
