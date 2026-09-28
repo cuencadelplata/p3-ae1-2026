@@ -11,5 +11,5 @@
     "types": ["node", "vitest/globals"],
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
+  "include": ["service-server.ts", "src/**/*.ts", "tests/**/*.ts", "tests-e2e/**/*.ts"]
 }

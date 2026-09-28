@@ -14,6 +14,12 @@ paths:
       responses:
         '201': { description: Viaje creado }
         '400': { description: Datos inválidos }
+        '503': { description: Base de datos no disponible }
+  /health:
+    get:
+      summary: Verifica que el proceso HTTP de M6 está activo
+      responses:
+        '200': { description: Proceso disponible }
   /api/viajes/{viajeId}/finalizacion:
     post:
       summary: Finaliza un viaje y captura su pago
@@ -27,6 +33,7 @@ paths:
       responses:
         '200': { description: Viaje finalizado }
         '400': { description: Transición inválida }
+        '503': { description: Dependencia externa o base de datos no disponible }
   /api/viajes/{viajeId}/cancelacion-cliente:
     post:
       summary: Cancela un viaje por solicitud del cliente
@@ -40,6 +47,7 @@ paths:
       responses:
         '200': { description: Viaje cancelado }
         '400': { description: Cancelación inválida }
+        '503': { description: Dependencia externa o base de datos no disponible }
   /api/viajes/{viajeId}/cancelacion-conductor:
     post:
       summary: Cancela un viaje por solicitud del conductor
@@ -53,6 +61,7 @@ paths:
       responses:
         '200': { description: Viaje cancelado y cliente retornado al despacho }
         '400': { description: Cancelación inválida }
+        '503': { description: Dependencia externa o base de datos no disponible }
   /api/viajes/{viajeId}/historial-transiciones:
     get:
       summary: Obtiene el historial de transiciones de un viaje
@@ -71,6 +80,7 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/TransicionViaje' }
         '404': { description: Viaje no encontrado }
+        '503': { description: Base de datos no disponible }
 components:
   schemas:
     CrearViaje:

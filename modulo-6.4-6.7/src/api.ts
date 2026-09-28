@@ -1,5 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import CircuitBreaker from 'opossum';
 import { Viaje, type CrearViajeInput, type FinalizarViajeInput } from './Viaje.js';
+import { MapViajeRepository, type ViajeRepository } from './ViajeRepository.js';
+import { BadGatewayError, ExternalApiResponseError, ServiceUnavailableError } from './errors.js';
 
 export interface ExternalApisClient {
   estimateFare(input: { viajeId: string; distanciaKm: number; tiempoMinutos: number }): Promise<number>;
@@ -9,16 +12,50 @@ export interface ExternalApisClient {
 }
 
 export class HttpExternalApisClient implements ExternalApisClient {
+  private readonly breakers = new Map<string, CircuitBreaker<[unknown], unknown>>();
+
   constructor(private readonly baseUrl: string) {}
 
   private async post<T>(path: string, body: unknown): Promise<T> {
+    try {
+      return await this.breaker(path).fire(body) as T;
+    } catch (error) {
+      if (error instanceof ExternalApiResponseError && error.status < 500) {
+        throw new BadGatewayError(error.message);
+      }
+      throw new ServiceUnavailableError(`Dependencia externa no disponible: ${path}`);
+    }
+  }
+
+  private breaker(path: string): CircuitBreaker<[unknown], unknown> {
+    let breaker = this.breakers.get(path);
+    if (!breaker) {
+      breaker = new CircuitBreaker(
+        (body: unknown) => this.send(path, body),
+        {
+          name: path,
+          timeout: 2500,
+          resetTimeout: 5000,
+          errorThresholdPercentage: 50,
+          volumeThreshold: 1,
+          rollingCountTimeout: 10000,
+          errorFilter: (error: unknown) => error instanceof ExternalApiResponseError && error.status < 500,
+        },
+      );
+      this.breakers.set(path, breaker);
+    }
+    return breaker;
+  }
+
+  private async send(path: string, body: unknown): Promise<unknown> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(2000),
     });
-    if (!response.ok) throw new Error(`API externa respondió ${response.status}`);
-    return response.json() as Promise<T>;
+    if (!response.ok) throw new ExternalApiResponseError(response.status);
+    return response.json();
   }
 
   async estimateFare(input: { viajeId: string; distanciaKm: number; tiempoMinutos: number }): Promise<number> {
@@ -44,24 +81,29 @@ export class HttpExternalApisClient implements ExternalApisClient {
 
 export interface ViajeApiOptions {
   externalApis: ExternalApisClient;
+  repository?: ViajeRepository;
   viajes?: Map<string, Viaje>;
 }
 
 export function createViajeApi(options: ViajeApiOptions): Server {
-  const viajes = options.viajes ?? new Map<string, Viaje>();
+  const repository = options.repository ?? new MapViajeRepository(options.viajes);
 
   return createServer(async (request, response) => {
     try {
+      if (request.method === 'GET' && request.url === '/health') {
+        return send(response, 200, { status: 'ok' });
+      }
+
       if (request.method === 'POST' && request.url === '/api/viajes') {
         const viaje = crearViaje(await readJson(request) as unknown as CrearViajeInput);
-        viajes.set(viaje.id, viaje);
+        await repository.save(viaje);
         return send(response, 201, { viaje });
       }
 
       const match = request.url?.match(/^\/api\/viajes\/([^/]+)\/(finalizacion|cancelacion-cliente|cancelacion-conductor|historial-transiciones)$/);
       if (!match) return send(response, 404, { error: 'Ruta no encontrada' });
 
-      const viaje = viajes.get(match[1]);
+      const viaje = await repository.get(match[1]);
       if (!viaje) return send(response, 404, { error: 'Viaje no encontrado' });
 
       if (request.method === 'GET' && match[2] === 'historial-transiciones') {
@@ -90,6 +132,7 @@ export function createViajeApi(options: ViajeApiOptions): Server {
           amount: total,
           metodoPago: viaje.metodoPago as string,
         });
+        await repository.save(viaje);
         return send(response, 200, { viaje, paymentId });
       }
 
@@ -97,6 +140,7 @@ export function createViajeApi(options: ViajeApiOptions): Server {
         const motivo = String((input as { motivo?: string }).motivo ?? '');
         const cargo = await options.externalApis.cancellationCharge({ viajeId: viaje.id, estado: viaje.estado });
         viaje.cancelarPorCliente({ motivo, cargo });
+        await repository.save(viaje);
         return send(response, 200, { viaje });
       }
 
@@ -107,10 +151,12 @@ export function createViajeApi(options: ViajeApiOptions): Server {
       });
       viaje.cancelarPorConductor({ motivo });
       viaje.retornoDespacho = retornoDespacho;
+      await repository.save(viaje);
       return send(response, 200, { viaje, retornoDespacho });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Solicitud inválida';
-      return send(response, 400, { error: message });
+      const status = error instanceof ServiceUnavailableError ? 503 : error instanceof BadGatewayError ? 502 : 400;
+      return send(response, status, { error: message });
     }
   });
 }

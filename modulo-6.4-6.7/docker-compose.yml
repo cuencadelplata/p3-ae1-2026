@@ -7,9 +7,22 @@ services:
     ports: ["3000:3000"]
     environment:
       SIMULATOR_URL: http://simulador:3001
+      DATABASE_URL: postgres://m6:m6_local@db:5432/m6
     depends_on:
+      - db
       - simulador
     container_name: src-container
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: m6
+      POSTGRES_PASSWORD: m6_local
+      POSTGRES_DB: m6
+    volumes:
+      - m6-data:/var/lib/postgresql/data
+    restart: unless-stopped
 
   simulador:
     build:
@@ -18,3 +31,6 @@ services:
     image: p3-ae1-2026_g10-m6-dependencies:2.0
     expose: ["3001"]
     container_name: simulador-container
+
+volumes:
+  m6-data:

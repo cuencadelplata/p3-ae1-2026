@@ -10,7 +10,9 @@ Implementación del módulo M6 para los requisitos RF-6.4 a RF-6.7:
  - Cancelación por conductor.
  - Historial de transiciones.
 
-La API principal delega las operaciones de tarifa, pagos y despacho en APIs externas. Esas APIs se ejecutan en la imagen de dependencias y no forman parte de los endpoints provistos por M6.
+La API principal delega las operaciones de tarifa, pagos y despacho en APIs externas. Esas APIs se ejecutan en la imagen de dependencias y no forman parte de los endpoints provistos por M6. El simulador preserva los contratos usados por M6; la integración de captura con RabbitMQ queda pendiente de acuerdo con M7, como documenta su rama AE2.
+
+Los viajes y sus historiales se persisten en PostgreSQL mediante el volumen `m6-data` de Docker Compose. Si PostgreSQL o una dependencia HTTP deja de responder, M6 devuelve `503` y el proceso permanece activo; `GET /health` verifica la disponibilidad HTTP del proceso, no la de sus dependencias.
 
 ## Imágenes Docker Hub
 
@@ -69,6 +71,8 @@ npm run docker:e2e:up
 npm run test:e2e
 npm run docker:e2e:down
 ```
+
+La suite E2E incluye pruebas que detienen y vuelven a iniciar el simulador y PostgreSQL para verificar que el contenedor M6 siga disponible. Requiere Docker Compose y permiso para ejecutar `docker compose stop/start`.
 
 La suite unitaria/de integración local usa puertos efímeros y levanta el servicio M6 y el simulador durante cada prueba. No requiere iniciar Docker.
 
