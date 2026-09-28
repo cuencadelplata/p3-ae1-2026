@@ -1,25 +1,28 @@
 {
-  "name": "historial-financiero",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "m7-reintegro-idempotencia",
+  "version": "2.0.0",
+  "description": "M7 - RF-7.5 Reintegro y RF-7.6 Idempotencia (AE2)",
+  "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
-    "test:report": "playwright test --reporter=html"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module",
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@types/express": "^5.0.6",
     "@types/node": "^26.4.1",
     "@types/pg": "^8.23.1",
-    "typescript": "^7.0.2"
+    "@types/supertest": "^7.2.1",
+    "@vitest/coverage-v8": "^5.0.2",
+    "supertest": "^7.3.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
   },
   "dependencies": {
     "@scalar/express-api-reference": "^0.10.18",
