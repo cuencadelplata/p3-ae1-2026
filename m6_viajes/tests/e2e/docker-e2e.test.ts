@@ -1,13 +1,13 @@
 import { describe, it, beforeAll, afterAll, expect } from 'vitest';
 import axios from 'axios';
-import { execSync, spawn } from 'child_process';
+import { execSync } from 'child_process';
 import { resolve } from 'path';
 
 const API_URL = 'http://localhost:3000/api';
 const PROJECT_ROOT = resolve(__dirname, '../../');
 let containerId: string | null = null;
 
-describe.skip('E2E Tests - Docker Container', () => {
+describe('E2E Tests - Docker Container', () => {
   beforeAll(async () => {
     console.log('Construyendo imagen de Docker...');
     try {
@@ -79,8 +79,6 @@ describe.skip('E2E Tests - Docker Container', () => {
     expect(response.data).toHaveProperty('clienteId', 'cliente-123');
     expect(response.data).toHaveProperty('estado', 'SOLICITADO');
     expect(response.data).toHaveProperty('codigoVerificacion');
-    // expect(response.data).toHaveProperty('qrCode');
-    // expect(response.data.qrCode).toMatch(/^data:image\/png;base64,/);
   });
 
   it('RF-6.1: POST /viajes - Múltiples viajes tienen códigos e IDs únicos', async () => {
@@ -165,7 +163,7 @@ describe.skip('E2E Tests - Docker Container', () => {
 
     expect(response.status).toBe(200);
     expect(response.data.viaje.estado).toBe('EN_CURSO');
-  });
+  }, 30000);
 
   it('RF-6.3: POST /viajes/:id/iniciar - Rechazar código de verificación inválido', async () => {
     const viaje = await axios.post(`${API_URL}/viajes`, {
@@ -192,7 +190,7 @@ describe.skip('E2E Tests - Docker Container', () => {
     } catch (error: any) {
       expect(error.response?.status).toBe(401);
     }
-  });
+  }, 30000);
 
   it('Flujo completo de viaje: Solicitar -> Asignar -> Arribo -> Iniciar', async () => {
     // Paso 1: Solicitar Viaje
@@ -227,7 +225,7 @@ describe.skip('E2E Tests - Docker Container', () => {
 
     expect(inicio.status).toBe(200);
     expect(inicio.data.viaje.estado).toBe('EN_CURSO');
-  });
+  }, 30000);
 
   it('GET /viajes debe retornar no encontrado para un viaje inexistente', async () => {
     try {
