@@ -1,8 +1,19 @@
-import { createViajeApi, HttpExternalApisClient } from './src/api.js';
+import { createViajeApi, HttpRf6ApiClient } from './src/api.js';
+import { RabbitMqEventPublisher } from './src/rabbitmq.js';
 
+const events = new RabbitMqEventPublisher(process.env.RABBITMQ_URL ?? 'amqp://rabbitmq:5672');
 const server = createViajeApi({
-  externalApis: new HttpExternalApisClient(process.env.SIMULATOR_URL ?? 'http://127.0.0.1:3001'),
+  rf6Api: new HttpRf6ApiClient(process.env.RF6_API_URL ?? 'http://localhost:3000'),
+  events,
 });
-server.listen(Number(process.env.PORT ?? 3000), '0.0.0.0', () => {
-  console.log(`API M6 escuchando en ${process.env.PORT ?? 3000}`);
+server.listen(Number(process.env.PORT ?? 3001), '0.0.0.0', () => {
+  console.log(`API M6 escuchando en ${process.env.PORT ?? 3001}`);
 });
+
+async function shutdown(): Promise<void> {
+  await events.close();
+  server.close();
+}
+
+process.once('SIGINT', shutdown);
+process.once('SIGTERM', shutdown);

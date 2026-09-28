@@ -1,25 +1,44 @@
 import type { Server } from 'node:http';
-import { createViajeApi, HttpExternalApisClient } from '../src/api.js';
-import { createSimulator } from '../simulator/server.js';
-import type { Viaje } from '../src/Viaje.js';
+import { createViajeApi, type CancellationEventPublisher, type Rf6ApiClient, type Rf6Viaje } from '../src/api.js';
 
-export async function startServices(viajes: Map<string, Viaje>): Promise<{
+export async function startServices(viajes: Map<string, Rf6Viaje>): Promise<{
   api: Server;
-  simulator: Server;
   url: string;
+  events: TestEventPublisher;
 }> {
-  const simulator = createSimulator();
-  const simulatorPort = await listen(simulator);
+  const rf6Api: Rf6ApiClient = {
+    async getViaje(viajeId) {
+      const viaje = viajes.get(viajeId);
+      if (!viaje) throw new Error('Viaje no encontrado');
+      return viaje;
+    },
+    async cancelViaje(input) {
+      const viaje = viajes.get(input.viajeId);
+      if (!viaje) throw new Error('Viaje no encontrado');
+      const cancelado = { ...viaje, estado: 'CANCELADO' };
+      viajes.set(input.viajeId, cancelado);
+      return cancelado;
+    },
+  };
+  const events = new TestEventPublisher();
   const api = createViajeApi({
-    externalApis: new HttpExternalApisClient(`http://127.0.0.1:${simulatorPort}`),
-    viajes,
+    rf6Api,
+    events,
   });
   const apiPort = await listen(api);
-  return { api, simulator, url: `http://127.0.0.1:${apiPort}` };
+  return { api, events, url: `http://127.0.0.1:${apiPort}` };
 }
 
-export function stopServices(...servers: Server[]): void {
-  for (const server of servers) server.close();
+export function stopServices(server: Server): void {
+  server.close();
+}
+
+export class TestEventPublisher implements CancellationEventPublisher {
+  readonly messages: Array<{ routingKey: string; payload: unknown }> = [];
+
+  async publish(routingKey: string, payload: unknown): Promise<void> {
+    this.messages.push({ routingKey, payload });
+  }
 }
 
 function listen(server: Server): Promise<number> {

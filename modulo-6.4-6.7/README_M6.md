@@ -3,35 +3,12 @@ Paradigmas 3 AE1 2026 - Grupo 10 - M6
 
 # M6: Viajes
 
-Implementación del módulo M6 para los requisitos RF-6.4 a RF-6.7:
+Implementación del módulo M6 para cancelación de viajes:
 
- - Finalización de viajes.
  - Cancelación por cliente.
  - Cancelación por conductor.
- - Historial de transiciones.
 
-La API principal delega las operaciones de tarifa, pagos y despacho en APIs externas. Esas APIs se ejecutan en la imagen de dependencias y no forman parte de los endpoints provistos por M6.
-
-## Imágenes Docker Hub
-
-Las imágenes publicadas están disponibles en:
-
- - [Código principal M6](https://hub.docker.com/repository/docker/mordkalucas/p3-ae1-2026_g10-m6/general)
- - [Dependencias simuladas](https://hub.docker.com/repository/docker/mordkalucas/p3-ae1-2026_g10-m6-dependencies/general)
-
-Para descargar la versión `2.0` desde la terminal integrada de VS Code:
-
-```sh
-docker pull mordkalucas/p3-ae1-2026_g10-m6:2.0
-docker pull mordkalucas/p3-ae1-2026_g10-m6-dependencies:2.0
-```
-
-Para comprobar que ambas imágenes quedaron instaladas localmente:
-
-```sh
-docker image ls mordkalucas/p3-ae1-2026_g10-m6
-docker image ls mordkalucas/p3-ae1-2026_g10-m6-dependencies
-```
+La API consulta y actualiza viajes en el servicio RF-6 mediante `RF6_API_URL`, y publica eventos de cancelación en RabbitMQ mediante `RABBITMQ_URL`.
 
 ## Ejecutar los tests
 
@@ -62,41 +39,24 @@ npm install
 npm test
 ```
 
-Para ejecutar los tests end-to-end, que requieren los servicios Docker:
+Para iniciar la API y RabbitMQ:
 
 ```sh
-npm run docker:e2e:up
-npm run test:e2e
-npm run docker:e2e:down
+npm run docker:up
+npm run docker:down
 ```
 
-La suite unitaria/de integración local usa puertos efímeros y levanta el servicio M6 y el simulador durante cada prueba. No requiere iniciar Docker.
+La suite unitaria usa dobles inyectables para RF-6 y RabbitMQ. No requiere Docker.
 
 ## Endpoints provistos por la API
 
 La especificación completa se encuentra en [openapi.yaml](openapi.yaml).
 
-### Crear un viaje
-
-`POST /api/viajes`
-
-Crea un viaje en memoria para iniciar su ciclo de vida. Recibe los identificadores del cliente y conductor, el estado inicial, las tarifas configuradas y la hora de inicio. `Esta API se creó por necesidad de simulación, ya que se necesitaría la otra mitad del M6 para cumplir los requerimientos dados.`
-
-Respuesta exitosa: `201 Created`.
-
-### Finalizar un viaje
-
-`POST /api/viajes/{viajeId}/finalizacion`
-
-Implementa RF-6.4. Registra el tiempo, la distancia, la hora de finalización y el método de pago. Consulta la estimación de tarifa a la API externa, cambia el viaje a `completado` y solicita la captura del pago.
-
-Respuesta exitosa: `200 OK`, con el viaje actualizado y el identificador del pago.
-
 ### Cancelar por cliente
 
 `POST /api/viajes/{viajeId}/cancelacion-cliente`
 
-Implementa RF-6.5. Cancela el viaje por solicitud del cliente, registra el motivo y consulta a la API externa el eventual cargo de cancelación.
+Consulta el viaje en RF-6, valida que esté en `SOLICITADO` o `CONDUCTOR_EN_CAMINO`, solicita el cambio a `CANCELADO` y publica `cancelacion_cliente` en RabbitMQ.
 
 Respuesta exitosa: `200 OK`, con el viaje cancelado.
 
@@ -104,23 +64,14 @@ Respuesta exitosa: `200 OK`, con el viaje cancelado.
 
 `POST /api/viajes/{viajeId}/cancelacion-conductor`
 
-Implementa RF-6.6. Registra el motivo de la cancelación por parte del conductor y solicita a la API de despacho que retorne el cliente al proceso de búsqueda.
+Consulta y actualiza el viaje en RF-6 y publica `despacho.reabrir` en RabbitMQ para que despacho retorne al cliente al proceso de búsqueda.
 
 Respuesta exitosa: `200 OK`, con el viaje cancelado y el resultado del retorno al despacho.
 
-### Consultar historial de transiciones
+## Variables de entorno
 
-`GET /api/viajes/{viajeId}/historial-transiciones`
+ - `RF6_API_URL`: URL base de RF-6. Por defecto: `http://localhost:3000`.
+ - `RABBITMQ_URL`: URL del broker. Por defecto: `amqp://rabbitmq:5672`.
+ - `PORT`: puerto de esta API. Por defecto: `3001`.
 
-Implementa RF-6.7. Devuelve el historial inmutable de cambios de estado registrados para el viaje, incluyendo estado anterior, estado nuevo, fecha y detalle.
-
-Respuesta exitosa: `200 OK`, con la propiedad `historial`.
-
-## Contrato de APIs externas
-
-Estos endpoints son consumidos por M6 para simular dependencias de otros módulos; no son endpoints provistos por nuestra API:
-
- - `POST /api/tarifas/estimacion`
- - `POST /api/tarifas/cargo-cancelacion`
- - `POST /api/pagos/captura`
- - `POST /api/despacho/reabrir`
+El contrato consumido por esta API se documenta en [simulator/rf-6-apis.yaml](simulator/rf-6-apis.yaml). El directorio conserva ese contrato, pero ya no contiene un servidor simulador.

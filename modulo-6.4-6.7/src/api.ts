@@ -1,122 +1,87 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { Viaje, type CrearViajeInput, type FinalizarViajeInput } from './Viaje.js';
 
-export interface ExternalApisClient {
-  estimateFare(input: { viajeId: string; distanciaKm: number; tiempoMinutos: number }): Promise<number>;
-  capturePayment(input: { viajeId: string; amount: number; metodoPago: string }): Promise<string>;
-  cancellationCharge(input: { viajeId: string; estado: string }): Promise<number>;
-  returnClientToDispatch(input: { viajeId: string; conductorId: string }): Promise<{ reabrirDespacho: boolean; clienteRetornado: boolean }>;
+export interface Rf6Viaje {
+  id: string | number;
+  clienteId: string;
+  conductorId?: string;
+  estado: string;
+  origen?: string;
+  destino?: string;
 }
 
-export class HttpExternalApisClient implements ExternalApisClient {
+export interface Rf6ApiClient {
+  getViaje(viajeId: string): Promise<Rf6Viaje>;
+  cancelViaje(input: { viajeId: string; actor: 'cliente' | 'conductor'; motivo: string }): Promise<Rf6Viaje>;
+}
+
+export class HttpRf6ApiClient implements Rf6ApiClient {
   constructor(private readonly baseUrl: string) {}
 
-  private async post<T>(path: string, body: unknown): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method: 'POST',
+  async getViaje(viajeId: string): Promise<Rf6Viaje> {
+    return this.request<Rf6Viaje>(`/api/viajes/${encodeURIComponent(viajeId)}`, { method: 'GET' });
+  }
+
+  async cancelViaje(input: { viajeId: string; actor: 'cliente' | 'conductor'; motivo: string }): Promise<Rf6Viaje> {
+    return this.request<Rf6Viaje>(`/api/viajes/${encodeURIComponent(input.viajeId)}/cancelacion`, {
+      method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ actor: input.actor, motivo: input.motivo }),
     });
-    if (!response.ok) throw new Error(`API externa respondió ${response.status}`);
+  }
+
+  private async request<T>(path: string, init: RequestInit): Promise<T> {
+    const response = await fetch(`${this.baseUrl}${path}`, init);
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(detail.error ?? `API RF-6 respondió ${response.status}`);
+    }
     return response.json() as Promise<T>;
   }
+}
 
-  async estimateFare(input: { viajeId: string; distanciaKm: number; tiempoMinutos: number }): Promise<number> {
-    const result = await this.post<{ total: number }>('/api/tarifas/estimacion', input);
-    return result.total;
-  }
-
-  async capturePayment(input: { viajeId: string; amount: number; metodoPago: string }): Promise<string> {
-    const result = await this.post<{ paymentId: string }>('/api/pagos/captura', input);
-    return result.paymentId;
-  }
-
-  async cancellationCharge(input: { viajeId: string; estado: string }): Promise<number> {
-    const result = await this.post<{ cargo: number }>('/api/tarifas/cargo-cancelacion', input);
-    return result.cargo;
-  }
-
-  async returnClientToDispatch(input: { viajeId: string; conductorId: string }): Promise<{ reabrirDespacho: boolean; clienteRetornado: boolean }> {
-    const result = await this.post<{ reabrirDespacho: boolean; clienteRetornado: boolean }>('/api/despacho/reabrir', input);
-    return result;
-  }
+export interface CancellationEventPublisher {
+  publish(routingKey: string, payload: unknown): Promise<void>;
 }
 
 export interface ViajeApiOptions {
-  externalApis: ExternalApisClient;
-  viajes?: Map<string, Viaje>;
+  rf6Api: Rf6ApiClient;
+  events: CancellationEventPublisher;
 }
 
 export function createViajeApi(options: ViajeApiOptions): Server {
-  const viajes = options.viajes ?? new Map<string, Viaje>();
-
   return createServer(async (request, response) => {
     try {
-      if (request.method === 'POST' && request.url === '/api/viajes') {
-        const viaje = crearViaje(await readJson(request) as unknown as CrearViajeInput);
-        viajes.set(viaje.id, viaje);
-        return send(response, 201, { viaje });
-      }
-
-      const match = request.url?.match(/^\/api\/viajes\/([^/]+)\/(finalizacion|cancelacion-cliente|cancelacion-conductor|historial-transiciones)$/);
+      const match = request.url?.match(/^\/api\/viajes\/([^/]+)\/(cancelacion-cliente|cancelacion-conductor)$/);
       if (!match) return send(response, 404, { error: 'Ruta no encontrada' });
 
-      const viaje = viajes.get(match[1]);
-      if (!viaje) return send(response, 404, { error: 'Viaje no encontrado' });
-
-      if (request.method === 'GET' && match[2] === 'historial-transiciones') {
-        return send(response, 200, { historial: viaje.historialTransiciones });
-      }
-
       if (request.method !== 'POST') return send(response, 404, { error: 'Ruta no encontrada' });
-      const input = await readJson(request);
+      const input = await readJson(request) as { motivo?: string };
+      const motivo = input.motivo?.trim() ?? '';
+      if (!motivo) return send(response, 400, { error: 'El motivo de cancelación es obligatorio' });
 
-      if (match[2] === 'finalizacion') {
-        const data = input as Partial<FinalizarViajeInput>;
-        const total = await options.externalApis.estimateFare({
-          viajeId: viaje.id,
-          distanciaKm: Number(data.distanciaKm),
-          tiempoMinutos: Number(data.tiempoMinutos),
-        });
-        viaje.finalizar({
-          tiempoMinutos: Number(data.tiempoMinutos),
-          distanciaKm: Number(data.distanciaKm),
-          horaFin: new Date(String(data.horaFin)),
-          metodoPago: String(data.metodoPago),
-          total,
-        });
-        const paymentId = await options.externalApis.capturePayment({
-          viajeId: viaje.id,
-          amount: total,
-          metodoPago: viaje.metodoPago as string,
-        });
-        return send(response, 200, { viaje, paymentId });
+      const actor = match[2] === 'cancelacion-cliente' ? 'cliente' : 'conductor';
+      const viaje = await options.rf6Api.getViaje(match[1]);
+      if (!['SOLICITADO', 'CONDUCTOR_EN_CAMINO'].includes(viaje.estado)) {
+        return send(response, 400, { error: `No se puede cancelar un viaje en estado ${viaje.estado}` });
       }
 
-      if (match[2] === 'cancelacion-cliente') {
-        const motivo = String((input as { motivo?: string }).motivo ?? '');
-        const cargo = await options.externalApis.cancellationCharge({ viajeId: viaje.id, estado: viaje.estado });
-        viaje.cancelarPorCliente({ motivo, cargo });
-        return send(response, 200, { viaje });
-      }
-
-      const motivo = String((input as { motivo?: string }).motivo ?? '');
-      const retornoDespacho = await options.externalApis.returnClientToDispatch({
-        viajeId: viaje.id,
-        conductorId: viaje.conductorId,
+      const viajeCancelado = await options.rf6Api.cancelViaje({ viajeId: match[1], actor, motivo });
+      const routingKey = actor === 'conductor' ? 'despacho.reabrir' : 'cancelacion_cliente';
+      await options.events.publish(routingKey, {
+        viajeId: String(viajeCancelado.id),
+        clienteId: viajeCancelado.clienteId,
+        conductorId: viajeCancelado.conductorId,
+        motivo,
+        evento: routingKey,
+        timestamp: new Date().toISOString(),
       });
-      viaje.cancelarPorConductor({ motivo });
-      viaje.retornoDespacho = retornoDespacho;
-      return send(response, 200, { viaje, retornoDespacho });
+      return send(response, 200, { viaje: viajeCancelado });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Solicitud inválida';
-      return send(response, 400, { error: message });
+      const status = message.includes('Viaje no encontrado') ? 404 : 400;
+      return send(response, status, { error: message });
     }
   });
-}
-
-export function crearViaje(data: CrearViajeInput): Viaje {
-  return new Viaje(data);
 }
 
 async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {

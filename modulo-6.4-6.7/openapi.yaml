@@ -1,32 +1,8 @@
 openapi: 3.0.3
 info:
-  title: API M6 - Viajes
+  title: API M6 - Cancelación de viajes
   version: 1.0.0
 paths:
-  /api/viajes:
-    post:
-      summary: Crea un viaje para iniciar su ciclo de vida
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/CrearViaje' }
-      responses:
-        '201': { description: Viaje creado }
-        '400': { description: Datos inválidos }
-  /api/viajes/{viajeId}/finalizacion:
-    post:
-      summary: Finaliza un viaje y captura su pago
-      parameters:
-        - { name: viajeId, in: path, required: true, schema: { type: string } }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/FinalizarViaje' }
-      responses:
-        '200': { description: Viaje finalizado }
-        '400': { description: Transición inválida }
   /api/viajes/{viajeId}/cancelacion-cliente:
     post:
       summary: Cancela un viaje por solicitud del cliente
@@ -36,10 +12,11 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CancelarCliente' }
+            schema: { $ref: '#/components/schemas/CancelarViaje' }
       responses:
         '200': { description: Viaje cancelado }
-        '400': { description: Cancelación inválida }
+        '400': { description: Viaje en estado no cancelable o motivo inválido }
+        '404': { description: Viaje no encontrado en RF-6 }
   /api/viajes/{viajeId}/cancelacion-conductor:
     post:
       summary: Cancela un viaje por solicitud del conductor
@@ -49,65 +26,15 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CancelarConductor' }
+            schema: { $ref: '#/components/schemas/CancelarViaje' }
       responses:
-        '200': { description: Viaje cancelado y cliente retornado al despacho }
-        '400': { description: Cancelación inválida }
-  /api/viajes/{viajeId}/historial-transiciones:
-    get:
-      summary: Obtiene el historial de transiciones de un viaje
-      parameters:
-        - { name: viajeId, in: path, required: true, schema: { type: string } }
-      responses:
-        '200':
-          description: Historial de transiciones
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [historial]
-                properties:
-                  historial:
-                    type: array
-                    items: { $ref: '#/components/schemas/TransicionViaje' }
-        '404': { description: Viaje no encontrado }
+        '200': { description: Viaje cancelado y evento despacho.reabrir publicado }
+        '400': { description: Viaje en estado no cancelable o motivo inválido }
+        '404': { description: Viaje no encontrado en RF-6 }
 components:
   schemas:
-    CrearViaje:
-      type: object
-      required: [id, clienteId, conductorId, estado, tarifaBase, tarifaPorKm, tarifaPorMinuto, inicio]
-      properties:
-        id: { type: string }
-        clienteId: { type: string }
-        conductorId: { type: string }
-        estado: { type: string, enum: [solicitado, asignado, en curso, completado, cancelado] }
-        tarifaBase: { type: number }
-        tarifaPorKm: { type: number }
-        tarifaPorMinuto: { type: number }
-        inicio: { type: string, format: date-time }
-    FinalizarViaje:
-      type: object
-      required: [tiempoMinutos, distanciaKm, horaFin, metodoPago]
-      properties:
-        tiempoMinutos: { type: number, minimum: 0 }
-        distanciaKm: { type: number, minimum: 0 }
-        horaFin: { type: string, format: date-time }
-        metodoPago: { type: string }
-    CancelarCliente:
+    CancelarViaje:
       type: object
       required: [motivo]
       properties:
         motivo: { type: string, minLength: 1 }
-    CancelarConductor:
-      type: object
-      required: [motivo]
-      properties:
-        motivo: { type: string, minLength: 1 }
-    TransicionViaje:
-      type: object
-      required: [from, to, timestamp]
-      properties:
-        from: { type: string, enum: [solicitado, asignado, 'en curso', completado, cancelado] }
-        to: { type: string, enum: [solicitado, asignado, 'en curso', completado, cancelado] }
-        timestamp: { type: string, format: date-time }
-        detalle: { type: string }
