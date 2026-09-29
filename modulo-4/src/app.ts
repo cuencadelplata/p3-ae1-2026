@@ -8,19 +8,20 @@ import { MemoryLocationRepository } from './repositories/memory-location.reposit
 
 const ttlSeconds = Number(process.env.LOCATION_TTL_SECONDS ?? 60);
 export const locationService = new LocationService(new MemoryLocationRepository(), ttlSeconds);
-const controller = new LocationController(locationService);
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectDirectory = path.resolve(moduleDirectory, '..');
 
-export const app = express();
-app.use(express.json());
-app.use('/openapi', express.static(path.join(projectDirectory, 'openapi')));
-app.get('/scalar/standalone.js', (_req, res) => {
+export const createApp = (service: LocationService) => {
+const controller = new LocationController(service);
+const application = express();
+application.use(express.json());
+application.use('/openapi', express.static(path.join(projectDirectory, 'openapi')));
+application.get('/scalar/standalone.js', (_req, res) => {
   res.sendFile(
     path.join(projectDirectory, 'node_modules', '@scalar', 'api-reference', 'dist', 'browser', 'standalone.js')
   );
 });
-app.get(
+application.get(
   '/docs',
   apiReference({
     pageTitle: 'M4 - Documentacion API',
@@ -30,7 +31,7 @@ app.get(
   })
 );
 
-app.get('/', (_req, res) => {
+application.get('/', (_req, res) => {
   res.status(200).json({
     service: 'm4-location-service',
     version: '1.3.0',
@@ -39,14 +40,18 @@ app.get('/', (_req, res) => {
   });
 });
 
-app.get('/health', (_req, res) => {
+application.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', service: 'm4-location-service' });
 });
 
-app.put('/api/v1/drivers/:driverId/location', controller.updateLocation);
-app.get('/api/v1/drivers/:driverId/location', controller.getLocation);
-app.delete('/api/v1/drivers/:driverId/location', controller.removeLocation);
-app.patch('/api/v1/drivers/:driverId/availability', controller.updateAvailability);
-app.get('/api/v1/drivers/nearby', controller.findNearby);
-app.post('/api/v1/geocode', controller.geocode);
-app.post('/api/v1/estimate', controller.estimate);
+application.put('/api/v1/drivers/:driverId/location', controller.updateLocation);
+application.get('/api/v1/drivers/:driverId/location', controller.getLocation);
+application.delete('/api/v1/drivers/:driverId/location', controller.removeLocation);
+application.patch('/api/v1/drivers/:driverId/availability', controller.updateAvailability);
+application.get('/api/v1/drivers/nearby', controller.findNearby);
+application.post('/api/v1/geocode', controller.geocode);
+application.post('/api/v1/estimate', controller.estimate);
+return application;
+};
+
+export const app = createApp(locationService);
