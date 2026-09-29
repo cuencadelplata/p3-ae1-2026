@@ -1,27 +1,61 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import express from "express";
+
+vi.mock("../6-reintegro/reintegroBD", () => ({ existeOrden: vi.fn() }));
+vi.mock("../infraestructura/redis", () => ({
+  estaEnCache: vi.fn(),
+  marcarEnCache: vi.fn(),
+}));
+
 import rutaPagoDuplicado from "../5-pago-duplicado/rutaPagoDuplicado";
+import { existeOrden } from "../6-reintegro/reintegroBD";
+import { estaEnCache, marcarEnCache } from "../infraestructura/redis";
 
 const app = express();
 app.use(express.json());
 app.use(rutaPagoDuplicado);
 
-describe("GET /pagos/:idOrden/duplicado ruta ", () => {
-  it("devuelve esDuplicado: true para una orden que ya existe (o1)", async () => {
-    const respuesta = await request(app).get("/pagos/o1/duplicado");
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(estaEnCache).mockResolvedValue(false);
+  vi.mocked(existeOrden).mockResolvedValue(false);
+});
 
-    expect(respuesta.status).toBe(200);
-    expect(respuesta.body.idOrden).toBe("o1");
-    expect(respuesta.body.esDuplicado).toBe(true);
+describe("GET /pagos/:idOrden/duplicado", () => {
+  it("true si está en Redis (no consulta la base)", async () => {
+    vi.mocked(estaEnCache).mockResolvedValue(true);
+
+    const r = await request(app).get("/pagos/ORD-1/duplicado");
+
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ idOrden: "ORD-1", esDuplicado: true });
+    expect(existeOrden).not.toHaveBeenCalled();
   });
 
-  it("devuelve esDuplicado: false para una orden nueva", async () => {
-    const respuesta = await request(app).get(
-      "/pagos/orden-que-no-existe/duplicado"
-    );
+  it("true si no está en Redis pero sí en la base, y repone la caché", async () => {
+    vi.mocked(existeOrden).mockResolvedValue(true);
 
-    expect(respuesta.status).toBe(200);
-    expect(respuesta.body.esDuplicado).toBe(false);
+    const r = await request(app).get("/pagos/ORD-2/duplicado");
+
+    expect(r.body.esDuplicado).toBe(true);
+    expect(marcarEnCache).toHaveBeenCalledWith("ORD-2");
+  });
+
+  it("false si no existe en ningún lado, y no cachea el 'no'", async () => {
+    const r = await request(app).get("/pagos/ORD-NUEVA/duplicado");
+
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ idOrden: "ORD-NUEVA", esDuplicado: false });
+    expect(marcarEnCache).not.toHaveBeenCalled();
+  });
+
+  it("503 si la base falla", async () => {
+    vi.mocked(existeOrden).mockRejectedValue(new Error("db caída"));
+
+    const r = await request(app).get("/pagos/ORD-1/duplicado");
+
+    expect(r.status).toBe(503);
+    expect(r.body.error).toBeDefined();
   });
 });
