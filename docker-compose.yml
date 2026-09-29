@@ -9,15 +9,24 @@ services:
       REDIS_URL: redis://redis:6379
       CARGO_CANCELACION_URL: http://cargo-cancelacion:3007
     depends_on:
-      - rabbitmq
-      - redis
-      - cargo-cancelacion
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      cargo-cancelacion:
+        condition: service_started
+    restart: on-failure
 
   rabbitmq:
     image: rabbitmq:3-management
     ports:
       - "5672:5672"
       - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
 
   redis:
     image: redis:7-alpine

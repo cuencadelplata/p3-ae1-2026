@@ -2,11 +2,14 @@ import amqp from "amqplib";
 import type { Channel } from "amqplib";
 import { config } from "../config";
 
-export const EXCHANGE_VIAJES = "viajes";        // lo publica M6
+export const EXCHANGE_VIAJES = "viajes";
 export const EXCHANGE_M7 = "m7.eventos";
 export const EXCHANGE_DLX = "m7.dlx";
 export const QUEUE_CANCELADO = "m7.reintegro.viaje-cancelado";
 export const QUEUE_DLQ = "m7.reintegro.viaje-cancelado.dlq";
+
+// Routing keys reales que publica M6 (Lucas). No usan "viaje.cancelado".
+const ROUTING_KEYS_M6 = ["cancelacion_cliente", "despacho.reabrir"];
 
 let canal: Channel | undefined;
 
@@ -28,7 +31,11 @@ export async function iniciarRabbit(): Promise<Channel> {
       "x-dead-letter-routing-key": QUEUE_CANCELADO,
     },
   });
-  await ch.bindQueue(QUEUE_CANCELADO, EXCHANGE_VIAJES, "viaje.cancelado");
+
+  // Antes: un solo bind a "viaje.cancelado". Ahora: uno por cada routing key de M6.
+  for (const rk of ROUTING_KEYS_M6) {
+    await ch.bindQueue(QUEUE_CANCELADO, EXCHANGE_VIAJES, rk);
+  }
 
   await ch.prefetch(5);
   canal = ch;

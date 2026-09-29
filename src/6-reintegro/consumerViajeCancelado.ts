@@ -1,21 +1,23 @@
-import type { ConsumeMessage } from "amqplib";
+import type { ConsumeMessage, Channel } from "amqplib";
 import { config } from "../config";
 import { QUEUE_CANCELADO } from "../infraestructura/rabbit";
 import { ErrorPermanente } from "./cargoCancelacionClient";
-import { procesarReintegro, type ViajeCanceladoEvento } from "./procesarReintegro";
-import type { Channel } from "amqplib";
+import { procesarReintegro, type EventoCancelacionM6 } from "./procesarReintegro";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function parsear(msg: ConsumeMessage): ViajeCanceladoEvento {
-  let ev: ViajeCanceladoEvento;
+function parsear(msg: ConsumeMessage): EventoCancelacionM6 {
+  let ev: EventoCancelacionM6;
   try {
     ev = JSON.parse(msg.content.toString());
   } catch {
     throw new ErrorPermanente("JSON inválido");
   }
-  if (!ev.idOrden || !ev.viajeId || !ev.requestedBy || typeof ev.estimatedFare !== "number") {
-    throw new ErrorPermanente("Evento viaje.cancelado incompleto");
+  if (!ev.viajeId || !ev.evento) {
+    throw new ErrorPermanente("Evento de cancelación incompleto (falta viajeId o evento)");
+  }
+  if (ev.evento !== "cancelacion_cliente" && ev.evento !== "despacho.reabrir") {
+    throw new ErrorPermanente(`routing key/evento desconocido: ${ev.evento}`);
   }
   return ev;
 }
@@ -28,7 +30,7 @@ export async function iniciarConsumerViajeCancelado(ch: Channel): Promise<void> 
     try {
       const ev = parsear(msg);
       const resultado = await procesarReintegro(ev);
-      console.log(JSON.stringify({ evento: "viaje.cancelado", idOrden: ev.idOrden, resultado }));
+      console.log(JSON.stringify({ evento: ev.evento, viajeId: ev.viajeId, resultado }));
       ch.ack(msg);
     } catch (e) {
       const error = e as Error;

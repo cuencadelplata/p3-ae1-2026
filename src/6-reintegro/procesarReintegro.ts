@@ -4,62 +4,62 @@ import { existeOrden, insertarReintegro } from "./reintegroBD";
 import { estaEnCache, marcarEnCache } from "../infraestructura/redis";
 import { publicar } from "../infraestructura/rabbit";
 
-// Contrato del evento viaje.cancelad, publica M6
-export interface ViajeCanceladoEvento {
-  idOrden: string;
+// Contrato REAL que publica M6 (Lucas), no el que habíamos supuesto.
+export interface EventoCancelacionM6 {
   viajeId: string;
-  requestedBy: "cliente" | "conductor";
-  vehicleType: "auto" | "moto";
-  tripStatus: string;
-  estimatedFare: number;
-  assignedAt?: string | undefined;
-  arrivedAt?: string | undefined;
-  cancelledAt?: string | undefined;
-  reason?: string | undefined;
+  clienteId: string;
+  conductorId?: string;
+  motivo: string;
+  evento: "cancelacion_cliente" | "despacho.reabrir";
+  timestamp: string;
 }
 
 export type Resultado = "procesado" | "duplicado" | "sin_cargo";
 
 const redondear = (n: number) => Math.round(n * 100) / 100;
 
-export async function procesarReintegro(ev: ViajeCanceladoEvento): Promise<Resultado> {
-  // 1) Idempotencia: Redis, y si no, la base
-  if ((await estaEnCache(ev.idOrden)) || (await existeOrden(ev.idOrden))) {
-    await marcarEnCache(ev.idOrden);
+// TODO(dependencia M6): estos 3 no vienen en el evento de Lucas.
+// Por ahora se usa un valor por defecto documentado; cuando M6 los agregue
+// (o exponga un GET /viajes/:id con tarifa), reemplazar esto.
+const ESTIMATED_FARE_DEFAULT = 5000;
+const VEHICLE_TYPE_DEFAULT = "auto" as const;
+const TRIP_STATUS_DEFAULT = "asignado";
+
+export async function procesarReintegro(ev: EventoCancelacionM6): Promise<Resultado> {
+  // Sin idOrden real: usamos viajeId como clave de idempotencia.
+  const idOrden = ev.viajeId;
+  const requestedBy = ev.evento === "cancelacion_cliente" ? "cliente" : "conductor";
+
+  if ((await estaEnCache(idOrden)) || (await existeOrden(idOrden))) {
+    await marcarEnCache(idOrden);
     return "duplicado";
   }
 
-  // 2) El cargo lo calcula RF-7.4
   const request: CargoRequest = {
     tripId: ev.viajeId,
-    requestedBy: ev.requestedBy,
-    vehicleType: ev.vehicleType,
-    tripStatus: ev.tripStatus,
-    estimatedFare: ev.estimatedFare,
-    assignedAt: ev.assignedAt,
-    arrivedAt: ev.arrivedAt,
-    cancelledAt: ev.cancelledAt,
-    reason: ev.reason,
+    requestedBy,
+    vehicleType: VEHICLE_TYPE_DEFAULT,
+    tripStatus: TRIP_STATUS_DEFAULT,
+    estimatedFare: ESTIMATED_FARE_DEFAULT,
+    cancelledAt: ev.timestamp,
   };
   const cargo = await obtenerCargo(request);
   if (cargo <= 0) return "sin_cargo";
 
-  // 3) Reintegro (RF-7.5) y registro
   const montoReintegro = redondear(calculoReintegro(cargo));
   const insertado = await insertarReintegro({
-    idOrden: ev.idOrden,
+    idOrden,
     viajeId: ev.viajeId,
     montoCancelacion: cargo,
     montoReintegro,
   });
-  await marcarEnCache(ev.idOrden);
+  await marcarEnCache(idOrden);
   if (!insertado) return "duplicado";
 
-  // 4) Segundo flujo asíncrono: avisar a M8
   publicar(
     "reintegro.procesado",
-    { idOrden: ev.idOrden, viajeId: ev.viajeId, montoReintegro },
-    ev.idOrden
+    { idOrden, viajeId: ev.viajeId, montoReintegro },
+    idOrden
   );
   return "procesado";
 }
