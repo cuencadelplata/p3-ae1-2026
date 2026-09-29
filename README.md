@@ -13,6 +13,7 @@ asociada (**RF-3.4**) de los conductores. Parte de la entrega AE1
 - Supabase (PostgreSQL) como persistencia
 - Docker / Docker Compose para contenerización
 - Jest (pruebas unitarias) + Playwright (pruebas End-to-End)
+- Redis 7 (redis:7-alpine), como cache para idempotencia de pedidos
 
 ## Requisitos previos
 
@@ -29,6 +30,7 @@ SUPABASE_URL=https://tu-proyecto.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
 PORT=8083
 ```
+REDIS_URL: URL de conexión a Redis. Local (npm run dev): redis://localhost:6379. En Docker (docker compose): redis://redis:6379 (nombre del servicio dentro de la red de compose).
 
 ## Ejecución con Docker (recomendado)
 
@@ -96,8 +98,9 @@ servidor corriendo (Playwright lo levanta solo si hace falta):
 npx playwright test
 ```
 
-Cobertura actual: 22 tests E2E (10 de vehículos, 12 de documentos) +
-pruebas unitarias del service de vehículos, todos en verde.
+Cobertura actual: 25 tests E2E (10 de vehículos, 12 de documentos, 2 de idempotencia) +
+pruebas unitarias del service de vehículos, todos en verde,
+
 
 ## Endpoints principales
 
@@ -129,3 +132,4 @@ solicitud y respuestas de error.
   con un constraint en la base).
 - No implementa autenticación/autorización (fuera del alcance de AE1
   para este módulo; ver M1 — Identidad y Acceso).
+- Se agregó idempotencia en los endpoints POST /vehicles y POST /documents usando Redis. El cliente puede mandar un header Idempotency-Key; si reintenta el mismo pedido con la misma key, el servidor devuelve la respuesta ya guardada en vez de procesar el pedido de nuevo (evita duplicados por reintentos de red). Las respuestas se cachean por 24hs, y solo si el pedido original tuvo éxito (2xx) — un error no se cachea, para no bloquear un reintento legítimo. Si no se manda el header, el comportamiento es el de siempre (sin idempotencia).
