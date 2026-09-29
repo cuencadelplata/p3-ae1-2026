@@ -15,10 +15,10 @@ Este comando posiciona la terminal dentro de la carpeta del Modulo 4. Los siguie
 ## 2. Construir la imagen y ejecutar los tests
 
 ```powershell
-docker build --no-cache --progress=plain -t segocodee/p3-m4-ubicacion:1.3.0 .
+docker build --no-cache --progress=plain -t segocodee/p3-m4-ubicacion:2.0.0 .
 ```
 
-Docker instala las dependencias, ejecuta automaticamente los tests, compila el codigo TypeScript y crea la imagen de la API `segocodee/p3-m4-ubicacion:1.3.0`.
+Docker instala las dependencias, ejecuta automaticamente los tests, compila el codigo TypeScript y crea la imagen de la API `segocodee/p3-m4-ubicacion:2.0.0`.
 
 La opcion `--no-cache` obliga a Docker a ejecutar nuevamente todos los pasos, aunque la imagen se haya construido antes. La opcion `--progress=plain` muestra la salida completa en la terminal. De esta manera, los resultados de los tests quedan visibles para la demostracion y la captura. Este proceso puede tardar algunos minutos.
 
@@ -50,7 +50,7 @@ Como alternativa, durante el desarrollo se pueden reconstruir ambas imagenes loc
 docker compose up --build -d
 ```
 
-Este comando crea e inicia dos aplicaciones en segundo plano: `m4-api` para la API REST y `m4-ui` para la interfaz grafica. Cada una utiliza su propio proyecto, imagen y contenedor.
+Este comando inicia tres contenedores: `redis` para las ubicaciones temporales, `m4-api` para la API REST y `m4-ui` para la interfaz grafica.
 
 ## 4. Comprobar el estado del contenedor
 
@@ -58,7 +58,16 @@ Este comando crea e inicia dos aplicaciones en segundo plano: `m4-api` para la A
 docker compose ps
 ```
 
-Muestra los contenedores activos. Deben aparecer `m4-api` y `m4-ui` con estado saludable.
+Muestra los contenedores activos. Deben aparecer `redis`, `m4-api` y `m4-ui` con estado saludable.
+
+Para comprobar Redis directamente:
+
+```powershell
+docker compose exec redis redis-cli ping
+docker compose exec redis redis-cli KEYS "m4:driver:*:location"
+```
+
+El primer comando debe responder `PONG`. El segundo muestra las claves de los conductores que todavia no vencieron.
 
 Tambien se puede consultar directamente la salud de la API:
 

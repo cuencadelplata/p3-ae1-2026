@@ -15,7 +15,8 @@ export class MemoryLocationRepository implements LocationRepository {
     location: DriverLocation,
     ttlSeconds: number
   ): Promise<SaveLocationResult> {
-    const current = await this.get(location.driverId);
+    const stored = this.locations.get(location.driverId);
+    const current = stored && stored.expiresAtMs > this.now() ? stored.location : null;
     if (current && Date.parse(location.updatedAt) < Date.parse(current.updatedAt)) {
       return { saved: false, location: current };
     }

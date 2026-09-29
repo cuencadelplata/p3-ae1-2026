@@ -127,7 +127,7 @@ describe('API M4', () => {
     const response = await request(app).get('/').expect(200);
 
     expect(response.headers['content-type']).toContain('application/json');
-    expect(response.body).toMatchObject({ service: 'm4-location-service', version: '1.3.0' });
+    expect(response.body).toMatchObject({ service: 'm4-location-service', version: '2.0.0' });
   });
 
   it('publica la documentacion local con Scalar', async () => {

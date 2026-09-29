@@ -92,6 +92,54 @@ describe('LocationService', () => {
     expect((await service.getActiveLocation('driver-1')).latitude).toBe(-27.4692);
   });
 
+  it('conserva la ubicacion mas reciente cuando llegan actualizaciones al mismo tiempo', async () => {
+    const now = new Date('2026-09-10T12:00:30.000Z').getTime();
+    const service = createService(60, () => now);
+
+    const results = await Promise.allSettled([
+      service.updateLocation(
+        'driver-1',
+        { latitude: -27.4692, longitude: -58.8306 },
+        'AUTO',
+        true,
+        '2026-09-10T12:00:20.000Z'
+      ),
+      service.updateLocation(
+        'driver-1',
+        { latitude: -27.5, longitude: -58.9 },
+        'AUTO',
+        true,
+        '2026-09-10T12:00:10.000Z'
+      )
+    ]);
+
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect((await service.getActiveLocation('driver-1')).latitude).toBe(-27.4692);
+  });
+
+  it('procesa dos veces la misma actualizacion sin cambiar el resultado', async () => {
+    const now = new Date('2026-09-10T12:00:30.000Z').getTime();
+    const service = createService(60, () => now);
+    const timestamp = '2026-09-10T12:00:20.000Z';
+
+    const first = await service.updateLocation(
+      'driver-1',
+      { latitude: -27.4692, longitude: -58.8306 },
+      'AUTO',
+      true,
+      timestamp
+    );
+    const repeated = await service.updateLocation(
+      'driver-1',
+      { latitude: -27.4692, longitude: -58.8306 },
+      'AUTO',
+      true,
+      timestamp
+    );
+
+    expect(repeated).toEqual(first);
+  });
+
   it('elimina una ubicacion activa', async () => {
     const service = createService(60, () => 1_000);
     await service.updateLocation('driver-1', { latitude: -27.4692, longitude: -58.8306 }, 'AUTO', true);

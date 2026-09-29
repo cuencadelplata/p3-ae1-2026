@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Modulo 4 - Ubicacion y Disponibilidad
-  version: 1.3.0
+  version: 2.0.0
   description: API REST para ubicaciones temporales, disponibilidad, cercania, geocodificacion simulada y ETA.
 servers:
   - url: http://localhost:3004/api/v1
