@@ -11,7 +11,10 @@ export const locationService = new LocationService(new MemoryLocationRepository(
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectDirectory = path.resolve(moduleDirectory, '..');
 
-export const createApp = (service: LocationService) => {
+export const createApp = (
+  service: LocationService,
+  checkStorage: () => Promise<void> = async () => undefined
+) => {
 const controller = new LocationController(service);
 const application = express();
 application.use(express.json());
@@ -40,8 +43,13 @@ application.get('/', (_req, res) => {
   });
 });
 
-application.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'ok', service: 'm4-location-service' });
+application.get('/health', async (_req, res) => {
+  try {
+    await checkStorage();
+    res.status(200).json({ status: 'ok', service: 'm4-location-service', storage: 'ok' });
+  } catch {
+    res.status(503).json({ status: 'error', service: 'm4-location-service', storage: 'unavailable' });
+  }
 });
 
 application.put('/api/v1/drivers/:driverId/location', controller.updateLocation);

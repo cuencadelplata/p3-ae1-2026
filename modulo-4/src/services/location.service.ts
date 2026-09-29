@@ -59,7 +59,11 @@ export class LocationService {
 
   public async updateAvailability(driverId: string, available: boolean): Promise<DriverLocation> {
     const location = await this.getActiveLocation(driverId);
-    const updated: DriverLocation = { ...location, available };
+    const updated: DriverLocation = {
+      ...location,
+      available,
+      expiresAt: new Date(this.now() + this.ttlSeconds * 1000).toISOString()
+    };
     await this.repository.saveIfNewer(updated, this.ttlSeconds);
     return updated;
   }

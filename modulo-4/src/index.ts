@@ -7,7 +7,7 @@ const ttlSeconds = Number(process.env.LOCATION_TTL_SECONDS ?? 60);
 const redisUrl = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
 const repository = new RedisLocationRepository(redisUrl);
 await repository.ping();
-const app = createApp(new LocationService(repository, ttlSeconds));
+const app = createApp(new LocationService(repository, ttlSeconds), () => repository.ping());
 
 app.listen(port, () => {
   console.log(`[M4 Ubicacion y Disponibilidad] Servicio en http://localhost:${port}`);
