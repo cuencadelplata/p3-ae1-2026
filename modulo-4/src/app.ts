@@ -4,9 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LocationController } from './controllers/location.controller.js';
 import { LocationService } from './services/location.service.js';
+import { MemoryLocationRepository } from './repositories/memory-location.repository.js';
 
 const ttlSeconds = Number(process.env.LOCATION_TTL_SECONDS ?? 60);
-export const locationService = new LocationService(ttlSeconds);
+export const locationService = new LocationService(new MemoryLocationRepository(), ttlSeconds);
 const controller = new LocationController(locationService);
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectDirectory = path.resolve(moduleDirectory, '..');

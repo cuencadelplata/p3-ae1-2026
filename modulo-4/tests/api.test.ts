@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { app, locationService } from '../src/app.js';
 
 describe('API M4', () => {
-  beforeEach(() => locationService.clear());
+  beforeEach(async () => locationService.clear());
 
   it('publica ubicacion y devuelve el conductor en una busqueda cercana', async () => {
     await request(app).put('/api/v1/drivers/driver-1/location').send({

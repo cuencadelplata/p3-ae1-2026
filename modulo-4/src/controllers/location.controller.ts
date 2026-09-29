@@ -18,10 +18,10 @@ export class LocationController {
   public constructor(private readonly service: LocationService) {}
 
   public updateLocation = (req: Request, res: Response): void => {
-    this.handle(res, () => {
+    void this.handle(res, async () => {
       const body = updateLocationSchema.parse(req.body);
       return res.status(200).json(
-        this.service.updateLocation(
+        await this.service.updateLocation(
           String(req.params.driverId),
           { latitude: body.latitude, longitude: body.longitude },
           body.vehicleType,
@@ -33,32 +33,32 @@ export class LocationController {
   };
 
   public updateAvailability = (req: Request, res: Response): void => {
-    this.handle(res, () => {
+    void this.handle(res, async () => {
       const body = updateAvailabilitySchema.parse(req.body);
       return res.status(200).json(
-        this.service.updateAvailability(String(req.params.driverId), body.available)
+        await this.service.updateAvailability(String(req.params.driverId), body.available)
       );
     });
   };
 
   public getLocation = (req: Request, res: Response): void => {
-    this.handle(res, () =>
-      res.status(200).json(this.service.getActiveLocation(String(req.params.driverId)))
+    void this.handle(res, async () =>
+      res.status(200).json(await this.service.getActiveLocation(String(req.params.driverId)))
     );
   };
 
   public removeLocation = (req: Request, res: Response): void => {
-    this.handle(res, () => {
-      this.service.removeLocation(String(req.params.driverId));
+    void this.handle(res, async () => {
+      await this.service.removeLocation(String(req.params.driverId));
       return res.status(204).send();
     });
   };
 
   public findNearby = (req: Request, res: Response): void => {
-    this.handle(res, () => {
+    void this.handle(res, async () => {
       const query = nearbyQuerySchema.parse(req.query);
       const maxCandidates = query.maxCandidates ?? query.limit ?? 10;
-      const drivers = this.service.findNearby(
+      const drivers = await this.service.findNearby(
         { latitude: query.latitude, longitude: query.longitude },
         query.vehicleType,
         query.radiusKm,
@@ -76,22 +76,22 @@ export class LocationController {
   };
 
   public geocode = (req: Request, res: Response): void => {
-    this.handle(res, () => {
+    void this.handle(res, async () => {
       const body = geocodeSchema.parse(req.body);
       return res.status(200).json(this.service.geocode(body.address));
     });
   };
 
   public estimate = (req: Request, res: Response): void => {
-    this.handle(res, () => {
+    void this.handle(res, async () => {
       const body = estimateSchema.parse(req.body);
       return res.status(200).json(this.service.estimate(body.origin, body.destination));
     });
   };
 
-  private handle(res: Response, action: () => Response): void {
+  private async handle(res: Response, action: () => Response | Promise<Response>): Promise<void> {
     try {
-      action();
+      await action();
     } catch (error) {
       if (error instanceof ZodError) {
         res.status(400).json({

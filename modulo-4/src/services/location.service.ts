@@ -5,15 +5,15 @@ import type {
   NearbyDriver,
   VehicleType
 } from '../types/location.types.js';
+import type { LocationRepository } from '../repositories/location.repository.js';
 
 export class NotFoundError extends Error {}
 export class LocationValidationError extends Error {}
 export class StaleLocationError extends Error {}
 
 export class LocationService {
-  private readonly locations = new Map<string, DriverLocation>();
-
   public constructor(
+    private readonly repository: LocationRepository,
     private readonly ttlSeconds = 60,
     private readonly now: () => number = Date.now
   ) {
@@ -22,26 +22,19 @@ export class LocationService {
     }
   }
 
-  public updateLocation(
+  public async updateLocation(
     driverId: string,
     coordinates: Coordinates,
     vehicleType: VehicleType,
     available: boolean,
     timestamp?: string
-  ): DriverLocation {
+  ): Promise<DriverLocation> {
     const updatedAtMs = timestamp ? Date.parse(timestamp) : this.now();
     const maximumClockSkewMs = 30_000;
 
     if (updatedAtMs > this.now() + maximumClockSkewMs) {
       throw new LocationValidationError(
         'La marca temporal de la ubicacion no puede estar mas de 30 segundos en el futuro'
-      );
-    }
-
-    const currentLocation = this.locations.get(driverId);
-    if (currentLocation && updatedAtMs < Date.parse(currentLocation.updatedAt)) {
-      throw new StaleLocationError(
-        'La ubicacion recibida es anterior a la ultima ubicacion registrada'
       );
     }
 
@@ -52,43 +45,46 @@ export class LocationService {
       vehicleType,
       available,
       updatedAt,
-      expiresAt: new Date(updatedAtMs + this.ttlSeconds * 1000).toISOString()
+      expiresAt: new Date(this.now() + this.ttlSeconds * 1000).toISOString()
     };
 
-    this.locations.set(driverId, location);
-    return location;
+    const result = await this.repository.saveIfNewer(location, this.ttlSeconds);
+    if (!result.saved) {
+      throw new StaleLocationError(
+        'La ubicacion recibida es anterior a la ultima ubicacion registrada'
+      );
+    }
+    return result.location;
   }
 
-  public updateAvailability(driverId: string, available: boolean): DriverLocation {
-    const location = this.getActiveLocation(driverId);
+  public async updateAvailability(driverId: string, available: boolean): Promise<DriverLocation> {
+    const location = await this.getActiveLocation(driverId);
     const updated: DriverLocation = { ...location, available };
-    this.locations.set(driverId, updated);
+    await this.repository.saveIfNewer(updated, this.ttlSeconds);
     return updated;
   }
 
-  public getActiveLocation(driverId: string): DriverLocation {
-    const location = this.locations.get(driverId);
-    if (!location || this.isExpired(location)) {
-      this.locations.delete(driverId);
+  public async getActiveLocation(driverId: string): Promise<DriverLocation> {
+    const location = await this.repository.get(driverId);
+    if (!location) {
       throw new NotFoundError('Ubicacion activa no encontrada para el conductor');
     }
     return location;
   }
 
-  public removeLocation(driverId: string): void {
-    this.getActiveLocation(driverId);
-    this.locations.delete(driverId);
+  public async removeLocation(driverId: string): Promise<void> {
+    if (!(await this.repository.delete(driverId))) {
+      throw new NotFoundError('Ubicacion activa no encontrada para el conductor');
+    }
   }
 
-  public findNearby(
+  public async findNearby(
     origin: Coordinates,
     vehicleType: VehicleType,
     radiusKm: number,
     limit: number
-  ): NearbyDriver[] {
-    this.removeExpiredLocations();
-
-    return Array.from(this.locations.values())
+  ): Promise<NearbyDriver[]> {
+    return (await this.repository.getAll())
       .filter((location) => location.available && location.vehicleType === vehicleType)
       .map((location) => {
         const estimate = this.estimate(origin, location);
@@ -121,18 +117,8 @@ export class LocationService {
     };
   }
 
-  public clear(): void {
-    this.locations.clear();
-  }
-
-  private removeExpiredLocations(): void {
-    for (const [driverId, location] of this.locations) {
-      if (this.isExpired(location)) this.locations.delete(driverId);
-    }
-  }
-
-  private isExpired(location: DriverLocation): boolean {
-    return new Date(location.expiresAt).getTime() <= this.now();
+  public async clear(): Promise<void> {
+    await this.repository.clear();
   }
 
   private haversineDistance(pointA: Coordinates, pointB: Coordinates): number {
