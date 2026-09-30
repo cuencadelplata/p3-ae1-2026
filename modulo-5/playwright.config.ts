@@ -15,7 +15,7 @@ export default defineConfig({
     command: 'npx ts-node src/index.ts',
     port: 3055,
     timeout: 15_000,
-    reuseExistingServer: false,
+    reuseExistingServer: true,
     env: {
       PORT: '3055',
     },
