@@ -52,6 +52,14 @@ export interface Payment {
   authorizationCode?: string;
 }
 
+/** Autorizacion del comprobante otorgada por el autorizador fiscal externo. */
+export interface FiscalAuthorization {
+  authorizationCode: string;
+  /** Fecha de vencimiento del codigo (AAAA-MM-DD). */
+  expiresOn: string;
+  authorizedAt: string;
+}
+
 /** Contrato de entrada: lo que M6 (viaje finalizado) y M7 (tarifa/pago) envian a M8. */
 export interface ReceiptRequest {
   tripId: string;
@@ -81,5 +89,7 @@ export interface Receipt {
   trip: TripDetail;
   fare: Fare;
   payment: Payment;
+  /** Ausente solo en comprobantes emitidos antes de incorporar la autorizacion fiscal. */
+  fiscal?: FiscalAuthorization;
   deliveries: DeliveryRecord[];
 }

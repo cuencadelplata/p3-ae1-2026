@@ -1,4 +1,4 @@
-export type DependencyName = 'postgres' | 'redis' | 'rabbitmq';
+export type DependencyName = 'postgres' | 'redis' | 'rabbitmq' | 'fiscal';
 export type DependencyCheck = () => Promise<boolean>;
 export type DependencyChecks = Record<DependencyName, DependencyCheck>;
 
@@ -14,11 +14,13 @@ export interface Readiness {
 
 /**
  * PostgreSQL es la unica dependencia critica: sin ella no se puede emitir ni
- * consultar un comprobante. Sin Redis fallan solo los enlaces temporales, y sin
+ * consultar un comprobante. Sin Redis fallan solo los enlaces temporales; sin
  * RabbitMQ la API REST sigue funcionando y los eventos esperan en la bandeja de
- * salida; en esos casos el servicio sigue disponible pero degradado.
+ * salida; sin el autorizador fiscal no se emiten comprobantes nuevos, pero los
+ * pagos esperan en la cola y los ya emitidos se siguen consultando y
+ * descargando. En esos casos el servicio sigue disponible pero degradado.
  */
-const CRITICAL: Record<DependencyName, boolean> = { postgres: true, redis: false, rabbitmq: false };
+const CRITICAL: Record<DependencyName, boolean> = { postgres: true, redis: false, rabbitmq: false, fiscal: false };
 
 const CHECK_TIMEOUT_MS = 2000;
 

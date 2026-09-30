@@ -1,6 +1,7 @@
 import * as amqp from 'amqplib';
 import type { ConfirmChannel, ConsumeMessage } from 'amqplib';
 
+import { DependencyUnavailableError } from '../errors/dependency-unavailable.error';
 import { PermanentMessageError } from './errors';
 import { createLogger, errorMessage, withCorrelationId } from '../observability/logger';
 import { assertTopology, type QueueTopology } from './topology';
@@ -57,6 +58,8 @@ function retryCount(message: ConsumeMessage): number {
  * - Error permanente: NACK sin reencolar, RabbitMQ lo envia a la DLQ.
  * - Error transitorio: se republica en la cola de reintentos con el contador
  *   incrementado y se confirma el original. Agotados los reintentos, a la DLQ.
+ * - Dependencia no disponible (DependencyUnavailableError): se republica en la
+ *   cola de reintentos sin incrementar el contador, hasta que se recupere.
  *
  * El ACK se envia recien cuando el procesamiento termino: si el proceso se cae
  * a mitad de camino, RabbitMQ vuelve a entregar el mensaje.
@@ -103,21 +106,37 @@ export function startConsumer(options: ConsumerOptions): RunningConsumer {
         return;
       }
 
-      if (attempt >= options.maxRetries) {
+      // Con una dependencia caida el mensaje no tiene la culpa: espera en la
+      // cola de reintentos sin descontar intentos, asi una caida larga no lo
+      // manda a la DLQ. Mientras el circuito esta abierto, cada intento falla
+      // al instante sin cargar a la dependencia.
+      const outage = error instanceof DependencyUnavailableError;
+
+      if (!outage && attempt >= options.maxRetries) {
         log('error', 'reintentos agotados, mensaje enviado a la DLQ', { ...fields, reason });
         channel.nack(message, false, false);
         return;
       }
 
+      const nextAttempt = outage ? attempt : attempt + 1;
       try {
-        await sendToRetry(channel, message, attempt + 1);
+        await sendToRetry(channel, message, nextAttempt);
         channel.ack(message);
-        log('warn', 'fallo transitorio, mensaje programado para reintento', {
-          ...fields,
-          nextAttempt: attempt + 1,
-          delayMs: options.retryDelayMs,
-          reason,
-        });
+        if (outage) {
+          log('warn', 'dependencia no disponible, el mensaje espera sin descontar intentos', {
+            ...fields,
+            dependency: error.dependency,
+            delayMs: options.retryDelayMs,
+            reason,
+          });
+        } else {
+          log('warn', 'fallo transitorio, mensaje programado para reintento', {
+            ...fields,
+            nextAttempt,
+            delayMs: options.retryDelayMs,
+            reason,
+          });
+        }
       } catch (retryError) {
         // Si no se pudo programar el reintento, el mensaje vuelve a la cola
         // principal para no perderlo.

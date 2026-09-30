@@ -1,3 +1,6 @@
+import { isDatabaseUnavailable } from '../db/errors';
+import { DependencyUnavailableError } from '../errors/dependency-unavailable.error';
+import { FiscalAuthorizationRejectedError } from '../integrations/fiscal-authorizer';
 import type { ReceiptRequest } from '../models/receipt';
 import * as inbox from '../repositories/inbox.repository';
 import { issueReceipt } from '../services/receipt.service';
@@ -77,10 +80,30 @@ export function toReceiptRequest(envelope: EventEnvelope): ValidationResult<Rece
  *    corta despues de emitir y antes de registrar el mensaje, la reentrega
  *    encuentra el comprobante ya emitido y no genera otro.
  *
- * Un mensaje mal formado lanza PermanentMessageError: reintentarlo no cambia el
- * resultado, por eso va directo a la cola de descarte.
+ * Los errores se clasifican para el consumidor:
+ * - PermanentMessageError (sobre o contenido invalido, o rechazo del
+ *   autorizador fiscal): reintentarlo no cambia el resultado, va directo a la
+ *   cola de descarte.
+ * - DependencyUnavailableError (PostgreSQL caido, o autorizador fiscal sin
+ *   respuesta o con el circuito abierto): el mensaje espera a que la
+ *   dependencia se recupere sin descontar intentos.
+ * - Cualquier otro: transitorio, se reintenta hasta agotar los intentos.
  */
 export async function processPaymentConfirmed(content: Buffer): Promise<PaymentConfirmedOutcome> {
+  try {
+    return await processMessage(content);
+  } catch (error) {
+    if (error instanceof FiscalAuthorizationRejectedError) {
+      throw new PermanentMessageError('El autorizador fiscal rechazo el comprobante', [`${error.code}: ${error.message}`]);
+    }
+    if (isDatabaseUnavailable(error)) {
+      throw new DependencyUnavailableError('postgres', 'PostgreSQL no esta disponible', 5, { cause: error });
+    }
+    throw error;
+  }
+}
+
+async function processMessage(content: Buffer): Promise<PaymentConfirmedOutcome> {
   const envelope = parseEnvelope(content);
   if (!envelope.ok) {
     throw new PermanentMessageError('Sobre del mensaje invalido', envelope.errors);

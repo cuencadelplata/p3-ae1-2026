@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { AppError } from '../errors/app-error';
+import { fiscalClient } from '../integrations/fiscal-authorizer';
 import { buildReceiptIssuedEvent } from '../messaging/receipt-issued';
 import type { DeliveryChannel, DeliveryRecord, Receipt, ReceiptRequest } from '../models/receipt';
 import * as repository from '../repositories/receipt.repository';
@@ -27,6 +28,11 @@ export interface IssueResult {
  * Solo la emision que crea el comprobante registra el evento receipt.issued,
  * sea que llegue por payment.confirmed o por POST: un pedido repetido no
  * genera un segundo evento.
+ *
+ * Errores que puede propagar ademas de los de la base:
+ * - DependencyUnavailableError: el autorizador fiscal no responde o su
+ *   circuito esta abierto. El pedido se puede repetir mas tarde.
+ * - FiscalAuthorizationRejectedError: el autorizador rechazo el comprobante.
  */
 export async function issueReceipt(request: ReceiptRequest): Promise<IssueResult> {
   const existing = await repository.findByTripId(request.tripId);
@@ -35,6 +41,17 @@ export async function issueReceipt(request: ReceiptRequest): Promise<IssueResult
   }
 
   const receipt = buildReceipt(request);
+
+  // La autorizacion se pide antes de generar el PDF porque el codigo va impreso
+  // en el documento. Si el autorizador no esta disponible, no se persiste nada
+  // y el pedido se puede repetir (idempotente por tripId en ambos lados).
+  receipt.fiscal = await fiscalClient.authorize({
+    tripId: receipt.tripId,
+    issuedAt: receipt.issuedAt,
+    currency: receipt.fare.currency,
+    total: receipt.fare.total,
+  });
+
   const pdf = await renderReceiptPdf(receipt);
 
   try {

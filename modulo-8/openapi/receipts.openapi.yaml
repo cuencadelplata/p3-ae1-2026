@@ -5,16 +5,19 @@ info:
     Microservicio de la **Plataforma Distribuida de Movilidad Urbana (ISI - Paradigmas 3)**.
     Responsable de la **emisión, consulta, descarga y reenvío de comprobantes de viaje en PDF**.
 
-    **Versión 2.0.0: evolución individual AE2 (Juan Gualtieri) sobre la versión 1.0.0 del Grupo 14 (AE1).**
+    **Versión 2.1.0: evolución individual AE2 (Juan Gualtieri) sobre la versión 1.0.0 del Grupo 14 (AE1).**
     - **RF-8.3:** Comprobante PDF. Además de `POST /receipts`, se emite de forma asincrónica al consumir
       `payment.confirmed` (RabbitMQ). Persistencia en PostgreSQL (esquema `receipts`).
     - **RF-8.4:** Reenvío de comprobante (entrega simulada) y descarga mediante enlace temporal (Redis).
     - **Idempotencia (RNF-08/09):** un único comprobante por `tripId`, garantizado por una restricción
       `UNIQUE` de la base aun con varias réplicas del servicio.
+    - **Autorización fiscal (2.1.0):** antes de emitir, el comprobante se autoriza ante un servicio externo
+      (simulado), con timeout de 2 s y circuit breaker. El código queda en `fiscal` e impreso en el PDF.
+    - **Dependencias caídas:** responden `503` con `Retry-After` (nunca `500`); el servicio sigue atendiendo.
 
     Los contratos asincrónicos (`payment.confirmed`, `receipt.issued`) y el contrato interno con Receipts
     Delivery están en `contracts/events/catalogo-eventos-v1.md`; no forman parte de esta API pública.
-  version: 2.0.0
+  version: 2.1.0
   contact:
     name: Grupo 14 - M8 Comprobantes
 servers:
@@ -44,6 +47,11 @@ paths:
         
         **Idempotencia (RNF-08):** Si ya existe un comprobante para el `tripId` enviado, la API responde `200 OK`
         con los datos del comprobante vigente en lugar de duplicar el archivo. Si es nuevo responde `201 Created`.
+
+        **Autorización fiscal:** antes de generar el PDF se pide la autorización al autorizador fiscal externo
+        (timeout de 2 s, circuit breaker). Si no responde o su circuito está abierto, responde
+        `503 FISCAL_SERVICE_UNAVAILABLE` con `Retry-After` y no se persiste nada: el pedido se puede repetir.
+        Si lo rechaza, responde `422 FISCAL_AUTHORIZATION_REJECTED`.
       operationId: createReceipt
       requestBody:
         required: true
@@ -104,13 +112,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Error de validación en los campos del comprobante
+          description: |
+            Error de validación en los campos del comprobante (`VALIDATION_ERROR`), o el autorizador fiscal
+            rechazó el comprobante (`FISCAL_AUTHORIZATION_REJECTED`, con el motivo en `details`).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ValidationErrorResponse'
+                anyOf:
+                  - $ref: '#/components/schemas/ValidationErrorResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                validacion:
+                  summary: Datos inválidos
+                  value:
+                    error:
+                      code: VALIDATION_ERROR
+                      message: La solicitud contiene datos invalidos
+                      path: /api/v1/receipts
+                      timestamp: "2026-10-05T18:42:12.000Z"
+                      details: ["customer.fullName es obligatorio"]
+                rechazoFiscal:
+                  summary: Rechazo del autorizador fiscal
+                  value:
+                    error:
+                      code: FISCAL_AUTHORIZATION_REJECTED
+                      message: El autorizador fiscal rechazo el comprobante
+                      path: /api/v1/receipts
+                      timestamp: "2026-10-05T18:42:12.000Z"
+                      details: { code: AMOUNT_LIMIT_EXCEEDED, message: "El importe supera el maximo autorizable (10000000)" }
         '500':
           description: Error interno del servidor
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
 
   /receipts/{tripId}:
     get:
@@ -146,6 +179,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
 
   /receipts/{tripId}/pdf:
     get:
@@ -188,6 +223,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
 
   /receipts/downloads/{token}:
     get:
@@ -231,7 +268,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
-          description: Los enlaces de descarga no están disponibles momentáneamente (`DOWNLOAD_LINKS_UNAVAILABLE`)
+          description: |
+            Los enlaces de descarga no están disponibles momentáneamente (`DOWNLOAD_LINKS_UNAVAILABLE`, Redis
+            caído) o la base de datos no responde (`DATABASE_UNAVAILABLE`).
           content:
             application/json:
               schema:
@@ -288,6 +327,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationErrorResponse'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
 
   /health/live:
     servers:
@@ -323,13 +364,16 @@ paths:
         - Salud
       summary: Disponibilidad del servicio y de cada dependencia
       description: |
-        Verifica PostgreSQL, Redis y RabbitMQ (cada uno con un limite de 2 s).
+        Verifica PostgreSQL, Redis, RabbitMQ y el autorizador fiscal (cada uno con un limite de 2 s)
+        e informa el estado de los circuit breakers (`closed`, `open`, `half_open`).
 
         - `ok`: todas las dependencias disponibles.
-        - `degraded` (200): falta Redis (no se generan enlaces temporales) o RabbitMQ
-          (no se consumen pagos ni se publican eventos, que esperan en la bandeja de salida).
+        - `degraded` (200): falta Redis (no se generan enlaces temporales), RabbitMQ
+          (no se consumen pagos ni se publican eventos, que esperan en la bandeja de salida) o el
+          autorizador fiscal (no se emiten comprobantes nuevos; los pagos esperan en la cola).
           La API REST sigue funcionando.
-        - `unavailable` (503): falta PostgreSQL, la unica dependencia critica.
+        - `unavailable` (503): falta PostgreSQL, la unica dependencia critica. El proceso sigue vivo
+          (`/health/live` en 200) y se recupera solo cuando la base vuelve.
       operationId: getReadiness
       responses:
         '200':
@@ -347,12 +391,15 @@ paths:
               example:
                 status: unavailable
                 service: m8-documentos
-                version: 2.0.0
+                version: 2.1.0
                 uptimeSeconds: 42
                 dependencies:
                   postgres: { status: unavailable, critical: true }
                   redis: { status: available, critical: false }
                   rabbitmq: { status: available, critical: false }
+                  fiscal: { status: available, critical: false }
+                circuits:
+                  fiscal: closed
 
   /health:
     servers:
@@ -381,6 +428,29 @@ paths:
                 $ref: '#/components/schemas/ReadinessResponse'
 
 components:
+  responses:
+    DependencyUnavailable:
+      description: |
+        Una dependencia no está disponible: la base de datos (`DATABASE_UNAVAILABLE`) o el autorizador
+        fiscal (`FISCAL_SERVICE_UNAVAILABLE`, sin respuesta o con el circuito abierto). El pedido se
+        puede repetir después del tiempo indicado en `Retry-After`.
+      headers:
+        Retry-After:
+          description: Segundos sugeridos antes de reintentar.
+          schema:
+            type: integer
+            example: 5
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: FISCAL_SERVICE_UNAVAILABLE
+              message: El autorizador fiscal no esta disponible (circuito abierto)
+              path: /api/v1/receipts
+              timestamp: "2026-10-05T18:42:12.000Z"
+
   schemas:
     LivenessResponse:
       type: object
@@ -394,7 +464,7 @@ components:
           example: m8-documentos
         version:
           type: string
-          example: 2.0.0
+          example: 2.1.0
         uptimeSeconds:
           type: integer
           example: 42
@@ -423,13 +493,13 @@ components:
           example: m8-documentos
         version:
           type: string
-          example: 2.0.0
+          example: 2.1.0
         uptimeSeconds:
           type: integer
           example: 42
         dependencies:
           type: object
-          required: [postgres, redis, rabbitmq]
+          required: [postgres, redis, rabbitmq, fiscal]
           properties:
             postgres:
               $ref: '#/components/schemas/DependencyStatus'
@@ -437,6 +507,16 @@ components:
               $ref: '#/components/schemas/DependencyStatus'
             rabbitmq:
               $ref: '#/components/schemas/DependencyStatus'
+            fiscal:
+              $ref: '#/components/schemas/DependencyStatus'
+        circuits:
+          type: object
+          description: Estado de cada circuit breaker del servicio.
+          properties:
+            fiscal:
+              type: string
+              enum: [closed, open, half_open]
+              example: closed
 
     ReceiptRequest:
       type: object
@@ -637,6 +717,8 @@ components:
           $ref: '#/components/schemas/FareDetails'
         payment:
           $ref: '#/components/schemas/PaymentDetails'
+        fiscal:
+          $ref: '#/components/schemas/FiscalAuthorization'
         deliveries:
           type: array
           items:
@@ -647,6 +729,26 @@ components:
             downloadUrl:
               type: string
               example: "http://localhost:3008/api/v1/receipts/trip-2026-000123/pdf"
+
+    FiscalAuthorization:
+      type: object
+      description: |
+        Autorización otorgada por el autorizador fiscal externo (simulado). Ausente solo en comprobantes
+        emitidos antes de la versión 2.1.0.
+      required: [authorizationCode, expiresOn, authorizedAt]
+      properties:
+        authorizationCode:
+          type: string
+          pattern: '^\d{14}$'
+          example: "71234567890123"
+        expiresOn:
+          type: string
+          format: date
+          example: "2026-10-15"
+        authorizedAt:
+          type: string
+          format: date-time
+          example: "2026-10-05T18:42:12.000Z"
 
     DeliveryRecord:
       type: object
