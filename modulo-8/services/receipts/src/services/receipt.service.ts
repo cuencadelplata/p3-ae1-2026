@@ -4,9 +4,12 @@ import { AppError } from '../errors/app-error';
 import { buildReceiptIssuedEvent } from '../messaging/receipt-issued';
 import type { DeliveryChannel, DeliveryRecord, Receipt, ReceiptRequest } from '../models/receipt';
 import * as repository from '../repositories/receipt.repository';
-import { buildReceiptNumber, maskDestination } from '../utils/identifiers';
+import { createLogger } from '../observability/logger';
+import { buildReceiptNumber } from '../utils/identifiers';
 import { createDownloadLink, resolveDownloadLink, type DownloadLink } from './download-link.service';
 import { renderReceiptPdf } from './pdf.service';
+
+const log = createLogger('receipts');
 
 export interface IssueResult {
   receipt: Receipt;
@@ -134,9 +137,8 @@ export async function resendReceipt(
   await repository.addDelivery(receipt.receiptId, delivery);
   receipt.deliveries.push(delivery);
 
-  console.info(
-    `[reenvio] tripId=${receipt.tripId} comprobante=${receipt.receiptNumber} canal=${channel} destino=${maskDestination(target)}`,
-  );
+  // El destino (email, telefono o dispositivo) es un dato personal: no se registra.
+  log('info', 'reenvio registrado', { tripId: receipt.tripId, receiptNumber: receipt.receiptNumber, channel });
 
   return { receipt, delivery };
 }

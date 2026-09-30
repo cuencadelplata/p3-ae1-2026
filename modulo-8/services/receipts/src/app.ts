@@ -2,15 +2,34 @@ import cors from 'cors';
 import express, { type Express } from 'express';
 
 import { env } from './config/env';
+import { isRedisReady } from './cache/redis';
+import { isDatabaseReady } from './db/pool';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
+import { requestContext } from './middlewares/request-context.middleware';
+import type { DependencyChecks } from './observability/health';
 import { apiRouter } from './routes';
-import { healthRouter } from './routes/health.routes';
+import { createHealthRouter } from './routes/health.routes';
 import { internalRouter } from './routes/internal.routes';
 
-export function createApp(): Express {
+export interface AppOptions {
+  /**
+   * Verificaciones de salud. RabbitMQ la aporta el proceso que corre el
+   * consumidor y el relay; sin ella se informa como no disponible.
+   */
+  checks?: Partial<DependencyChecks>;
+}
+
+export function createApp(options: AppOptions = {}): Express {
   const app = express();
+  const checks: DependencyChecks = {
+    postgres: isDatabaseReady,
+    redis: isRedisReady,
+    rabbitmq: async () => false,
+    ...options.checks,
+  };
 
   app.disable('x-powered-by');
+  app.use(requestContext);
 
   app.use(
     cors({
@@ -21,7 +40,7 @@ export function createApp(): Express {
 
   app.use(express.json({ limit: '256kb' }));
 
-  app.use('/health', healthRouter);
+  app.use('/health', createHealthRouter(checks));
   app.get('/docs', (_req, res) => res.redirect(`${env.apiPrefix}/docs`));
 
   // Los PDF ya no se publican como archivos estaticos: la unica forma de

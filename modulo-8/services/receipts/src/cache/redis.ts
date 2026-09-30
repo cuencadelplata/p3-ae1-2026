@@ -1,6 +1,9 @@
 import { createClient } from 'redis';
 
 import { env } from '../config/env';
+import { createLogger } from '../observability/logger';
+
+const log = createLogger('redis');
 
 /**
  * Cliente de Redis del servicio. Solo guarda datos efimeros (los enlaces
@@ -24,12 +27,12 @@ let disconnected = false;
 redis.on('error', (error: Error) => {
   if (!disconnected) {
     disconnected = true;
-    console.error(`[redis] sin conexion con Redis, reintentando reason=${error.message}`);
+    log('error', 'sin conexion con Redis, reintentando', { reason: error.message });
   }
 });
 redis.on('ready', () => {
   disconnected = false;
-  console.info('[redis] conectado');
+  log('info', 'conectado');
 });
 
 // La conexion no debe impedir que el proceso termine (pruebas, apagado).
@@ -44,6 +47,10 @@ let opening: Promise<unknown> | undefined;
 export async function connectRedis(): Promise<void> {
   opening ??= redis.connect();
   await opening;
+}
+
+export async function isRedisReady(): Promise<boolean> {
+  return redis.isReady && (await redis.ping()) === 'PONG';
 }
 
 export async function closeRedis(): Promise<void> {

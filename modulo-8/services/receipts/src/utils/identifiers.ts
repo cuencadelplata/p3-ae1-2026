@@ -19,16 +19,3 @@ export function buildReceiptNumber(issuedAt: Date, receiptId: string): string {
   return `CMP-${year}-${suffix}`;
 }
 
-/** Oculta el destino de una entrega para no volcar datos personales en los logs (RNF-23). */
-export function maskDestination(destination: string): string {
-  const atIndex = destination.indexOf('@');
-  if (atIndex > 0) {
-    const user = destination.slice(0, atIndex);
-    const domain = destination.slice(atIndex);
-    return `${user.slice(0, 1)}${'*'.repeat(Math.max(user.length - 1, 1))}${domain}`;
-  }
-  if (destination.length <= 4) {
-    return '*'.repeat(destination.length);
-  }
-  return `${'*'.repeat(destination.length - 4)}${destination.slice(-4)}`;
-}

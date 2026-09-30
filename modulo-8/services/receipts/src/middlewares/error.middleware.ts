@@ -1,6 +1,9 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
 
 import { AppError } from '../errors/app-error';
+import { createLogger, errorFields } from '../observability/logger';
+
+const log = createLogger('http');
 
 interface ErrorBody {
   error: {
@@ -49,7 +52,7 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
     return;
   }
 
-  console.error(`[error] ${req.method} ${req.originalUrl}`, error);
+  log('error', 'error inesperado al atender la solicitud', { method: req.method, ...errorFields(error) });
   res
     .status(500)
     .json(

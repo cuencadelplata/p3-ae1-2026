@@ -280,76 +280,154 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationErrorResponse'
 
-  /health:
+  /health/live:
     servers:
       - url: http://localhost:3008
-        description: El health check se expone en la raiz, fuera del prefijo /api/v1
+        description: Los health checks se exponen en la raiz, fuera del prefijo /api/v1
       - url: /
         description: Servidor relativo
     get:
       tags:
         - Salud
-      summary: Health check del microservicio
+      summary: Vitalidad del proceso
       description: |
-        Devuelve el estado operativo del servicio y el de su base de datos.
-        Responde 503 cuando PostgreSQL no esta disponible: un servicio que no
-        puede leer ni escribir comprobantes no esta operativo aunque el proceso
-        responda.
+        Indica que el proceso esta vivo y atiende solicitudes. No consulta dependencias:
+        una caida de la base no debe provocar reinicios del contenedor. Es el que usa el
+        HEALTHCHECK de la imagen Docker.
+      operationId: getLiveness
+      responses:
+        '200':
+          description: El proceso esta vivo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessResponse'
+
+  /health/ready:
+    servers:
+      - url: http://localhost:3008
+        description: Los health checks se exponen en la raiz, fuera del prefijo /api/v1
+      - url: /
+        description: Servidor relativo
+    get:
+      tags:
+        - Salud
+      summary: Disponibilidad del servicio y de cada dependencia
+      description: |
+        Verifica PostgreSQL, Redis y RabbitMQ (cada uno con un limite de 2 s).
+
+        - `ok`: todas las dependencias disponibles.
+        - `degraded` (200): falta Redis (no se generan enlaces temporales) o RabbitMQ
+          (no se consumen pagos ni se publican eventos, que esperan en la bandeja de salida).
+          La API REST sigue funcionando.
+        - `unavailable` (503): falta PostgreSQL, la unica dependencia critica.
+      operationId: getReadiness
+      responses:
+        '200':
+          description: Servicio disponible (ok o degraded)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          description: Falta una dependencia critica
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+              example:
+                status: unavailable
+                service: m8-documentos
+                version: 2.0.0
+                uptimeSeconds: 42
+                dependencies:
+                  postgres: { status: unavailable, critical: true }
+                  redis: { status: available, critical: false }
+                  rabbitmq: { status: available, critical: false }
+
+  /health:
+    servers:
+      - url: http://localhost:3008
+        description: Los health checks se exponen en la raiz, fuera del prefijo /api/v1
+      - url: /
+        description: Servidor relativo
+    get:
+      tags:
+        - Salud
+      summary: Alias de /health/ready
+      description: Se conserva por compatibilidad con AE1. Misma respuesta que `/health/ready`.
       operationId: getHealth
       responses:
         '200':
-          description: Servicio saludable
+          description: Servicio disponible (ok o degraded)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthResponse'
+                $ref: '#/components/schemas/ReadinessResponse'
         '503':
-          description: Servicio degradado, la base de datos no esta disponible
+          description: Falta una dependencia critica
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthResponse'
-              example:
-                status: degraded
-                service: m8-documentos
-                version: 1.0.0
-                uptimeSeconds: 42
-                dependencies:
-                  database: unavailable
+                $ref: '#/components/schemas/ReadinessResponse'
 
 components:
   schemas:
-    HealthResponse:
+    LivenessResponse:
       type: object
-      required:
-        - status
-        - service
-        - version
-        - uptimeSeconds
-        - dependencies
+      required: [status, service, version, uptimeSeconds]
       properties:
         status:
           type: string
-          enum: [ok, degraded]
+          enum: [ok]
+        service:
+          type: string
+          example: m8-documentos
+        version:
+          type: string
+          example: 2.0.0
+        uptimeSeconds:
+          type: integer
+          example: 42
+
+    DependencyStatus:
+      type: object
+      required: [status, critical]
+      properties:
+        status:
+          type: string
+          enum: [available, unavailable]
+        critical:
+          type: boolean
+          description: Si es true, su falta deja al servicio en estado unavailable
+
+    ReadinessResponse:
+      type: object
+      required: [status, service, version, uptimeSeconds, dependencies]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, unavailable]
           example: ok
         service:
           type: string
           example: m8-documentos
         version:
           type: string
-          example: 1.0.0
+          example: 2.0.0
         uptimeSeconds:
           type: integer
           example: 42
         dependencies:
           type: object
-          required:
-            - database
+          required: [postgres, redis, rabbitmq]
           properties:
-            database:
-              type: string
-              enum: [available, unavailable]
-              example: available
+            postgres:
+              $ref: '#/components/schemas/DependencyStatus'
+            redis:
+              $ref: '#/components/schemas/DependencyStatus'
+            rabbitmq:
+              $ref: '#/components/schemas/DependencyStatus'
 
     ReceiptRequest:
       type: object

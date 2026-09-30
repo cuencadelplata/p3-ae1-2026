@@ -1,6 +1,9 @@
 import { Pool } from 'pg';
 
 import { env } from '../config/env';
+import { createLogger, errorFields } from '../observability/logger';
+
+const log = createLogger('postgres');
 
 /**
  * Pool unico de conexiones a CommunicationsDB. allowExitOnIdle permite que el
@@ -15,7 +18,7 @@ export const pool = new Pool({
 });
 
 pool.on('error', (error) => {
-  console.error(`[${env.serviceName}] error en una conexion inactiva del pool`, error);
+  log('error', 'error en una conexion inactiva del pool', errorFields(error));
 });
 
 export async function isDatabaseReady(): Promise<boolean> {
