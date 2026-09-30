@@ -1,5 +1,7 @@
 # ADR-002: Contenerización Unificada con Docker Compose y Orquestación de Pruebas (AE1)
 
+> **Documento de AE1 (versión 1.0.0), conservado como evidencia.** Sigue vigente la imagen única multi-stage; el compose de AE2 agrega PostgreSQL, RabbitMQ y Redis.
+
 * **Estado:** Aceptado  
 * **Fecha:** 2026-09-14  
 * **Autores:** Juan Gualtieri, Lucas Cremaschi, Meza Santiago (Grupo 14)  

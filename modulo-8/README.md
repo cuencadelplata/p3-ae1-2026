@@ -7,7 +7,7 @@ cada servicio conserva su propio puerto y contrato.
 | --- | ---: | --- |
 | Notifications | 3101 | RF-8.1, procesamiento PUSH mock. |
 | QR | 3103 | RF-8.2, QR temporal de un solo uso. |
-| Receipts | 3008 | RF-8.3 y RF-8.4, comprobantes PDF y reenvío simulado. |
+| Receipts | 3008 | RF-8.3 y RF-8.4, comprobantes PDF y reenvío simulado. En `ae2/juan-gualtieri`: versión 2.0.0 con PostgreSQL, RabbitMQ y Redis ([README](services/receipts/README.md)). |
 | Support | 3000 | RF-8.5 y base parcial de integración RabbitMQ para RF-8.6. |
 
 ## Requisitos y uso
@@ -24,8 +24,8 @@ pnpm run test:e2e
 docker compose down --remove-orphans
 ```
 
-`compose.yaml` inicia también RabbitMQ en los puertos 5672 y 15672. Receipts
-usa el volumen persistente `m8-storage`.
+`compose.yaml` inicia también RabbitMQ (puertos 5672 y 15672), PostgreSQL y Redis.
+Receipts guarda sus datos en PostgreSQL (esquema `receipts`).
 
 ## Contratos y documentación
 

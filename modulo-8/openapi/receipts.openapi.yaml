@@ -2,14 +2,19 @@
 info:
   title: M8 - Notificaciones, Documentos y Soporte (Comprobantes PDF)
   description: |
-    Microservicio de la **Plataforma Distribuida de Movilidad Urbana (ISI - Paradigmas 3 - AE1)**.
+    Microservicio de la **Plataforma Distribuida de Movilidad Urbana (ISI - Paradigmas 3)**.
     Responsable de la **emisión, consulta, descarga y reenvío de comprobantes de viaje en PDF**.
 
-    **Alcance asignado (Grupo 14 - Juan Gualtieri, Lucas Cremaschi, Meza Santiago):**
-    - **RF-8.3:** Generación de comprobante PDF posterior a la finalización/pago con datos del viaje, importe, identificadores y fecha.
-    - **RF-8.4:** Reenvío de comprobante (solicitud de enlace o entrega simulada por email, SMS o push).
-    - **Idempotencia:** La emisión por `tripId` es estrictamente idempotente para evitar comprobantes duplicados o condiciones de carrera.
-  version: 1.0.0
+    **Versión 2.0.0: evolución individual AE2 (Juan Gualtieri) sobre la versión 1.0.0 del Grupo 14 (AE1).**
+    - **RF-8.3:** Comprobante PDF. Además de `POST /receipts`, se emite de forma asincrónica al consumir
+      `payment.confirmed` (RabbitMQ). Persistencia en PostgreSQL (esquema `receipts`).
+    - **RF-8.4:** Reenvío de comprobante (entrega simulada) y descarga mediante enlace temporal (Redis).
+    - **Idempotencia (RNF-08/09):** un único comprobante por `tripId`, garantizado por una restricción
+      `UNIQUE` de la base aun con varias réplicas del servicio.
+
+    Los contratos asincrónicos (`payment.confirmed`, `receipt.issued`) y el contrato interno con Receipts
+    Delivery están en `contracts/events/catalogo-eventos-v1.md`; no forman parte de esta API pública.
+  version: 2.0.0
   contact:
     name: Grupo 14 - M8 Comprobantes
 servers:
@@ -17,6 +22,10 @@ servers:
     description: Servidor Local de Desarrollo
   - url: /api/v1
     description: Servidor relativo
+
+# Sin autenticacion propia: la identidad y los permisos son responsabilidad de la
+# plataforma (M1 - Identidad), fuera del alcance de este servicio en AE2.
+security: []
 
 tags:
   - name: Comprobantes (RF-8.3 / RF-8.4)
@@ -143,7 +152,7 @@ paths:
       tags:
         - Comprobantes (RF-8.3 / RF-8.4)
       summary: Descarga directa del archivo PDF del comprobante (RF-8.3)
-      description: Retorna el flujo binario del archivo PDF generado, con encabezado `Content-Disposition: attachment`.
+      description: "Retorna el flujo binario del archivo PDF generado, con encabezado `Content-Disposition: attachment`."
       operationId: downloadReceiptPdf
       parameters:
         - name: tripId

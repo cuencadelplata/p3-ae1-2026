@@ -15,6 +15,7 @@ COPY openapi/receipts.openapi.yaml openapi/receipts.openapi.yaml
 RUN pnpm install --frozen-lockfile
 
 COPY services/receipts/tsconfig.json services/receipts/tsconfig.json
+COPY services/receipts/tsconfig.test.json services/receipts/tsconfig.test.json
 COPY services/receipts/src services/receipts/src
 COPY services/receipts/tests services/receipts/tests
 COPY services/receipts/scripts services/receipts/scripts
@@ -23,6 +24,11 @@ RUN pnpm --filter m8-documentos run build
 RUN pnpm --filter m8-documentos deploy --prod --legacy /opt/deploy
 
 FROM node:22-slim AS runtime
+
+LABEL org.opencontainers.image.title="m8-documentos" \
+      org.opencontainers.image.description="M8 - Comprobantes de viaje en PDF (RF-8.3), evolucion AE2" \
+      org.opencontainers.image.version="2.0.0" \
+      org.opencontainers.image.source="https://github.com/cuencadelplata/p3-ae1-2026"
 
 WORKDIR /app
 
@@ -33,7 +39,8 @@ COPY --from=build /workspace/openapi/receipts.openapi.yaml ./openapi/receipts.op
 USER node
 
 ENV NODE_ENV=production \
-    PORT=3008
+    PORT=3008 \
+    SERVICE_VERSION=2.0.0
 
 EXPOSE 3008
 

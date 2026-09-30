@@ -1,5 +1,7 @@
 # Manual de Despliegue y Operación con Docker - Módulo 8
 
+> **Documento de AE1 (versión 1.0.0), conservado como evidencia.** Para AE2 seguir el [README del servicio](../../README.md): el volumen `m8-storage` ya no existe y el stack incluye PostgreSQL, RabbitMQ y Redis.
+
 **Materia:** ISI - Paradigmas de Programación 3 (2026)  
 **Módulo:** M8 - Notificaciones, Documentos y Soporte (Comprobantes PDF)  
 **Grupo 14:** Juan Gualtieri, Lucas Cremaschi, Meza Santiago  

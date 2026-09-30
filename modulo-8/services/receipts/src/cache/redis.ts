@@ -35,9 +35,9 @@ redis.on('ready', () => {
   log('info', 'conectado');
 });
 
-// La conexion no debe impedir que el proceso termine (pruebas, apagado).
-redis.unref();
-
+// La conexion se cierra de forma explicita con closeRedis (apagado del servicio y
+// pruebas). No se usa unref(): mientras la conexion se abre, nada mas mantiene
+// vivo el proceso y este podria terminar antes de conectar.
 let opening: Promise<unknown> | undefined;
 
 /**

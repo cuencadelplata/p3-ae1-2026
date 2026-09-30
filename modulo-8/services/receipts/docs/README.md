@@ -1,54 +1,31 @@
-# Índice de Documentación Técnica - Módulo 8 (Comprobantes PDF)
+# Documentación técnica: m8-documentos
 
-**Materia:** ISI - Paradigmas de Programación 3 (2026)  
-**Módulo:** M8 - Notificaciones, Documentos y Soporte  
-**Grupo 14:** Juan Gualtieri, Lucas Cremaschi, Meza Santiago  
-**Alcance:** RF-8.3 (Comprobante PDF) y RF-8.4 (Reenvío de Comprobante) — Instancia AE1  
+**Materia:** ISI - Paradigmas de Programación 3 (2026)
+**Módulo:** M8 - Notificaciones, Documentos y Soporte
+**Servicio:** comprobantes de viaje en PDF (RF-8.3 y RF-8.4)
 
----
+## AE2: versión 2.0.0 (Juan Gualtieri, evolución individual)
 
-Bienvenido al centro de documentación técnica del microservicio `m8-documentos`. A continuación se detallan los documentos de ingeniería, arquitectura, despliegue y pruebas del proyecto:
+| Documento | Contenido |
+| --- | --- |
+| [Arquitectura AE2](arquitectura/arquitectura-ae2.md) | Diagrama de componentes, propiedad de datos, secuencias de emisión asincrónica y de enlace temporal, observabilidad |
+| [ADR-003: RabbitMQ y Redis](adr/ADR-003-backing-services-ae2.md) | Emisión por evento, reintentos y DLQ, bandeja de salida, idempotencia en dos capas, enlace temporal |
+| [ADR-004: persistencia](adr/ADR-004-persistencia-ae2.md) | PostgreSQL con esquema y rol propios, PDF en la base frente a almacenamiento de objetos, `UNIQUE` como árbitro |
+| [Concurrencia e idempotencia AE2](pruebas/concurrencia-idempotencia-ae2.md) | La carrera reproducida, su solución y la demostración con dos réplicas |
+| [Catálogo de eventos v1](../../../contracts/events/catalogo-eventos-v1.md) | Topología de RabbitMQ, sobre del mensaje, `payment.confirmed`, `receipt.issued` y contrato interno con Receipts Delivery |
+| [OpenAPI 2.0.0](../../../openapi/receipts.openapi.yaml) | Contrato de la API pública |
 
----
+Puesta en marcha, pruebas y demostraciones: [README del servicio](../README.md).
 
-## 🗺️ Mapa de Documentación
+## AE1: versión 1.0.0 (Grupo 14, conservada como evidencia)
 
-### 1. Arquitectura del Sistema
-* 📄 **[Diagramas de Componentes y Secuencia (`docs/arquitectura/componentes-m8.md`)](./arquitectura/componentes-m8.md)**  
-  Visualización en Mermaid de la interacción entre capas (Controladores, Servicios, Repositorios), flujo de emisión de comprobantes, aislamiento de datos (RNF-04) y usabilidad.
+Describen el estado heredado. Lo que AE2 reemplazó se indica al comienzo de cada documento.
 
-### 2. Registro de Decisiones de Arquitectura (ADR)
-* 📄 **[ADR-001: Arquitectura Base y Generación PDF con PDFKit (`docs/adr/ADR-001-m8-comprobantes-ae1.md`)](./adr/ADR-001-m8-comprobantes-ae1.md)**  
-  Justificación de la elección de Node.js 22 LTS, TypeScript 7, motor PDFKit en memoria, persistencia transitoria en disco y estrategia de idempotencia.
-* 📄 **[ADR-002: Contenerización con Docker Compose e Imagen Unificada (`docs/adr/ADR-002-docker-compose-testing.md`)](./adr/ADR-002-docker-compose-testing.md)**  
-  Justificación de la adopción de Docker Compose, eliminación de dependencias en el host, imagen única para producción y testing, y automatización de pruebas.
-
-### 3. Despliegue e Infraestructura
-* 📄 **[Manual de Operación y Despliegue con Docker (`docs/despliegue/manual-operacion-docker.md`)](./despliegue/manual-operacion-docker.md)**  
-  Guía práctica para iniciar (`docker compose up -d`), consultar logs (`docker compose logs -f`), detener (`docker compose down`), persistencia de volúmenes (`m8-storage`) y resolución de problemas.
-
-### 4. Calidad, Pruebas y Concurrencia
-* 📄 **[Reporte de Estrategia de Pruebas y Concurrencia (`docs/pruebas/reporte-pruebas-concurrencia.md`)](./pruebas/reporte-pruebas-concurrencia.md)**  
-  Detalle de la suite de 22 tests unitarios e integración HTTP, validaciones de tarifas y vehículos, y evidencia de la prueba de estrés de 8 solicitudes concurrentes con idempotencia demostrada.
-
-### 5. Contrato de API y Consola Interactiva
-* 📄 **[Especificación de la API REST y Contrato OpenAPI (`docs/api/contrato-y-endpoints.md`)](./api/contrato-y-endpoints.md)**  
-  Catálogo completo de endpoints (`/receipts`, `/receipts/:tripId/pdf`, `/resend`, `/health`), esquemas de solicitud/respuesta, formato uniforme de errores (RNF-05) y acceso a Scalar API Reference (`/docs`).
-
----
-
-## 🚀 Resumen Rápido de Puesta en Marcha
-
-```bash
-# 1. Posicionarse en la carpeta
-cd m8-documentos
-
-# 2. Levantar el microservicio en Docker
-docker compose up -d
-
-# 3. Correr la suite de pruebas completa
-docker compose run test
-
-# 4. Acceder a la consola interactiva en el navegador
-# http://localhost:3008/docs
-```
+| Documento | Contenido |
+| --- | --- |
+| [ADR-001](adr/ADR-001-m8-comprobantes-ae1.md) | Arquitectura base y PDFKit |
+| [ADR-002](adr/ADR-002-docker-compose-testing.md) | Contenerización y pruebas con Docker Compose |
+| [Componentes AE1](arquitectura/componentes-m8.md) | Diagramas de la versión 1.0.0 |
+| [Manual de operación AE1](despliegue/manual-operacion-docker.md) | Operación con Docker en AE1 |
+| [Pruebas y concurrencia AE1](pruebas/reporte-pruebas-concurrencia.md) | Suite de 22 pruebas y prueba de 8 solicitudes |
+| [API AE1](api/contrato-y-endpoints.md) | Endpoints de la versión 1.0.0 |

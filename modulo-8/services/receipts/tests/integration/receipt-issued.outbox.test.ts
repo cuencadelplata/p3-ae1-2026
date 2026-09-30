@@ -108,9 +108,13 @@ describe('Publicacion de receipt.issued (Integration PostgreSQL + RabbitMQ)', ()
     assert.equal(event?.data.receiptId, receipt.receiptId);
     assert.equal(event?.data.receiptNumber, receipt.receiptNumber);
 
-    const [row] = await outboxRows(receipt.tripId);
-    assert.equal(row?.message_id, event?.messageId);
-    assert.ok(row?.published_at instanceof Date);
+    // RabbitMQ entrega el evento antes de que el relay registre la marca en la
+    // base (primero se confirma la publicacion, despues se marca): se espera la marca.
+    const row = await waitFor(async () => {
+      const [current] = await outboxRows(receipt.tripId);
+      return current?.published_at instanceof Date && current;
+    });
+    assert.equal(row.message_id, event?.messageId);
   });
 
   it('no debe publicar un segundo receipt.issued ante un payment.confirmed repetido', async () => {
@@ -145,8 +149,8 @@ describe('Publicacion de receipt.issued (Integration PostgreSQL + RabbitMQ)', ()
 
     await startRelay().whenReady();
     await waitFor(async () => receivedFor(receipt.tripId).length === 1);
-    const [published] = await outboxRows(receipt.tripId);
-    assert.ok(published?.published_at instanceof Date);
+    await waitFor(async () => (await outboxRows(receipt.tripId))[0]?.published_at instanceof Date);
+    assert.equal(receivedFor(receipt.tripId).length, 1);
   });
 
   it('debe publicar cada evento una sola vez aunque corran dos instancias', async () => {
