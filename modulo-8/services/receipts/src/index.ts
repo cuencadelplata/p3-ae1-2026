@@ -1,25 +1,31 @@
 import { createApp } from './app';
 import { env } from './config/env';
-import { ensureStorage } from './repositories/receipt.repository';
+import { runMigrations } from './db/migrations';
+import { closePool } from './db/pool';
 
 async function bootstrap(): Promise<void> {
-  await ensureStorage();
+  await runMigrations();
 
   const app = createApp();
   const server = app.listen(env.port, () => {
     console.info(`[${env.serviceName}] escuchando en ${env.publicBaseUrl} (entorno: ${env.nodeEnv})`);
     console.info(`[${env.serviceName}] API disponible en ${env.publicBaseUrl}${env.apiPrefix}/receipts`);
-    console.info(`[${env.serviceName}] comprobantes almacenados en ${env.storageDir}`);
   });
 
   const shutdown = (signal: string): void => {
     console.info(`[${env.serviceName}] senal ${signal} recibida, cerrando el servidor`);
     server.close((error) => {
-      if (error) {
-        console.error(`[${env.serviceName}] error al cerrar el servidor`, error);
-        process.exit(1);
-      }
-      process.exit(0);
+      closePool()
+        .catch((poolError: unknown) => {
+          console.error(`[${env.serviceName}] error al cerrar la conexion con la base`, poolError);
+        })
+        .finally(() => {
+          if (error) {
+            console.error(`[${env.serviceName}] error al cerrar el servidor`, error);
+            process.exit(1);
+          }
+          process.exit(0);
+        });
     });
   };
 

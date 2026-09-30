@@ -45,6 +45,10 @@ jobs:
       - name: Build workspace services
         run: pnpm run build
 
+      - name: Start test database
+        run: |
+          docker compose up -d --wait postgres
+
       - name: Run workspace tests
         run: pnpm run test
 

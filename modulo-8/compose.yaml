@@ -30,8 +30,10 @@ services:
       NODE_ENV: production
       PORT: "3008"
       PUBLIC_BASE_URL: http://localhost:3008
-    volumes:
-      - m8-storage:/app/storage
+      RECEIPTS_DATABASE_URL: "postgres://m8_receipts:${RECEIPTS_DB_PASSWORD:-m8_receipts_local}@postgres:5432/${POSTGRES_DB:-m8}"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
@@ -55,8 +57,10 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:-m8}"
       POSTGRES_USER: "${POSTGRES_USER:-m8_admin}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-m8_admin_local}"
+      RECEIPTS_DB_PASSWORD: "${RECEIPTS_DB_PASSWORD:-m8_receipts_local}"
     volumes:
       - m8-postgres:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 10s
@@ -88,7 +92,5 @@ services:
         condition: service_healthy
 
 volumes:
-  m8-storage:
-    name: m8-storage
   m8-postgres:
     name: m8-postgres

@@ -1,11 +1,8 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import type { RequestHandler } from 'express';
 
 import { env } from '../config/env';
 import { AppError } from '../errors/app-error';
 import type { Receipt } from '../models/receipt';
-import { pdfFileName } from '../repositories/receipt.repository';
 import * as receiptService from '../services/receipt.service';
 import { isValidTripId } from '../utils/identifiers';
 import { validateReceiptRequest, validateResendRequest } from '../validators/receipt.validator';
@@ -25,7 +22,6 @@ function toResponse(receipt: Receipt) {
     ...receipt,
     pdf: {
       downloadUrl: `${env.publicBaseUrl}${env.apiPrefix}/receipts/${receipt.tripId}/pdf`,
-      staticUrl: `${env.publicBaseUrl}${env.staticPrefix}/${pdfFileName(receipt.tripId)}`,
     },
   };
 }
@@ -69,24 +65,12 @@ export const getReceipt: RequestHandler = async (req, res, next) => {
 export const downloadReceipt: RequestHandler = async (req, res, next) => {
   try {
     const tripId = readTripId(req.params['tripId']);
-    const { receipt, filePath } = await receiptService.getReceiptPdfPath(tripId);
+    const { receipt, pdf } = await receiptService.getReceiptPdf(tripId);
 
-    const resolvedPath = path.resolve(filePath);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="comprobante-${receipt.receiptNumber}.pdf"`);
-
-    const stream = fs.createReadStream(resolvedPath);
-    stream.on('error', (streamError) => {
-      // Si el archivo falla antes de la primera escritura todavia se puede
-      // responder con el formato de error del servicio; si ya empezo a enviarse
-      // el PDF hay que cortar la conexion para no dejarla colgada.
-      if (res.headersSent) {
-        res.destroy(streamError);
-        return;
-      }
-      next(streamError);
-    });
-    stream.pipe(res);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.status(200).send(pdf);
   } catch (error) {
     next(error);
   }

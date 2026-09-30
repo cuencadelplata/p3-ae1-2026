@@ -1,21 +1,21 @@
 import { Router } from 'express';
 
 import { env } from '../config/env';
-import { isStorageWritable } from '../repositories/receipt.repository';
+import { isDatabaseReady } from '../db/pool';
 
 export const healthRouter = Router();
 
 healthRouter.get('/', async (_req, res, next) => {
   try {
-    const storageReady = await isStorageWritable();
+    const databaseReady = await isDatabaseReady();
 
-    res.status(storageReady ? 200 : 503).json({
-      status: storageReady ? 'ok' : 'degraded',
+    res.status(databaseReady ? 200 : 503).json({
+      status: databaseReady ? 'ok' : 'degraded',
       service: env.serviceName,
       version: env.serviceVersion,
       uptimeSeconds: Math.round(process.uptime()),
       dependencies: {
-        storage: storageReady ? 'available' : 'unavailable',
+        database: databaseReady ? 'available' : 'unavailable',
       },
     });
   } catch (error) {

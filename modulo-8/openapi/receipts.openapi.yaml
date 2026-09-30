@@ -236,7 +236,11 @@ paths:
       tags:
         - Salud
       summary: Health check del microservicio
-      description: Devuelve el estado operativo del servicio, timestamp y uptime.
+      description: |
+        Devuelve el estado operativo del servicio y el de su base de datos.
+        Responde 503 cuando PostgreSQL no esta disponible: un servicio que no
+        puede leer ni escribir comprobantes no esta operativo aunque el proceso
+        responda.
       operationId: getHealth
       responses:
         '200':
@@ -244,20 +248,55 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: "ok"
-                  timestamp:
-                    type: string
-                    format: date-time
-                  uptimeSeconds:
-                    type: number
-                    example: 12.4
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Servicio degradado, la base de datos no esta disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: degraded
+                service: m8-documentos
+                version: 1.0.0
+                uptimeSeconds: 42
+                dependencies:
+                  database: unavailable
 
 components:
   schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - service
+        - version
+        - uptimeSeconds
+        - dependencies
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+          example: ok
+        service:
+          type: string
+          example: m8-documentos
+        version:
+          type: string
+          example: 1.0.0
+        uptimeSeconds:
+          type: integer
+          example: 42
+        dependencies:
+          type: object
+          required:
+            - database
+          properties:
+            database:
+              type: string
+              enum: [available, unavailable]
+              example: available
+
     ReceiptRequest:
       type: object
       required:
@@ -467,9 +506,6 @@ components:
             downloadUrl:
               type: string
               example: "http://localhost:3008/api/v1/receipts/trip-2026-000123/pdf"
-            staticUrl:
-              type: string
-              example: "http://localhost:3008/files/receipts/trip-2026-000123.pdf"
 
     DeliveryRecord:
       type: object
