@@ -47,6 +47,32 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-m8}"
+      POSTGRES_USER: "${POSTGRES_USER:-m8_admin}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-m8_admin_local}"
+    volumes:
+      - m8-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   support:
     build:
       context: .
@@ -64,3 +90,5 @@ services:
 volumes:
   m8-storage:
     name: m8-storage
+  m8-postgres:
+    name: m8-postgres
