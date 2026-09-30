@@ -2,6 +2,7 @@ import * as amqp from 'amqplib';
 import type { ConfirmChannel, ConsumeMessage } from 'amqplib';
 
 import { PermanentMessageError } from './errors';
+import { createLogger, errorMessage } from './log';
 import { assertTopology, type QueueTopology } from './topology';
 
 type Connection = Awaited<ReturnType<typeof amqp.connect>>;
@@ -55,12 +56,7 @@ export function startConsumer(options: ConsumerOptions): RunningConsumer {
     markReady = resolve;
   });
 
-  const log = (level: 'info' | 'warn' | 'error', message: string, fields: Record<string, unknown> = {}): void => {
-    const detail = Object.entries(fields)
-      .map(([key, value]) => `${key}=${String(value)}`)
-      .join(' ');
-    console[level](`[${options.name}] ${message}${detail ? ` ${detail}` : ''}`);
-  };
+  const log = createLogger(options.name);
 
   async function sendToRetry(channel: ConfirmChannel, message: ConsumeMessage, attempt: number): Promise<void> {
     channel.sendToQueue(topology.retryQueue, message.content, {
@@ -82,7 +78,7 @@ export function startConsumer(options: ConsumerOptions): RunningConsumer {
       channel.ack(message);
       return;
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = errorMessage(error);
 
       if (error instanceof PermanentMessageError) {
         log('warn', 'mensaje invalido enviado a la DLQ', { ...fields, reason, details: error.details.join('; ') });
@@ -110,7 +106,7 @@ export function startConsumer(options: ConsumerOptions): RunningConsumer {
         // principal para no perderlo.
         log('error', 'no se pudo programar el reintento, se devuelve a la cola', {
           ...fields,
-          reason: retryError instanceof Error ? retryError.message : String(retryError),
+          reason: errorMessage(retryError),
         });
         channel.nack(message, false, true);
       }
@@ -137,9 +133,7 @@ export function startConsumer(options: ConsumerOptions): RunningConsumer {
       await channel.consume(topology.queue, (message) => {
         if (message) {
           void onMessage(channel, message).catch((error: unknown) => {
-            log('error', 'error inesperado al confirmar el mensaje', {
-              reason: error instanceof Error ? error.message : String(error),
-            });
+            log('error', 'error inesperado al confirmar el mensaje', { reason: errorMessage(error) });
           });
         }
       });
@@ -158,7 +152,7 @@ export function startConsumer(options: ConsumerOptions): RunningConsumer {
       markReady();
     } catch (error) {
       log('error', 'no se pudo conectar con RabbitMQ, reintentando', {
-        reason: error instanceof Error ? error.message : String(error),
+        reason: errorMessage(error),
         delayMs: reconnectDelayMs,
       });
       await candidate?.close().catch(() => undefined);

@@ -79,6 +79,12 @@ export const env = {
   /** Espera entre reintentos, en milisegundos. */
   consumerRetryDelayMs: readPositiveInt('CONSUMER_RETRY_DELAY_MS', 5000),
 
+  /** Espera entre revisiones de la bandeja de salida de eventos, en milisegundos. */
+  outboxPollIntervalMs: readPositiveInt('OUTBOX_POLL_INTERVAL_MS', 1000),
+
+  /** Eventos que se publican por revision de la bandeja de salida. */
+  outboxBatchSize: readPositiveInt('OUTBOX_BATCH_SIZE', 20),
+
   /** Datos de presentacion del emisor dentro del PDF. */
   issuerName: readText('RECEIPT_ISSUER_NAME', 'Plataforma de Movilidad Urbana'),
   issuerTeam: readText('RECEIPT_ISSUER_TEAM', 'Grupo 14 - Modulo 8'),

@@ -6,6 +6,9 @@
  *   2. el mismo mensaje otra vez (mismo id)    -> se descarta como repetido
  *   3. un mensaje que no respeta el sobre      -> va a la DLQ sin reintentos
  *
+ * Ademas escucha receipt.issued, como lo haria cualquier suscriptor, y muestra
+ * que el servicio lo publica una unica vez aunque el pago llegue repetido.
+ *
  * El paso 2 se publica despues de que el paso 1 termino, para que la bandeja de
  * entrada ya lo tenga registrado. Si ambos llegaran a la vez, los dos pasarian
  * esa primera verificacion y el repetido se detectaria en la segunda capa: la
@@ -22,6 +25,7 @@ import amqp from 'amqplib';
 const URL = process.env.RABBITMQ_URL ?? 'amqp://guest:guest@localhost:5672';
 const EXCHANGE = process.env.EVENTS_EXCHANGE ?? 'mobility.events';
 const ROUTING_KEY = 'payment.confirmed';
+const ISSUED_ROUTING_KEY = 'receipt.issued';
 const BASE = process.env.BASE_URL ?? 'http://localhost:3008';
 const LINEA = '='.repeat(72);
 
@@ -91,6 +95,22 @@ async function main() {
   const connection = await amqp.connect(URL);
   const channel = await connection.createConfirmChannel();
 
+  // Cola temporal del suscriptor: se borra sola al cerrar la conexion.
+  const emitidos = [];
+  await channel.assertExchange(EXCHANGE, 'topic', { durable: true });
+  const { queue } = await channel.assertQueue('', { exclusive: true, autoDelete: true });
+  await channel.bindQueue(queue, EXCHANGE, ISSUED_ROUTING_KEY);
+  await channel.consume(
+    queue,
+    (mensaje) => {
+      const recibido = mensaje && JSON.parse(mensaje.content.toString('utf8'));
+      if (recibido?.correlationId === tripId) {
+        emitidos.push(recibido);
+      }
+    },
+    { noAck: true },
+  );
+
   console.log(LINEA);
   console.log(' DEMO payment.confirmed -> comprobante (RF-8.3 / RF-8.6)');
   console.log(LINEA);
@@ -113,18 +133,25 @@ async function main() {
   publicar(channel, '{"esto": "no respeta el sobre"}', `demo-invalido-${Date.now()}`);
   console.log(' 3. Publicado un mensaje invalido');
   await channel.waitForConfirms();
+
+  // Margen para que un segundo receipt.issued, si lo hubiera, llegue a verse.
+  await new Promise((resolve) => setTimeout(resolve, 3000));
   await connection.close();
 
   console.log('-'.repeat(72));
   if (comprobante) {
     console.log(` Comprobante emitido : ${comprobante.receiptNumber}`);
     console.log(` Descarga del PDF    : ${comprobante.pdf.downloadUrl}`);
+    console.log(` receipt.issued      : ${emitidos.length} recibido(s) para este viaje (se espera 1)`);
+    for (const evento of emitidos) {
+      console.log(`   messageId=${evento.messageId} data=${JSON.stringify(evento.data)}`);
+    }
   } else {
     console.log(` No se encontro el comprobante en ${BASE}. Revisar docker compose logs receipts`);
   }
   console.log(LINEA);
   console.log(' Verificar:');
-  console.log('  - docker compose logs receipts : "emitido", "repetido descartado" y "DLQ"');
+  console.log('  - docker compose logs receipts : "emitido", "repetido descartado", "DLQ" y "evento publicado"');
   console.log('  - http://localhost:15672 -> Queues -> m8.receipts.payment-confirmed.dlq (1 mensaje)');
   console.log(LINEA);
 }
