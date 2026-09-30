@@ -135,8 +135,10 @@ describe('Publicacion de receipt.issued (Integration PostgreSQL + RabbitMQ)', ()
     startRelay('amqp://guest:guest@127.0.0.1:1');
 
     const { receipt } = await issueReceipt(requestFor(`trip-outbox-caida-${Date.now()}`));
-    await pause(POLL_INTERVAL_MS * 3);
 
+    // Se verifica enseguida: si el servicio esta levantado, su relay es otra
+    // replica que lee la misma tabla y, pasado su intervalo, publicaria el evento.
+    // En CI las pruebas corren solo contra PostgreSQL, RabbitMQ y Redis.
     const [pending] = await outboxRows(receipt.tripId);
     assert.equal(pending?.published_at, null);
     assert.equal(receivedFor(receipt.tripId).length, 0);

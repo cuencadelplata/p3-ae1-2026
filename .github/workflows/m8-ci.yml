@@ -47,7 +47,7 @@ jobs:
 
       - name: Start test backing services
         run: |
-          docker compose up -d --wait postgres rabbitmq
+          docker compose up -d --wait postgres rabbitmq redis
 
       - name: Run workspace tests
         run: pnpm run test

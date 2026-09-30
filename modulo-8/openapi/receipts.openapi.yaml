@@ -173,6 +173,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: El comprobante existe pero su PDF no está disponible (`RECEIPT_PDF_UNAVAILABLE`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /receipts/downloads/{token}:
+    get:
+      tags:
+        - Comprobantes (RF-8.3 / RF-8.4)
+      summary: Descarga el PDF mediante un enlace temporal
+      description: |
+        Enlace que se entrega al cliente en los reenvíos (RF-8.4). Lo genera el contrato interno
+        `GET /internal/receipts/{tripId}/delivery-reference`, que no forma parte de esta API pública.
+
+        El token es opaco: no contiene ni deriva del `tripId`. Vence según `RECEIPT_LINK_TTL_SECONDS`
+        (900 s por defecto); un token vencido o inexistente responde `410 Gone`.
+      operationId: downloadReceiptPdfByToken
+      parameters:
+        - name: token
+          in: path
+          required: true
+          description: Token opaco del enlace (43 caracteres base64url)
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{43}$'
+            example: "8xbxRxHzO1E3gDGHTxdET0wvySSRPJ9lZoylXk9vneE"
+      responses:
+        '200':
+          description: Archivo PDF del comprobante
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '409':
+          description: El comprobante existe pero su PDF no está disponible (`RECEIPT_PDF_UNAVAILABLE`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          description: El enlace no existe o ya venció (`DOWNLOAD_LINK_EXPIRED`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Los enlaces de descarga no están disponibles momentáneamente (`DOWNLOAD_LINKS_UNAVAILABLE`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /receipts/{tripId}/resend:
     post:

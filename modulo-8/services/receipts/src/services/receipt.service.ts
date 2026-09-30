@@ -5,6 +5,7 @@ import { buildReceiptIssuedEvent } from '../messaging/receipt-issued';
 import type { DeliveryChannel, DeliveryRecord, Receipt, ReceiptRequest } from '../models/receipt';
 import * as repository from '../repositories/receipt.repository';
 import { buildReceiptNumber, maskDestination } from '../utils/identifiers';
+import { createDownloadLink, resolveDownloadLink, type DownloadLink } from './download-link.service';
 import { renderReceiptPdf } from './pdf.service';
 
 export interface IssueResult {
@@ -61,13 +62,43 @@ export async function getReceiptPdf(tripId: string): Promise<{ receipt: Receipt;
   const pdf = await repository.findPdfByTripId(tripId);
 
   if (!pdf) {
-    throw AppError.conflict(
-      'RECEIPT_PDF_UNAVAILABLE',
-      `El comprobante del viaje ${tripId} existe pero su archivo PDF no esta disponible`,
-    );
+    throw pdfUnavailable(tripId);
   }
 
   return { receipt, pdf };
+}
+
+function pdfUnavailable(tripId: string): AppError {
+  return AppError.conflict(
+    'RECEIPT_PDF_UNAVAILABLE',
+    `El comprobante del viaje ${tripId} existe pero su archivo PDF no esta disponible`,
+  );
+}
+
+export interface DeliveryReference extends DownloadLink {
+  tripId: string;
+  receiptNumber: string;
+}
+
+/**
+ * Referencia de descarga para Receipts Delivery (RF-8.4): un enlace temporal
+ * al PDF, para que el reenvio no necesite acceder a la base de datos del
+ * servicio (catalogo de eventos v1, seccion 6).
+ */
+export async function getDeliveryReference(tripId: string): Promise<DeliveryReference> {
+  const receipt = await getReceipt(tripId);
+  if (!(await repository.hasPdf(receipt.receiptId))) {
+    throw pdfUnavailable(tripId);
+  }
+
+  const link = await createDownloadLink(tripId);
+  return { tripId, receiptNumber: receipt.receiptNumber, ...link };
+}
+
+/** Descarga del PDF a partir de un enlace temporal vigente. */
+export async function getReceiptPdfByToken(token: string): Promise<{ receipt: Receipt; pdf: Buffer }> {
+  const tripId = await resolveDownloadLink(token);
+  return getReceiptPdf(tripId);
 }
 
 /**
