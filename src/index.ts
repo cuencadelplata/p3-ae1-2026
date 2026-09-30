@@ -7,7 +7,6 @@ import { config } from "./config";
 import { conectarRedis } from "./infraestructura/redis";
 import { iniciarRabbit } from "./infraestructura/rabbit";
 import { iniciarConsumerViajeCancelado } from "./6-reintegro/consumerViajeCancelado";
-import rutaReintegro from "./6-reintegro/rutaReintegro";
 import rutaPagoDuplicado from "./5-pago-duplicado/rutaPagoDuplicado";
 
 const app = express();
@@ -17,7 +16,6 @@ app.use("/docs", apiReference({ content: parse(readFileSync("./openapi.yaml", "u
 app.get("/", (_req, res) => res.redirect("/docs"));
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
-app.use(rutaReintegro);
 app.use(rutaPagoDuplicado);
 
 async function main() {
