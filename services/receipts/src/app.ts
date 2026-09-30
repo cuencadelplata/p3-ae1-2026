@@ -3,15 +3,10 @@ import express, { type Express } from 'express';
 
 import { env } from './config/env';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
-import { ensureStorageSync, pdfDirectory } from './repositories/receipt.repository';
 import { apiRouter } from './routes';
 import { healthRouter } from './routes/health.routes';
 
 export function createApp(): Express {
-  // La aplicacion se hace cargo de su propio almacenamiento: asi /health responde
-  // correctamente aunque se la levante sin pasar por el arranque del proceso.
-  ensureStorageSync();
-
   const app = express();
 
   app.disable('x-powered-by');
@@ -28,20 +23,8 @@ export function createApp(): Express {
   app.use('/health', healthRouter);
   app.get('/docs', (_req, res) => res.redirect(`${env.apiPrefix}/docs`));
 
-  // Solo se publica el directorio de PDF. Los metadatos viven en otra carpeta
-  // para que nunca queden expuestos como archivos estaticos.
-  app.use(
-    env.staticPrefix,
-    express.static(pdfDirectory, {
-      index: false,
-      dotfiles: 'deny',
-      setHeaders: (res) => {
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Cache-Control', 'private, max-age=300');
-      },
-    }),
-  );
-
+  // Los PDF ya no se publican como archivos estaticos: la unica forma de
+  // obtenerlos es a traves de la API.
   app.use(env.apiPrefix, apiRouter);
 
   app.use(notFoundHandler);

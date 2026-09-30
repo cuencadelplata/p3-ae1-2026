@@ -1,9 +1,24 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: m8-receipts-db
+    environment:
+      POSTGRES_DB: m8
+      POSTGRES_USER: m8_admin
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-m8_admin_local}"
+      RECEIPTS_DB_PASSWORD: "${RECEIPTS_DB_PASSWORD:-m8_receipts_local}"
+    volumes:
+      - ../../infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U m8_admin -d m8"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   m8-documentos:
     build:
       context: ../..
       dockerfile: services/receipts/Dockerfile
-    image: arkeoff/m8-documentos:1.0.0
     container_name: m8-app
     ports:
       - "3008:3008"
@@ -11,8 +26,10 @@ services:
       - NODE_ENV=production
       - PORT=3008
       - PUBLIC_BASE_URL=http://localhost:3008
-    volumes:
-      - m8-storage:/app/storage
+      - RECEIPTS_DATABASE_URL=postgres://m8_receipts:${RECEIPTS_DB_PASSWORD:-m8_receipts_local}@postgres:5432/m8
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
   test:
@@ -26,9 +43,9 @@ services:
     environment:
       - NODE_ENV=development
       - BASE_URL=http://m8-documentos:3008
+      - RECEIPTS_DATABASE_URL=postgres://m8_receipts:${RECEIPTS_DB_PASSWORD:-m8_receipts_local}@postgres:5432/m8
     depends_on:
-      - m8-documentos
-
-volumes:
-  m8-storage:
-    name: m8-storage
+      postgres:
+        condition: service_healthy
+      m8-documentos:
+        condition: service_started

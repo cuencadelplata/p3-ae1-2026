@@ -1,7 +1,7 @@
 /**
- * El identificador de viaje se usa como nombre de archivo en el almacenamiento,
- * por lo que se restringe a un conjunto seguro de caracteres. Esto evita
- * recorridos de directorio ("../") en las rutas /receipts/:tripId.
+ * El identificador de viaje forma parte de las rutas /receipts/:tripId y del
+ * contrato con otros modulos, por lo que se restringe a un conjunto seguro de
+ * caracteres.
  */
 export const TRIP_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 

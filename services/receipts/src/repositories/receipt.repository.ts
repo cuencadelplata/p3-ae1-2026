@@ -1,20 +1,19 @@
-import { mkdirSync, promises as fs } from 'node:fs';
-import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
-import { env } from '../config/env';
-import type { Receipt } from '../models/receipt';
-import { isValidTripId } from '../utils/identifiers';
+import { pool } from '../db/pool';
+import type { DeliveryRecord, Receipt } from '../models/receipt';
 
 /**
- * Persistencia transitoria en sistema de archivos (AE1). Los metadatos y los PDF
- * se guardan en directorios separados para que solo la carpeta de PDF pueda
- * publicarse como contenido estatico.
+ * Persistencia del comprobante en CommunicationsDB (esquema "receipts").
  *
- * En AE2 este repositorio se reemplaza por CommunicationsDB + almacenamiento de
- * objetos manteniendo la misma interfaz.
+ * Reemplaza al almacenamiento en sistema de archivos de AE1. El servicio de
+ * dominio sigue usando las mismas operaciones de lectura y escritura; lo que
+ * cambia es quien garantiza la unicidad: antes el flag de creacion exclusiva
+ * del archivo, ahora la restriccion UNIQUE sobre trip_id.
  */
-export const metadataDirectory = path.join(env.storageDir, 'metadata');
-export const pdfDirectory = path.join(env.storageDir, 'pdf');
+
+const TRIP_ID_UNIQUE_CONSTRAINT = 'receipts_trip_id_key';
+const UNIQUE_VIOLATION = '23505';
 
 export class ReceiptAlreadyExistsError extends Error {
   constructor(tripId: string) {
@@ -23,121 +22,126 @@ export class ReceiptAlreadyExistsError extends Error {
   }
 }
 
-function assertTripId(tripId: string): void {
-  if (!isValidTripId(tripId)) {
-    throw new Error(`Identificador de viaje invalido: ${tripId}`);
-  }
+interface ReceiptRow {
+  receipt_id: string;
+  receipt_number: string;
+  trip_id: string;
+  issued_at: Date;
+  customer: Receipt['customer'];
+  driver: Receipt['driver'];
+  trip: Receipt['trip'];
+  fare: Receipt['fare'];
+  payment: Receipt['payment'];
+  deliveries: Array<{ channel: DeliveryRecord['channel']; destination: string; sentAt: string }>;
 }
 
-export function pdfFileName(tripId: string): string {
-  return `${tripId}.pdf`;
+function toReceipt(row: ReceiptRow): Receipt {
+  return {
+    receiptId: row.receipt_id,
+    receiptNumber: row.receipt_number,
+    tripId: row.trip_id,
+    issuedAt: row.issued_at.toISOString(),
+    customer: row.customer,
+    driver: row.driver,
+    trip: row.trip,
+    fare: row.fare,
+    payment: row.payment,
+    deliveries: row.deliveries.map((delivery) => ({
+      channel: delivery.channel,
+      destination: delivery.destination,
+      sentAt: new Date(delivery.sentAt).toISOString(),
+    })),
+  };
 }
 
-export function pdfPath(tripId: string): string {
-  assertTripId(tripId);
-  return path.join(pdfDirectory, pdfFileName(tripId));
-}
-
-function metadataPath(tripId: string): string {
-  assertTripId(tripId);
-  return path.join(metadataDirectory, `${tripId}.json`);
-}
-
-function errorCode(error: unknown): string | undefined {
-  return (error as NodeJS.ErrnoException | null)?.code;
-}
-
-export async function ensureStorage(): Promise<void> {
-  await fs.mkdir(metadataDirectory, { recursive: true });
-  await fs.mkdir(pdfDirectory, { recursive: true });
-}
-
-/**
- * Variante sincronica para usar durante la construccion de la aplicacion, donde
- * todavia no hay contexto asincronico. Garantiza que /health y la publicacion de
- * archivos estaticos encuentren los directorios aunque nadie haya emitido un
- * comprobante todavia.
- */
-export function ensureStorageSync(): void {
-  mkdirSync(metadataDirectory, { recursive: true });
-  mkdirSync(pdfDirectory, { recursive: true });
-}
-
-export async function isStorageWritable(): Promise<boolean> {
-  try {
-    await fs.access(metadataDirectory, fs.constants.W_OK);
-    await fs.access(pdfDirectory, fs.constants.W_OK);
-    return true;
-  } catch {
-    return false;
-  }
+function isTripIdConflict(error: unknown): boolean {
+  const pgError = error as { code?: string; constraint?: string } | null;
+  return pgError?.code === UNIQUE_VIOLATION && pgError.constraint === TRIP_ID_UNIQUE_CONSTRAINT;
 }
 
 export async function findByTripId(tripId: string): Promise<Receipt | null> {
-  try {
-    const raw = await fs.readFile(metadataPath(tripId), 'utf8');
-    return JSON.parse(raw) as Receipt;
-  } catch (error) {
-    if (errorCode(error) === 'ENOENT') {
-      return null;
-    }
-    throw error;
-  }
-}
+  const result = await pool.query<ReceiptRow>(
+    `SELECT r.receipt_id, r.receipt_number, r.trip_id, r.issued_at,
+            r.customer, r.driver, r.trip, r.fare, r.payment,
+            COALESCE(
+              (SELECT json_agg(
+                        json_build_object('channel', d.channel, 'destination', d.destination, 'sentAt', d.sent_at)
+                        ORDER BY d.sent_at, d.delivery_id)
+                 FROM receipts.receipt_deliveries d
+                WHERE d.receipt_id = r.receipt_id),
+              '[]'::json) AS deliveries
+       FROM receipts.receipts r
+      WHERE r.trip_id = $1`,
+    [tripId],
+  );
 
-export async function pdfExists(tripId: string): Promise<boolean> {
-  try {
-    await fs.access(pdfPath(tripId));
-    return true;
-  } catch {
-    return false;
-  }
+  const row = result.rows[0];
+  return row ? toReceipt(row) : null;
 }
 
 /**
- * Escribe el comprobante de forma atomica respecto de otros procesos: el
- * metadato se crea con el flag "wx", de modo que solo la primera escritura para
- * un tripId prospera. El PDF se materializa recien despues, con un rename sobre
- * un archivo temporal, para que nunca quede un PDF sin metadato asociado.
+ * Devuelve el binario del PDF asociado al comprobante del viaje, o null si el
+ * comprobante no existe o no tiene documento.
+ */
+export async function findPdfByTripId(tripId: string): Promise<Buffer | null> {
+  const result = await pool.query<{ content: Buffer }>(
+    `SELECT d.content
+       FROM receipts.receipt_documents d
+       JOIN receipts.receipts r ON r.receipt_id = d.receipt_id
+      WHERE r.trip_id = $1`,
+    [tripId],
+  );
+  return result.rows[0]?.content ?? null;
+}
+
+/**
+ * Persiste el comprobante y su PDF en una sola transaccion: nunca queda un
+ * comprobante sin documento ni un documento huerfano. Si otro proceso ya emitio
+ * el comprobante del mismo viaje, la restriccion UNIQUE rechaza la insercion y
+ * se informa con ReceiptAlreadyExistsError.
  */
 export async function create(receipt: Receipt, pdf: Buffer): Promise<void> {
-  await ensureStorage();
-  const finalPdfPath = pdfPath(receipt.tripId);
-  const temporaryPdfPath = `${finalPdfPath}.${process.pid}.${Date.now()}.tmp`;
-
-  await fs.writeFile(temporaryPdfPath, pdf);
-
+  const client = await pool.connect();
   try {
-    await fs.writeFile(metadataPath(receipt.tripId), serialize(receipt), { flag: 'wx' });
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO receipts.receipts
+         (receipt_id, receipt_number, trip_id, issued_at, customer, driver, trip, fare, payment)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        receipt.receiptId,
+        receipt.receiptNumber,
+        receipt.tripId,
+        receipt.issuedAt,
+        JSON.stringify(receipt.customer),
+        JSON.stringify(receipt.driver),
+        JSON.stringify(receipt.trip),
+        JSON.stringify(receipt.fare),
+        JSON.stringify(receipt.payment),
+      ],
+    );
+    await client.query(
+      `INSERT INTO receipts.receipt_documents (pdf_key, receipt_id, content_type, size_bytes, content)
+       VALUES ($1, $2, 'application/pdf', $3, $4)`,
+      [randomUUID(), receipt.receiptId, pdf.length, pdf],
+    );
+    await client.query('COMMIT');
   } catch (error) {
-    await fs.rm(temporaryPdfPath, { force: true });
-    if (errorCode(error) === 'EEXIST') {
+    await client.query('ROLLBACK');
+    if (isTripIdConflict(error)) {
       throw new ReceiptAlreadyExistsError(receipt.tripId);
     }
     throw error;
-  }
-
-  await fs.rename(temporaryPdfPath, finalPdfPath);
-}
-
-/**
- * Actualiza los metadatos de un comprobante ya emitido (por ejemplo, sus
- * reenvios). Se escribe primero un archivo temporal y despues se renombra, para
- * que una interrupcion a mitad de la escritura no deje el comprobante corrupto.
- */
-export async function update(receipt: Receipt): Promise<void> {
-  const finalPath = metadataPath(receipt.tripId);
-  const temporaryPath = `${finalPath}.${process.pid}.${Date.now()}.tmp`;
-
-  await fs.writeFile(temporaryPath, serialize(receipt), 'utf8');
-  try {
-    await fs.rename(temporaryPath, finalPath);
-  } catch (error) {
-    await fs.rm(temporaryPath, { force: true });
-    throw error;
+  } finally {
+    client.release();
   }
 }
 
-function serialize(receipt: Receipt): string {
-  return `${JSON.stringify(receipt, null, 2)}\n`;
+/** Registra un reenvio del comprobante. El historial solo crece por insercion. */
+export async function addDelivery(receiptId: string, delivery: DeliveryRecord): Promise<void> {
+  await pool.query(
+    `INSERT INTO receipts.receipt_deliveries (receipt_id, channel, destination, sent_at)
+     VALUES ($1, $2, $3, $4)`,
+    [receiptId, delivery.channel, delivery.destination, delivery.sentAt],
+  );
 }

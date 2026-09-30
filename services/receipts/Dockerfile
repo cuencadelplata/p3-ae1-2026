@@ -30,16 +30,10 @@ COPY --from=build /opt/deploy ./
 COPY --from=build /workspace/services/receipts/dist ./dist
 COPY --from=build /workspace/openapi/receipts.openapi.yaml ./openapi/receipts.openapi.yaml
 
-RUN mkdir -p /app/storage/receipts/metadata /app/storage/receipts/pdf \
-    && chown -R node:node /app/storage
-
-VOLUME ["/app/storage"]
-
 USER node
 
 ENV NODE_ENV=production \
-    PORT=3008 \
-    STORAGE_DIR=/app/storage/receipts
+    PORT=3008
 
 EXPOSE 3008
 

@@ -1,0 +1,72 @@
+import { pool } from './pool';
+
+/**
+ * Esquema del servicio de comprobantes. Las sentencias son idempotentes para
+ * poder ejecutarse en cada arranque.
+ *
+ * - receipts: el comprobante. Cliente, conductor, recorrido, tarifa y pago se
+ *   guardan como una foto inmutable de los datos recibidos al emitir, por eso
+ *   se almacenan en jsonb y no como tablas relacionadas. La restriccion UNIQUE
+ *   sobre trip_id es la que garantiza un unico comprobante por viaje, aun con
+ *   varias instancias del servicio (RNF-09).
+ * - receipt_documents: el PDF, identificado por una clave opaca que no deriva
+ *   del tripId. Se inserta en la misma transaccion que el comprobante.
+ * - receipt_deliveries: historial de reenvios, solo por insercion.
+ */
+const statements = [
+  `CREATE TABLE IF NOT EXISTS receipts.receipts (
+     receipt_id     uuid        PRIMARY KEY,
+     receipt_number text        NOT NULL UNIQUE,
+     trip_id        text        NOT NULL,
+     issued_at      timestamptz NOT NULL,
+     customer       jsonb       NOT NULL,
+     driver         jsonb       NOT NULL,
+     trip           jsonb       NOT NULL,
+     fare           jsonb       NOT NULL,
+     payment        jsonb       NOT NULL,
+     created_at     timestamptz NOT NULL DEFAULT now(),
+     CONSTRAINT receipts_trip_id_key UNIQUE (trip_id)
+   )`,
+  `CREATE TABLE IF NOT EXISTS receipts.receipt_documents (
+     pdf_key      uuid        PRIMARY KEY,
+     receipt_id   uuid        NOT NULL UNIQUE REFERENCES receipts.receipts (receipt_id),
+     content_type text        NOT NULL,
+     size_bytes   integer     NOT NULL,
+     content      bytea       NOT NULL,
+     created_at   timestamptz NOT NULL DEFAULT now()
+   )`,
+  `CREATE TABLE IF NOT EXISTS receipts.receipt_deliveries (
+     delivery_id bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+     receipt_id  uuid        NOT NULL REFERENCES receipts.receipts (receipt_id),
+     channel     text        NOT NULL CHECK (channel IN ('EMAIL', 'SMS', 'PUSH')),
+     destination text        NOT NULL,
+     sent_at     timestamptz NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS receipt_deliveries_receipt_id_idx
+     ON receipts.receipt_deliveries (receipt_id, sent_at)`,
+];
+
+/** Clave arbitraria del bloqueo consultivo que serializa las migraciones. */
+const MIGRATION_LOCK_KEY = 8_003_001;
+
+/**
+ * Dos instancias que arrancan a la vez pueden chocar al crear las mismas tablas
+ * aunque usen IF NOT EXISTS. El bloqueo consultivo de la transaccion hace que
+ * la segunda espere a la primera.
+ */
+export async function runMigrations(): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [MIGRATION_LOCK_KEY]);
+    for (const statement of statements) {
+      await client.query(statement);
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}

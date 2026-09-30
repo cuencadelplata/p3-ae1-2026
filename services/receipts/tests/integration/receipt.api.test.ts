@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
 
 import { createApp } from '../../src/app';
+import { runMigrations } from '../../src/db/migrations';
 
 describe('Receipt API (Integration HTTP)', () => {
   let server: Server;
@@ -11,6 +12,7 @@ describe('Receipt API (Integration HTTP)', () => {
   const tripId = `trip-int-${Date.now()}`;
 
   before(async () => {
+    await runMigrations();
     const app = createApp();
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => {
@@ -30,8 +32,9 @@ describe('Receipt API (Integration HTTP)', () => {
   it('GET /health debe responder 200 con status ok', async () => {
     const res = await fetch(`${baseUrl}/health`);
     assert.equal(res.status, 200);
-    const body = (await res.json()) as { status: string };
+    const body = (await res.json()) as { status: string; dependencies: { database: string } };
     assert.equal(body.status, 'ok');
+    assert.equal(body.dependencies.database, 'available');
   });
 
   it('GET /api/v1/docs/openapi.json debe devolver la especificacion OpenAPI', async () => {
@@ -114,6 +117,11 @@ describe('Receipt API (Integration HTTP)', () => {
     assert.ok(res.headers.get('content-type')?.includes('application/pdf'));
     const arrayBuffer = await res.arrayBuffer();
     assert.ok(arrayBuffer.byteLength > 100);
+  });
+
+  it('GET /files/receipts/:tripId.pdf ya no publica el PDF como archivo estatico (404)', async () => {
+    const res = await fetch(`${baseUrl}/files/receipts/${tripId}.pdf`);
+    assert.equal(res.status, 404);
   });
 
   it('POST /api/v1/receipts/:tripId/resend debe solicitar reenvio (202 Accepted)', async () => {

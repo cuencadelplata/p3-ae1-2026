@@ -4,7 +4,6 @@ import { AppError } from '../errors/app-error';
 import type { DeliveryChannel, DeliveryRecord, Receipt, ReceiptRequest } from '../models/receipt';
 import * as repository from '../repositories/receipt.repository';
 import { buildReceiptNumber, maskDestination } from '../utils/identifiers';
-import { withLock } from '../utils/lock';
 import { renderReceiptPdf } from './pdf.service';
 
 export interface IssueResult {
@@ -16,34 +15,32 @@ export interface IssueResult {
  * Emite el comprobante de un viaje finalizado (RF-8.3).
  *
  * La operacion es idempotente por tripId: si el comprobante ya existe se
- * devuelve el mismo documento en lugar de emitir uno nuevo. El candado por
- * tripId serializa las solicitudes concurrentes dentro del proceso y el flag de
- * escritura exclusiva del repositorio cubre el caso de varias instancias.
+ * devuelve el mismo documento en lugar de emitir uno nuevo. Ante solicitudes
+ * concurrentes, en uno o en varios procesos, la restriccion UNIQUE de la base
+ * deja pasar una sola insercion; las demas releen el comprobante ganador.
  */
 export async function issueReceipt(request: ReceiptRequest): Promise<IssueResult> {
-  return withLock(request.tripId, async () => {
-    const existing = await repository.findByTripId(request.tripId);
-    if (existing) {
-      return { receipt: existing, created: false };
-    }
+  const existing = await repository.findByTripId(request.tripId);
+  if (existing) {
+    return { receipt: existing, created: false };
+  }
 
-    const receipt = buildReceipt(request);
-    const pdf = await renderReceiptPdf(receipt);
+  const receipt = buildReceipt(request);
+  const pdf = await renderReceiptPdf(receipt);
 
-    try {
-      await repository.create(receipt, pdf);
-    } catch (error) {
-      if (error instanceof repository.ReceiptAlreadyExistsError) {
-        const winner = await repository.findByTripId(request.tripId);
-        if (winner) {
-          return { receipt: winner, created: false };
-        }
+  try {
+    await repository.create(receipt, pdf);
+  } catch (error) {
+    if (error instanceof repository.ReceiptAlreadyExistsError) {
+      const winner = await repository.findByTripId(request.tripId);
+      if (winner) {
+        return { receipt: winner, created: false };
       }
-      throw error;
     }
+    throw error;
+  }
 
-    return { receipt, created: true };
-  });
+  return { receipt, created: true };
 }
 
 export async function getReceipt(tripId: string): Promise<Receipt> {
@@ -54,17 +51,18 @@ export async function getReceipt(tripId: string): Promise<Receipt> {
   return receipt;
 }
 
-export async function getReceiptPdfPath(tripId: string): Promise<{ receipt: Receipt; filePath: string }> {
+export async function getReceiptPdf(tripId: string): Promise<{ receipt: Receipt; pdf: Buffer }> {
   const receipt = await getReceipt(tripId);
+  const pdf = await repository.findPdfByTripId(tripId);
 
-  if (!(await repository.pdfExists(tripId))) {
+  if (!pdf) {
     throw AppError.conflict(
       'RECEIPT_PDF_UNAVAILABLE',
       `El comprobante del viaje ${tripId} existe pero su archivo PDF no esta disponible`,
     );
   }
 
-  return { receipt, filePath: repository.pdfPath(tripId) };
+  return { receipt, pdf };
 }
 
 /**
@@ -79,32 +77,32 @@ export async function resendReceipt(
   channel: DeliveryChannel,
   destination?: string,
 ): Promise<{ receipt: Receipt; delivery: DeliveryRecord }> {
-  return withLock(tripId, async () => {
-    const receipt = await getReceipt(tripId);
-    const target = destination ?? receipt.customer.email;
+  const receipt = await getReceipt(tripId);
+  const target = destination ?? receipt.customer.email;
 
-    if (!target) {
-      throw AppError.unprocessable(
-        'DELIVERY_DESTINATION_REQUIRED',
-        'El comprobante no tiene un destino registrado. Indique "destination" en el cuerpo de la solicitud.',
-      );
-    }
-
-    const delivery: DeliveryRecord = {
-      channel,
-      destination: target,
-      sentAt: new Date().toISOString(),
-    };
-
-    receipt.deliveries.push(delivery);
-    await repository.update(receipt);
-
-    console.info(
-      `[reenvio] tripId=${receipt.tripId} comprobante=${receipt.receiptNumber} canal=${channel} destino=${maskDestination(target)}`,
+  if (!target) {
+    throw AppError.unprocessable(
+      'DELIVERY_DESTINATION_REQUIRED',
+      'El comprobante no tiene un destino registrado. Indique "destination" en el cuerpo de la solicitud.',
     );
+  }
 
-    return { receipt, delivery };
-  });
+  const delivery: DeliveryRecord = {
+    channel,
+    destination: target,
+    sentAt: new Date().toISOString(),
+  };
+
+  // Cada reenvio es una fila nueva: dos reenvios simultaneos no se pisan entre
+  // si, por eso ya no hace falta serializarlos.
+  await repository.addDelivery(receipt.receiptId, delivery);
+  receipt.deliveries.push(delivery);
+
+  console.info(
+    `[reenvio] tripId=${receipt.tripId} comprobante=${receipt.receiptNumber} canal=${channel} destino=${maskDestination(target)}`,
+  );
+
+  return { receipt, delivery };
 }
 
 function buildReceipt(request: ReceiptRequest): Receipt {

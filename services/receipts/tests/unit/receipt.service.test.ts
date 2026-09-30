@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { before, describe, it } from 'node:test';
 
+import { runMigrations } from '../../src/db/migrations';
 import type { ReceiptRequest } from '../../src/models/receipt';
 import * as receiptService from '../../src/services/receipt.service';
 
@@ -39,6 +40,10 @@ const sampleRequest: ReceiptRequest = {
 };
 
 describe('Receipt Service (Unit)', () => {
+  before(async () => {
+    await runMigrations();
+  });
+
   it('debe emitir un nuevo comprobante y generar el PDF (RF-8.3)', async () => {
     const result = await receiptService.issueReceipt(sampleRequest);
     assert.equal(result.created, true);
@@ -58,6 +63,12 @@ describe('Receipt Service (Unit)', () => {
     const receipt = await receiptService.getReceipt(testTripId);
     assert.equal(receipt.tripId, testTripId);
     assert.equal(receipt.driver.fullName, 'Santiago Meza');
+  });
+
+  it('debe recuperar el PDF persistido del comprobante', async () => {
+    const { receipt, pdf } = await receiptService.getReceiptPdf(testTripId);
+    assert.equal(receipt.tripId, testTripId);
+    assert.equal(pdf.subarray(0, 5).toString('latin1'), '%PDF-');
   });
 
   it('debe registrar y simular el reenvio del comprobante (RF-8.4)', async () => {
