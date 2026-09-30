@@ -12,6 +12,9 @@ import { pool } from './pool';
  * - receipt_documents: el PDF, identificado por una clave opaca que no deriva
  *   del tripId. Se inserta en la misma transaccion que el comprobante.
  * - receipt_deliveries: historial de reenvios, solo por insercion.
+ * - processed_messages: bandeja de entrada del consumidor. Registra el
+ *   messageId de cada evento ya procesado para descartar las reentregas de
+ *   RabbitMQ (RNF-08).
  */
 const statements = [
   `CREATE TABLE IF NOT EXISTS receipts.receipts (
@@ -44,6 +47,12 @@ const statements = [
    )`,
   `CREATE INDEX IF NOT EXISTS receipt_deliveries_receipt_id_idx
      ON receipts.receipt_deliveries (receipt_id, sent_at)`,
+  `CREATE TABLE IF NOT EXISTS receipts.processed_messages (
+     message_id     uuid        PRIMARY KEY,
+     event_type     text        NOT NULL,
+     correlation_id text        NOT NULL,
+     processed_at   timestamptz NOT NULL DEFAULT now()
+   )`,
 ];
 
 /** Clave arbitraria del bloqueo consultivo que serializa las migraciones. */

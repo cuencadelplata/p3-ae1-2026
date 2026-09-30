@@ -27,15 +27,19 @@ evidencia del estado heredado de AE1.
 | Colas | `<modulo>.<proposito>`, una por consumidor y propósito |
 | Colas de descarte | `<cola>.dlq`, ligadas a `mobility.events.dlx` |
 
-Cada cola de consumo declara `x-dead-letter-exchange: mobility.events.dlx`.
-Una cola por consumidor evita que dos módulos compitan por el mismo mensaje:
-cada uno recibe su propia copia.
+Cada cola de consumo declara `x-dead-letter-exchange: mobility.events.dlx` y
+`x-dead-letter-routing-key: <cola>`. Usar el nombre de la cola como clave de
+descarte hace que cada DLQ reciba solo los rechazos de su propio consumidor,
+aunque varios módulos consuman el mismo evento. Una cola por consumidor evita
+que dos módulos compitan por el mismo mensaje: cada uno recibe su propia copia.
 
 ### Colas del servicio de comprobantes
 
-| Cola | Binding | Cola de descarte |
-| --- | --- | --- |
-| `m8.receipts.payment-confirmed` | `payment.confirmed` | `m8.receipts.payment-confirmed.dlq` |
+| Cola | Función |
+| --- | --- |
+| `m8.receipts.payment-confirmed` | Ligada a `mobility.events` con `payment.confirmed`. La consume el servicio. |
+| `m8.receipts.payment-confirmed.retry` | Sin consumidores. El mensaje espera ahí el tiempo de reintento y RabbitMQ lo devuelve a la cola principal. |
+| `m8.receipts.payment-confirmed.dlq` | Ligada a `mobility.events.dlx` con la clave `m8.receipts.payment-confirmed`. Mensajes inválidos o con reintentos agotados. |
 
 ## 3. Sobre del mensaje
 
@@ -85,8 +89,11 @@ Propiedades AMQP de publicación: `content_type: application/json`,
 3. **ACK manual.** Se confirma el mensaje solo después de que el efecto quedó
    persistido.
 4. **Reintentos.** Ante un fallo transitorio (base de datos o almacenamiento no
-   disponibles) se reintenta hasta 3 veces. Superado ese límite, el mensaje va a
-   la cola de descarte.
+   disponibles) el mensaje se republica en la cola `<cola>.retry` con el
+   encabezado `x-retry-count` incrementado y una espera fija
+   (`CONSUMER_RETRY_DELAY_MS`, 5 s por defecto); el original se confirma.
+   Se reintenta hasta 3 veces (`CONSUMER_MAX_RETRIES`). Superado ese límite, el
+   mensaje va a la cola de descarte.
 5. **Cola de descarte.** Los mensajes quedan disponibles para inspección y
    reprocesamiento manual sin bloquear la cola principal.
 
@@ -125,9 +132,27 @@ Contenido propuesto de `data`:
     "surcharges": 0,
     "discounts": 150,
     "total": 5390.5
+  },
+  "customer": { "id": "cli-0091", "fullName": "Lucia Fernandez", "email": "lucia.fernandez@example.com" },
+  "driver": {
+    "id": "cnd-0457",
+    "fullName": "Martin Rodriguez",
+    "vehicle": { "type": "AUTO", "plate": "AB123CD", "model": "Toyota Etios 2021" }
+  },
+  "trip": {
+    "origin": "Av. Colon 1250",
+    "destination": "Aeropuerto",
+    "startedAt": "2026-10-05T18:05:00.000Z",
+    "finishedAt": "2026-10-05T18:36:00.000Z",
+    "distanceKm": 14.8,
+    "durationMin": 31
   }
 }
 ```
+
+`customer`, `driver` y `trip` siguen el mismo esquema que el contrato REST de
+emisión (`POST /api/v1/receipts`). Se incluyen de forma provisoria según la
+alternativa 1 del punto abierto (abajo), hasta que M7 confirme.
 
 | Campo | Tipo | Obligatorio | Regla |
 | --- | --- | --- | --- |
@@ -140,6 +165,13 @@ Contenido propuesto de `data`:
 | `fare.currency` | string (ISO 4217) | Sí | |
 | `fare.total` | número | Sí | Mayor o igual a 0. |
 | `fare.baseFare`, `distanceAmount`, `timeAmount`, `surcharges`, `discounts` | número | No | Si se informan, deben cerrar con `total` (tolerancia de un centavo). |
+| `customer` | objeto | Sí (provisorio) | `id`, `fullName`; `email` y `documentId` opcionales. |
+| `driver` | objeto | Sí (provisorio) | `id`, `fullName`, `vehicle.type` (`AUTO`/`MOTO`), `vehicle.plate`. |
+| `trip` | objeto | Sí (provisorio) | `origin`, `destination`, `startedAt`, `finishedAt`, `distanceKm`, `durationMin`. |
+
+Además, `correlationId` del sobre debe coincidir con `data.tripId`. Un mensaje
+que no cumple estas reglas es inválido y va a la cola de descarte sin
+reintentos.
 
 **Punto abierto.** El comprobante también muestra datos del cliente, del
 conductor y del recorrido, que no son propiedad de M7. Hasta que M7 responda,

@@ -45,9 +45,9 @@ jobs:
       - name: Build workspace services
         run: pnpm run build
 
-      - name: Start test database
+      - name: Start test backing services
         run: |
-          docker compose up -d --wait postgres
+          docker compose up -d --wait postgres rabbitmq
 
       - name: Run workspace tests
         run: pnpm run test

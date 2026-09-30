@@ -19,6 +19,18 @@ function readPort(name: string, fallback: number): number {
   return parsed;
 }
 
+function readPositiveInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`La variable de entorno ${name} debe ser un entero positivo. Valor recibido: "${raw}"`);
+  }
+  return parsed;
+}
+
 // Normaliza a la forma "/segmento" para que las rutas montadas no dependan de como
 // se escriba la variable en el .env.
 function readPathPrefix(name: string, fallback: string): string {
@@ -51,6 +63,21 @@ export const env = {
     'RECEIPTS_DATABASE_URL',
     'postgres://m8_receipts:m8_receipts_local@localhost:5432/m8',
   ),
+
+  /** Mensajeria segun el catalogo de eventos v1 (modulo-8/contracts/events). */
+  rabbitmqUrl: readText('RABBITMQ_URL', 'amqp://guest:guest@localhost:5672'),
+  eventsExchange: readText('EVENTS_EXCHANGE', 'mobility.events'),
+  deadLetterExchange: readText('EVENTS_DEAD_LETTER_EXCHANGE', 'mobility.events.dlx'),
+  paymentConfirmedQueue: readText('PAYMENT_CONFIRMED_QUEUE', 'm8.receipts.payment-confirmed'),
+
+  /** Mensajes que el consumidor procesa a la vez antes de confirmar. */
+  consumerPrefetch: readPositiveInt('CONSUMER_PREFETCH', 5),
+
+  /** Reintentos ante fallos transitorios antes de enviar el mensaje a la DLQ. */
+  consumerMaxRetries: readPositiveInt('CONSUMER_MAX_RETRIES', 3),
+
+  /** Espera entre reintentos, en milisegundos. */
+  consumerRetryDelayMs: readPositiveInt('CONSUMER_RETRY_DELAY_MS', 5000),
 
   /** Datos de presentacion del emisor dentro del PDF. */
   issuerName: readText('RECEIPT_ISSUER_NAME', 'Plataforma de Movilidad Urbana'),
