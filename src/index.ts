@@ -6,7 +6,6 @@ import { parse } from "yaml";
 import { config } from "./config";
 import { conectarRedis } from "./infraestructura/redis";
 import { iniciarRabbit } from "./infraestructura/rabbit";
-import { iniciarConsumerViajeCancelado } from "./6-reintegro/consumerViajeCancelado";
 import rutaPagoDuplicado from "./5-pago-duplicado/rutaPagoDuplicado";
 
 const app = express();
@@ -22,9 +21,7 @@ async function main() {
   await conectarRedis();
   console.log("Redis conectado");
 
-  const canal = await iniciarRabbit();
-  await iniciarConsumerViajeCancelado(canal);
-  console.log("RabbitMQ conectado, escuchando viaje.cancelado");
+  await iniciarRabbit(); // ahora arma el canal, la topología y el consumer internamente
 
   app.listen(config.port, () => {
     console.log(`M7 corriendo en el puerto ${config.port}`);

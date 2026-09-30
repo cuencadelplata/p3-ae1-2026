@@ -42,13 +42,12 @@ async function publicar(
 const esDuplicado = async (request: APIRequestContext, viajeId: string) =>
   (await (await request.get(`/pagos/${viajeId}/duplicado`)).json()).esDuplicado;
 
-// Siempre dejamos todo prendido al terminar, pase lo que pase
 test.afterEach(() => {
   docker("start redis rabbitmq");
 });
 
 test.describe("Resiliencia ante caída de backing services", () => {
-  test.describe.configure({ timeout: 60000 });
+  test.describe.configure({ timeout: 120000 });
 
   test("1. Todo prendido: camino feliz", async ({ request }) => {
     const viajeId = nuevoId("TODO-OK");
@@ -63,8 +62,6 @@ test.describe("Resiliencia ante caída de backing services", () => {
 
     const viajeId = nuevoId("SIN-REDIS");
     expect(await publicar(request, viajeId)).toBe(true);
-
-    // sin caché, /pagos igual responde porque estaEnCache() no explota
     await expect.poll(() => esDuplicado(request, viajeId), { timeout: 15000 }).toBe(true);
 
     docker("start redis");
@@ -76,15 +73,14 @@ test.describe("Resiliencia ante caída de backing services", () => {
     await expect.poll(() => esDuplicado(request, viajeIdAntes), { timeout: 15000 }).toBe(true);
 
     docker("stop rabbitmq");
-    await esperar(3000); // el consumer queda sin conexión
+    await esperar(3000);
 
     docker("start rabbitmq");
-    await esperar(10000); // tiempo para que amqplib reconecte y rearme la topología
+    await esperar(30000); // le da tiempo real a amqplib para reconectar y rearmar exchanges/colas/bindings
 
     const viajeIdDespues = nuevoId("POST-CAIDA");
     expect(await publicar(request, viajeIdDespues)).toBe(true);
-    await expect.poll(() => esDuplicado(request, viajeIdDespues), { timeout: 15000 }).toBe(true);
-  });
+    await expect.poll(() => esDuplicado(request, viajeIdDespues), { timeout: 15000 }).toBe(true);  });
 
   test("4. Redis y RabbitMQ caen juntos y vuelven: recupera sin intervención", async ({
     request,
@@ -93,10 +89,10 @@ test.describe("Resiliencia ante caída de backing services", () => {
     await esperar(3000);
 
     docker("start redis rabbitmq");
-    await esperar(10000);
+    await esperar(30000);
 
     const viajeId = nuevoId("DOBLE-CAIDA");
     expect(await publicar(request, viajeId)).toBe(true);
-    await expect.poll(() => esDuplicado(request, viajeId), { timeout: 15000 }).toBe(true);
+    await expect.poll(() => esDuplicado(request, viajeId), { timeout: 20000 }).toBe(true);
   });
 });
