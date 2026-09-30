@@ -1,4 +1,4 @@
-import type { RequestHandler } from 'express';
+import type { RequestHandler, Response } from 'express';
 
 import { env } from '../config/env';
 import { AppError } from '../errors/app-error';
@@ -61,16 +61,47 @@ export const getReceipt: RequestHandler = async (req, res, next) => {
   }
 };
 
+function sendPdf(res: Response, receipt: Receipt, pdf: Buffer): void {
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="comprobante-${receipt.receiptNumber}.pdf"`);
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.status(200).send(pdf);
+}
+
 /** GET /receipts/:tripId/pdf - descarga controlada del archivo generado. */
 export const downloadReceipt: RequestHandler = async (req, res, next) => {
   try {
     const tripId = readTripId(req.params['tripId']);
     const { receipt, pdf } = await receiptService.getReceiptPdf(tripId);
+    sendPdf(res, receipt, pdf);
+  } catch (error) {
+    next(error);
+  }
+};
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="comprobante-${receipt.receiptNumber}.pdf"`);
-    res.setHeader('Cache-Control', 'private, no-store');
-    res.status(200).send(pdf);
+/**
+ * GET /receipts/downloads/:token
+ * Descarga mediante enlace temporal. Un enlace vencido o inexistente responde 410.
+ */
+export const downloadByToken: RequestHandler = async (req, res, next) => {
+  try {
+    const { receipt, pdf } = await receiptService.getReceiptPdfByToken(String(req.params['token']));
+    sendPdf(res, receipt, pdf);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /internal/receipts/:tripId/delivery-reference
+ * Contrato interno con Receipts Delivery (RF-8.4): devuelve un enlace temporal
+ * al PDF y su vencimiento. No forma parte de la API publica.
+ */
+export const getDeliveryReference: RequestHandler = async (req, res, next) => {
+  try {
+    const tripId = readTripId(req.params['tripId']);
+    const reference = await receiptService.getDeliveryReference(tripId);
+    res.status(200).json({ data: reference });
   } catch (error) {
     next(error);
   }

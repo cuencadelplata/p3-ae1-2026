@@ -5,6 +5,7 @@ import { env } from './config/env';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
 import { apiRouter } from './routes';
 import { healthRouter } from './routes/health.routes';
+import { internalRouter } from './routes/internal.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -26,6 +27,7 @@ export function createApp(): Express {
   // Los PDF ya no se publican como archivos estaticos: la unica forma de
   // obtenerlos es a traves de la API.
   app.use(env.apiPrefix, apiRouter);
+  app.use('/internal', internalRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

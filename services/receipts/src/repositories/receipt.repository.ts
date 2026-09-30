@@ -95,6 +95,12 @@ export async function findPdfByTripId(tripId: string): Promise<Buffer | null> {
   return result.rows[0]?.content ?? null;
 }
 
+/** Indica si el comprobante tiene PDF, sin leer el contenido del archivo. */
+export async function hasPdf(receiptId: string): Promise<boolean> {
+  const result = await pool.query('SELECT 1 FROM receipts.receipt_documents WHERE receipt_id = $1', [receiptId]);
+  return (result.rowCount ?? 0) > 0;
+}
+
 /**
  * Persiste el comprobante, su PDF y el evento receipt.issued en una sola
  * transaccion: nunca queda un comprobante sin documento ni sin evento, ni un

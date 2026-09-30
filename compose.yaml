@@ -32,10 +32,14 @@ services:
       PUBLIC_BASE_URL: http://localhost:3008
       RECEIPTS_DATABASE_URL: "postgres://m8_receipts:${RECEIPTS_DB_PASSWORD:-m8_receipts_local}@postgres:5432/${POSTGRES_DB:-m8}"
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      REDIS_URL: redis://redis:6379
+      RECEIPT_LINK_TTL_SECONDS: "${RECEIPT_LINK_TTL_SECONDS:-900}"
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   # Segunda instancia del servicio de comprobantes, para demostrar RNF-09 con

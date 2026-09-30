@@ -253,10 +253,16 @@ Respuesta `200`:
 | 400 | `INVALID_TRIP_ID` | `tripId` con formato inválido. |
 | 404 | `RECEIPT_NOT_FOUND` | No hay comprobante emitido para ese viaje. |
 | 409 | `RECEIPT_PDF_UNAVAILABLE` | El comprobante existe pero su PDF no. |
+| 503 | `DOWNLOAD_LINKS_UNAVAILABLE` | Redis no está disponible; reintentar más tarde. |
 
-El enlace usa un token opaco que no contiene ni deriva del `tripId`. Vence
-según `RECEIPT_LINK_TTL_SECONDS` (por defecto 900 s) y deja de funcionar una
-vez vencido.
+El enlace usa un token opaco (32 bytes aleatorios en base64url) que no
+contiene ni deriva del `tripId`. Vence según `RECEIPT_LINK_TTL_SECONDS` (por
+defecto 900 s). Cada llamada genera un enlace nuevo; los anteriores siguen
+vigentes hasta su vencimiento.
+
+Al descargar, `GET /api/v1/receipts/downloads/{token}` responde el PDF o
+`410 DOWNLOAD_LINK_EXPIRED` si el enlace no existe o ya venció. Redis no
+distingue un token vencido de uno inexistente, por eso ambos responden igual.
 
 ## 7. Claves de Redis del servicio de comprobantes
 

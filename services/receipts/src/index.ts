@@ -1,4 +1,5 @@
 import { createApp } from './app';
+import { closeRedis, connectRedis } from './cache/redis';
 import { env } from './config/env';
 import { runMigrations } from './db/migrations';
 import { closePool } from './db/pool';
@@ -9,6 +10,10 @@ import { queueTopology } from './messaging/topology';
 
 async function bootstrap(): Promise<void> {
   await runMigrations();
+
+  // Sin Redis el servicio arranca igual: solo quedan sin servicio los enlaces
+  // temporales, y el cliente reintenta la conexion por su cuenta.
+  void connectRedis().catch(() => undefined);
 
   const app = createApp();
   const server = app.listen(env.port, () => {
@@ -59,7 +64,7 @@ async function bootstrap(): Promise<void> {
     console.info(`[${env.serviceName}] senal ${signal} recibida, cerrando el servidor`);
     server.close((error) => {
       Promise.all([consumer.close(), relay.close()])
-        .then(() => closePool())
+        .then(() => Promise.all([closePool(), closeRedis()]))
         .catch((closeError: unknown) => {
           console.error(`[${env.serviceName}] error al liberar las conexiones`, closeError);
         })

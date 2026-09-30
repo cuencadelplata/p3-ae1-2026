@@ -64,6 +64,12 @@ export const env = {
     'postgres://m8_receipts:m8_receipts_local@localhost:5432/m8',
   ),
 
+  /** Redis guarda solo datos efimeros: los enlaces temporales de descarga. */
+  redisUrl: readText('REDIS_URL', 'redis://localhost:6379'),
+
+  /** Vigencia de un enlace temporal de descarga del PDF, en segundos. */
+  receiptLinkTtlSeconds: readPositiveInt('RECEIPT_LINK_TTL_SECONDS', 900),
+
   /** Mensajeria segun el catalogo de eventos v1 (modulo-8/contracts/events). */
   rabbitmqUrl: readText('RABBITMQ_URL', 'amqp://guest:guest@localhost:5672'),
   eventsExchange: readText('EVENTS_EXCHANGE', 'mobility.events'),

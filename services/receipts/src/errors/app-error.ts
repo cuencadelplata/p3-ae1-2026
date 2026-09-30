@@ -30,4 +30,12 @@ export class AppError extends Error {
   static conflict(code: string, message: string): AppError {
     return new AppError(409, code, message);
   }
+
+  static gone(code: string, message: string): AppError {
+    return new AppError(410, code, message);
+  }
+
+  static unavailable(code: string, message: string): AppError {
+    return new AppError(503, code, message);
+  }
 }
