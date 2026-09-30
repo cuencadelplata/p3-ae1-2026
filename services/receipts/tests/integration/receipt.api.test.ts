@@ -29,12 +29,11 @@ describe('Receipt API (Integration HTTP)', () => {
     });
   });
 
-  it('GET /health debe responder 200 con status ok', async () => {
+  it('GET /health debe responder 200 e informar la base de datos disponible', async () => {
     const res = await fetch(`${baseUrl}/health`);
     assert.equal(res.status, 200);
-    const body = (await res.json()) as { status: string; dependencies: { database: string } };
-    assert.equal(body.status, 'ok');
-    assert.equal(body.dependencies.database, 'available');
+    const body = (await res.json()) as { dependencies: { postgres: { status: string } } };
+    assert.equal(body.dependencies.postgres.status, 'available');
   });
 
   it('GET /api/v1/docs/openapi.json debe devolver la especificacion OpenAPI', async () => {

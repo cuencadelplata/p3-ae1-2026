@@ -2,7 +2,7 @@ import * as amqp from 'amqplib';
 import type { ConfirmChannel, ConsumeMessage } from 'amqplib';
 
 import { PermanentMessageError } from './errors';
-import { createLogger, errorMessage } from './log';
+import { createLogger, errorMessage, withCorrelationId } from '../observability/logger';
 import { assertTopology, type QueueTopology } from './topology';
 
 type Connection = Awaited<ReturnType<typeof amqp.connect>>;
@@ -26,6 +26,23 @@ export interface RunningConsumer {
   whenReady(): Promise<void>;
   isConnected(): boolean;
   close(): Promise<void>;
+}
+
+/**
+ * correlationId del mensaje: la propiedad AMQP si el productor la envio, o el
+ * campo del sobre. Se usa solo para los logs; la validacion la hace el handler.
+ */
+function correlationIdOf(message: ConsumeMessage): string | undefined {
+  const fromProperties: unknown = message.properties.correlationId;
+  if (typeof fromProperties === 'string' && fromProperties !== '') {
+    return fromProperties;
+  }
+  try {
+    const parsed = JSON.parse(message.content.toString('utf8')) as { correlationId?: unknown };
+    return typeof parsed.correlationId === 'string' ? parsed.correlationId : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function retryCount(message: ConsumeMessage): number {
@@ -71,7 +88,7 @@ export function startConsumer(options: ConsumerOptions): RunningConsumer {
 
   async function onMessage(channel: ConfirmChannel, message: ConsumeMessage): Promise<void> {
     const attempt = retryCount(message);
-    const fields = { queue: topology.queue, messageId: message.properties.messageId ?? '-', attempt };
+    const fields = { queue: topology.queue, messageId: message.properties.messageId, attempt };
 
     try {
       await options.handle(message.content);
@@ -132,7 +149,8 @@ export function startConsumer(options: ConsumerOptions): RunningConsumer {
       await channel.prefetch(options.prefetch);
       await channel.consume(topology.queue, (message) => {
         if (message) {
-          void onMessage(channel, message).catch((error: unknown) => {
+          // Todo lo que se registre al procesar el mensaje lleva su correlationId.
+          void withCorrelationId(correlationIdOf(message), () => onMessage(channel, message)).catch((error: unknown) => {
             log('error', 'error inesperado al confirmar el mensaje', { reason: errorMessage(error) });
           });
         }

@@ -7,6 +7,9 @@ import { startConsumer } from './messaging/consumer';
 import { startOutboxRelay } from './messaging/outbox-relay';
 import { PAYMENT_CONFIRMED_ROUTING_KEY, processPaymentConfirmed } from './messaging/payment-confirmed';
 import { queueTopology } from './messaging/topology';
+import { createLogger, errorFields } from './observability/logger';
+
+const log = createLogger('server');
 
 async function bootstrap(): Promise<void> {
   await runMigrations();
@@ -15,15 +18,10 @@ async function bootstrap(): Promise<void> {
   // temporales, y el cliente reintenta la conexion por su cuenta.
   void connectRedis().catch(() => undefined);
 
-  const app = createApp();
-  const server = app.listen(env.port, () => {
-    console.info(`[${env.serviceName}] escuchando en ${env.publicBaseUrl} (entorno: ${env.nodeEnv})`);
-    console.info(`[${env.serviceName}] API disponible en ${env.publicBaseUrl}${env.apiPrefix}/receipts`);
-  });
-
   // RF-8.6: la emision del comprobante se dispara de forma asincronica cuando M7
   // confirma el pago. Si RabbitMQ no esta disponible, la API REST sigue
   // funcionando y el consumidor reintenta la conexion.
+  const consumerLog = createLogger('payment-confirmed');
   const consumer = startConsumer({
     name: 'payment-confirmed',
     url: env.rabbitmqUrl,
@@ -39,14 +37,14 @@ async function bootstrap(): Promise<void> {
     handle: async (content) => {
       const outcome = await processPaymentConfirmed(content);
       if (outcome.status === 'duplicate') {
-        console.info(
-          `[payment-confirmed] mensaje repetido descartado messageId=${outcome.messageId} tripId=${outcome.tripId}`,
-        );
+        consumerLog('info', 'mensaje repetido descartado', { messageId: outcome.messageId, tripId: outcome.tripId });
         return;
       }
-      console.info(
-        `[payment-confirmed] comprobante ${outcome.created ? 'emitido' : 'ya existente'} messageId=${outcome.messageId} tripId=${outcome.tripId} receiptId=${outcome.receiptId}`,
-      );
+      consumerLog('info', outcome.created ? 'comprobante emitido' : 'comprobante ya existente', {
+        messageId: outcome.messageId,
+        tripId: outcome.tripId,
+        receiptId: outcome.receiptId,
+      });
     },
   });
 
@@ -60,17 +58,29 @@ async function bootstrap(): Promise<void> {
     batchSize: env.outboxBatchSize,
   });
 
+  const app = createApp({
+    checks: { rabbitmq: async () => consumer.isConnected() && relay.isConnected() },
+  });
+  const server = app.listen(env.port, () => {
+    log('info', 'servicio iniciado', {
+      url: env.publicBaseUrl,
+      api: `${env.publicBaseUrl}${env.apiPrefix}/receipts`,
+      environment: env.nodeEnv,
+      version: env.serviceVersion,
+    });
+  });
+
   const shutdown = (signal: string): void => {
-    console.info(`[${env.serviceName}] senal ${signal} recibida, cerrando el servidor`);
+    log('info', 'cerrando el servidor', { signal });
     server.close((error) => {
       Promise.all([consumer.close(), relay.close()])
         .then(() => Promise.all([closePool(), closeRedis()]))
         .catch((closeError: unknown) => {
-          console.error(`[${env.serviceName}] error al liberar las conexiones`, closeError);
+          log('error', 'error al liberar las conexiones', errorFields(closeError));
         })
         .finally(() => {
           if (error) {
-            console.error(`[${env.serviceName}] error al cerrar el servidor`, error);
+            log('error', 'error al cerrar el servidor', errorFields(error));
             process.exit(1);
           }
           process.exit(0);
@@ -83,6 +93,6 @@ async function bootstrap(): Promise<void> {
 }
 
 bootstrap().catch((error: unknown) => {
-  console.error('No se pudo iniciar el servicio', error);
+  log('error', 'no se pudo iniciar el servicio', errorFields(error));
   process.exit(1);
 });

@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import YAML from 'yamljs';
 import { apiReference } from '@scalar/express-api-reference';
 
+import { createLogger, errorFields } from '../observability/logger';
+
 export const docsRouter = Router();
 
 // Carga la especificacion OpenAPI buscando en distintas rutas posibles
@@ -22,7 +24,7 @@ try {
     throw new Error(`No se encontro receipts.openapi.yaml en ninguna de las rutas esperadas: ${candidatePaths.join(', ')}`);
   }
 } catch (error) {
-  console.error('Error al cargar la especificacion OpenAPI:', error);
+  createLogger('docs')('error', 'no se pudo cargar la especificacion OpenAPI', errorFields(error));
   openapiDocument = {
     openapi: '3.0.3',
     info: { title: 'M8 Comprobantes', version: '1.0.0' },

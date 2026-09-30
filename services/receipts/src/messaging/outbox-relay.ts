@@ -2,7 +2,7 @@ import * as amqp from 'amqplib';
 import type { ConfirmChannel } from 'amqplib';
 
 import * as outbox from '../repositories/outbox.repository';
-import { createLogger, errorMessage } from './log';
+import { createLogger, errorMessage, withCorrelationId } from '../observability/logger';
 
 type Connection = Awaited<ReturnType<typeof amqp.connect>>;
 
@@ -75,7 +75,9 @@ export function startOutboxRelay(options: OutboxRelayOptions): RunningRelay {
       try {
         const published = await outbox.publishPending(options.batchSize, publishBatch(current));
         for (const { routingKey, envelope } of published) {
-          log('info', 'evento publicado', { routingKey, messageId: envelope.messageId, tripId: envelope.correlationId });
+          withCorrelationId(envelope.correlationId, () =>
+            log('info', 'evento publicado', { routingKey, messageId: envelope.messageId, tripId: envelope.correlationId }),
+          );
         }
         if (failing) {
           failing = false;
