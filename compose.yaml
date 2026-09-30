@@ -38,6 +38,15 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  # Segunda instancia del servicio de comprobantes, para demostrar RNF-09 con
+  # dos replicas que comparten base de datos y cola. Solo se levanta con el
+  # perfil: docker compose --profile replicas up -d --build
+  receipts-replica:
+    extends: receipts
+    profiles: ["replicas"]
+    ports: !override
+      - "3018:3008"
+
   rabbitmq:
     image: rabbitmq:3-management-alpine
     ports:

@@ -4,11 +4,18 @@
  * Lanza N solicitudes simultaneas de emision sobre un mismo tripId y verifica
  * que el servicio emita un unico comprobante. Genera la evidencia del portafolio.
  *
- * Uso: levantar el servicio (npm run dev) y ejecutar `npm run prueba:concurrencia`
+ * Si recibe varias URL base, reparte las solicitudes entre ellas: con dos
+ * replicas del servicio, ningun candado en memoria puede evitar la carrera y
+ * la unicidad depende solo de la restriccion UNIQUE de la base.
+ *
+ * Uso, con el stack levantado (docker compose up -d en modulo-8):
+ *   una instancia : pnpm run prueba:concurrencia
+ *   dos replicas  : docker compose --profile replicas up -d --build
+ *                   pnpm run prueba:replicas
  */
 import { execSync } from 'node:child_process';
 
-const BASE = process.env.BASE_URL ?? 'http://localhost:3008';
+const BASES = process.argv.length > 2 ? process.argv.slice(2) : [process.env.BASE_URL ?? 'http://localhost:3008'];
 const SOLICITUDES = Number(process.env.SOLICITUDES ?? 8);
 const tripId = `trip-concurrencia-${Date.now()}`;
 const LINEA = '='.repeat(72);
@@ -66,12 +73,14 @@ async function waitForHealth(baseUrl, maxRetries = 15, delayMs = 1000) {
 }
 
 async function main() {
-  try {
-    await waitForHealth(BASE);
-  } catch (error) {
-    console.error(`\nNo se pudo contactar el servicio en ${BASE} (${error.message}).`);
-    console.error('Asegurate de que el contenedor m8-documentos este levantado.\n');
-    process.exit(1);
+  for (const base of BASES) {
+    try {
+      await waitForHealth(base);
+    } catch (error) {
+      console.error(`\nNo se pudo contactar el servicio en ${base} (${error.message}).`);
+      console.error('Asegurate de que el contenedor m8-documentos este levantado.\n');
+      process.exit(1);
+    }
   }
 
   console.log(LINEA);
@@ -81,15 +90,16 @@ async function main() {
   console.log(` Fecha       : ${new Date().toLocaleString('es-AR')}`);
   console.log(` Rama        : ${gitInfo('git rev-parse --abbrev-ref HEAD', 'desconocida')}`);
   console.log(` Commit      : ${gitInfo('git rev-parse --short HEAD', 'desconocido')}`);
-  console.log(` Endpoint    : POST ${BASE}/api/v1/receipts`);
+  console.log(` Endpoint    : POST /api/v1/receipts`);
+  BASES.forEach((base, i) => console.log(` Replica ${i + 1}   : ${base}`));
   console.log(` tripId      : ${tripId}`);
-  console.log(` Solicitudes : ${SOLICITUDES} simultaneas sobre el mismo viaje`);
+  console.log(` Solicitudes : ${SOLICITUDES} simultaneas sobre el mismo viaje, repartidas entre ${BASES.length} instancia(s)`);
   console.log(GUION);
 
   const inicio = performance.now();
   const respuestas = await Promise.all(
-    Array.from({ length: SOLICITUDES }, () =>
-      fetch(`${BASE}/api/v1/receipts`, {
+    Array.from({ length: SOLICITUDES }, (_, i) =>
+      fetch(`${BASES[i % BASES.length]}/api/v1/receipts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cuerpo),
@@ -103,8 +113,9 @@ async function main() {
   respuestas.forEach((respuesta, i) => {
     const datos = cuerpos[i].data;
     const etiqueta = respuesta.status === 201 ? '201 Created  (emitido)   ' : '200 OK       (idempotente)';
+    const replica = BASES.length > 1 ? `  replica ${(i % BASES.length) + 1}` : '';
     console.log(
-      ` #${String(i + 1).padStart(2)}  ${etiqueta}  ${datos.receiptNumber}  ${datos.receiptId.slice(0, 8)}`,
+      ` #${String(i + 1).padStart(2)}${replica}  ${etiqueta}  ${datos.receiptNumber}  ${datos.receiptId.slice(0, 8)}`,
     );
   });
 
