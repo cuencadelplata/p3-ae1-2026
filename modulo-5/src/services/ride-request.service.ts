@@ -102,18 +102,16 @@ export class RideRequestService {
   }
 
   /**
-   * Stub de integración con M4: Conductores Cercanos (RF-4.2)
+   * Integración con M4: Conductores Cercanos (RF-4.2 / RF-5.2)
+   * Consulta las ubicaciones y disponibilidad de conductores desde Redis (m4:driver:{driverId}:location)
    */
-  private async fetchNearbyDriversFromM4(
-    _lat: number,
-    _lng: number,
-    vehicleType: VehicleType
+  public async fetchNearbyDriversFromM4(
+    lat: number,
+    lng: number,
+    vehicleType: VehicleType,
+    radiusKm: number = 5.0
   ): Promise<NearbyDriverStub[]> {
-    // Simula respuesta de M4 en AE1
-    return [
-      { driverId: 'drv_101', distanceKm: 1.2, vehicleType },
-      { driverId: 'drv_102', distanceKm: 2.1, vehicleType }
-    ];
+    return this.redisService.findNearbyDriversFromM4(lat, lng, vehicleType, radiusKm);
   }
 
   /**
@@ -252,11 +250,12 @@ export class RideRequestService {
       );
     }
 
-    // 3. Consumir conductores cercanos desde M4 (RF-4.2)
+    // 3. Consumir conductores cercanos desde M4 (RF-4.2 / RF-5.2)
     const nearby = await this.fetchNearbyDriversFromM4(
       request.origin.latitude,
       request.origin.longitude,
-      request.vehicleType
+      request.vehicleType,
+      radiusKm
     );
 
     // 4. Algoritmo de filtrado y ordenamiento:
