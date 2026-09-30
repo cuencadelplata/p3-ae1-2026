@@ -45,6 +45,9 @@ jobs:
       - name: Build workspace services
         run: pnpm run build
 
+      - name: Typecheck receipts tests
+        run: pnpm --filter m8-documentos run typecheck:test
+
       - name: Start test backing services
         run: |
           docker compose up -d --wait postgres rabbitmq redis
@@ -56,6 +59,9 @@ jobs:
         run: docker compose build
 
       - name: Start Compose services
+        # TTL corto para que la E2E pueda verificar el vencimiento del enlace de descarga.
+        env:
+          RECEIPT_LINK_TTL_SECONDS: "5"
         run: docker compose up -d
 
       - name: Wait for service health
