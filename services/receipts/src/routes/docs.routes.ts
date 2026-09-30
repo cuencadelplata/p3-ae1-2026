@@ -27,7 +27,7 @@ try {
   createLogger('docs')('error', 'no se pudo cargar la especificacion OpenAPI', errorFields(error));
   openapiDocument = {
     openapi: '3.0.3',
-    info: { title: 'M8 Comprobantes', version: '1.0.0' },
+    info: { title: 'M8 Comprobantes', version: '2.0.0' },
     paths: {},
   };
 }

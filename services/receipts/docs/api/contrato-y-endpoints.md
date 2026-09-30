@@ -1,5 +1,7 @@
 # Especificación de la API REST y Contrato OpenAPI (M8)
 
+> **Documento de AE1 (versión 1.0.0), conservado como evidencia.** El contrato vigente es [openapi/receipts.openapi.yaml](../../../../openapi/receipts.openapi.yaml) (2.0.0): se eliminó la descarga estática y se agregaron el enlace temporal y el health por dependencia.
+
 **Materia:** ISI - Paradigmas de Programación 3 (2026)  
 **Módulo:** M8 - Notificaciones, Documentos y Soporte (Comprobantes PDF)  
 **Grupo 14:** Juan Gualtieri, Lucas Cremaschi, Meza Santiago  

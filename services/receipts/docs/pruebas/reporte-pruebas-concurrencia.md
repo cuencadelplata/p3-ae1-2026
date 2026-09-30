@@ -1,5 +1,7 @@
 # Reporte de Estrategia de Pruebas, Concurrencia e Idempotencia (AE1)
 
+> **Documento de AE1 (versión 1.0.0), conservado como evidencia.** La versión de AE2 está en [concurrencia-idempotencia-ae2.md](concurrencia-idempotencia-ae2.md).
+
 **Materia:** ISI - Paradigmas de Programación 3 (2026)  
 **Módulo:** M8 - Notificaciones, Documentos y Soporte (Comprobantes PDF)  
 **Grupo 14:** Juan Gualtieri, Lucas Cremaschi, Meza Santiago  

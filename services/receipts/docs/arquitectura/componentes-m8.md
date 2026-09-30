@@ -1,5 +1,7 @@
 # Arquitectura y Diagrama de Componentes - Módulo 8 (Comprobantes PDF)
 
+> **Documento de AE1 (versión 1.0.0), conservado como evidencia.** La arquitectura vigente está en [arquitectura-ae2.md](arquitectura-ae2.md): el almacenamiento en disco y el candado en memoria fueron reemplazados.
+
 **Grupo 14:** Juan Gualtieri, Lucas Cremaschi, Meza Santiago  
 **Módulo:** M8 - Notificaciones, Documentos y Soporte  
 **Alcance Asignado:** RF-8.3 (Comprobante PDF) y RF-8.4 (Reenvío de Comprobante)  

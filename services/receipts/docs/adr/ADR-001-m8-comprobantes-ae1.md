@@ -1,6 +1,6 @@
 # ADR-001: Arquitectura y Estrategia de Implementación de Comprobantes PDF (AE1)
 
-* **Estado:** Aceptado
+* **Estado:** Aceptado en AE1; reemplazado parcialmente en AE2 por [ADR-003](ADR-003-backing-services-ae2.md) y [ADR-004](ADR-004-persistencia-ae2.md) (persistencia en disco y candado en memoria)
 * **Fecha:** 2026-09-01
 * **Autores:** Juan Gualtieri, Lucas Cremaschi, Meza Santiago (Grupo 14)
 * **Requerimientos:** RF-8.3, RF-8.4, RNF-01, RNF-03, RNF-04, RNF-05, RNF-08, RNF-09, RNF-11, RNF-17
