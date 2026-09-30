@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { pool } from '../db/pool';
 import type { DeliveryRecord, Receipt } from '../models/receipt';
+import * as outbox from './outbox.repository';
 
 /**
  * Persistencia del comprobante en CommunicationsDB (esquema "receipts").
@@ -95,12 +96,14 @@ export async function findPdfByTripId(tripId: string): Promise<Buffer | null> {
 }
 
 /**
- * Persiste el comprobante y su PDF en una sola transaccion: nunca queda un
- * comprobante sin documento ni un documento huerfano. Si otro proceso ya emitio
- * el comprobante del mismo viaje, la restriccion UNIQUE rechaza la insercion y
- * se informa con ReceiptAlreadyExistsError.
+ * Persiste el comprobante, su PDF y el evento receipt.issued en una sola
+ * transaccion: nunca queda un comprobante sin documento ni sin evento, ni un
+ * documento o evento huerfano. Si otro proceso ya emitio el comprobante del
+ * mismo viaje, la restriccion UNIQUE rechaza la insercion y se informa con
+ * ReceiptAlreadyExistsError; como se revierte todo, tampoco queda un segundo
+ * evento.
  */
-export async function create(receipt: Receipt, pdf: Buffer): Promise<void> {
+export async function create(receipt: Receipt, pdf: Buffer, issuedEvent: outbox.OutboxEvent): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -125,6 +128,7 @@ export async function create(receipt: Receipt, pdf: Buffer): Promise<void> {
        VALUES ($1, $2, 'application/pdf', $3, $4)`,
       [randomUUID(), receipt.receiptId, pdf.length, pdf],
     );
+    await outbox.enqueue(client, issuedEvent);
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');

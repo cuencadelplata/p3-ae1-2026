@@ -4,6 +4,7 @@ import { before, describe, it } from 'node:test';
 
 import { runMigrations } from '../../src/db/migrations';
 import { pool } from '../../src/db/pool';
+import { buildReceiptIssuedEvent } from '../../src/messaging/receipt-issued';
 import type { Receipt } from '../../src/models/receipt';
 import * as repository from '../../src/repositories/receipt.repository';
 
@@ -32,6 +33,15 @@ function sampleReceipt(tripId: string): Receipt {
 
 const fakePdf = Buffer.from('%PDF-1.3 prueba');
 
+function create(receipt: Receipt, issuedEvent = buildReceiptIssuedEvent(receipt)): Promise<void> {
+  return repository.create(receipt, fakePdf, issuedEvent);
+}
+
+async function countOutboxEvents(tripId: string): Promise<number> {
+  const result = await pool.query('SELECT 1 FROM receipts.outbox_events WHERE correlation_id = $1', [tripId]);
+  return result.rowCount ?? 0;
+}
+
 describe('Receipt Repository (PostgreSQL)', () => {
   before(async () => {
     await runMigrations();
@@ -39,7 +49,7 @@ describe('Receipt Repository (PostgreSQL)', () => {
 
   it('debe persistir el comprobante y su PDF', async () => {
     const receipt = sampleReceipt(`trip-repo-${Date.now()}`);
-    await repository.create(receipt, fakePdf);
+    await create(receipt);
 
     const stored = await repository.findByTripId(receipt.tripId);
     assert.equal(stored?.receiptId, receipt.receiptId);
@@ -52,7 +62,7 @@ describe('Receipt Repository (PostgreSQL)', () => {
 
   it('debe guardar el PDF con una clave opaca que no deriva del tripId', async () => {
     const receipt = sampleReceipt(`trip-repo-clave-${Date.now()}`);
-    await repository.create(receipt, fakePdf);
+    await create(receipt);
 
     const result = await pool.query<{ pdf_key: string }>(
       'SELECT pdf_key FROM receipts.receipt_documents WHERE receipt_id = $1',
@@ -68,8 +78,8 @@ describe('Receipt Repository (PostgreSQL)', () => {
     const first = sampleReceipt(tripId);
     const second = sampleReceipt(tripId);
 
-    await repository.create(first, fakePdf);
-    await assert.rejects(() => repository.create(second, fakePdf), repository.ReceiptAlreadyExistsError);
+    await create(first);
+    await assert.rejects(() => create(second), repository.ReceiptAlreadyExistsError);
 
     const receipts = await pool.query('SELECT 1 FROM receipts.receipts WHERE trip_id = $1', [tripId]);
     assert.equal(receipts.rowCount, 1);
@@ -78,11 +88,26 @@ describe('Receipt Repository (PostgreSQL)', () => {
       second.receiptId,
     ]);
     assert.equal(orphan.rowCount, 0);
+    assert.equal(await countOutboxEvents(tripId), 1);
+  });
+
+  it('debe guardar el evento receipt.issued pendiente en la misma transaccion', async () => {
+    const receipt = sampleReceipt(`trip-repo-evento-${Date.now()}`);
+    const event = buildReceiptIssuedEvent(receipt);
+    await create(receipt, event);
+
+    const result = await pool.query<{ routing_key: string; published_at: Date | null; envelope: { data: object } }>(
+      'SELECT routing_key, published_at, envelope FROM receipts.outbox_events WHERE message_id = $1',
+      [event.envelope.messageId],
+    );
+    assert.equal(result.rows[0]?.routing_key, 'receipt.issued');
+    assert.equal(result.rows[0]?.published_at, null);
+    assert.deepEqual(result.rows[0]?.envelope.data, event.envelope.data);
   });
 
   it('debe acumular los reenvios en orden de registro', async () => {
     const receipt = sampleReceipt(`trip-repo-envios-${Date.now()}`);
-    await repository.create(receipt, fakePdf);
+    await create(receipt);
 
     await repository.addDelivery(receipt.receiptId, {
       channel: 'EMAIL',

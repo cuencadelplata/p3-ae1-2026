@@ -3,6 +3,7 @@ import { env } from './config/env';
 import { runMigrations } from './db/migrations';
 import { closePool } from './db/pool';
 import { startConsumer } from './messaging/consumer';
+import { startOutboxRelay } from './messaging/outbox-relay';
 import { PAYMENT_CONFIRMED_ROUTING_KEY, processPaymentConfirmed } from './messaging/payment-confirmed';
 import { queueTopology } from './messaging/topology';
 
@@ -44,11 +45,20 @@ async function bootstrap(): Promise<void> {
     },
   });
 
+  // receipt.issued se publica desde la bandeja de salida: el evento ya quedo
+  // guardado junto con el comprobante y aca solo se envia a RabbitMQ.
+  const relay = startOutboxRelay({
+    name: 'outbox',
+    url: env.rabbitmqUrl,
+    exchange: env.eventsExchange,
+    intervalMs: env.outboxPollIntervalMs,
+    batchSize: env.outboxBatchSize,
+  });
+
   const shutdown = (signal: string): void => {
     console.info(`[${env.serviceName}] senal ${signal} recibida, cerrando el servidor`);
     server.close((error) => {
-      consumer
-        .close()
+      Promise.all([consumer.close(), relay.close()])
         .then(() => closePool())
         .catch((closeError: unknown) => {
           console.error(`[${env.serviceName}] error al liberar las conexiones`, closeError);

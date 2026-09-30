@@ -193,8 +193,24 @@ La decisión se registra en la sección 1 cuando se cierre.
 | Consumidores | Suscripción libre (ej.: M2 para historial, Notificaciones para avisar al cliente) |
 | Estado | Definido por M8 |
 
-Se publica una única vez por comprobante, después de persistirlo. Un evento
-`payment.confirmed` repetido no genera un segundo `receipt.issued`.
+Se publica una única vez por comprobante, después de persistirlo, sea que la
+emisión llegue por `payment.confirmed` o por `POST /api/v1/receipts`. Un
+evento `payment.confirmed` repetido no genera un segundo `receipt.issued`.
+
+**Publicación mediante bandeja de salida.** El evento se guarda en la tabla
+`receipts.outbox_events` en la misma transacción que el comprobante, y un
+proceso del servicio lo publica en `mobility.events` con la routing key
+`receipt.issued`. Se marca como publicado recién cuando RabbitMQ confirma la
+recepción. En consecuencia:
+
+- Si el comprobante no se persiste, el evento no existe.
+- Si RabbitMQ no está disponible, el evento espera en la tabla y se publica al
+  recuperar la conexión (`OUTBOX_POLL_INTERVAL_MS`, 1 s por defecto).
+- Ante un corte entre la confirmación de RabbitMQ y la marca en la base, el
+  evento se republica con el **mismo** `messageId`. Los consumidores deben
+  deduplicar por `messageId` (regla 2 de la sección 4).
+- Con varias instancias del servicio, cada evento lo publica una sola de ellas
+  (`FOR UPDATE SKIP LOCKED`).
 
 ```json
 {

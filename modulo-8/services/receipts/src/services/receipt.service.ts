@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { AppError } from '../errors/app-error';
+import { buildReceiptIssuedEvent } from '../messaging/receipt-issued';
 import type { DeliveryChannel, DeliveryRecord, Receipt, ReceiptRequest } from '../models/receipt';
 import * as repository from '../repositories/receipt.repository';
 import { buildReceiptNumber, maskDestination } from '../utils/identifiers';
@@ -18,6 +19,10 @@ export interface IssueResult {
  * devuelve el mismo documento en lugar de emitir uno nuevo. Ante solicitudes
  * concurrentes, en uno o en varios procesos, la restriccion UNIQUE de la base
  * deja pasar una sola insercion; las demas releen el comprobante ganador.
+ *
+ * Solo la emision que crea el comprobante registra el evento receipt.issued,
+ * sea que llegue por payment.confirmed o por POST: un pedido repetido no
+ * genera un segundo evento.
  */
 export async function issueReceipt(request: ReceiptRequest): Promise<IssueResult> {
   const existing = await repository.findByTripId(request.tripId);
@@ -29,7 +34,7 @@ export async function issueReceipt(request: ReceiptRequest): Promise<IssueResult
   const pdf = await renderReceiptPdf(receipt);
 
   try {
-    await repository.create(receipt, pdf);
+    await repository.create(receipt, pdf, buildReceiptIssuedEvent(receipt));
   } catch (error) {
     if (error instanceof repository.ReceiptAlreadyExistsError) {
       const winner = await repository.findByTripId(request.tripId);

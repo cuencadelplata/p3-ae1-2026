@@ -15,6 +15,9 @@ import { pool } from './pool';
  * - processed_messages: bandeja de entrada del consumidor. Registra el
  *   messageId de cada evento ya procesado para descartar las reentregas de
  *   RabbitMQ (RNF-08).
+ * - outbox_events: bandeja de salida. Cada evento a publicar se inserta en la
+ *   misma transaccion que el cambio que lo origina; published_at queda en null
+ *   hasta que RabbitMQ confirma la recepcion.
  */
 const statements = [
   `CREATE TABLE IF NOT EXISTS receipts.receipts (
@@ -53,6 +56,17 @@ const statements = [
      correlation_id text        NOT NULL,
      processed_at   timestamptz NOT NULL DEFAULT now()
    )`,
+  `CREATE TABLE IF NOT EXISTS receipts.outbox_events (
+     message_id     uuid        PRIMARY KEY,
+     event_type     text        NOT NULL,
+     routing_key    text        NOT NULL,
+     correlation_id text        NOT NULL,
+     envelope       jsonb       NOT NULL,
+     created_at     timestamptz NOT NULL DEFAULT now(),
+     published_at   timestamptz
+   )`,
+  `CREATE INDEX IF NOT EXISTS outbox_events_pending_idx
+     ON receipts.outbox_events (created_at) WHERE published_at IS NULL`,
 ];
 
 /** Clave arbitraria del bloqueo consultivo que serializa las migraciones. */
