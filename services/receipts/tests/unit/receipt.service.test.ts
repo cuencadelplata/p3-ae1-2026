@@ -31,6 +31,11 @@ const sampleRequest: ReceiptRequest = {
   },
   fare: {
     currency: 'ARS',
+    baseFare: 3500,
+    distanceAmount: 0,
+    timeAmount: 0,
+    surcharges: 0,
+    discounts: 0,
     total: 3500,
   },
   payment: {

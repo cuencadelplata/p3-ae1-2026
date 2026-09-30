@@ -86,15 +86,16 @@ test("Receipts emite, conserva idempotencia, consulta y descarga PDF", async () 
 
   const issued = await postJson(`${urls.receipts}/api/v1/receipts`, payload);
   assert.equal(issued.response.status, 201);
-  const receiptId = issued.body.data.id;
+  const receiptId = issued.body.data.receiptId;
+  assert.equal(typeof receiptId, "string");
 
   const repeated = await postJson(`${urls.receipts}/api/v1/receipts`, payload);
   assert.equal(repeated.response.status, 200);
-  assert.equal(repeated.body.data.id, receiptId);
+  assert.equal(repeated.body.data.receiptId, receiptId);
 
   const queried = await requestJson(`${urls.receipts}/api/v1/receipts/${tripId}`);
   assert.equal(queried.response.status, 200);
-  assert.equal(queried.body.data.id, receiptId);
+  assert.equal(queried.body.data.receiptId, receiptId);
 
   const pdf = await fetch(`${urls.receipts}/api/v1/receipts/${tripId}/pdf`);
   assert.equal(pdf.status, 200);
