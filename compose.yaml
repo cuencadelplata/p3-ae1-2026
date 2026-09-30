@@ -34,6 +34,11 @@ services:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
       REDIS_URL: redis://redis:6379
       RECEIPT_LINK_TTL_SECONDS: "${RECEIPT_LINK_TTL_SECONDS:-900}"
+      FISCAL_API_URL: http://fiscal-sandbox:4010
+    # Si el proceso termina por cualquier motivo, Docker lo vuelve a levantar.
+    # Una dependencia caida no lo hace terminar: sigue atendiendo en modo
+    # degradado y se reconecta solo (ver /health/ready).
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,6 +55,18 @@ services:
     profiles: ["replicas"]
     ports: !override
       - "3018:3008"
+
+  # Servicio externo simulado: autoriza cada comprobante antes de emitirlo.
+  # El modo (normal, slow, down) se cambia en caliente con PUT /admin/mode.
+  fiscal-sandbox:
+    build:
+      context: ./infra/fiscal-sandbox
+    ports:
+      - "${FISCAL_HOST_PORT:-4010}:4010"
+    environment:
+      FISCAL_MODE: "${FISCAL_MODE:-normal}"
+      SLOW_DELAY_MS: "${FISCAL_SLOW_DELAY_MS:-5000}"
+    restart: unless-stopped
 
   rabbitmq:
     image: rabbitmq:3-management-alpine

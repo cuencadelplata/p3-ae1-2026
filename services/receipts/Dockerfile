@@ -27,7 +27,7 @@ FROM node:22-slim AS runtime
 
 LABEL org.opencontainers.image.title="m8-documentos" \
       org.opencontainers.image.description="M8 - Comprobantes de viaje en PDF (RF-8.3), evolucion AE2" \
-      org.opencontainers.image.version="2.0.0" \
+      org.opencontainers.image.version="2.1.0" \
       org.opencontainers.image.source="https://github.com/cuencadelplata/p3-ae1-2026"
 
 WORKDIR /app
@@ -40,7 +40,7 @@ USER node
 
 ENV NODE_ENV=production \
     PORT=3008 \
-    SERVICE_VERSION=2.0.0
+    SERVICE_VERSION=2.1.0
 
 EXPOSE 3008
 

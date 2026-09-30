@@ -1,28 +1,56 @@
+import { setTimeout as sleep } from 'node:timers/promises';
+
 import { createApp } from './app';
 import { closeRedis, connectRedis } from './cache/redis';
 import { env } from './config/env';
 import { runMigrations } from './db/migrations';
-import { closePool } from './db/pool';
-import { startConsumer } from './messaging/consumer';
-import { startOutboxRelay } from './messaging/outbox-relay';
+import { closePool, isDatabaseReady } from './db/pool';
+import { startConsumer, type RunningConsumer } from './messaging/consumer';
+import { startOutboxRelay, type RunningRelay } from './messaging/outbox-relay';
 import { PAYMENT_CONFIRMED_ROUTING_KEY, processPaymentConfirmed } from './messaging/payment-confirmed';
 import { queueTopology } from './messaging/topology';
-import { createLogger, errorFields } from './observability/logger';
+import { createLogger, errorFields, errorMessage } from './observability/logger';
 
 const log = createLogger('server');
 
-async function bootstrap(): Promise<void> {
-  await runMigrations();
+let closing = false;
+let schemaReady = false;
+let consumer: RunningConsumer | undefined;
+let relay: RunningRelay | undefined;
 
-  // Sin Redis el servicio arranca igual: solo quedan sin servicio los enlaces
-  // temporales, y el cliente reintenta la conexion por su cuenta.
-  void connectRedis().catch(() => undefined);
+/**
+ * Prepara el esquema reintentando hasta que PostgreSQL responda. El servicio no
+ * termina si la base no esta disponible al arrancar: sigue atendiendo
+ * /health/live, informa la base como no disponible en /health/ready y se
+ * recupera solo cuando vuelve.
+ */
+async function prepareDatabase(): Promise<boolean> {
+  for (let attempt = 1; !closing; attempt += 1) {
+    try {
+      await runMigrations();
+      if (attempt > 1) {
+        log('info', 'PostgreSQL disponible, esquema preparado', { attempt });
+      }
+      return true;
+    } catch (error) {
+      log('warn', 'PostgreSQL no disponible al arrancar, se reintenta', {
+        attempt,
+        delayMs: env.databaseStartupRetryMs,
+        reason: errorMessage(error),
+      });
+      await sleep(env.databaseStartupRetryMs);
+    }
+  }
+  return false;
+}
 
+/** Consumidor de payment.confirmed y relay de la bandeja de salida: necesitan el esquema creado. */
+function startMessaging(): void {
   // RF-8.6: la emision del comprobante se dispara de forma asincronica cuando M7
   // confirma el pago. Si RabbitMQ no esta disponible, la API REST sigue
   // funcionando y el consumidor reintenta la conexion.
   const consumerLog = createLogger('payment-confirmed');
-  const consumer = startConsumer({
+  consumer = startConsumer({
     name: 'payment-confirmed',
     url: env.rabbitmqUrl,
     topology: queueTopology({
@@ -50,17 +78,29 @@ async function bootstrap(): Promise<void> {
 
   // receipt.issued se publica desde la bandeja de salida: el evento ya quedo
   // guardado junto con el comprobante y aca solo se envia a RabbitMQ.
-  const relay = startOutboxRelay({
+  relay = startOutboxRelay({
     name: 'outbox',
     url: env.rabbitmqUrl,
     exchange: env.eventsExchange,
     intervalMs: env.outboxPollIntervalMs,
     batchSize: env.outboxBatchSize,
   });
+}
+
+function bootstrap(): void {
+  // Sin Redis el servicio arranca igual: solo quedan sin servicio los enlaces
+  // temporales, y el cliente reintenta la conexion por su cuenta.
+  void connectRedis().catch(() => undefined);
 
   const app = createApp({
-    checks: { rabbitmq: async () => consumer.isConnected() && relay.isConnected() },
+    checks: {
+      postgres: async () => schemaReady && (await isDatabaseReady()),
+      rabbitmq: async () => Boolean(consumer?.isConnected() && relay?.isConnected()),
+    },
   });
+
+  // El servidor HTTP arranca antes que la base: asi /health responde aunque
+  // PostgreSQL todavia no este disponible.
   const server = app.listen(env.port, () => {
     log('info', 'servicio iniciado', {
       url: env.publicBaseUrl,
@@ -70,10 +110,18 @@ async function bootstrap(): Promise<void> {
     });
   });
 
+  void prepareDatabase().then((ready) => {
+    if (ready) {
+      schemaReady = true;
+      startMessaging();
+    }
+  });
+
   const shutdown = (signal: string): void => {
     log('info', 'cerrando el servidor', { signal });
+    closing = true;
     server.close((error) => {
-      Promise.all([consumer.close(), relay.close()])
+      Promise.all([consumer?.close(), relay?.close()])
         .then(() => Promise.all([closePool(), closeRedis()]))
         .catch((closeError: unknown) => {
           log('error', 'error al liberar las conexiones', errorFields(closeError));
@@ -92,7 +140,9 @@ async function bootstrap(): Promise<void> {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-bootstrap().catch((error: unknown) => {
+try {
+  bootstrap();
+} catch (error) {
   log('error', 'no se pudo iniciar el servicio', errorFields(error));
   process.exit(1);
-});
+}

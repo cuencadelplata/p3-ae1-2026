@@ -33,6 +33,7 @@ interface ReceiptRow {
   trip: Receipt['trip'];
   fare: Receipt['fare'];
   payment: Receipt['payment'];
+  fiscal: Receipt['fiscal'] | null;
   deliveries: Array<{ channel: DeliveryRecord['channel']; destination: string; sentAt: string }>;
 }
 
@@ -47,6 +48,7 @@ function toReceipt(row: ReceiptRow): Receipt {
     trip: row.trip,
     fare: row.fare,
     payment: row.payment,
+    ...(row.fiscal ? { fiscal: row.fiscal } : {}),
     deliveries: row.deliveries.map((delivery) => ({
       channel: delivery.channel,
       destination: delivery.destination,
@@ -63,7 +65,7 @@ function isTripIdConflict(error: unknown): boolean {
 export async function findByTripId(tripId: string): Promise<Receipt | null> {
   const result = await pool.query<ReceiptRow>(
     `SELECT r.receipt_id, r.receipt_number, r.trip_id, r.issued_at,
-            r.customer, r.driver, r.trip, r.fare, r.payment,
+            r.customer, r.driver, r.trip, r.fare, r.payment, r.fiscal,
             COALESCE(
               (SELECT json_agg(
                         json_build_object('channel', d.channel, 'destination', d.destination, 'sentAt', d.sent_at)
@@ -115,8 +117,8 @@ export async function create(receipt: Receipt, pdf: Buffer, issuedEvent: outbox.
     await client.query('BEGIN');
     await client.query(
       `INSERT INTO receipts.receipts
-         (receipt_id, receipt_number, trip_id, issued_at, customer, driver, trip, fare, payment)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+         (receipt_id, receipt_number, trip_id, issued_at, customer, driver, trip, fare, payment, fiscal)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         receipt.receiptId,
         receipt.receiptNumber,
@@ -127,6 +129,7 @@ export async function create(receipt: Receipt, pdf: Buffer, issuedEvent: outbox.
         JSON.stringify(receipt.trip),
         JSON.stringify(receipt.fare),
         JSON.stringify(receipt.payment),
+        receipt.fiscal ? JSON.stringify(receipt.fiscal) : null,
       ],
     );
     await client.query(

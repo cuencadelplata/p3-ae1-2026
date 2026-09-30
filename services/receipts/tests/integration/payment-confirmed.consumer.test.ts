@@ -7,6 +7,7 @@ import type { Channel } from 'amqplib';
 import { env } from '../../src/config/env';
 import { runMigrations } from '../../src/db/migrations';
 import { pool } from '../../src/db/pool';
+import { DependencyUnavailableError } from '../../src/errors/dependency-unavailable.error';
 import { RETRY_COUNT_HEADER, startConsumer, type RunningConsumer } from '../../src/messaging/consumer';
 import { PAYMENT_CONFIRMED_ROUTING_KEY, processPaymentConfirmed } from '../../src/messaging/payment-confirmed';
 import { queueTopology, type QueueTopology } from '../../src/messaging/topology';
@@ -196,5 +197,50 @@ describe('Consumidor de payment.confirmed (Integration RabbitMQ + PostgreSQL)', 
     await waitFor(() => isProcessed(event.messageId));
     assert.equal(attempts, 2);
     assert.equal(await countReceipts(tripId), 1);
+  });
+
+  it('con una dependencia caida el mensaje debe esperar sin descontar intentos ni ir a la DLQ', async () => {
+    const topology = testTopology('dependencia');
+    // El doble de fallas de las que admite un error transitorio comun: si el
+    // contador avanzara, el mensaje habria terminado en la DLQ.
+    const outageAttempts = MAX_RETRIES * 2;
+    let attempts = 0;
+    await consume(topology, async (content) => {
+      attempts += 1;
+      if (attempts <= outageAttempts) {
+        throw new DependencyUnavailableError('fiscal', 'autorizador fiscal caido (simulado)');
+      }
+      return processPaymentConfirmed(content);
+    });
+
+    const tripId = `trip-mq-caida-${Date.now()}`;
+    const event = paymentConfirmedEvent(tripId);
+    publish(topology, toBuffer(event), event.messageId);
+
+    await waitFor(() => isProcessed(event.messageId), 10000);
+
+    assert.equal(attempts, outageAttempts + 1);
+    assert.equal(await countReceipts(tripId), 1);
+    assert.equal(await channel.get(topology.deadLetterQueue, { noAck: true }), false);
+  });
+
+  it('un comprobante rechazado por el autorizador fiscal debe ir a la DLQ sin reintentos', async () => {
+    const topology = testTopology('rechazo-fiscal');
+    let attempts = 0;
+    await consume(topology, async (content) => {
+      attempts += 1;
+      return processPaymentConfirmed(content);
+    });
+
+    // El autorizador simulado rechaza importes mayores a 10.000.000.
+    const tripId = `trip-mq-rechazo-${Date.now()}`;
+    const event = paymentConfirmedEvent(tripId);
+    event.data['fare'] = { currency: 'ARS', baseFare: 20_000_000, total: 20_000_000 };
+    publish(topology, toBuffer(event), event.messageId);
+
+    const dead = await waitFor(async () => (await channel.get(topology.deadLetterQueue, { noAck: true })) || null);
+    assert.equal(dead.properties.messageId, event.messageId);
+    assert.equal(attempts, 1);
+    assert.equal(await countReceipts(tripId), 0);
   });
 });

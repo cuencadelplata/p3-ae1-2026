@@ -1,6 +1,6 @@
 # Arquitectura del servicio de comprobantes (AE2)
 
-Versión 2.0.0 del servicio `m8-documentos`. La arquitectura de AE1 se conserva como
+Versión 2.1.0 del servicio `m8-documentos`. La arquitectura de AE1 se conserva como
 evidencia en [componentes-m8.md](componentes-m8.md).
 
 ## 1. Componentes
@@ -19,7 +19,7 @@ flowchart LR
         DLQ["...dlq"]
     end
 
-    subgraph SVC["m8-documentos 2.0.0"]
+    subgraph SVC["m8-documentos 2.1.0"]
         HTTP["API REST<br/>/api/v1/receipts"]
         INT["API interna<br/>/internal/receipts"]
         CONS["Consumidor<br/>payment.confirmed"]
@@ -27,8 +27,11 @@ flowchart LR
         PDF["Generador PDF<br/>PDFKit"]
         LINK["Enlaces temporales"]
         RELAY["Relay de la<br/>bandeja de salida"]
+        FISC["Cliente fiscal<br/>timeout + circuit breaker"]
         HEALTH["/health/live<br/>/health/ready"]
     end
+
+    AUT["Autorizador fiscal<br/>(externo, simulado)"]
 
     PG[("PostgreSQL<br/>esquema receipts")]
     RED[("Redis<br/>m8:receipts:link:*")]
@@ -36,7 +39,7 @@ flowchart LR
     M7 -- publica --> EX
     EX -- payment.confirmed --> Q
     Q --> CONS
-    CONS -. fallo transitorio .-> RQ
+    CONS -. fallo transitorio o<br/>dependencia caída .-> RQ
     RQ -. vence la espera .-> Q
     CONS -. inválido o reintentos agotados .-> DLQ
 
@@ -44,6 +47,8 @@ flowchart LR
     RD --> INT
     HTTP --> EMI
     CONS --> EMI
+    EMI --> FISC
+    FISC -- POST /v1/authorizations<br/>Idempotency-Key = tripId --> AUT
     EMI --> PDF
     EMI -- comprobante + PDF + evento<br/>en una transacción --> PG
     INT --> LINK
@@ -52,7 +57,7 @@ flowchart LR
     RELAY -- lee pendientes --> PG
     RELAY -- receipt.issued --> EX
     EX --> SUB
-    HEALTH -.-> PG & RED & MQ
+    HEALTH -.-> PG & RED & MQ & AUT
 ```
 
 | Componente | Responsabilidad |
@@ -60,10 +65,11 @@ flowchart LR
 | API REST | Emisión manual, consulta, descarga y reenvío. Contrato: `openapi/receipts.openapi.yaml`. |
 | API interna | `delivery-reference` para Receipts Delivery. Contrato: catálogo de eventos, sección 6. |
 | Consumidor | ACK manual, reintentos con cola de espera, DLQ y bandeja de entrada. |
-| Emisión | Única lógica de emisión para ambos caminos; idempotente por `tripId`. |
+| Emisión | Única lógica de emisión para ambos caminos; idempotente por `tripId`. Pide la autorización fiscal antes de generar el PDF. |
+| Cliente fiscal | Llamada al autorizador externo con timeout de 2 s y circuit breaker ([ADR-005](../adr/ADR-005-resiliencia-ae2.md)). |
 | Relay | Publica la bandeja de salida con confirmación de RabbitMQ; `SKIP LOCKED` entre réplicas. |
 | Enlaces temporales | Token opaco con TTL en Redis. |
-| Health | Vitalidad sin dependencias; disponibilidad por dependencia (PostgreSQL crítica). |
+| Health | Vitalidad sin dependencias; disponibilidad por dependencia (PostgreSQL crítica) y estado del circuito. |
 
 ## 2. Propiedad de datos
 
@@ -81,6 +87,7 @@ erDiagram
         jsonb trip "foto recibida, no propia"
         jsonb fare
         jsonb payment
+        jsonb fiscal "autorización externa"
     }
     RECEIPT_DOCUMENTS {
         uuid pdf_key PK "no deriva del tripId"
@@ -112,6 +119,7 @@ erDiagram
 | Pago confirmado | M7 | Evento `payment.confirmed` |
 | Cliente, conductor, recorrido | M1 / M6 | Llegan en el evento (provisorio, pendiente de M7); se guardan como foto inmutable |
 | Enlaces de descarga | Este servicio (Redis, efímero) | Propio; vencen solos |
+| Autorización fiscal | Autorizador fiscal (externo) | Llamada HTTP al emitir; se guarda con el comprobante. Solo se le envían identificadores e importes |
 
 Ningún otro servicio accede a estas tablas, y este servicio no accede a tablas ajenas.
 Fundamento en [ADR-004](../adr/ADR-004-persistencia-ae2.md).
@@ -136,7 +144,8 @@ sequenceDiagram
     else nuevo
         C->>S: issueReceipt(pedido)
         S->>DB: ¿comprobante del tripId?
-        S->>S: genera el PDF
+        S->>S: autorización fiscal (timeout 2 s, circuit breaker)
+        S->>S: genera el PDF con el código de autorización
         S->>DB: BEGIN · INSERT comprobante · INSERT PDF · INSERT outbox · COMMIT
         alt UNIQUE(trip_id) violada (otro pedido ganó)
             DB-->>S: 23505
@@ -152,9 +161,12 @@ sequenceDiagram
     end
 ```
 
-Si la base no responde, el consumidor republica el mensaje en la cola `.retry` (espera
-de 5 s, hasta 3 veces) y después lo envía a la DLQ. Un mensaje inválido va directo a la
-DLQ. Si RabbitMQ no responde, el evento queda pendiente en `outbox_events`.
+Si la base o el autorizador fiscal no responden, el consumidor republica el mensaje en
+la cola `.retry` (espera de 5 s) **sin descontar intentos**, hasta que la dependencia
+vuelva. Otro error inesperado se reintenta hasta 3 veces y después va a la DLQ. Un
+mensaje inválido o rechazado por el autorizador va directo a la DLQ. Si RabbitMQ no
+responde, el evento queda pendiente en `outbox_events`. Detalle en
+[ADR-005](../adr/ADR-005-resiliencia-ae2.md).
 
 ## 4. Secuencia: enlace temporal de descarga
 

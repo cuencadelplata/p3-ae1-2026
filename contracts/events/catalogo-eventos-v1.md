@@ -94,6 +94,10 @@ Propiedades AMQP de publicación: `content_type: application/json`,
    (`CONSUMER_RETRY_DELAY_MS`, 5 s por defecto); el original se confirma.
    Se reintenta hasta 3 veces (`CONSUMER_MAX_RETRIES`). Superado ese límite, el
    mensaje va a la cola de descarte.
+   Si lo que falla es una dependencia (base de datos o un servicio externo caído, o
+   con su circuit breaker abierto), el mensaje se republica **sin incrementar**
+   `x-retry-count`: espera a que la dependencia vuelva y no llega a la cola de
+   descarte por una caída que no es culpa suya.
 5. **Cola de descarte.** Los mensajes quedan disponibles para inspección y
    reprocesamiento manual sin bloquear la cola principal.
 

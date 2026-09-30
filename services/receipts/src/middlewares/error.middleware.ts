@@ -1,7 +1,10 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
 
+import { isDatabaseUnavailable } from '../db/errors';
 import { AppError } from '../errors/app-error';
-import { createLogger, errorFields } from '../observability/logger';
+import { DependencyUnavailableError } from '../errors/dependency-unavailable.error';
+import { FiscalAuthorizationRejectedError } from '../integrations/fiscal-authorizer';
+import { createLogger, errorFields, errorMessage } from '../observability/logger';
 
 const log = createLogger('http');
 
@@ -41,6 +44,36 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
 
   if (error instanceof AppError) {
     res.status(error.status).json(buildBody(error.code, error.message, req.originalUrl, error.details));
+    return;
+  }
+
+  // Una dependencia caida no es un error inesperado del servicio: se responde
+  // 503 con Retry-After para que el cliente sepa que puede repetir el pedido.
+  const unavailable = isDatabaseUnavailable(error)
+    ? new DependencyUnavailableError('postgres', 'La base de datos no esta disponible. Intente nuevamente mas tarde.')
+    : error instanceof DependencyUnavailableError
+      ? error
+      : null;
+  if (unavailable) {
+    log('warn', 'dependencia no disponible', {
+      method: req.method,
+      dependency: unavailable.dependency,
+      reason: errorMessage(unavailable.cause ?? error),
+    });
+    res.setHeader('Retry-After', String(unavailable.retryAfterSeconds));
+    res.status(503).json(buildBody(unavailable.code, unavailable.message, req.originalUrl));
+    return;
+  }
+
+  if (error instanceof FiscalAuthorizationRejectedError) {
+    res
+      .status(422)
+      .json(
+        buildBody('FISCAL_AUTHORIZATION_REJECTED', 'El autorizador fiscal rechazo el comprobante', req.originalUrl, {
+          code: error.code,
+          message: error.message,
+        }),
+      );
     return;
   }
 

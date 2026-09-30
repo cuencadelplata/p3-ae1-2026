@@ -43,7 +43,7 @@ const port = readPort('PORT', 3008);
 export const env = {
   nodeEnv: readText('NODE_ENV', 'development'),
   serviceName: 'm8-documentos',
-  serviceVersion: readText('SERVICE_VERSION', '2.0.0'),
+  serviceVersion: readText('SERVICE_VERSION', '2.1.0'),
   port,
 
   /** Prefijo de la API REST versionada. */
@@ -90,6 +90,21 @@ export const env = {
 
   /** Eventos que se publican por revision de la bandeja de salida. */
   outboxBatchSize: readPositiveInt('OUTBOX_BATCH_SIZE', 20),
+
+  /** Espera entre intentos de preparar el esquema si PostgreSQL no esta disponible al arrancar. */
+  databaseStartupRetryMs: readPositiveInt('DATABASE_STARTUP_RETRY_MS', 3000),
+
+  /** Autorizador fiscal externo (simulado en modulo-8/infra/fiscal-sandbox). */
+  fiscalApiUrl: readText('FISCAL_API_URL', 'http://localhost:4010').replace(/\/+$/, ''),
+
+  /** Tiempo maximo de espera de una autorizacion, en milisegundos. */
+  fiscalTimeoutMs: readPositiveInt('FISCAL_TIMEOUT_MS', 2000),
+
+  /** Fallas seguidas del autorizador que abren el circuito. */
+  fiscalCircuitFailureThreshold: readPositiveInt('FISCAL_CIRCUIT_FAILURE_THRESHOLD', 3),
+
+  /** Tiempo que el circuito permanece abierto antes de probar de nuevo, en milisegundos. */
+  fiscalCircuitOpenMs: readPositiveInt('FISCAL_CIRCUIT_OPEN_MS', 10000),
 
   /** Datos de presentacion del emisor dentro del PDF. */
   issuerName: readText('RECEIPT_ISSUER_NAME', 'Plataforma de Movilidad Urbana'),

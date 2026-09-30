@@ -8,7 +8,8 @@ import { pool } from './pool';
  *   guardan como una foto inmutable de los datos recibidos al emitir, por eso
  *   se almacenan en jsonb y no como tablas relacionadas. La restriccion UNIQUE
  *   sobre trip_id es la que garantiza un unico comprobante por viaje, aun con
- *   varias instancias del servicio (RNF-09).
+ *   varias instancias del servicio (RNF-09). La columna fiscal guarda la
+ *   autorizacion otorgada por el autorizador fiscal externo.
  * - receipt_documents: el PDF, identificado por una clave opaca que no deriva
  *   del tripId. Se inserta en la misma transaccion que el comprobante.
  * - receipt_deliveries: historial de reenvios, solo por insercion.
@@ -33,6 +34,10 @@ const statements = [
      created_at     timestamptz NOT NULL DEFAULT now(),
      CONSTRAINT receipts_trip_id_key UNIQUE (trip_id)
    )`,
+  // Autorizacion del autorizador fiscal externo (v2.1.0). Se agrega con ALTER
+  // para que los volumenes creados antes la incorporen sin recrearse; queda
+  // nula en los comprobantes emitidos antes de este cambio.
+  `ALTER TABLE receipts.receipts ADD COLUMN IF NOT EXISTS fiscal jsonb`,
   `CREATE TABLE IF NOT EXISTS receipts.receipt_documents (
      pdf_key      uuid        PRIMARY KEY,
      receipt_id   uuid        NOT NULL UNIQUE REFERENCES receipts.receipts (receipt_id),

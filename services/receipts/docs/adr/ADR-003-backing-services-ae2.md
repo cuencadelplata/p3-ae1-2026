@@ -39,7 +39,8 @@ compatibilidad con AE1. Ambos caminos usan la misma lógica de emisión.
 | Tipo de fallo | Tratamiento |
 | --- | --- |
 | Mensaje mal formado o contenido inválido | `nack` sin reencolar: va directo a la DLQ. Reintentarlo no cambia el resultado. |
-| Fallo transitorio (base de datos caída) | Se republica en `<cola>.retry` con `x-retry-count` + 1 y un `expiration` de 5 s; al vencer, RabbitMQ lo devuelve a la cola principal. Tras 3 reintentos, a la DLQ. |
+| Fallo transitorio | Se republica en `<cola>.retry` con `x-retry-count` + 1 y un `expiration` de 5 s; al vencer, RabbitMQ lo devuelve a la cola principal. Tras 3 reintentos, a la DLQ. |
+| Dependencia caída (base de datos o autorizador fiscal) | Desde 2.1.0: se republica en `<cola>.retry` **sin incrementar** `x-retry-count`, hasta que la dependencia vuelva. Ver [ADR-005](ADR-005-resiliencia-ae2.md). |
 | Proceso cortado a mitad del procesamiento | El ACK es manual y se envía al final: RabbitMQ reentrega el mensaje. |
 
 | Alternativa para esperar entre reintentos | Por qué no |
