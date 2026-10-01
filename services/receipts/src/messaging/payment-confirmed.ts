@@ -22,8 +22,9 @@ type Data = Record<string, unknown>;
  * Traduce el evento payment.confirmed al pedido de emision del comprobante.
  *
  * Supone la alternativa 1 del catalogo de eventos v1: M7 incluye en data los
- * datos del cliente, del conductor y del recorrido. El contenido definitivo esta
- * pendiente de confirmacion por M7; si cambia, solo se ajusta esta funcion.
+ * datos del cliente, del conductor y del recorrido. Es provisorio: la respuesta de
+ * M7 no incluye esos datos y el contenido definitivo se cierra en AE4 (catalogo,
+ * seccion 5.1); si cambia, solo se ajusta esta funcion.
  */
 export function toReceiptRequest(envelope: EventEnvelope): ValidationResult<ReceiptRequest> {
   const data: Data = envelope.data;

@@ -150,7 +150,9 @@ paths:
       tags:
         - Comprobantes (RF-8.3 / RF-8.4)
       summary: Consulta los metadatos y enlaces de descarga del comprobante
-      description: Devuelve la información detallada del comprobante emitido, su historial de entregas y los enlaces de descarga.
+      description: >-
+        Devuelve la información detallada del comprobante emitido, su historial de entregas y los enlaces de descarga.
+        Ruta de uso interno y de operación: no tiene control de acceso hasta la integración con M1 en AE4 (ver ADR-003, decisión 5).
       operationId: getReceipt
       parameters:
         - name: tripId
@@ -187,7 +189,10 @@ paths:
       tags:
         - Comprobantes (RF-8.3 / RF-8.4)
       summary: Descarga directa del archivo PDF del comprobante (RF-8.3)
-      description: "Retorna el flujo binario del archivo PDF generado, con encabezado `Content-Disposition: attachment`."
+      description: >-
+        Retorna el flujo binario del archivo PDF generado, con encabezado `Content-Disposition: attachment`.
+        Ruta de uso interno y de operación: no tiene control de acceso hasta la integración con M1 en AE4.
+        La entrega al cliente se hace con el enlace temporal (`/receipts/downloads/{token}`); ver ADR-003, decisión 5.
       operationId: downloadReceiptPdf
       parameters:
         - name: tripId

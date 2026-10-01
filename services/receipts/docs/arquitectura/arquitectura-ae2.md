@@ -117,7 +117,7 @@ erDiagram
 | --- | --- | --- |
 | Comprobante, PDF, reenvíos, bandejas | **Este servicio** (esquema `receipts`, rol `m8_receipts`) | Propio |
 | Pago confirmado | M7 | Evento `payment.confirmed` |
-| Cliente, conductor, recorrido | M1 / M6 | Llegan en el evento (provisorio, pendiente de M7); se guardan como foto inmutable |
+| Cliente, conductor, recorrido | M1 / M6 | Llegan en el evento (provisorio hasta AE4: la respuesta de M7 no los incluye); se guardan como foto inmutable |
 | Enlaces de descarga | Este servicio (Redis, efímero) | Propio; vencen solos |
 | Autorización fiscal | Autorizador fiscal (externo) | Llamada HTTP al emitir; se guarda con el comprobante. Solo se le envían identificadores e importes |
 
