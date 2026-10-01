@@ -1,65 +1,120 @@
-import express from 'express';
+import express, { type Application } from 'express';
 import { apiReference } from '@scalar/express-api-reference';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LocationController } from './controllers/location.controller.js';
-import { LocationService } from './services/location.service.js';
-import { MemoryLocationRepository } from './repositories/memory-location.repository.js';
 
-const ttlSeconds = Number(process.env.LOCATION_TTL_SECONDS ?? 60);
-export const locationService = new LocationService(new MemoryLocationRepository(), ttlSeconds);
+import { EstimateDistanceEtaUseCase } from './application/use-cases/estimate-distance-eta.usecase.js';
+import { GeocodeAddressUseCase } from './application/use-cases/geocode-address.usecase.js';
+import { SearchNearbyDriversUseCase } from './application/use-cases/search-nearby-drivers.usecase.js';
+import { UpdateLocationUseCase } from './application/use-cases/update-location.usecase.js';
+
+import { config } from './infrastructure/config/env.config.js';
+import { HttpGeocodingAdapter } from './infrastructure/geocoding/http-geocoding.adapter.js';
+import { MockGeocodingAdapter } from './infrastructure/geocoding/mock-geocoding.adapter.js';
+import { HealthController } from './infrastructure/http/controllers/health.controller.js';
+import { LocationController } from './infrastructure/http/controllers/location.controller.js';
+import { correlationMiddleware } from './infrastructure/http/middlewares/correlation.middleware.js';
+import { errorHandlerMiddleware } from './infrastructure/http/middlewares/error.middleware.js';
+import { MemoryLocationRepository } from './infrastructure/redis/memory-location.repository.js';
+import { RedisLocationRepository } from './infrastructure/redis/redis-location.repository.js';
+import type { LocationRepository } from './ports/location-repository.port.js';
+import type { GeocodingProvider } from './ports/geocoding-provider.port.js';
+import type { EventPublisher } from './ports/event-publisher.port.js';
+import type { RabbitMQConnection } from './infrastructure/rabbitmq/rabbitmq.connection.ts';
+
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectDirectory = path.resolve(moduleDirectory, '..');
 
-export const createApp = (
-  service: LocationService,
-  checkStorage: () => Promise<void> = async () => undefined
-) => {
-const controller = new LocationController(service);
-const application = express();
-application.use(express.json());
-application.use('/openapi', express.static(path.join(projectDirectory, 'openapi')));
-application.get('/scalar/standalone.js', (_req, res) => {
-  res.sendFile(
-    path.join(projectDirectory, 'node_modules', '@scalar', 'api-reference', 'dist', 'browser', 'standalone.js')
+export interface AppDependencies {
+  locationRepository?: LocationRepository;
+  geocodingProvider?: GeocodingProvider;
+  eventPublisher?: EventPublisher;
+  rabbitmqConnection?: RabbitMQConnection;
+}
+
+export const defaultMemoryRepository = new MemoryLocationRepository();
+export const locationService = defaultMemoryRepository;
+
+export const createApp = (dependencies: AppDependencies = {}): Application => {
+  const application = express();
+  application.use(express.json());
+  application.use(correlationMiddleware);
+
+  // Instanciación de Adaptadores
+  const repository: LocationRepository =
+    dependencies.locationRepository ||
+    (config.redisUrl && process.env.NODE_ENV !== 'test'
+      ? new RedisLocationRepository(config.redisUrl, config.redisKeyPrefix)
+      : defaultMemoryRepository);
+
+  const geocoder: GeocodingProvider =
+    dependencies.geocodingProvider ||
+    (config.useMockGeocoding
+      ? new MockGeocodingAdapter()
+      : new HttpGeocodingAdapter(config.geocodingProviderUrl, config.geocodingApiKey, config.geocodingTimeoutMs));
+
+  // Casos de Uso
+  const updateLocationUseCase = new UpdateLocationUseCase(repository, config.locationTtlSeconds);
+  const searchNearbyDriversUseCase = new SearchNearbyDriversUseCase(repository);
+  const geocodeAddressUseCase = new GeocodeAddressUseCase(geocoder);
+  const estimateDistanceEtaUseCase = new EstimateDistanceEtaUseCase();
+
+  // Controladores
+  const healthController = new HealthController(repository, dependencies.rabbitmqConnection);
+  const locationController = new LocationController(
+    repository,
+    updateLocationUseCase,
+    searchNearbyDriversUseCase,
+    geocodeAddressUseCase,
+    estimateDistanceEtaUseCase,
+    dependencies.eventPublisher
   );
-});
-application.get(
-  '/docs',
-  apiReference({
-    pageTitle: 'M4 - Documentacion API',
-    theme: 'saturn',
-    url: '/openapi/openapi-m4.yaml',
-    cdn: '/scalar/standalone.js'
-  })
-);
 
-application.get('/', (_req, res) => {
-  res.status(200).json({
-    service: 'm4-location-service',
-    version: '2.0.0',
-    health: '/health',
-    documentation: '/docs'
+  // Documentación OpenAPI / Scalar
+  application.use('/openapi', express.static(path.join(projectDirectory, 'openapi')));
+  application.get('/scalar/standalone.js', (_req, res) => {
+    res.sendFile(
+      path.join(projectDirectory, 'node_modules', '@scalar', 'api-reference', 'dist', 'browser', 'standalone.js')
+    );
   });
-});
+  application.get(
+    '/docs',
+    apiReference({
+      pageTitle: 'M4 - Documentacion API',
+      theme: 'saturn',
+      url: '/openapi/openapi-m4.yaml',
+      cdn: '/scalar/standalone.js'
+    })
+  );
 
-application.get('/health', async (_req, res) => {
-  try {
-    await checkStorage();
-    res.status(200).json({ status: 'ok', service: 'm4-location-service', storage: 'ok' });
-  } catch {
-    res.status(503).json({ status: 'error', service: 'm4-location-service', storage: 'unavailable' });
-  }
-});
+  application.get('/', (_req, res) => {
+    res.status(200).json({
+      service: 'm4-location-service',
+      version: '2.0.0',
+      liveness: '/health/liveness',
+      readiness: '/health/readiness',
+      documentation: '/docs'
+    });
+  });
 
-application.put('/api/v1/drivers/:driverId/location', controller.updateLocation);
-application.get('/api/v1/drivers/:driverId/location', controller.getLocation);
-application.delete('/api/v1/drivers/:driverId/location', controller.removeLocation);
-application.patch('/api/v1/drivers/:driverId/availability', controller.updateAvailability);
-application.get('/api/v1/drivers/nearby', controller.findNearby);
-application.post('/api/v1/geocode', controller.geocode);
-application.post('/api/v1/estimate', controller.estimate);
-return application;
+  // Endpoints de Salud (RNF-05)
+  application.get('/health/liveness', healthController.getLiveness);
+  application.get('/health/readiness', healthController.getReadiness);
+  application.get('/health', healthController.getReadiness); // Compatibilidad previa
+
+  // Endpoints de la API
+  application.put('/api/v1/drivers/:driverId/location', locationController.updateLocation);
+  application.get('/api/v1/drivers/:driverId/location', locationController.getLocation);
+  application.delete('/api/v1/drivers/:driverId/location', locationController.removeLocation);
+  application.patch('/api/v1/drivers/:driverId/availability', locationController.updateAvailability);
+  application.get('/api/v1/drivers/nearby', locationController.findNearby);
+  application.post('/api/v1/geocode', locationController.geocode);
+  application.post('/api/v1/estimate', locationController.estimate);
+
+  // Middleware de Manejo de Errores Global
+  application.use(errorHandlerMiddleware);
+
+  return application;
 };
 
-export const app = createApp(locationService);
+export const app = createApp();

@@ -1,17 +1,74 @@
+import { TripEventHandler } from './application/event-handlers/trip-event.handler.js';
 import { createApp } from './app.js';
-import { RedisLocationRepository } from './repositories/redis-location.repository.js';
-import { LocationService } from './services/location.service.js';
+import { config } from './infrastructure/config/env.config.js';
+import { Logger } from './infrastructure/logger/structured.logger.js';
+import { RabbitMQEventPublisher } from './infrastructure/rabbitmq/rabbitmq-event.publisher.js';
+import { RabbitMQTripEventConsumer } from './infrastructure/rabbitmq/rabbitmq-trip-event.consumer.js';
+import { RabbitMQConnection } from './infrastructure/rabbitmq/rabbitmq.connection.js';
+import { MemoryLocationRepository } from './infrastructure/redis/memory-location.repository.js';
+import { RedisEventStore } from './infrastructure/redis/redis-event-store.js';
+import { RedisLocationRepository } from './infrastructure/redis/redis-location.repository.js';
 
-const port = Number(process.env.PORT ?? 3004);
-const ttlSeconds = Number(process.env.LOCATION_TTL_SECONDS ?? 60);
-const redisUrl = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
-const repository = new RedisLocationRepository(redisUrl);
-await repository.ping();
-const app = createApp(new LocationService(repository, ttlSeconds), () => repository.ping());
+async function bootstrap() {
+  Logger.info(`Iniciando M4 - Servicio de Ubicación y Disponibilidad v2.0.0 (ENV: ${config.nodeEnv})`);
 
-app.listen(port, () => {
-  console.log(`[M4 Ubicacion y Disponibilidad] Servicio en http://localhost:${port}`);
-  console.log(`[M4] Documentacion Scalar en http://localhost:${port}/docs`);
-  console.log('[M4] La interfaz grafica se ejecuta como una aplicacion independiente');
-  console.log(`[M4] Ubicaciones temporales guardadas en Redis (${redisUrl})`);
+  // Repositorio de Ubicación Redis (o Memory fallback)
+  const locationRepository = config.redisUrl
+    ? new RedisLocationRepository(config.redisUrl, config.redisKeyPrefix)
+    : new MemoryLocationRepository();
+
+  // Almacén de Idempotencia Redis
+  const eventStore = new RedisEventStore(config.redisUrl);
+
+  // Conexión RabbitMQ
+  const rabbitmqConnection = new RabbitMQConnection(config.rabbitmqUrl);
+  await rabbitmqConnection.connect();
+
+  // Publicador y Consumidor de Eventos RabbitMQ
+  const eventPublisher = new RabbitMQEventPublisher(rabbitmqConnection);
+  const tripEventHandler = new TripEventHandler(locationRepository, eventPublisher);
+  const tripEventConsumer = new RabbitMQTripEventConsumer(
+    rabbitmqConnection,
+    tripEventHandler,
+    eventStore
+  );
+
+  // Iniciar consumidor de eventos de viaje en segundo plano
+  tripEventConsumer.startConsuming().catch((err) => {
+    Logger.error('Falla al iniciar consumidor de eventos de viaje RabbitMQ', err);
+  });
+
+  // Crear aplicación Express
+  const app = createApp({
+    locationRepository,
+    eventPublisher,
+    rabbitmqConnection
+  });
+
+  const server = app.listen(config.port, () => {
+    Logger.info(`Servidor HTTP M4 escuchando en el puerto ${config.port}`, {
+      port: config.port,
+      docs: `http://localhost:${config.port}/docs`,
+      liveness: `http://localhost:${config.port}/health/liveness`,
+      readiness: `http://localhost:${config.port}/health/readiness`
+    });
+  });
+
+  // Cierre controlado (Graceful Shutdown)
+  const shutdown = async (signal: string) => {
+    Logger.warn(`Señal ${signal} recibida. Apagando servicio M4 ordenadamente...`);
+    server.close(async () => {
+      await rabbitmqConnection.close();
+      Logger.info('Servicio M4 apagado completamente.');
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+}
+
+bootstrap().catch((error) => {
+  Logger.error('Falla fatal al iniciar la aplicación M4', error);
+  process.exit(1);
 });
