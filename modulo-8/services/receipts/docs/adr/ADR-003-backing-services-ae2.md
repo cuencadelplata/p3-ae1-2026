@@ -91,6 +91,16 @@ funcionaría, pero la primera evita regenerar el PDF en cada reentrega.
 | Tabla de enlaces en PostgreSQL | Requiere una tarea de limpieza de enlaces vencidos y carga la base con datos que duran minutos. |
 | **Token opaco en Redis con TTL** | El vencimiento lo resuelve Redis sin limpieza; un enlace se revoca borrando la clave; lo comparten todas las réplicas. |
 
+**Limitación conocida.** Se conservan `GET /api/v1/receipts/{tripId}` y
+`GET /api/v1/receipts/{tripId}/pdf`, heredadas de AE1, porque forman parte del contrato
+que usan el resto del módulo y la prueba E2E del grupo. Como el `tripId` no es secreto,
+quien lo conozca puede leer el comprobante por esas rutas: el enlace temporal protege
+la entrega al cliente, pero no reemplaza el control de acceso. Esas rutas quedan para
+uso interno y de operación; protegerlas requiere validar la identidad y el rol de quien
+consulta, que corresponde a M1 (autenticación y roles) y a la integración de AE4
+(RNF-10). El servicio no implementa una autenticación propia para no duplicar esa
+responsabilidad.
+
 Redis guarda **solo** datos efímeros. Si se cae, fallan los enlaces (503) pero la
 emisión y la consulta siguen funcionando: por eso figura como dependencia no crítica
 en `/health/ready`.
@@ -103,9 +113,12 @@ en `/health/ready`.
 * **Negativas:** tres dependencias nuevas que operar (PostgreSQL, RabbitMQ, Redis); la
   emisión por evento es eventualmente consistente (el comprobante aparece
   milisegundos después de publicado el pago); el outbox agrega hasta 1 s de demora a
-  `receipt.issued`.
-* **Pendiente:** M7 no confirmó aún el contenido de `payment.confirmed`; se implementó
-  la alternativa 1 del catálogo de forma provisoria.
+  `receipt.issued`; las rutas por `tripId` siguen sin control de acceso hasta AE4
+  (limitación de la decisión 5).
+* **Pendiente:** M7 respondió el 2026-09-30 con un modelo de pago sin importes ni datos
+  del viaje, que no alcanza para emitir el comprobante. Se mantiene la alternativa 1 del
+  catálogo de forma provisoria y el cierre queda para la integración de AE4 (catálogo,
+  sección 5.1).
 
 ## Evidencia
 

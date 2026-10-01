@@ -15,7 +15,7 @@ evidencia del estado heredado de AE1.
 | 2026-09-29 | Exchange único, convención de nombres y sobre común | Grupo M8 | Acordado |
 | 2026-09-29 | Comprobantes consume `payment.confirmed` desde su propia cola | Damián Caminos (RF-8.6) | Acordado |
 | 2026-09-29 | Referencia de descarga temporal para reenvíos | Lucas Cremaschi (RF-8.4) | Acordado |
-| — | Contenido de `payment.confirmed` | Grupo M7 | Pendiente de confirmación |
+| 2026-09-30 | Contenido de `payment.confirmed` | Grupo M7 | Respondido sin cubrir los datos del comprobante; se mantiene la alternativa 1 de forma provisoria (ver 5.1) |
 
 ## 2. Topología
 
@@ -114,7 +114,7 @@ duplicados ante reconexiones o reintentos.
 | Versión | 1 |
 | Productor | M7 — Tarifas, Pagos y Liquidaciones |
 | Consumidores | M8 — Comprobantes (`m8.receipts.payment-confirmed`) |
-| Estado | **Pendiente de confirmación por M7** |
+| Estado | **Provisorio**: M7 respondió el 2026-09-30 sin cubrir estos datos (ver "Respuesta de M7") |
 
 Efecto en M8: emite el comprobante del viaje y genera su PDF (RF-8.3).
 
@@ -156,7 +156,7 @@ Contenido propuesto de `data`:
 
 `customer`, `driver` y `trip` siguen el mismo esquema que el contrato REST de
 emisión (`POST /api/v1/receipts`). Se incluyen de forma provisoria según la
-alternativa 1 del punto abierto (abajo), hasta que M7 confirme.
+alternativa 1 del punto abierto (abajo).
 
 | Campo | Tipo | Obligatorio | Regla |
 | --- | --- | --- | --- |
@@ -178,14 +178,32 @@ que no cumple estas reglas es inválido y va a la cola de descarte sin
 reintentos.
 
 **Punto abierto.** El comprobante también muestra datos del cliente, del
-conductor y del recorrido, que no son propiedad de M7. Hasta que M7 responda,
-se contemplan dos alternativas:
+conductor y del recorrido, que no son propiedad de M7. Se contemplan dos
+alternativas:
 
 - M7 incluye esos datos en `data`, tomados del viaje que ya conoce.
 - M8 consume además `trip.completed` (M6) y emite el comprobante cuando tiene
   ambos eventos del mismo `tripId`.
 
-La decisión se registra en la sección 1 cuando se cierre.
+**Respuesta de M7 (2026-09-30).** M7 compartió su modelo de pago (`MetodoPago`):
+`pagoId`, `clienteId`, `viajeId`, `tipo`, `detalle`, `fecha` y `estado`. Sus datos
+de viaje dependen de M6. Frente a este catálogo:
+
+| Tema | Este catálogo | Modelo de M7 |
+| --- | --- | --- |
+| Importes (`fare`) | Obligatorios | No los incluye |
+| Cliente, conductor y recorrido | Obligatorios (provisorio) | Solo `clienteId` |
+| Medio de pago | `EFECTIVO`, `TARJETA`, `BILLETERA` | efectivo, tarjeta, transferencia |
+| Estado del pago | `APROBADO` | pendiente, autorizado, rechazado |
+| Sobre del mensaje (`messageId`, `correlationId`) | Obligatorio | No lo menciona |
+
+La respuesta describe el modelo interno de M7, no el evento publicado, y no
+alcanza para emitir el comprobante. Para AE2 se mantiene la alternativa 1 de
+forma provisoria: el servicio funciona y se prueba con este contrato. El cierre
+queda para la integración de AE4, por alguno de estos caminos: que M7 agregue
+importes y sobre al evento, o la alternativa 2 (consumir además `trip.completed`
+de M6). En ambos casos solo cambia la traducción del evento
+(`src/messaging/payment-confirmed.ts`), no la emisión.
 
 ### 5.2 `receipt.issued`
 
