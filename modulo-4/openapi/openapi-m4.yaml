@@ -12,7 +12,33 @@ tags:
   - name: Ubicaciones
   - name: Busqueda
   - name: Calculos
+  - name: Salud
 paths:
+  /health/liveness:
+    get:
+      tags: [Salud]
+      summary: Liveness Probe - Verificacion de salud basica (RNF-05)
+      responses:
+        '200':
+          description: Servicio M4 activo y respondiendo
+          content:
+            application/json:
+              example: { status: UP, service: m4-location-service, timestamp: "2026-09-30T21:00:00.000Z" }
+  /health/readiness:
+    get:
+      tags: [Salud]
+      summary: Readiness Probe - Verificacion de conectividad con Redis y RabbitMQ (RNF-05)
+      responses:
+        '200':
+          description: Servicio M4 y sus dependencias listas
+          content:
+            application/json:
+              example: { status: UP, service: m4-location-service, checks: { redis: connected, rabbitmq: connected } }
+        '503':
+          description: Dependencia (Redis o RabbitMQ) no disponible
+          content:
+            application/json:
+              example: { status: DOWN, service: m4-location-service, checks: { redis: disconnected, rabbitmq: connected } }
   /drivers/{driverId}/location:
     parameters:
       - $ref: '#/components/parameters/DriverId'
