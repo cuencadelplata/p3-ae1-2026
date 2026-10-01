@@ -226,6 +226,7 @@ Imagen publicada: `juanigualtieri/m8-documentos:2.0.0`. La de AE1 es `arkeoff/m8
 
 | Documento | Contenido |
 | --- | --- |
+| [Consigna AE2](docs/consigna-ae2.md) | Alcance individual, rúbrica con su evidencia y evidencias de la entrega |
 | [Arquitectura AE2](docs/arquitectura/arquitectura-ae2.md) | Componentes, propiedad de datos y secuencias |
 | [ADR-003](docs/adr/ADR-003-backing-services-ae2.md) · [ADR-004](docs/adr/ADR-004-persistencia-ae2.md) · [ADR-005](docs/adr/ADR-005-resiliencia-ae2.md) | Decisiones de AE2 con alternativas comparadas |
 | [Concurrencia e idempotencia AE2](docs/pruebas/concurrencia-idempotencia-ae2.md) | La carrera, su solución y cómo reproducirla |

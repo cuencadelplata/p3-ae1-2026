@@ -8,6 +8,7 @@
 
 | Documento | Contenido |
 | --- | --- |
+| [Consigna AE2](consigna-ae2.md) | Alcance individual comprometido, criterios de la rúbrica con su evidencia y evidencias mínimas de la entrega |
 | [Arquitectura AE2](arquitectura/arquitectura-ae2.md) | Diagrama de componentes, propiedad de datos, secuencias de emisión asincrónica y de enlace temporal, observabilidad |
 | [ADR-003: RabbitMQ y Redis](adr/ADR-003-backing-services-ae2.md) | Emisión por evento, reintentos y DLQ, bandeja de salida, idempotencia en dos capas, enlace temporal |
 | [ADR-004: persistencia](adr/ADR-004-persistencia-ae2.md) | PostgreSQL con esquema y rol propios, PDF en la base frente a almacenamiento de objetos, `UNIQUE` como árbitro |
