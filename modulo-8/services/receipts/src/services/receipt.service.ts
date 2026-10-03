@@ -9,6 +9,13 @@ import { createLogger } from '../observability/logger';
 import { buildReceiptNumber } from '../utils/identifiers';
 import { createDownloadLink, resolveDownloadLink, type DownloadLink } from './download-link.service';
 import { renderReceiptPdf } from './pdf.service';
+import {
+  acquireResendLock,
+  checkResendRateLimit,
+  getCachedReceipt,
+  invalidateReceiptCache,
+  setCachedReceipt,
+} from './resend-protection.service';
 
 const log = createLogger('receipts');
 
@@ -70,10 +77,20 @@ export async function issueReceipt(request: ReceiptRequest): Promise<IssueResult
 }
 
 export async function getReceipt(tripId: string): Promise<Receipt> {
+  // RF-8.4: 1. Lectura cacheada en Redis
+  const cached = await getCachedReceipt(tripId);
+  if (cached) {
+    return cached;
+  }
+
+  // 2. Consulta en CommunicationsDB si hubo cache miss
   const receipt = await repository.findByTripId(tripId);
   if (!receipt) {
     throw AppError.notFound('RECEIPT_NOT_FOUND', `No existe un comprobante emitido para el viaje ${tripId}`);
   }
+
+  // 3. Poblar cache en Redis con TTL
+  await setCachedReceipt(receipt);
   return receipt;
 }
 
@@ -122,42 +139,72 @@ export async function getReceiptPdfByToken(token: string): Promise<{ receipt: Re
 }
 
 /**
- * Registra un nuevo envio del comprobante ya emitido (RF-8.4).
+ * Registra un nuevo envio del comprobante ya emitido (RF-8.4 - Lucas Cremaschi).
  *
- * En AE1 el envio se simula: se deja constancia de la entrega y se devuelve el
- * enlace de descarga. En AE2 este punto pasa a publicar un evento en RabbitMQ
- * hacia el canal de notificaciones correspondiente.
+ * Integra obligatoriamente Redis para:
+ * 1. Aplicar rate limiting para evitar abusos en la solicitud de envio.
+ * 2. Bloqueo distribuido (lock) para asegurar que multiples clics en "Reenviar"
+ *    no disparen procesos paralelos concurrentes.
+ * 3. Actualizacion / invalidacion de la cache de metadatos en Redis.
+ *
+ * Persistencia final auditable en CommunicationsDB (receipts.receipt_deliveries).
  */
 export async function resendReceipt(
   tripId: string,
   channel: DeliveryChannel,
   destination?: string,
 ): Promise<{ receipt: Receipt; delivery: DeliveryRecord }> {
-  const receipt = await getReceipt(tripId);
-  const target = destination ?? receipt.customer.email;
-
-  if (!target) {
-    throw AppError.unprocessable(
-      'DELIVERY_DESTINATION_REQUIRED',
-      'El comprobante no tiene un destino registrado. Indique "destination" en el cuerpo de la solicitud.',
+  // 1. Rate limiting en Redis (RF-8.4)
+  const rateLimit = await checkResendRateLimit(tripId);
+  if (!rateLimit.allowed) {
+    throw AppError.tooManyRequests(
+      'RATE_LIMIT_EXCEEDED',
+      `Ha superado el limite maximo de solicitudes de reenvio para el viaje ${tripId}. Intente nuevamente en ${rateLimit.retryAfterSeconds} segundos.`,
+      { retryAfterSeconds: rateLimit.retryAfterSeconds },
     );
   }
 
-  const delivery: DeliveryRecord = {
-    channel,
-    destination: target,
-    sentAt: new Date().toISOString(),
-  };
+  // 2. Lock distribuido en Redis ante reenvios concurrentes (RF-8.4)
+  const lock = await acquireResendLock(tripId);
+  if (!lock.acquired) {
+    throw AppError.conflict(
+      'CONCURRENT_RESEND_IN_PROGRESS',
+      `Ya existe un reenvio en curso para el viaje ${tripId}. Evite clics simultaneos.`,
+    );
+  }
 
-  // Cada reenvio es una fila nueva: dos reenvios simultaneos no se pisan entre
-  // si, por eso ya no hace falta serializarlos.
-  await repository.addDelivery(receipt.receiptId, delivery);
-  receipt.deliveries.push(delivery);
+  try {
+    const receipt = await getReceipt(tripId);
+    const target = destination ?? receipt.customer.email;
 
-  // El destino (email, telefono o dispositivo) es un dato personal: no se registra.
-  log('info', 'reenvio registrado', { tripId: receipt.tripId, receiptNumber: receipt.receiptNumber, channel });
+    if (!target) {
+      throw AppError.unprocessable(
+        'DELIVERY_DESTINATION_REQUIRED',
+        'El comprobante no tiene un destino registrado. Indique "destination" en el cuerpo de la solicitud.',
+      );
+    }
 
-  return { receipt, delivery };
+    const delivery: DeliveryRecord = {
+      channel,
+      destination: target,
+      sentAt: new Date().toISOString(),
+    };
+
+    // Persistencia final en CommunicationsDB
+    await repository.addDelivery(receipt.receiptId, delivery);
+    receipt.deliveries.push(delivery);
+
+    // 3. Invalida la cache para que la proxima lectura refleje el nuevo reenvio
+    await invalidateReceiptCache(tripId);
+
+    // El destino (email, telefono o dispositivo) es un dato personal: no se registra en logs.
+    log('info', 'reenvio registrado', { tripId: receipt.tripId, receiptNumber: receipt.receiptNumber, channel });
+
+    return { receipt, delivery };
+  } finally {
+    // 4. Liberacion segura del lock distribuido
+    await lock.release();
+  }
 }
 
 function buildReceipt(request: ReceiptRequest): Receipt {

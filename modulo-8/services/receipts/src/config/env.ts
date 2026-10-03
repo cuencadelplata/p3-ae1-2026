@@ -111,4 +111,22 @@ export const env = {
   issuerTeam: readText('RECEIPT_ISSUER_TEAM', 'Grupo 14 - Modulo 8'),
   timezone: readText('RECEIPT_TIMEZONE', 'America/Argentina/Buenos_Aires'),
   locale: readText('RECEIPT_LOCALE', 'es-AR'),
+
+  /** RF-8.4 (Lucas Cremaschi): TTL para la cache de metadatos en Redis (segundos). */
+  receiptCacheTtlSeconds: readPositiveInt('RECEIPT_CACHE_TTL_SECONDS', 300),
+
+  /** RF-8.4: TTL del lock distribuido de reenvio en Redis (milisegundos). */
+  resendLockTtlMs: readPositiveInt('RESEND_LOCK_TTL_MS', 5000),
+
+  /** RF-8.4: Maximo de solicitudes de reenvio permitidas por ventana (rate limiting). */
+  resendRateLimitMax: readPositiveInt('RESEND_RATE_LIMIT_MAX', 3),
+
+  /** RF-8.4: Ventana de tiempo para el rate limiting de reenvios, en segundos. */
+  resendRateLimitWindowSeconds: readPositiveInt('RESEND_RATE_LIMIT_WINDOW_SECONDS', 60),
+
+  /** RF-8.4 / M1: Clave secreta para verificacion de tokens JWT de identidad M1. */
+  jwtSecret: readText('JWT_SECRET', 'clave-local-desarrollo-m1-cambiar-en-produccion'),
+
+  /** RF-8.4 / M1: Exigir obligatoriedad de autenticacion en todas las rutas (false en dev para compatibilidad con E2E heredados). */
+  authRequired: readText('AUTH_REQUIRED', 'false').toLowerCase() === 'true',
 } as const;
