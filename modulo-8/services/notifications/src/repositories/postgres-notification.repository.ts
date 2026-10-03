@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 
 import { NotificationPersistenceError } from "../notifications/notification-persistence.error";
 import type { NotificationRepository, SaveNotificationResult } from "../notifications/notification.repository";
@@ -17,12 +17,12 @@ interface NotificationRow {
   created_at: Date;
 }
 
-const notificationColumns = `
+export const notificationColumns = `
   notification_id, source_message_id, trip_id, recipient_id, event_type,
   title, message, correlation_id, occurred_at, created_at
 `;
 
-function mapRow(row: NotificationRow): LogicalNotification {
+export function mapNotificationRow(row: NotificationRow): LogicalNotification {
   return {
     notificationId: row.notification_id,
     sourceMessageId: row.source_message_id,
@@ -37,11 +37,14 @@ function mapRow(row: NotificationRow): LogicalNotification {
   };
 }
 
-export function createPostgresNotificationRepository(pool: Pool): NotificationRepository {
-  return {
-    async saveIdempotent(notification: LogicalNotification): Promise<SaveNotificationResult> {
-      try {
-        const inserted = await pool.query<NotificationRow>(
+type NotificationQueryExecutor = Pick<Pool | PoolClient, "query">;
+
+export async function saveNotificationIdempotent(
+  executor: NotificationQueryExecutor,
+  notification: LogicalNotification,
+): Promise<SaveNotificationResult> {
+  try {
+        const inserted = await executor.query<NotificationRow>(
           `INSERT INTO notifications.notifications (${notificationColumns})
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            ON CONFLICT (source_message_id, recipient_id) DO NOTHING
@@ -61,10 +64,10 @@ export function createPostgresNotificationRepository(pool: Pool): NotificationRe
         );
 
         if (inserted.rowCount === 1) {
-          return { notification: mapRow(inserted.rows[0]), created: true };
+          return { notification: mapNotificationRow(inserted.rows[0]), created: true };
         }
 
-        const existing = await pool.query<NotificationRow>(
+        const existing = await executor.query<NotificationRow>(
           `SELECT ${notificationColumns}
            FROM notifications.notifications
            WHERE source_message_id = $1 AND recipient_id = $2`,
@@ -75,13 +78,19 @@ export function createPostgresNotificationRepository(pool: Pool): NotificationRe
           throw new NotificationPersistenceError("No se encontró la notificación duplicada persistida.");
         }
 
-        return { notification: mapRow(existing.rows[0]), created: false };
+        return { notification: mapNotificationRow(existing.rows[0]), created: false };
       } catch (error) {
         if (error instanceof NotificationPersistenceError) {
           throw error;
         }
         throw new NotificationPersistenceError("No se pudo persistir la notificación.", error);
       }
+}
+
+export function createPostgresNotificationRepository(pool: Pool): NotificationRepository {
+  return {
+    saveIdempotent(notification: LogicalNotification): Promise<SaveNotificationResult> {
+      return saveNotificationIdempotent(pool, notification);
     },
   };
 }

@@ -28,6 +28,25 @@ const migrations = [
        )`,
     ],
   },
+  {
+    version: 2,
+    name: "create_notification_outbox_table",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS notifications.outbox_events (
+         message_id uuid PRIMARY KEY,
+         notification_id uuid NOT NULL REFERENCES notifications.notifications (notification_id),
+         event_type text NOT NULL CHECK (event_type = 'NotificationRequested'),
+         routing_key text NOT NULL CHECK (routing_key = 'notification.requested'),
+         correlation_id text NOT NULL,
+         version integer NOT NULL CHECK (version = 1),
+         producer text NOT NULL CHECK (producer = 'm8'),
+         payload jsonb NULL,
+         created_at timestamptz NOT NULL,
+         published_at timestamptz NULL,
+         CONSTRAINT notifications_outbox_notification_event_key UNIQUE (notification_id, event_type)
+       )`,
+    ],
+  },
 ] as const;
 
 export async function runMigrations(pool: Pool): Promise<void> {
