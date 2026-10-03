@@ -106,6 +106,37 @@ export const openApiSpec = {
           '200': { description: 'Estado de cuenta del cliente' },
           '404': { description: 'Cliente no encontrado' }
         }
+      },
+      put: {
+        summary: 'Cambiar estado de cuenta: baja (INACTIVO) o bloqueo (RF-2.5)',
+        description: 'Los clientes nunca se eliminan. Para dar de baja a un cliente se cambia su estado a INACTIVO.',
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' }, example: 'cust_823a7b9c' }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['status', 'reason'],
+                properties: {
+                  status: {
+                    type: 'string',
+                    enum: ['ACTIVO', 'INACTIVO', 'BLOQUEADO_TEMPORAL', 'BLOQUEADO_PERMANENTE', 'EN_REVISIÓN'],
+                    example: 'INACTIVO'
+                  },
+                  reason: { type: 'string', example: 'Baja solicitada por el cliente' }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          '200': { description: 'Estado de cuenta actualizado' },
+          '400': { description: 'Estado o motivo inválido' },
+          '404': { description: 'Cliente no encontrado' }
+        }
       }
     },
     '/v1/customers/{id}/trips': {

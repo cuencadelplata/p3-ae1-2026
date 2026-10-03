@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { customerService, CustomerService } from '../services/customer.service.js';
-import { CreateCustomerSchema, UpdatePreferencesSchema } from '../types/customer.js';
+import { CreateCustomerSchema, UpdatePreferencesSchema, UpdateAccountStatusSchema } from '../types/customer.js';
 
 export class CustomerController {
   private service: CustomerService;
@@ -105,6 +105,39 @@ export class CustomerController {
     }
 
     res.status(200).json(statusInfo);
+  };
+
+  /**
+   * PUT /v1/customers/:id/status - Cambiar Estado de Cuenta (RF-2.5)
+   * Reemplaza al borrado: la baja de un cliente se registra con status INACTIVO.
+   */
+  updateAccountStatus = async (req: Request, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const parseResult = UpdateAccountStatusSchema.safeParse(req.body);
+
+    if (!parseResult.success) {
+      res.status(400).json({
+        error: 'ValidationError',
+        message: 'El estado enviado no es válido',
+        details: parseResult.error.errors
+      });
+      return;
+    }
+
+    try {
+      const updated = await this.service.updateAccountStatus(id, parseResult.data);
+      if (!updated) {
+        res.status(404).json({
+          error: 'CustomerNotFound',
+          message: 'No se encontró un cliente con el ID proporcionado para actualizar'
+        });
+        return;
+      }
+
+      res.status(200).json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: 'InternalServerError', message: error.message });
+    }
   };
 
   /**

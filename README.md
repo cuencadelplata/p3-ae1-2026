@@ -7,7 +7,7 @@ Implementación del módulo M2 para los requisitos RF-2.1, RF-2.3 y RF-2.5:
 
 - Perfil de cliente: alta y consulta de datos personales y preferencias.
 - Historial de viajes: consulta del listado de viajes realizados consumiendo la API de M6 sin acceso directo a su base de datos.
-- Estado de cuenta: consulta y control de la condición operativa del perfil (activo/bloqueado).
+- Estado de cuenta: consulta y control de la condición operativa del perfil (activo/inactivo/bloqueado). Los clientes nunca se eliminan: la baja se registra con el estado `INACTIVO`.
 
 ---
 
@@ -99,9 +99,16 @@ Respuesta exitosa: `200 OK` con las preferencias y estado actualizados.
 ### Consultar estado de cuenta
 `GET /v1/customers/:id/status`
 
-Implementa RF-2.5. Devuelve la condición operativa del perfil (activo, bloqueado temporal, bloqueado permanente o en revisión) junto al motivo registrado.
+Implementa RF-2.5. Devuelve la condición operativa del perfil (activo, inactivo, bloqueado temporal, bloqueado permanente o en revisión) junto al motivo registrado.
 
 Respuesta exitosa: `200 OK`.
+
+### Cambiar estado de cuenta (baja / bloqueo)
+`PUT /v1/customers/:id/status`
+
+Implementa RF-2.5. Cambia el estado del cliente y registra el motivo. **No existe borrado de clientes**: la baja se hace enviando `{ "status": "INACTIVO", "reason": "..." }`. La base de datos rechaza cualquier `DELETE` o `TRUNCATE` sobre las tablas de clientes mediante triggers.
+
+Respuesta exitosa: `200 OK` con el estado actualizado. `400` si el estado o el motivo son inválidos, `404` si el cliente no existe.
 
 ### Consultar historial de viajes
 `GET /v1/customers/:id/trips`

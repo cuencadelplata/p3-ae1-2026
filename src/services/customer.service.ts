@@ -3,6 +3,7 @@ import type {
   CreateCustomerDTO,
   CustomerProfile,
   UpdatePreferencesDTO,
+  UpdateAccountStatusDTO,
   AccountStatusResponse,
   CustomerTripsResponse
 } from '../types/customer.js';
@@ -59,6 +60,13 @@ export class CustomerService {
     if (!exists) return null;
 
     return await this.repository.findAccountStatus(customerId);
+  }
+
+  /**
+   * RF-2.5: Cambiar estado de cuenta (bajas y bloqueos). Los clientes nunca se borran.
+   */
+  async updateAccountStatus(customerId: string, dto: UpdateAccountStatusDTO): Promise<AccountStatusResponse | null> {
+    return await this.repository.updateAccountStatus(customerId, dto);
   }
 
   /**

@@ -55,4 +55,47 @@ describe('Endpoints REST - Módulo 2 Clientes (Supertest)', () => {
     expect(res.body.trips).toBeInstanceOf(Array);
     expect(res.body.tripsCount).toBeGreaterThanOrEqual(1);
   });
+
+  it('PUT /v1/customers/:id/status debe dar de baja al cliente con estado INACTIVO', async () => {
+    vi.spyOn(customerRepository, 'updateAccountStatus').mockResolvedValueOnce({
+      customerId: 'cust_823a7b9c',
+      status: 'INACTIVO',
+      reason: 'Baja solicitada por el cliente',
+      updatedAt: '2026-10-03T12:00:00Z'
+    });
+
+    const res = await request(app)
+      .put('/v1/customers/cust_823a7b9c/status')
+      .send({ status: 'INACTIVO', reason: 'Baja solicitada por el cliente' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('INACTIVO');
+    expect(res.body.reason).toBe('Baja solicitada por el cliente');
+  });
+
+  it('PUT /v1/customers/:id/status debe rechazar un estado inválido con 400', async () => {
+    const res = await request(app)
+      .put('/v1/customers/cust_823a7b9c/status')
+      .send({ status: 'ELIMINADO', reason: 'Borrado' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('ValidationError');
+  });
+
+  it('PUT /v1/customers/:id/status debe retornar 404 si el cliente no existe', async () => {
+    vi.spyOn(customerRepository, 'updateAccountStatus').mockResolvedValueOnce(null);
+
+    const res = await request(app)
+      .put('/v1/customers/cust_inexistente/status')
+      .send({ status: 'INACTIVO', reason: 'Baja solicitada por el cliente' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('CustomerNotFound');
+  });
+
+  it('DELETE /v1/customers/:id no debe existir (los clientes no se borran)', async () => {
+    const res = await request(app).delete('/v1/customers/cust_823a7b9c');
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('NotFound');
+  });
 });

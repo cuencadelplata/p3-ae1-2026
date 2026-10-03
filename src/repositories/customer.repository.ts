@@ -1,5 +1,5 @@
 import { pool } from '../config/db.js';
-import type { CustomerProfile, Preferences, AccountStatusResponse } from '../types/customer.js';
+import type { CustomerProfile, Preferences, AccountStatusResponse, UpdateAccountStatusDTO } from '../types/customer.js';
 
 export class CustomerRepository {
   /**
@@ -133,6 +133,51 @@ export class CustomerRepository {
       reason: row.reason,
       updatedAt: row.updated_at
     };
+  }
+
+  /**
+   * Actualiza el estado de cuenta (Soft Delete: la baja es status = INACTIVO).
+   * Mantiene sincronizados CustomerProfile y AccountStatus en una única transacción.
+   */
+  async updateAccountStatus(customerId: string, dto: UpdateAccountStatusDTO): Promise<AccountStatusResponse | null> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const profileResult = await client.query(
+        `UPDATE customers.CustomerProfile
+         SET status = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE customer_id = $2;`,
+        [dto.status, customerId]
+      );
+      if (profileResult.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+
+      const { rows } = await client.query(
+        `INSERT INTO customers.AccountStatus (customer_id, status, reason, updated_at)
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+         ON CONFLICT (customer_id) DO UPDATE
+           SET status = EXCLUDED.status, reason = EXCLUDED.reason, updated_at = EXCLUDED.updated_at
+         RETURNING customer_id, status, reason, updated_at;`,
+        [customerId, dto.status, dto.reason]
+      );
+
+      await client.query('COMMIT');
+      const row = rows[0];
+      return {
+        customerId: row.customer_id,
+        status: row.status,
+        reason: row.reason,
+        updatedAt: row.updated_at
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /**

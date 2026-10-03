@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CreateCustomerSchema, UpdatePreferencesSchema } from '../../src/types/customer.js';
+import { CreateCustomerSchema, UpdatePreferencesSchema, UpdateAccountStatusSchema } from '../../src/types/customer.js';
 
 describe('Validaciones de Dominio (Zod Schemas)', () => {
   it('debe validar y aceptar un cliente con datos válidos', () => {
@@ -68,5 +68,20 @@ describe('Validaciones de Dominio (Zod Schemas)', () => {
       expect(result.data.preferences.preferredVehicleType).toBe('auto');
       expect(result.data.preferences.notificationChannel).toBe('email');
     }
+  });
+
+  it('debe aceptar INACTIVO como estado de baja con un motivo', () => {
+    const result = UpdateAccountStatusSchema.safeParse({ status: 'INACTIVO', reason: 'Baja solicitada por el cliente' });
+    expect(result.success).toBe(true);
+  });
+
+  it('debe rechazar un estado de cuenta inexistente (ej. ELIMINADO)', () => {
+    const result = UpdateAccountStatusSchema.safeParse({ status: 'ELIMINADO', reason: 'Borrado' });
+    expect(result.success).toBe(false);
+  });
+
+  it('debe rechazar un cambio de estado sin motivo', () => {
+    const result = UpdateAccountStatusSchema.safeParse({ status: 'INACTIVO' });
+    expect(result.success).toBe(false);
   });
 });

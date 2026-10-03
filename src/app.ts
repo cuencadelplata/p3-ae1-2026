@@ -12,7 +12,7 @@ app.use(cors({
     'http://localhost:5173', // Vite dev server
     'http://localhost:80',   // nginx local
   ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'OPTIONS'], // Sin DELETE: los clientes solo se dan de baja por estado
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json());
@@ -51,6 +51,7 @@ app.get('/v1/customers', customerController.listCustomers);
 app.get('/v1/customers/:id', customerController.getCustomerById);
 app.put('/v1/customers/:id', customerController.updateCustomerPreferences);
 app.get('/v1/customers/:id/status', customerController.getAccountStatus);
+app.put('/v1/customers/:id/status', customerController.updateAccountStatus);
 app.get('/v1/customers/:id/trips', customerController.getCustomerTrips);
 
 // 4. Manejador 404 para rutas no reconocidas

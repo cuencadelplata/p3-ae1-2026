@@ -2,6 +2,7 @@ export type VehicleType = 'auto' | 'moto';
 export type NotificationChannel = 'email' | 'push';
 export type AccountStatusEnum =
   | 'ACTIVO'
+  | 'INACTIVO'
   | 'BLOQUEADO_TEMPORAL'
   | 'BLOQUEADO_PERMANENTE'
   | 'EN_REVISIÓN';

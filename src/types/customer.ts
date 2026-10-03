@@ -7,9 +7,10 @@ export type VehicleType = z.infer<typeof VehicleTypeSchema>;
 export const NotificationChannelSchema = z.enum(['email', 'push']);
 export type NotificationChannel = z.infer<typeof NotificationChannelSchema>;
 
-// Estados de cuenta posibles
+// Estados de cuenta posibles (INACTIVO = baja del cliente; nunca se borra físicamente)
 export const AccountStatusEnumSchema = z.enum([
   'ACTIVO',
+  'INACTIVO',
   'BLOQUEADO_TEMPORAL',
   'BLOQUEADO_PERMANENTE',
   'EN_REVISIÓN'
@@ -42,6 +43,13 @@ export const UpdatePreferencesSchema = z.object({
   preferences: PreferencesSchema
 });
 export type UpdatePreferencesDTO = z.infer<typeof UpdatePreferencesSchema>;
+
+// Esquema para cambiar el estado de cuenta (PUT /v1/customers/:id/status)
+export const UpdateAccountStatusSchema = z.object({
+  status: AccountStatusEnumSchema,
+  reason: z.string().min(3, 'El motivo debe tener al menos 3 caracteres')
+});
+export type UpdateAccountStatusDTO = z.infer<typeof UpdateAccountStatusSchema>;
 
 // Interfaces del Dominio
 export interface CustomerProfile {
