@@ -5,7 +5,7 @@
 | RF8.1 | Notificaciones de viaje | Implementado | Notifications / HTTP | Tests del servicio y E2E. Push mock; delivery, persistencia e idempotencia pendientes. |
 | RF8.2 | QR temporal | Implementado | QR / HTTP | Tests del servicio y E2E. Estado en memoria; almacenamiento distribuido pendiente. |
 | RF8.3 | Comprobante PDF | Implementado (AE2 2.1.0) | Receipts / HTTP y RabbitMQ | Emisión por `POST` y por `payment.confirmed`; PostgreSQL; `receipt.issued`; enlace temporal en Redis; autorización ante un servicio externo simulado con timeout y circuit breaker. |
-| RF8.4 | Reenvío de comprobante | Implementado dentro de Receipts | Receipts / HTTP | Reenvío simulado; delivery independiente pendiente. |
+| RF8.4 | Reenvío de comprobante | Implementado (AE2 2.1.0 - Lucas Cremaschi) | Receipts / HTTP | Reenvío en `POST /receipts/:tripId/resend` y `POST /resend`; integración M1 (autenticación JWT y permisos de cliente/conductor/operador); Redis obligatorio para caché de metadatos con TTL, bloqueo distribuido (*lock*) ante reenvíos concurrentes y *rate limiting*; persistencia en `CommunicationsDB`; contrato OpenAPI en `rf84-receipt-resend.yaml`; suite de tests unitarios (`rf84-resend.test.ts`). |
 | RF8.5 | Tickets de soporte | Implementado | Support / HTTP | Tickets en memoria y tests de controller/modelo. |
 | RF8.6 | Integración asíncrona | Base/código AE1 existente | Support / RabbitMQ | Exchange, cola, bindings, publish/consume validados. Faltan eventId, inbox, dedupe, retry, NACK/DLQ. |
 | RF8.7 | Entrega de notificaciones | Pendiente AE2 | — | `PushProvider` mock de RF8.1 no constituye servicio final de delivery. |
