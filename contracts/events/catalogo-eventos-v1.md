@@ -3,7 +3,9 @@
 Contrato asíncrono acordado para la AE2. Define la topología de RabbitMQ, el
 sobre común de los mensajes y los eventos que produce o consume el servicio de
 comprobantes (RF-8.3). Incluye además el contrato REST interno acordado con
-Receipts Delivery (RF-8.4), porque forma parte de la misma integración.
+Receipts Delivery (RF-8.4), porque forma parte de la misma integración. También
+registra objetivos internos comunes de M8 que RF8.6 centralizará durante la
+integración, sin afirmar que ya estén implementados fuera de RF8.3.
 
 Reemplaza a `rabbitmq-ae1.md` para la AE2. Ese archivo se conserva como
 evidencia del estado heredado de AE1.
@@ -72,6 +74,11 @@ todos los eventos; `data` es propio de cada tipo.
 Propiedades AMQP de publicación: `content_type: application/json`,
 `delivery_mode: 2` (persistente) y `message_id` igual a `messageId`.
 
+`eventType` identifica el contrato semántico del evento. La routing key AMQP
+define su enrutamiento. No son valores equivalentes ni intercambiables: por
+ejemplo, `PaymentConfirmed` se enruta como `payment.confirmed` y
+`ReceiptIssued` como `receipt.issued`.
+
 ### Política de versionado
 
 - Agregar campos opcionales a `data` no cambia la versión.
@@ -83,26 +90,36 @@ Propiedades AMQP de publicación: `content_type: application/json`,
 
 1. **Validación del sobre.** Un mensaje que no respeta el sobre o el esquema de
    su evento se rechaza sin reintento y va directo a la cola de descarte.
-2. **Idempotencia.** Antes de aplicar efectos se registra `messageId` en una
-   tabla propia del consumidor con restricción de unicidad. Si ya existía, el
-   mensaje se confirma sin volver a procesarse.
-3. **ACK manual.** Se confirma el mensaje solo después de que el efecto quedó
-   persistido.
-4. **Reintentos.** Ante un fallo transitorio (base de datos o almacenamiento no
-   disponibles) el mensaje se republica en la cola `<cola>.retry` con el
-   encabezado `x-retry-count` incrementado y una espera fija
-   (`CONSUMER_RETRY_DELAY_MS`, 5 s por defecto); el original se confirma.
-   Se reintenta hasta 3 veces (`CONSUMER_MAX_RETRIES`). Superado ese límite, el
-   mensaje va a la cola de descarte.
-   Si lo que falla es una dependencia (base de datos o un servicio externo caído, o
-   con su circuit breaker abierto), el mensaje se republica **sin incrementar**
-   `x-retry-count`: espera a que la dependencia vuelva y no llega a la cola de
-   descarte por una caída que no es culpa suya.
+2. **Idempotencia e Inbox.** Estado actual: RF8.3 posee un Inbox propio que
+   deduplica sus mensajes. Objetivo común AE2: el Inbox técnico tendrá
+   `UNIQUE(consumerId, messageId)`, para que el mismo `messageId` pueda ser
+   procesado legítimamente por consumidores distintos. Si ya existe para ese
+   consumidor, el mensaje se confirma sin volver a procesarse. Cada RF mantiene
+   además su idempotencia de negocio.
+3. **Marcado y ACK manual.** El Inbox se marca como procesado sólo después de
+   que el handler finaliza correctamente y el efecto queda persistido; recién
+   entonces se realiza el ACK.
+4. **Reintentos.** Política común objetivo AE2: ante un fallo reintentable el
+   mensaje se republica en `<cola>.retry` con `x-retry-count` incrementado y una
+   espera fija (`CONSUMER_RETRY_DELAY_MS`, 5 s por defecto). El máximo es tres
+   intentos (`CONSUMER_MAX_RETRIES`) y luego el mensaje va a la DLQ.
+   Estado actual: RF8.3 conserva un camino particular para
+   `dependency-unavailable` que no incrementa el contador. Esa ruta debe
+   alinearse a la política común durante la extracción de infraestructura hacia
+   RF8.6; no se afirma que ya cumpla el máximo común en todos sus caminos.
 5. **Cola de descarte.** Los mensajes quedan disponibles para inspección y
    reprocesamiento manual sin bloquear la cola principal.
 
 RabbitMQ garantiza entrega al menos una vez: la regla 2 es la que evita efectos
 duplicados ante reconexiones o reintentos.
+
+### Ownership técnico común (objetivo AE2)
+
+RF8.6 será el owner técnico del transporte RabbitMQ compartido: envelope,
+exchanges, queues y bindings, Inbox, ACK/NACK, retry, DLQ, routing y adaptadores
+externos. Cada RF mantiene sus validaciones, persistencia, lógica e
+idempotencia de negocio. RF8.3 conserva mientras tanto su implementación actual
+como estado heredado que se integrará sin degradar sus decisiones funcionales.
 
 ## 5. Eventos
 
@@ -245,6 +262,20 @@ recepción. En consecuencia:
 
 `data` no incluye datos personales ni enlaces de descarga: quien necesite el
 documento lo solicita por contrato (sección 6).
+
+### 5.3 `notification.requested` (contrato interno objetivo AE2)
+
+| Atributo | Valor |
+| --- | --- |
+| `eventType` | `NotificationRequested` |
+| Routing key | `notification.requested` |
+| Productor | RF8.1 — Notificaciones |
+| Consumidor | RF8.7 — Entrega de notificaciones |
+| Estado | **CONTRATO INTERNO OBJETIVO AE2**; pendiente de implementación y de acuerdo de campos |
+
+Su finalidad es solicitar la entrega de una notificación lógica ya creada por
+RF8.1. El catálogo no fija aún un `data` definitivo para este flujo: deberá
+cerrarse entre RF8.1 y RF8.7 antes de implementarlo.
 
 ## 6. Contrato REST interno con Receipts Delivery
 
