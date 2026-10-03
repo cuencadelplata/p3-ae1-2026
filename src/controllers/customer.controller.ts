@@ -35,7 +35,8 @@ export class CustomerController {
         });
         return;
       }
-      res.status(500).json({ error: 'InternalServerError', message: error.message });
+      // RF-2.1: el resto de los errores (ej. DB caída) los resuelve el middleware central
+      throw error;
     }
   };
 

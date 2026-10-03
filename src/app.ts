@@ -3,6 +3,8 @@ import cors from 'cors';
 import { apiReference } from '@scalar/express-api-reference';
 import { openApiSpec } from './docs/openapi.js';
 import { customerController } from './controllers/customer.controller.js';
+import { asyncHandler } from './middlewares/async-handler.js';
+import { errorHandler } from './middlewares/error-handler.js';
 
 export const app = express();
 
@@ -46,10 +48,11 @@ app.get('/health', (_req, res) => {
 });
 
 // 3. Rutas de la API REST (/v1/customers...)
-app.post('/v1/customers', customerController.createCustomer);
-app.get('/v1/customers', customerController.listCustomers);
-app.get('/v1/customers/:id', customerController.getCustomerById);
-app.put('/v1/customers/:id', customerController.updateCustomerPreferences);
+// RF-2.1: asyncHandler envía los errores async al middleware central (Express 4 no lo hace solo)
+app.post('/v1/customers', asyncHandler(customerController.createCustomer));
+app.get('/v1/customers', asyncHandler(customerController.listCustomers));
+app.get('/v1/customers/:id', asyncHandler(customerController.getCustomerById));
+app.put('/v1/customers/:id', asyncHandler(customerController.updateCustomerPreferences));
 app.get('/v1/customers/:id/status', customerController.getAccountStatus);
 app.put('/v1/customers/:id/status', customerController.updateAccountStatus);
 app.get('/v1/customers/:id/trips', customerController.getCustomerTrips);
@@ -61,3 +64,6 @@ app.use((_req, res) => {
     message: 'La ruta solicitada no existe en el microservicio de clientes'
   });
 });
+
+// 5. Middleware central de errores (debe registrarse al final)
+app.use(errorHandler);
