@@ -9,6 +9,29 @@ export const EVENT_TYPES = [ // los eventos que puede recibir la notificacion
 
 export type EventType = (typeof EVENT_TYPES)[number];
 
+export const TRIP_NOTIFICATION_EVENT_TYPES = [
+  "TripRequested",
+  "TripAssigned",
+  "DriverArrived",
+  "TripStarted",
+  "TripCancelled",
+  "TripCompleted",
+] as const;
+
+export type TripNotificationEventType = (typeof TRIP_NOTIFICATION_EVENT_TYPES)[number];
+
+export const HTTP_EVENT_TYPE_TO_TRIP_NOTIFICATION_EVENT_TYPE: Record<
+  EventType,
+  TripNotificationEventType
+> = {
+  TRIP_REQUESTED: "TripRequested",
+  DRIVER_ASSIGNED: "TripAssigned",
+  DRIVER_ARRIVED: "DriverArrived",
+  TRIP_STARTED: "TripStarted",
+  TRIP_CANCELLED: "TripCancelled",
+  TRIP_COMPLETED: "TripCompleted",
+};
+
 export const NOTIFICATION_CHANNELS = ["PUSH"] as const; // los canales por los que se puede enviar la notificacion
 
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
@@ -38,6 +61,27 @@ export interface Notification {//tipos de la notificacion que devuelve el servid
   channels: NotificationChannel[];
   message: string;
   status: (typeof NOTIFICATION_STATUSES)[number];
+  createdAt: string;
+}
+
+export interface NormalizedTripNotificationEvent {
+  messageId: string;
+  eventType: TripNotificationEventType;
+  tripId: string;
+  recipientId: string;
+  correlationId: string;
+  occurredAt: string;
+}
+
+export interface LogicalNotification {
+  notificationId: string;
+  sourceMessageId: string;
+  tripId: string;
+  recipientId: string;
+  eventType: TripNotificationEventType;
+  title: string;
+  message: string;
+  correlationId: string;
   createdAt: string;
 }
 
