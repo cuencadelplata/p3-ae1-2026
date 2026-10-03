@@ -17,7 +17,7 @@ export function handleTripNotificationEvent(
     return validation;
   }
 
-  const { messageId, eventType, tripId, recipientId, correlationId } = validation.data;
+  const { messageId, eventType, tripId, recipientId, correlationId, occurredAt } = validation.data;
   const { title, message } = getTripNotificationContent(eventType);
 
   return {
@@ -31,6 +31,7 @@ export function handleTripNotificationEvent(
       title,
       message,
       correlationId,
+      occurredAt,
       createdAt: new Date().toISOString(),
     },
   };
