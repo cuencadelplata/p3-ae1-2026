@@ -1,0 +1,87 @@
+import type { Pool } from "pg";
+
+import { NotificationPersistenceError } from "../notifications/notification-persistence.error";
+import type { NotificationRepository, SaveNotificationResult } from "../notifications/notification.repository";
+import type { LogicalNotification, TripNotificationEventType } from "../notifications/notification.types";
+
+interface NotificationRow {
+  notification_id: string;
+  source_message_id: string;
+  trip_id: string;
+  recipient_id: string;
+  event_type: TripNotificationEventType;
+  title: string;
+  message: string;
+  correlation_id: string;
+  occurred_at: Date;
+  created_at: Date;
+}
+
+const notificationColumns = `
+  notification_id, source_message_id, trip_id, recipient_id, event_type,
+  title, message, correlation_id, occurred_at, created_at
+`;
+
+function mapRow(row: NotificationRow): LogicalNotification {
+  return {
+    notificationId: row.notification_id,
+    sourceMessageId: row.source_message_id,
+    tripId: row.trip_id,
+    recipientId: row.recipient_id,
+    eventType: row.event_type,
+    title: row.title,
+    message: row.message,
+    correlationId: row.correlation_id,
+    occurredAt: row.occurred_at.toISOString(),
+    createdAt: row.created_at.toISOString(),
+  };
+}
+
+export function createPostgresNotificationRepository(pool: Pool): NotificationRepository {
+  return {
+    async saveIdempotent(notification: LogicalNotification): Promise<SaveNotificationResult> {
+      try {
+        const inserted = await pool.query<NotificationRow>(
+          `INSERT INTO notifications.notifications (${notificationColumns})
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT (source_message_id, recipient_id) DO NOTHING
+           RETURNING ${notificationColumns}`,
+          [
+            notification.notificationId,
+            notification.sourceMessageId,
+            notification.tripId,
+            notification.recipientId,
+            notification.eventType,
+            notification.title,
+            notification.message,
+            notification.correlationId,
+            notification.occurredAt,
+            notification.createdAt,
+          ],
+        );
+
+        if (inserted.rowCount === 1) {
+          return { notification: mapRow(inserted.rows[0]), created: true };
+        }
+
+        const existing = await pool.query<NotificationRow>(
+          `SELECT ${notificationColumns}
+           FROM notifications.notifications
+           WHERE source_message_id = $1 AND recipient_id = $2`,
+          [notification.sourceMessageId, notification.recipientId],
+        );
+
+        if (existing.rowCount !== 1) {
+          throw new NotificationPersistenceError("No se encontró la notificación duplicada persistida.");
+        }
+
+        return { notification: mapRow(existing.rows[0]), created: false };
+      } catch (error) {
+        if (error instanceof NotificationPersistenceError) {
+          throw error;
+        }
+        throw new NotificationPersistenceError("No se pudo persistir la notificación.", error);
+      }
+    },
+  };
+}

@@ -82,6 +82,7 @@ export interface LogicalNotification {
   title: string;
   message: string;
   correlationId: string;
+  occurredAt: string;
   createdAt: string;
 }
 
