@@ -2,6 +2,7 @@ import type { RequestHandler, Response } from 'express';
 
 import { env } from '../config/env';
 import { AppError } from '../errors/app-error';
+import { authorizeReceiptPermission } from '../middlewares/auth.middleware';
 import type { Receipt } from '../models/receipt';
 import * as receiptService from '../services/receipt.service';
 import { isValidTripId } from '../utils/identifiers';
@@ -55,6 +56,7 @@ export const getReceipt: RequestHandler = async (req, res, next) => {
   try {
     const tripId = readTripId(req.params['tripId']);
     const receipt = await receiptService.getReceipt(tripId);
+    authorizeReceiptPermission(receipt, req.usuarioAutenticado);
     res.status(200).json({ data: toResponse(receipt) });
   } catch (error) {
     next(error);
@@ -73,6 +75,7 @@ export const downloadReceipt: RequestHandler = async (req, res, next) => {
   try {
     const tripId = readTripId(req.params['tripId']);
     const { receipt, pdf } = await receiptService.getReceiptPdf(tripId);
+    authorizeReceiptPermission(receipt, req.usuarioAutenticado);
     sendPdf(res, receipt, pdf);
   } catch (error) {
     next(error);
@@ -109,8 +112,8 @@ export const getDeliveryReference: RequestHandler = async (req, res, next) => {
 
 /**
  * POST /receipts/:tripId/resend
- * Vuelve a solicitar el envio del comprobante (RF-8.4). En AE1 la entrega se
- * simula y se registra en el historial del comprobante.
+ * Vuelve a solicitar el envio del comprobante (RF-8.4 - Lucas Cremaschi).
+ * Aplica validacion de permisos M1, bloqueo distribuido y rate limiting en Redis.
  */
 export const resendReceipt: RequestHandler = async (req, res, next) => {
   try {
@@ -124,6 +127,41 @@ export const resendReceipt: RequestHandler = async (req, res, next) => {
         validation.errors,
       );
     }
+
+    const receiptCurrent = await receiptService.getReceipt(tripId);
+    authorizeReceiptPermission(receiptCurrent, req.usuarioAutenticado);
+
+    const { receipt, delivery } = await receiptService.resendReceipt(
+      tripId,
+      validation.value.channel,
+      validation.value.destination,
+    );
+
+    res.status(202).json({ data: { ...toResponse(receipt), lastDelivery: delivery } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /receipts/resend
+ * Endpoint de reenvio que recibe tripId en el cuerpo JSON (RF-8.4 - Lucas Cremaschi).
+ */
+export const resendReceiptWithBody: RequestHandler = async (req, res, next) => {
+  try {
+    const tripId = readTripId(req.body?.tripId ?? req.params['tripId']);
+
+    const validation = validateResendRequest(req.body);
+    if (!validation.ok) {
+      throw AppError.unprocessable(
+        'VALIDATION_ERROR',
+        'La solicitud de reenvio contiene datos invalidos',
+        validation.errors,
+      );
+    }
+
+    const receiptCurrent = await receiptService.getReceipt(tripId);
+    authorizeReceiptPermission(receiptCurrent, req.usuarioAutenticado);
 
     const { receipt, delivery } = await receiptService.resendReceipt(
       tripId,
