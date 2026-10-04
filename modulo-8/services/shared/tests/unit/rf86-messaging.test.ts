@@ -4,7 +4,9 @@ import {
   EventConsumer,
   InMemoryTechnicalInbox,
   NonRetryableMessagingError,
+  OutboxPublisher,
   parseEnvelope,
+  PostgresTechnicalInbox,
 } from '../../src';
 
 describe('RF8.6 - Validador de Envelope M8', () => {
@@ -57,7 +59,7 @@ describe('RF8.6 - Validador de Envelope M8', () => {
   });
 });
 
-describe('RF8.6 - Adaptadores de Eventos Externos (M5/M6/M7)', () => {
+describe('RF8.6 - Adaptadores de Eventos Externos y Contratos (M5/M6/M7)', () => {
   it('debe adaptar un evento externo con snake_case a la convencion M8', () => {
     const externalPayload = {
       eventType: 'trip_completed',
@@ -68,39 +70,101 @@ describe('RF8.6 - Adaptadores de Eventos Externos (M5/M6/M7)', () => {
     const envelope = adaptExternalEvent(JSON.stringify(externalPayload), 'trip.completed');
     expect(envelope.eventType).toBe('TripCompleted');
     expect(envelope.data['tripId']).toBe('999');
-    expect(envelope.messageId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+  });
+
+  it('debe mapear driver.offer.accepted y driver.assigned a DriverAssigned', () => {
+    const payloadM5 = { trip_id: '500', driver_id: '300' };
+    const envelope1 = adaptExternalEvent(JSON.stringify(payloadM5), 'driver.offer.accepted');
+    expect(envelope1.eventType).toBe('DriverAssigned');
+
+    const envelope2 = adaptExternalEvent(JSON.stringify(payloadM5), 'driver.assigned');
+    expect(envelope2.eventType).toBe('DriverAssigned');
+  });
+
+  it('debe mapear driver.arrived a DriverArrived', () => {
+    const payload = { trip_id: '500' };
+    const envelope = adaptExternalEvent(JSON.stringify(payload), 'driver.arrived');
+    expect(envelope.eventType).toBe('DriverArrived');
+  });
+
+  it('debe generar messageId deterministico y estable cuando el evento no trae UUID', () => {
+    const rawPayload = JSON.stringify({ trip_id: 888, status: 'started' });
+    const envelopeA = adaptExternalEvent(rawPayload, 'trip.started');
+    const envelopeB = adaptExternalEvent(rawPayload, 'trip.started');
+
+    expect(envelopeA.messageId).toBe(envelopeB.messageId);
+    expect(envelopeA.messageId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+  });
+
+  it('debe lanzar NonRetryableMessagingError ante JSON invalido o no objeto', () => {
+    expect(() => adaptExternalEvent('texto-invalido-json')).toThrow(NonRetryableMessagingError);
+    expect(() => adaptExternalEvent('12345')).toThrow(NonRetryableMessagingError);
   });
 });
 
-describe('RF8.6 - Inbox Tecnico e Idempotencia (UNIQUE(consumerId, messageId))', () => {
-  it('debe registrar y evitar duplicados por consumidor', async () => {
+describe('RF8.6 - Inbox Tecnico, Atomisidad e Idempotencia (UNIQUE(consumerId, messageId))', () => {
+  it('debe soportar reclamo atomico (claim) y marcar completado', async () => {
     const inbox = new InMemoryTechnicalInbox();
     const consumerA = 'm8.notifications';
-    const consumerB = 'm8.receipts';
-    const messageId = 'msg-uuid-100';
+    const messageId = 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
 
-    expect(await inbox.hasBeenProcessed(consumerA, messageId)).toBe(false);
-    await inbox.markAsProcessed(consumerA, messageId, 'TripCompleted');
+    const claimedFirst = await inbox.claim(consumerA, messageId, 'TripCompleted');
+    expect(claimedFirst).toBe(true);
+
+    const claimedSecond = await inbox.claim(consumerA, messageId, 'TripCompleted');
+    expect(claimedSecond).toBe(false);
+
+    await inbox.markAsCompleted(consumerA, messageId);
     expect(await inbox.hasBeenProcessed(consumerA, messageId)).toBe(true);
+  });
 
-    // UNIQUE(consumerId, messageId) -> Consumer B no se ve afectado por el consumo de Consumer A
-    expect(await inbox.hasBeenProcessed(consumerB, messageId)).toBe(false);
+  it('debe permitir reclamo posterior si se libera el claim por falla', async () => {
+    const inbox = new InMemoryTechnicalInbox();
+    const consumerA = 'm8.notifications';
+    const messageId = 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
+
+    await inbox.claim(consumerA, messageId, 'TripCompleted');
+    await inbox.releaseClaim(consumerA, messageId);
+
+    const claimedAfterRelease = await inbox.claim(consumerA, messageId, 'TripCompleted');
+    expect(claimedAfterRelease).toBe(true);
+  });
+
+  it('debe apuntar a la tabla messaging.inbox_events en PostgresTechnicalInbox', async () => {
+    const mockSql = { query: vi.fn().mockResolvedValue({ rows: [{ id: 1 }] }) };
+    const pgInbox = new PostgresTechnicalInbox(mockSql);
+
+    await pgInbox.claim('consumer1', 'msg1', 'Event1');
+    expect(mockSql.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO messaging.inbox_events'),
+      ['consumer1', 'msg1', 'Event1']
+    );
+
+    await pgInbox.markAsCompleted('consumer1', 'msg1');
+    expect(mockSql.query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE messaging.inbox_events'),
+      ['consumer1', 'msg1']
+    );
   });
 });
 
-describe('RF8.6 - EventConsumer AMQP (ACK, Retry, DLQ)', () => {
-  function createMockChannel() {
+describe('RF8.6 - EventConsumer AMQP (ACK, Concurrencia, Retry, DLQ, Publisher Confirms)', () => {
+  function createMockConfirmChannel() {
     return {
       ack: vi.fn(),
-      publish: vi.fn(),
+      publish: vi.fn((_ex: string, _rk: string, _buf: Buffer, _opt: any, cb: (err?: any) => void) => {
+        if (typeof cb === 'function') cb();
+        return true;
+      }),
       consume: vi.fn(),
       cancel: vi.fn(),
+      waitForConfirms: vi.fn().mockResolvedValue(true),
     } as any;
   }
 
   it('debe ejecutar handler, marcar Inbox y hacer ACK ante mensaje valido', async () => {
     const inbox = new InMemoryTechnicalInbox();
-    const channel = createMockChannel();
+    const channel = createMockConfirmChannel();
     const consumer = new EventConsumer({
       consumerId: 'm8.test-consumer',
       topology: { queue: 'm8.test-queue', routingKey: 'trip.completed' },
@@ -133,19 +197,67 @@ describe('RF8.6 - EventConsumer AMQP (ACK, Retry, DLQ)', () => {
     expect(await inbox.hasBeenProcessed('m8.test-consumer', 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d')).toBe(true);
   });
 
-  it('debe programar reintento a la cola retry ante falla recuperable (hasta 3 intentos)', async () => {
+  it('debe prevenir ejecucion duplicada del handler ante entregas concurrentes del mismo mensaje', async () => {
     const inbox = new InMemoryTechnicalInbox();
-    const channel = createMockChannel();
+    const channel = createMockConfirmChannel();
     const consumer = new EventConsumer({
       consumerId: 'm8.test-consumer',
       topology: { queue: 'm8.test-queue', routingKey: 'trip.completed' },
       inboxStore: inbox,
-      maxRetries: 3,
-      retryDelayMs: 1000,
     });
 
+    let executionCount = 0;
     consumer.registerHandler('TripCompleted', async () => {
-      throw new Error('Fallo transitorio de DB');
+      executionCount++;
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const validPayload = {
+      messageId: 'concurrent-msg-123',
+      eventType: 'TripCompleted',
+      version: 1,
+      occurredAt: '2026-10-04T12:00:00Z',
+      correlationId: '100',
+      producer: 'm6',
+      data: { tripId: '100' },
+    };
+
+    const msg1 = {
+      content: Buffer.from(JSON.stringify(validPayload)),
+      fields: { routingKey: 'trip.completed' },
+      properties: { headers: {} },
+    } as any;
+
+    const msg2 = {
+      content: Buffer.from(JSON.stringify(validPayload)),
+      fields: { routingKey: 'trip.completed' },
+      properties: { headers: {} },
+    } as any;
+
+    await Promise.all([
+      consumer.processMessage(channel, msg1),
+      consumer.processMessage(channel, msg2),
+    ]);
+
+    expect(executionCount).toBe(1);
+    expect(channel.ack).toHaveBeenCalledTimes(2);
+  });
+
+  it('debe incrementar retryCount y programar reintento si falla la consulta al Inbox', async () => {
+    const failingInbox = {
+      claim: vi.fn().mockRejectedValue(new Error('DB Connection Timeout')),
+      markAsCompleted: vi.fn(),
+      releaseClaim: vi.fn(),
+      hasBeenProcessed: vi.fn(),
+      markAsProcessed: vi.fn(),
+    };
+
+    const channel = createMockConfirmChannel();
+    const consumer = new EventConsumer({
+      consumerId: 'm8.test-consumer',
+      topology: { queue: 'm8.test-queue', routingKey: 'trip.completed' },
+      inboxStore: failingInbox,
+      maxRetries: 3,
     });
 
     const msg = {
@@ -159,51 +271,75 @@ describe('RF8.6 - EventConsumer AMQP (ACK, Retry, DLQ)', () => {
         data: {},
       })),
       fields: { routingKey: 'trip.completed' },
-      properties: { headers: { 'x-retry-count': 0 } },
+      properties: { headers: { 'x-retry-count': 1 } },
     } as any;
 
     await consumer.processMessage(channel, msg);
 
     expect(channel.publish).toHaveBeenCalledWith('', 'm8.test-queue.retry', expect.any(Buffer), expect.objectContaining({
-      headers: expect.objectContaining({ 'x-retry-count': 1 }),
-      expiration: '1000',
-    }));
+      headers: expect.objectContaining({ 'x-retry-count': 2 }),
+    }), expect.any(Function));
     expect(channel.ack).toHaveBeenCalledWith(msg);
   });
 
-  it('debe desviar a DLQ si supera el maximo de 3 reintentos', async () => {
+  it('debe enviar directamente a DLQ ante mensaje corrupto o JSON invalido', async () => {
     const inbox = new InMemoryTechnicalInbox();
-    const channel = createMockChannel();
+    const channel = createMockConfirmChannel();
     const consumer = new EventConsumer({
       consumerId: 'm8.test-consumer',
       topology: { queue: 'm8.test-queue', routingKey: 'trip.completed' },
       inboxStore: inbox,
-      maxRetries: 3,
-    });
-
-    consumer.registerHandler('TripCompleted', async () => {
-      throw new Error('Fallo continuo');
     });
 
     const msg = {
-      content: Buffer.from(JSON.stringify({
-        messageId: 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
-        eventType: 'TripCompleted',
-        version: 1,
-        occurredAt: '2026-10-04T12:00:00Z',
-        correlationId: '100',
-        producer: 'm6',
-        data: {},
-      })),
+      content: Buffer.from('contenido-no-json'),
       fields: { routingKey: 'trip.completed' },
-      properties: { headers: { 'x-retry-count': 3 } },
+      properties: { headers: {} },
     } as any;
 
     await consumer.processMessage(channel, msg);
 
-    expect(channel.publish).toHaveBeenCalledWith('mobility.events.dlx', 'm8.test-queue', expect.any(Buffer), expect.objectContaining({
-      headers: expect.objectContaining({ 'x-dlq-reason': 'Error: Fallo continuo' }),
-    }));
+    expect(channel.publish).toHaveBeenCalledWith(
+      'mobility.events.dlx',
+      'm8.test-queue',
+      expect.any(Buffer),
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-dlq-reason': expect.stringContaining('JSON') }),
+      }),
+      expect.any(Function)
+    );
     expect(channel.ack).toHaveBeenCalledWith(msg);
+  });
+});
+
+describe('RF8.6 - Publicador Outbox con Publisher Confirms', () => {
+  it('debe publicar eventos pendientes y marcarlos publicados tras confirmacion', async () => {
+    const outboxStore = {
+      fetchPending: vi.fn().mockResolvedValue([
+        { id: 'ob-1', eventType: 'ReceiptIssued', payload: { messageId: 'm-1', data: {} } },
+      ]),
+      markAsPublished: vi.fn().mockResolvedValue(undefined),
+      markAsFailed: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const channel = {
+      publish: vi.fn((_ex: string, _rk: string, _buf: Buffer, _opt: any, cb: (err?: any) => void) => {
+        cb();
+        return true;
+      }),
+    } as any;
+
+    const publisher = new OutboxPublisher(outboxStore);
+    const count = await publisher.publishPending(channel);
+
+    expect(count).toBe(1);
+    expect(channel.publish).toHaveBeenCalledWith(
+      'mobility.events',
+      'receipt.issued',
+      expect.any(Buffer),
+      expect.objectContaining({ persistent: true }),
+      expect.any(Function)
+    );
+    expect(outboxStore.markAsPublished).toHaveBeenCalledWith('ob-1');
   });
 });

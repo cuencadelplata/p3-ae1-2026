@@ -9,8 +9,8 @@ export const DLX_EXCHANGE = 'mobility.events.dlx';
  */
 export const EVENT_TYPE_TO_ROUTING_KEY: Record<string, string> = {
   TripRequested: 'trip.requested',
-  TripAssigned: 'trip.assigned',
-  DriverArrived: 'trip.driver-arrived',
+  DriverAssigned: 'driver.assigned',
+  DriverArrived: 'driver.arrived',
   TripStarted: 'trip.started',
   TripCancelled: 'trip.cancelled',
   TripCompleted: 'trip.completed',
@@ -20,12 +20,16 @@ export const EVENT_TYPE_TO_ROUTING_KEY: Record<string, string> = {
 };
 
 /** Mapeo inverso de routingKey AMQP a eventType. */
-export const ROUTING_KEY_TO_EVENT_TYPE: Record<string, string> = Object.entries(
-  EVENT_TYPE_TO_ROUTING_KEY
-).reduce((acc, [eventType, routingKey]) => {
-  acc[routingKey] = eventType;
-  return acc;
-}, {} as Record<string, string>);
+export const ROUTING_KEY_TO_EVENT_TYPE: Record<string, string> = {
+  ...Object.entries(EVENT_TYPE_TO_ROUTING_KEY).reduce((acc, [eventType, routingKey]) => {
+    acc[routingKey] = eventType;
+    return acc;
+  }, {} as Record<string, string>),
+  'driver.offer.accepted': 'DriverAssigned',
+  'trip.assigned': 'DriverAssigned',
+  'trip.driver-arrived': 'DriverArrived',
+};
+
 
 export interface QueueTopologyOptions {
   exchange?: string;
