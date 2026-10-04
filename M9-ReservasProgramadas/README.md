@@ -230,6 +230,27 @@ Consecuencias actuales:
 - no se comparten datos entre varias réplicas de M9;
 - el reclamo de una reserva sigue siendo atómico dentro de una única instancia.
 
+## Base AE2: PostgreSQL y Prisma
+
+La infraestructura inicial de AE2 agrega PostgreSQL 17 con volumen persistente y el
+modelo Prisma en `prisma/schema.prisma`. El servicio todavía utiliza el repositorio en
+memoria; esta preparación no cambia el comportamiento de AE1 mientras se implementa y
+prueba el adaptador PostgreSQL.
+
+Desde la raíz, preparar las variables locales y levantar la base:
+
+```bash
+Copy-Item M9-ReservasProgramadas/.env.example M9-ReservasProgramadas/.env
+docker compose --env-file M9-ReservasProgramadas/.env -f M9-ReservasProgramadas/docker-compose.yml up -d postgres
+npm run db:validate
+npm run db:generate
+npm run db:migrate -- --name init
+```
+
+Los mismos scripts `db:validate`, `db:generate`, `db:migrate` y `db:studio` están
+disponibles dentro de `M9-ReservasProgramadas/`. La conexión por defecto es local y
+solo para desarrollo. `npm run local:clean` también elimina el volumen de PostgreSQL.
+
 ## Pruebas
 
 ### Verificaciones del código
