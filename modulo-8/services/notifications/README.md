@@ -52,6 +52,25 @@ Para pruebas PostgreSQL se requiere `NOTIFICATIONS_TEST_DATABASE_URL`.
 La factory AE2 recibe `databaseUrl` o un `Pool` ya creado. Las migraciones se
 ejecutan con `initialize()`; no hay efectos colaterales al importar modulos.
 
+## Docker Compose y CommunicationsDB
+
+En runtime Docker Compose construye `NOTIFICATIONS_DATABASE_URL` con el rol
+propio `m8_notifications` y el password local configurable mediante
+`NOTIFICATIONS_DB_PASSWORD`.
+
+El contenedor `postgres` ejecuta `infra/postgres/init/03-notifications.sh` al
+inicializar un volumen vacio. Ese script prepara rol, schema y permisos, pero no
+crea tablas funcionales. Las tablas `notifications.notifications`,
+`notifications.outbox_events` y `notifications.schema_migrations` las crea
+RF8.1 con `runMigrations(pool)` durante `initialize()`.
+
+Si el volumen `m8-postgres` ya existia antes de agregar el init script, preparar
+el rol manualmente sin borrar datos:
+
+```powershell
+docker compose exec postgres sh /docker-entrypoint-initdb.d/03-notifications.sh
+```
+
 Usa `PORT` (3000 por defecto); Compose publica `3101`. Endpoints HTTP AE1:
 `GET /health` y `POST /notifications`. El contrato canonico esta en
 `../../openapi/notifications.openapi.yaml`.
