@@ -3,7 +3,9 @@
 Contrato asíncrono acordado para la AE2. Define la topología de RabbitMQ, el
 sobre común de los mensajes y los eventos que produce o consume el servicio de
 comprobantes (RF-8.3). Incluye además el contrato REST interno acordado con
-Receipts Delivery (RF-8.4), porque forma parte de la misma integración.
+Receipts Delivery (RF-8.4), porque forma parte de la misma integración. También
+registra objetivos internos comunes de M8 que RF8.6 centralizará durante la
+integración, sin afirmar que ya estén implementados fuera de RF8.3.
 
 Reemplaza a `rabbitmq-ae1.md` para la AE2. Ese archivo se conserva como
 evidencia del estado heredado de AE1.
@@ -16,6 +18,8 @@ evidencia del estado heredado de AE1.
 | 2026-09-29 | Comprobantes consume `payment.confirmed` desde su propia cola | Damián Caminos (RF-8.6) | Acordado |
 | 2026-09-29 | Referencia de descarga temporal para reenvíos | Lucas Cremaschi (RF-8.4) | Acordado |
 | 2026-09-30 | Contenido de `payment.confirmed` | Grupo M7 | Respondido sin cubrir los datos del comprobante; se mantiene la alternativa 1 de forma provisoria (ver 5.1) |
+| 2026-10-04 | Congelar contrato de entrada RF8.6 → RF8.1 (6 eventos de viaje, sobre, deduplicación, queue/bindings) y Outbox RF8.1 → RF8.7 | Damián Caminos (RF-8.6) / Invaldi (M8) | **CONGELADO Y CONFIRMADO** |
+
 
 ## 2. Topología
 
@@ -72,6 +76,11 @@ todos los eventos; `data` es propio de cada tipo.
 Propiedades AMQP de publicación: `content_type: application/json`,
 `delivery_mode: 2` (persistente) y `message_id` igual a `messageId`.
 
+`eventType` identifica el contrato semántico del evento. La routing key AMQP
+define su enrutamiento. No son valores equivalentes ni intercambiables: por
+ejemplo, `PaymentConfirmed` se enruta como `payment.confirmed` y
+`ReceiptIssued` como `receipt.issued`.
+
 ### Política de versionado
 
 - Agregar campos opcionales a `data` no cambia la versión.
@@ -83,26 +92,36 @@ Propiedades AMQP de publicación: `content_type: application/json`,
 
 1. **Validación del sobre.** Un mensaje que no respeta el sobre o el esquema de
    su evento se rechaza sin reintento y va directo a la cola de descarte.
-2. **Idempotencia.** Antes de aplicar efectos se registra `messageId` en una
-   tabla propia del consumidor con restricción de unicidad. Si ya existía, el
-   mensaje se confirma sin volver a procesarse.
-3. **ACK manual.** Se confirma el mensaje solo después de que el efecto quedó
-   persistido.
-4. **Reintentos.** Ante un fallo transitorio (base de datos o almacenamiento no
-   disponibles) el mensaje se republica en la cola `<cola>.retry` con el
-   encabezado `x-retry-count` incrementado y una espera fija
-   (`CONSUMER_RETRY_DELAY_MS`, 5 s por defecto); el original se confirma.
-   Se reintenta hasta 3 veces (`CONSUMER_MAX_RETRIES`). Superado ese límite, el
-   mensaje va a la cola de descarte.
-   Si lo que falla es una dependencia (base de datos o un servicio externo caído, o
-   con su circuit breaker abierto), el mensaje se republica **sin incrementar**
-   `x-retry-count`: espera a que la dependencia vuelva y no llega a la cola de
-   descarte por una caída que no es culpa suya.
+2. **Idempotencia e Inbox.** Estado actual: RF8.3 posee un Inbox propio que
+   deduplica sus mensajes. Objetivo común AE2: el Inbox técnico tendrá
+   `UNIQUE(consumerId, messageId)`, para que el mismo `messageId` pueda ser
+   procesado legítimamente por consumidores distintos. Si ya existe para ese
+   consumidor, el mensaje se confirma sin volver a procesarse. Cada RF mantiene
+   además su idempotencia de negocio.
+3. **Marcado y ACK manual.** El Inbox se marca como procesado sólo después de
+   que el handler finaliza correctamente y el efecto queda persistido; recién
+   entonces se realiza el ACK.
+4. **Reintentos.** Política común objetivo AE2: ante un fallo reintentable el
+   mensaje se republica en `<cola>.retry` con `x-retry-count` incrementado y una
+   espera fija (`CONSUMER_RETRY_DELAY_MS`, 5 s por defecto). El máximo es tres
+   intentos (`CONSUMER_MAX_RETRIES`) y luego el mensaje va a la DLQ.
+   Estado actual: RF8.3 conserva un camino particular para
+   `dependency-unavailable` que no incrementa el contador. Esa ruta debe
+   alinearse a la política común durante la extracción de infraestructura hacia
+   RF8.6; no se afirma que ya cumpla el máximo común en todos sus caminos.
 5. **Cola de descarte.** Los mensajes quedan disponibles para inspección y
    reprocesamiento manual sin bloquear la cola principal.
 
 RabbitMQ garantiza entrega al menos una vez: la regla 2 es la que evita efectos
 duplicados ante reconexiones o reintentos.
+
+### Ownership técnico común (objetivo AE2)
+
+RF8.6 será el owner técnico del transporte RabbitMQ compartido: envelope,
+exchanges, queues y bindings, Inbox, ACK/NACK, retry, DLQ, routing y adaptadores
+externos. Cada RF mantiene sus validaciones, persistencia, lógica e
+idempotencia de negocio. RF8.3 conserva mientras tanto su implementación actual
+como estado heredado que se integrará sin degradar sus decisiones funcionales.
 
 ## 5. Eventos
 
@@ -245,6 +264,133 @@ recepción. En consecuencia:
 
 `data` no incluye datos personales ni enlaces de descarga: quien necesite el
 documento lo solicita por contrato (sección 6).
+
+### 5.3 `notification.requested` (Outbox RF8.1 → RF8.7)
+
+| Atributo | Valor |
+| --- | --- |
+| `eventType` | `NotificationRequested` |
+| Routing key | `notification.requested` |
+| Productor | RF8.1 — Notificaciones (`m8-notifications`) |
+| Consumidor | RF8.7 — Entrega de notificaciones (`m8.delivery.notification-requested`) |
+| Estado | **CONTRATO INTERNO CONGELADO Y CONFIRMADO** |
+
+Su finalidad es solicitar la entrega de una notificación lógica ya creada por RF8.1. Se emite vía el patrón Transactional Outbox (`notifications.outbox_deliveries`) y es publicado por RF8.6 en RabbitMQ (`mobility.events`).
+
+**Estructura del mensaje:**
+
+```json
+{
+  "messageId": "7c9e1d2a-8b3f-4e5c-9d0a-1f2e3d4c5b6a",
+  "eventType": "NotificationRequested",
+  "version": 1,
+  "occurredAt": "2026-10-05T18:42:12.500Z",
+  "correlationId": "trip-2026-000123",
+  "producer": "m8-notifications",
+  "data": {
+    "notificationId": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+    "tripId": "trip-2026-000123",
+    "recipientId": "usr-0091",
+    "eventType": "TRIP_STARTED",
+    "channel": "PUSH",
+    "message": "Tu viaje ha comenzado.",
+    "createdAt": "2026-10-05T18:42:12.000Z"
+  }
+}
+```
+
+| Campo | Tipo | Obligatorio | Regla |
+| --- | --- | --- | --- |
+| `notificationId` | string (UUID v4) | Sí | ID de la notificación lógica creada en RF8.1. |
+| `tripId` | string | Sí | ID del viaje asociado. |
+| `recipientId` | string | Sí | Destinatario del mensaje (cliente o conductor). |
+| `eventType` | enum | Sí | Evento de viaje en notificaciones (`TRIP_REQUESTED`, `DRIVER_ASSIGNED`, etc.). |
+| `channel` | enum | Sí | Canal de entrega (`PUSH`). |
+| `message` | string | Sí | Mensaje formateado listo para ser enviado por el proveedor de entrega. |
+| `createdAt` | string (ISO 8601) | Sí | Timestamp de creación de la notificación lógica. |
+
+**Publicación y marcado de `published_at`:**
+1. El registro se guarda en la tabla `outbox_deliveries` en la misma transacción DB que crea la notificación.
+2. El worker de Outbox Relay (RF8.6) consulta registros con `published_at IS NULL ORDER BY created_at ASC` aplicando bloqueo `FOR UPDATE SKIP LOCKED`.
+3. RF8.6 publica el mensaje en `mobility.events` con routing key `notification.requested`.
+4. Únicamente **después** de recibir la confirmación (Publisher Confirm ACK) de RabbitMQ, el worker marca `published_at = NOW()` en la base de datos.
+5. Si RabbitMQ o la DB caen, el mensaje se reintenta conservando el mismo `messageId`, delegando la deduplicación al Inbox de RF8.7 (`UNIQUE(consumer_id, message_id)`).
+
+---
+
+### 5.4 Contrato de Entrada RF8.6 → RF8.1 (Eventos de Viaje)
+
+| Atributo | Valor |
+| --- | --- |
+| Routing keys | `trip.requested`, `driver.assigned`, `driver.arrived`, `trip.started`, `trip.cancelled`, `trip.completed` |
+| Productor | M6 (Viajes) / M5 (Despacho) |
+| Consumidor | RF8.6 (Consumer de RF8.1: `m8.notifications.trip-events`) |
+| Estado | **CONTRATO INTERNO CONGELADO Y CONFIRMADO** |
+
+#### 1. Sobre del mensaje (`mobility.events`)
+
+```json
+{
+  "messageId": "9f1c7b2e-4d3a-4c8f-9b21-6e0a5c7d4812",
+  "eventType": "TripStarted",
+  "version": 1,
+  "occurredAt": "2026-10-05T18:42:11.000Z",
+  "correlationId": "trip-2026-000123",
+  "producer": "m6-viajes",
+  "data": {
+    "tripId": "trip-2026-000123",
+    "recipientId": "usr-0091",
+    "details": {}
+  }
+}
+```
+
+* `messageId`: UUID v4 obligatorio, clave de deduplicación.
+* `eventType`: Nombre del evento en PascalCase.
+* `correlationId`: Debe coincidir con `data.tripId`.
+* `occurredAt`: ISO 8601 UTC.
+* `data.tripId`: ID único del viaje.
+* `data.recipientId`: ID del destinatario de la notificación (cliente o conductor).
+
+#### 2. Mapeo de los 6 eventos de viaje
+
+| `eventType` AMQP | Routing Key AMQP | `eventType` RF8.1 | Mensaje Generado por Defecto | Destinatario |
+| --- | --- | --- | --- | --- |
+| `TripRequested` | `trip.requested` | `TRIP_REQUESTED` | "Tu solicitud de viaje fue recibida." | Cliente |
+| `DriverAssigned` | `driver.assigned` | `DRIVER_ASSIGNED` | "Se asignó un conductor a tu viaje." | Cliente |
+| `DriverArrived` | `driver.arrived` | `DRIVER_ARRIVED` | "Tu conductor ha llegado al punto de encuentro." | Cliente |
+| `TripStarted` | `trip.started` | `TRIP_STARTED` | "Tu viaje ha comenzado." | Cliente |
+| `TripCancelled` | `trip.cancelled` | `TRIP_CANCELLED` | "Tu viaje fue cancelado." | Cliente / Conductor |
+| `TripCompleted` | `trip.completed` | `TRIP_COMPLETED` | "Tu viaje ha finalizado." | Cliente |
+
+#### 3. Topología de Queue, Bindings y DLX
+
+* **Exchange Principal**: `mobility.events` (topic, durable).
+* **Exchange DLX**: `mobility.events.dlx` (topic, durable).
+* **Cola Principal Consumer**: `m8.notifications.trip-events` (durable).
+  * Argumentos: `x-dead-letter-exchange: mobility.events.dlx`, `x-dead-letter-routing-key: m8.notifications.trip-events`.
+* **Cola de Reintentos**: `m8.notifications.trip-events.retry` (durable, sin consumidor).
+  * Argumentos: `x-message-ttl: 5000` (5s), `x-dead-letter-exchange: mobility.events`.
+* **Cola DLQ**: `m8.notifications.trip-events.dlq` (durable).
+  * Binding en `mobility.events.dlx` con routing key `m8.notifications.trip-events`.
+* **Bindings en `mobility.events`**:
+  * `trip.requested`
+  * `driver.assigned` (y `trip.driver-assigned`)
+  * `driver.arrived` (y `trip.driver-arrived`)
+  * `trip.started`
+  * `trip.cancelled`
+  * `trip.completed`
+
+#### 4. Tratamiento de Resultados de Procesamiento en RF8.1
+
+| Resultado | Criterio / Causa | Acción en DB / Consumer | Respuesta AMQP |
+| --- | --- | --- | --- |
+| **Nuevo (Éxito)** | Registro inédito de `(consumer_id, message_id)` | Inserta en Inbox, crea la notificación lógica y la entrada en Outbox en 1 transacción DB. | `ACK` manual |
+| **Duplicado Idempotente** | Violación de `UNIQUE(consumer_id, message_id)` en Inbox | Se ignora la regeneración de la notificación. | `ACK` manual inmediato |
+| **Inválido / Esquema Erróneo** | Falta `messageId`, `tripId`, `recipientId` o `eventType` desconocido | No ingresa a la DB ni al Outbox. Se descarta. | `NACK` (`requeue=false`) → DLQ |
+| **Fallo DB / Transitorio** | Pérdida temporal de conexión a PostgreSQL / Timeout | Reencola a `m8.notifications.trip-events.retry` incrementando `x-retry-count`. Si es >= 3 reintentos, va a la DLQ. | `NACK` con reencolado / Retry queue |
+
+
 
 ## 6. Contrato REST interno con Receipts Delivery
 

@@ -13,18 +13,66 @@ Las etiquetas son estrictas: **CONFIRMADO** tiene evidencia en código, OpenAPI 
 - Los contratos HTTP canónicos vigentes continúan en openapi/.
 - Este documento no crea endpoints, schemas ni infraestructura.
 
-## 3. Principios de integración
+## 3. Decisiones internas M8 congeladas (objetivo AE2)
 
-Los siguientes principios están **CONFIRMADOS** por el alcance y arquitectura de M8:
+Estas decisiones describen el objetivo común de M8. No reemplazan el estado
+actual de cada RF: RF8.3 ya posee implementación AE2 propia que se conservará
+hasta que la integración común se realice de forma mínima y explícita.
 
-1. Cada módulo es dueño exclusivo de sus datos.
-2. M8 no consulta directamente tablas, repositorios ni bases de otros módulos.
-3. La integración intermodular se realiza por REST/OpenAPI o RabbitMQ/eventos.
-4. Un contrato externo no depende de una estructura interna de base de datos.
-5. Un cambio interno no rompe consumidores mientras conserve su contrato.
-6. Operaciones sensibles a duplicados requieren idempotencia.
-7. Requests y eventos deben ser trazables.
-8. M6 conserva el ciclo de vida del viaje; M8 no ejecuta transiciones de viaje.
+### Aplicación e infraestructura
+
+- La entrega final tendrá una única aplicación/contenedor de M8; los siete RF
+  conservarán responsabilidades internas separadas.
+- M8 utilizará una CommunicationsDB física con ownership lógico —de
+  preferencia schema por RF—, una instancia Redis compartida cuando exista una
+  necesidad real y un RabbitMQ compartido.
+- Redis es infraestructura interna para TTL, estado efímero, locks o datos
+  temporales; no es una interfaz de integración entre módulos.
+- Ningún RF de M8 consulta tablas, repositorios ni bases de otros módulos.
+  La integración externa se realiza por REST/OpenAPI documentado o RabbitMQ.
+- M6 conserva el lifecycle del viaje; M8 no ejecuta transiciones de viaje.
+
+### Transporte y envelope
+
+- RF8.6 es dueño técnico del transporte RabbitMQ: conexión, exchanges, queues,
+  bindings, envelope, validación, Inbox, ACK/NACK, retry, DLQ, routing y
+  adaptadores. Cada RF conserva su lógica, persistencia e idempotencia de
+  negocio.
+- El exchange común es `mobility.events` y el DLX es `mobility.events.dlx`.
+- El envelope interno M8 usa `messageId`, `eventType`, `version`,
+  `occurredAt`, `correlationId`, `producer` y `data`. Para flujos de viaje,
+  la convención de esta AE2 es `correlationId = tripId`.
+- `eventType` identifica el contrato semántico; la routing key AMQP define el
+  enrutamiento. Por ejemplo, `PaymentConfirmed` se enruta como
+  `payment.confirmed`, y `NotificationRequested` como
+  `notification.requested`.
+
+### Idempotencia, retry y delivery
+
+- El Inbox técnico objetivo tiene `UNIQUE(consumerId, messageId)`: el mismo
+  mensaje puede ser procesado legítimamente por consumidores diferentes. Se
+  marca procesado sólo después de que el handler termina correctamente;
+  después se realiza el ACK.
+- Cada RF conserva además su idempotencia de negocio. Los índices concretos se
+  definen con su implementación.
+- La política común objetivo es un máximo de tres intentos y luego DLQ.
+  RF8.3 mantiene por ahora su Inbox propio y una ruta particular para
+  `dependency-unavailable`; ambos aspectos se alinearán al extraer la
+  infraestructura compartida hacia RF8.6, sin falsear su estado actual.
+- RF8.1 genera la notificación lógica y RF8.7 realiza la entrega. El flujo
+  interno objetivo es `RF8.1 → NotificationRequested → RF8.7`; los campos del
+  payload de delivery se cerrarán al implementarlo.
+
+### Health y alcance
+
+El objetivo de health común es `GET /health/live`, `GET /health/ready` y
+`GET /health` como alias de ready, con estados `ok`, `degraded` y
+`unavailable`. Receipts ya posee una base de health que se integrará
+posteriormente al health global.
+
+RF8.1–RF8.6 aparecen en la consigna general original. RF8.7 fue incorporado
+posteriormente por definición confirmada del profesor para Sprint 2 / AE2 y
+forma parte confirmada del alcance actual; no es opcional.
 
 ## 4. Ownership de datos
 
@@ -45,7 +93,7 @@ Los siguientes principios están **CONFIRMADOS** por el alcance y arquitectura d
 | Ticket | M8 Support | Sí | Sí | API M8 | CONFIRMADO | viajeId es el contexto externo actual. |
 | Notificación | M8 Notifications | Sí | Sí | API/contrato interno M8 | CONFIRMADO | Delivery final pendiente. |
 | Device token PUSH | No determinado | Sí, para RF8.7 | Posiblemente | Contrato futuro | PENDIENTE DE ACUERDO | No hay owner evidenciado. |
-| Estado entrega PUSH | M8 RF8.7 futuro | Sí | Sí | Contrato interno M8 | PROPUESTA M8 | No implementado en AE1. |
+| Estado entrega PUSH | M8 RF8.7 | Sí | Sí | Contrato interno M8 | PROPUESTA M8 | No implementado en AE1. |
 
 ## 5. Convenciones transversales pendientes
 
@@ -135,11 +183,12 @@ M9 tiene contratos de reservas programadas y un stub M5. No se encontró integra
 
 | Relación | Necesidad conceptual | Estado |
 | --- | --- | --- |
-| RF8.6 Event Consumer → RF8.1 Notifications | eventId, tipo, correlación, viaje, destinatario y contexto | PENDIENTE DE ACUERDO INTERNO |
+| RF8.6 Event Consumer → RF8.1 Notifications | Envelope común con `messageId`, 6 eventos de viaje, correlación, `tripId`, `recipientId`, queue `m8.notifications.trip-events`, deduplicación Inbox | **CONGELADO Y CONFIRMADO** (Ver catálogo v1 sección 5.4) |
 | RF8.6 Event Consumer → RF8.3 Receipts | Snapshot suficiente sin consultas a DB ajena | PENDIENTE DE ACUERDO INTERNO |
-| RF8.1 Notifications → RF8.7 Delivery | notificationId, destinatario, canal, contenido/template/variables, correlación e idempotencia | PROPUESTA M8; servicio inexistente |
+| RF8.1 Notifications → RF8.7 Delivery | `NotificationRequested` via Outbox Relay (`outbox_deliveries`) publicado por RF8.6 tras `published_at` | **CONGELADO Y CONFIRMADO** (Ver catálogo v1 sección 5.3) |
 
-Para RF8.1→RF8.7 se consideran RabbitMQ, HTTP o puerto interno. RabbitMQ desacopla y tolera retries; HTTP simplifica una primera interacción síncrona; un puerto interno evita fijar transporte prematuramente. La elección queda **PENDIENTE DE ACUERDO INTERNO**. PENDING, SENT y FAILED son **PROPUESTA M8**, no enums congelados.
+RF8.1 genera la notificación lógica y persiste la orden de entrega en su Outbox. RF8.6 procesa la cola de Outbox, publica en RabbitMQ (`notification.requested`) y marca `published_at = NOW()` al recibir confirmación. RF8.7 es el responsable final del proveedor real/sandbox, reintentos e idempotencia de delivery.
+
 
 ## 15. HTTP / OpenAPI
 
@@ -149,25 +198,18 @@ Para RF8.1→RF8.7 se consideran RabbitMQ, HTTP o puerto interno. RabbitMQ desac
 
 ## 16. RabbitMQ / eventos
 
-Estado AE1 **CONFIRMADO como implementación local**, no como contrato intermodular AE2: exchange topic durable viajes_exchange, cola durable m8_async_events, bindings viaje.# y ticket.#, y prefetch(1).
+Como evidencia histórica, AE1 utilizó `viajes_exchange`, `m8_async_events`,
+bindings `viaje.#` y `ticket.#`. No constituyen el contrato interno AE2.
 
-Son **PENDIENTES DE ACUERDO**: exchange(s), naming, routing keys, colas, durabilidad, publisher confirms, ACK/NACK, requeue, retry, backoff, DLQ, TTL, ordering, deduplicación y poison messages.
+El contrato interno M8 congelado para AE2 es el del catálogo de eventos:
+`mobility.events`, `mobility.events.dlx`, envelope con `messageId`,
+`eventType`, `version`, `occurredAt`, `correlationId`, `producer` y `data`, y
+retry objetivo de tres intentos seguido de DLQ. RF8.6 será su owner técnico.
 
-### Envelope propuesto por M8
-
-~~~json
-{
-  "eventId": "...",
-  "eventType": "...",
-  "eventVersion": 1,
-  "occurredAt": "...",
-  "correlationId": "...",
-  "producer": "...",
-  "payload": {}
-}
-~~~
-
-Es **PROPUESTA M8**, no schema definitivo. eventId identifica y ayuda a deduplicar; eventType selecciona contrato; eventVersion permite evolución; occurredAt preserva el momento; correlationId enlaza la operación; producer habilita trazabilidad; payload contiene sólo datos del hecho. Los campos de cabecera serían obligatorios y los generaría el productor, salvo propagación de correlación. causationId y traceId se evaluarán sólo ante necesidad acordada.
+Esto no elimina los pendientes externos: cada productor externo debe adoptar
+el contrato o ser adaptado por RF8.6. Si un módulo externo conserva nombres
+históricos como `eventId`, `eventVersion` o `payload`, se documentará como
+frontera externa pendiente, no como el contrato interno de M8.
 
 ## 17. Idempotencia y duplicados
 
@@ -176,14 +218,18 @@ Es **PROPUESTA M8**, no schema definitivo. eventId identifica y ayuda a deduplic
 | HTTP | Definir cuándo se exige Idempotency-Key y qué POST puede duplicar efectos. |
 | RF8.2 | Mantener consumo único atómico del QR. |
 | RF8.3 | Una repetición no debe producir dos comprobantes. |
-| RF8.6 | Inbox o equivalente por eventId ante redelivery. |
+| RF8.6 | Inbox técnico objetivo con `UNIQUE(consumerId, messageId)` ante redelivery; cada RF conserva su idempotencia de negocio. |
 | RF8.7 | Evitar PUSH duplicados y modelar ambigüedad del proveedor. |
 
 Lo anterior es **PROPUESTA M8** hasta definir storage y semántica de reintento.
 
 ## 18. Errores, retry y DLQ
 
-**CONFIRMADO:** AE1 hace ACK incluso ante excepción y no tiene retry ni DLQ durables. **PENDIENTE DE ACUERDO:** errores transitorios/no reintentables, NACK, requeue, backoff, máximo de intentos, DLQ, TTL y poison messages. No se implementa política en esta fase.
+**CONFIRMADO como estado AE1:** se hacía ACK incluso ante excepción y no había
+retry ni DLQ durables. **OBJETIVO AE2:** RF8.6 aplica la política común de
+máximo tres intentos y luego DLQ. RF8.3 ya posee retry/DLQ, pero su camino
+`dependency-unavailable` debe alinearse a esa política al extraer la
+infraestructura común; no se afirma aquí que ya lo cumpla en todos los casos.
 
 ## 19. Seguridad y autorización
 
@@ -191,7 +237,9 @@ Decisiones **PENDIENTES DE ACUERDO**: JWT, credenciales service-to-service, role
 
 ## 20. Observabilidad y correlación
 
-**PROPUESTA M8:** requestId identifica una solicitud HTTP, eventId una entrega de evento y correlationId recorre solicitud → viaje → pago → comprobante → notificación. No se implementa tracing distribuido todavía.
+**PROPUESTA M8:** `requestId` identifica una solicitud HTTP, `messageId` una
+entrega de evento y `correlationId` recorre solicitud → viaje → pago →
+comprobante → notificación. No se implementa tracing distribuido todavía.
 
 ## 21. Testing intermodular
 
@@ -199,7 +247,10 @@ Para desarrollar independientemente se necesitarán OpenAPI estable, schemas de 
 
 ## 22. Compatibilidad y versionado
 
-**PENDIENTE DE ACUERDO:** versión OpenAPI común, prefijo /api/v1 cuando corresponda, eventVersion, compatibilidad backward, deprecación y breaking changes. Se detectaron OpenAPI 3.0.0 y 3.0.3; no se migra ninguno aquí.
+**PENDIENTE DE ACUERDO:** versión OpenAPI común, prefijo /api/v1 cuando
+corresponda, compatibilidad backward, deprecación y breaking changes. En el
+envelope interno M8 la evolución se expresa con `version`; no se migra aquí
+ningún contrato externo.
 
 ## 23. Decisiones bloqueantes para iniciar implementación
 
@@ -209,8 +260,8 @@ Para desarrollar independientemente se necesitarán OpenAPI estable, schemas de 
 | B-02 | M6 | Productor, momento y payload de eventos | Event Consumer no puede extraerse sin contrato | 8.1, 8.2, 8.3, 8.6 | Equipo M6 | BLOQUEANTE |
 | B-03 | M7 | Pago definitivo, importe y activación receipt | RF8.3 no recibe datos fiables | 8.3, 8.4, 8.6 | Equipo M7 | BLOQUEANTE |
 | B-04 | M1/M2 | Owner de usuario/cliente y recipientId | Falta destinatario/autorización | 8.1, 8.3, 8.5, 8.7 | Equipos M1/M2 | BLOQUEANTE |
-| B-05 | M8 | Contrato Processing→Delivery | No existe RF8.7 ni semántica de entrega | 8.1, 8.4, 8.7 | Equipo M8 | BLOQUEANTE |
-| B-06 | Transversal | Envelope y semántica RabbitMQ | Impide consumer durable/idempotente | 8.6, 8.7 | M5/M6/M7/M8 | BLOQUEANTE |
+| B-05 | M8 | Implementación de Processing→Delivery | RF8.7 está confirmado, pero faltan su implementación y campos de delivery | 8.1, 8.7 | Equipo M8 | BLOQUEANTE DE IMPLEMENTACIÓN |
+| B-06 | Transversal | Adopción o adaptación de envelope RabbitMQ por productores externos | El contrato interno M8 ya está definido; falta su adopción externa o adaptación mediante RF8.6 | 8.6, 8.7 | M5/M6/M7/M8 | BLOQUEANTE EXTERNO |
 | I-01 | M5 | Hechos notificables y owner de asignación | Define alcance de Notifications | 8.1, 8.6 | Equipos M5/M6 | IMPORTANTE |
 | N-01 | M4/M9 | Confirmar ausencia directa | Evita dependencias artificiales | — | Equipos M4/M9 | NO BLOQUEANTE |
 
