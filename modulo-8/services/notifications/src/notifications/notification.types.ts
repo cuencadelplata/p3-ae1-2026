@@ -53,3 +53,55 @@ export interface ErrorResponse {//tipos de respuesta del error
     details?: ErrorDetail[];
   };
 }
+
+// --- Contrato Congelado RF8.6 -> RF8.1 (Integración Asíncrona RabbitMQ) ---
+
+export const TRIP_EVENT_TYPE_MAP = {
+  TripRequested: "TRIP_REQUESTED",
+  DriverAssigned: "DRIVER_ASSIGNED",
+  DriverArrived: "DRIVER_ARRIVED",
+  TripStarted: "TRIP_STARTED",
+  TripCancelled: "TRIP_CANCELLED",
+  TripCompleted: "TRIP_COMPLETED",
+} as const;
+
+export type AmqpTripEventType = keyof typeof TRIP_EVENT_TYPE_MAP;
+
+export interface TripEventData {
+  tripId: string;
+  recipientId: string;
+  details?: Record<string, unknown>;
+}
+
+export interface TripEventEnvelope {
+  messageId: string;
+  eventType: AmqpTripEventType | string;
+  version: number;
+  occurredAt: string;
+  correlationId: string;
+  producer: string;
+  data: TripEventData;
+}
+
+// --- Contrato Congelado RF8.1 -> RF8.7 (Outbox NotificationRequested) ---
+
+export interface NotificationRequestedData {
+  notificationId: string;
+  tripId: string;
+  recipientId: string;
+  eventType: EventType;
+  channel: NotificationChannel;
+  message: string;
+  createdAt: string;
+}
+
+export interface NotificationRequestedEnvelope {
+  messageId: string;
+  eventType: "NotificationRequested";
+  version: 1;
+  occurredAt: string;
+  correlationId: string;
+  producer: "m8-notifications";
+  data: NotificationRequestedData;
+}
+
