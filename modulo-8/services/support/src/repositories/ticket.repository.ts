@@ -14,6 +14,20 @@ export interface CambioDeEstado {
   expectedVersion?: number;
 }
 
+// Posición de un ticket en el listado: su fecha de creación y su id.
+export interface PosicionDeListado {
+  fechaCreacion: string;
+  id: string;
+}
+
+export interface FiltroDeTickets {
+  tripId?: string;
+  estado?: TicketStatus;
+  limit: number;
+  // Devuelve sólo los tickets posteriores a esta posición en el orden del listado.
+  despuesDe?: PosicionDeListado;
+}
+
 export interface ClaveDeIdempotencia {
   clave: string;
   // Huella del pedido normalizado: distingue un reintento de un pedido distinto.
@@ -59,5 +73,6 @@ export interface TicketRepository {
   actualizarEstado(id: string, nuevoEstado: TicketStatus, cambio?: CambioDeEstado): Promise<Ticket | null>;
   // Historial del ticket en orden cronológico.
   listarHistorial(ticketId: string): Promise<TicketHistoryEntry[]>;
-  listarTodos(): Promise<Ticket[]>;
+  // Orden estable: fecha de creación descendente y luego id descendente.
+  listar(filtro: FiltroDeTickets): Promise<Ticket[]>;
 }

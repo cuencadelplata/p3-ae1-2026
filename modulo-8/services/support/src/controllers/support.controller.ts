@@ -1,5 +1,11 @@
 import { Request, Response } from 'express';
-import { leerActor, leerCambioDeEstado, leerIdempotencyKey, leerNuevoTicket } from '../http/ticket-requests.js';
+import {
+  leerActor,
+  leerCambioDeEstado,
+  leerConsultaDeTickets,
+  leerIdempotencyKey,
+  leerNuevoTicket,
+} from '../http/ticket-requests.js';
 import { RabbitMQConsumer } from '../rabbitmq/consumer.js';
 import { TicketService } from '../services/ticket.service.js';
 
@@ -50,9 +56,16 @@ export function createSupportController({ ticketService }: SupportControllerDeps
       res.json(historial);
     },
 
-    // Endpoint: GET /tickets (solo para revisión y pruebas)
+    // Endpoint: GET /tickets?tripId=&estado=&limit=&cursor=
     async listarTodos(req: Request, res: Response) {
-      const tickets = await ticketService.listarTickets();
+      const consulta = leerConsultaDeTickets(req.query);
+      const { tickets, siguienteCursor } = await ticketService.listarTickets(consulta);
+
+      // El cuerpo sigue siendo un array: el cursor de la página siguiente va
+      // en una cabecera, y sólo si hay más resultados.
+      if (siguienteCursor) {
+        res.setHeader('X-Next-Cursor', siguienteCursor);
+      }
       res.json(tickets);
     },
   };

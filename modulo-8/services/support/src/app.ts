@@ -26,7 +26,7 @@ export function registerSupportRoutes(router: IRouter, deps: SupportAppDeps) {
   tickets.get('/:id', controller.obtenerTicket);
   tickets.patch('/:id/estado', controller.actualizarEstado);
   tickets.get('/:id/historial', controller.obtenerHistorial);
-  tickets.get('/', controller.listarTodos); // Para pruebas
+  tickets.get('/', controller.listarTodos);
   tickets.use(supportErrorHandler);
 
   router.use('/tickets', tickets);

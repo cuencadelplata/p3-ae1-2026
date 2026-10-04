@@ -10,11 +10,43 @@ import type { SupportEventPublisher } from '../events/support-event-publisher.js
 import { TRANSICIONES_PERMITIDAS } from '../models/ticket.model.js';
 import type { Ticket, TicketHistoryEntry, TicketStatus } from '../models/ticket.model.js';
 import { IdempotencyKeyConflictError, TicketVersionConflictError } from '../repositories/ticket.repository.js';
-import type { CambioDeEstado, OpcionesDeCreacion, TicketRepository } from '../repositories/ticket.repository.js';
+import type {
+  CambioDeEstado,
+  OpcionesDeCreacion,
+  PosicionDeListado,
+  TicketRepository,
+} from '../repositories/ticket.repository.js';
 
 export interface OpcionesDeNuevoTicket extends OpcionesDeCreacion {
   // Si se indica, repetir el pedido con la misma clave no crea otro ticket.
   idempotencyKey?: string;
+}
+
+export interface ConsultaDeTickets {
+  tripId?: string;
+  estado?: TicketStatus;
+  limit?: number;
+  cursor?: string;
+}
+
+const LIMITE_POR_DEFECTO = 50;
+
+// El cursor es opaco para el cliente: codifica la posición del último ticket
+// de la página.
+function codificarCursor({ fechaCreacion, id }: PosicionDeListado): string {
+  return Buffer.from(JSON.stringify([fechaCreacion, id])).toString('base64url');
+}
+
+function decodificarCursor(cursor: string): PosicionDeListado {
+  try {
+    const [fechaCreacion, id] = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (typeof fechaCreacion === 'string' && typeof id === 'string' && !Number.isNaN(Date.parse(fechaCreacion))) {
+      return { fechaCreacion, id };
+    }
+  } catch {
+    // Se informa abajo como cursor inválido.
+  }
+  throw validationError([{ field: 'cursor', reason: 'No es un cursor válido.' }]);
 }
 
 // Huella del pedido ya normalizado, con las claves ordenadas: no depende de si
@@ -122,7 +154,22 @@ export class TicketService {
     return this.repository.listarHistorial(id);
   }
 
-  listarTickets(): Promise<Ticket[]> {
-    return this.repository.listarTodos();
+  async listarTickets(consulta: ConsultaDeTickets = {}): Promise<{ tickets: Ticket[]; siguienteCursor?: string }> {
+    const limit = consulta.limit ?? LIMITE_POR_DEFECTO;
+    const despuesDe = consulta.cursor === undefined ? undefined : decodificarCursor(consulta.cursor);
+
+    // Se pide uno de más para saber si hay otra página.
+    const encontrados = await this.repository.listar({
+      tripId: consulta.tripId,
+      estado: consulta.estado,
+      limit: limit + 1,
+      despuesDe,
+    });
+    if (encontrados.length <= limit) {
+      return { tickets: encontrados };
+    }
+
+    const tickets = encontrados.slice(0, limit);
+    return { tickets, siguienteCursor: codificarCursor(tickets[tickets.length - 1]) };
   }
 }

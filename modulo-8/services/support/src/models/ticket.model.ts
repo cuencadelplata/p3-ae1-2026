@@ -3,6 +3,7 @@ import { IdempotencyKeyConflictError, TicketVersionConflictError } from '../repo
 import type {
   CambioDeEstado,
   ClaveDeIdempotencia,
+  FiltroDeTickets,
   OpcionesDeCreacion,
   TicketRepository,
 } from '../repositories/ticket.repository.js';
@@ -43,6 +44,14 @@ export interface TicketHistoryEntry {
   cambiadoPor: string | null;
   motivo: string | null;
   fecha: string;
+}
+
+// Orden del listado: por fecha de creación y, a igual fecha, por id.
+function compararPosicion(a: { fechaCreacion: string; id: string }, b: { fechaCreacion: string; id: string }): number {
+  if (a.fechaCreacion !== b.fechaCreacion) {
+    return a.fechaCreacion < b.fechaCreacion ? -1 : 1;
+  }
+  return a.id === b.id ? 0 : a.id < b.id ? -1 : 1;
 }
 
 // Repositorio en memoria (simula una base de datos)
@@ -123,6 +132,16 @@ export class InMemoryTicketRepository implements TicketRepository {
 
   async listarHistorial(ticketId: string): Promise<TicketHistoryEntry[]> {
     return this.historial.filter(entrada => entrada.ticketId === ticketId).map(entrada => ({ ...entrada }));
+  }
+
+  async listar({ tripId, estado, limit, despuesDe }: FiltroDeTickets): Promise<Ticket[]> {
+    return this.tickets
+      .filter(ticket => tripId === undefined || ticket.tripId === tripId)
+      .filter(ticket => estado === undefined || ticket.estado === estado)
+      .sort((a, b) => compararPosicion(b, a))
+      .filter(ticket => despuesDe === undefined || compararPosicion(ticket, despuesDe) < 0)
+      .slice(0, limit)
+      .map(ticket => ({ ...ticket }));
   }
 
   // Listar todos los tickets (útil para pruebas)
