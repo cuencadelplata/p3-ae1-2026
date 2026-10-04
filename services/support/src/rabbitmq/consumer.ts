@@ -159,7 +159,7 @@ export class RabbitMQConsumer {
             const pdfUrl = await DocumentServiceMock.generatePDF(payload.viajeId, payload.importe || 0);
             await NotificationServiceMock.sendNotification(payload.viajeId, 'EMAIL', `Tu comprobante está listo: ${pdfUrl}`);
 
-            const tickets = ticketRepository.listarTodos().filter(t => t.viajeId === payload.viajeId);
+            const tickets = (await ticketRepository.listarTodos()).filter(t => t.viajeId === payload.viajeId);
             if (tickets.length > 0) {
               console.log(`[RabbitMQ] El viaje completado tiene ${tickets.length} tickets asociados. Actualizando estados...`);
             }

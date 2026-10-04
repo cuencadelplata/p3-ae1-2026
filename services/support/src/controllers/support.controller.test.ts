@@ -3,6 +3,8 @@ import request from 'supertest';
 import { describe, it, expect } from 'vitest';
 import { SupportController } from './support.controller.js';
 import { createSupportApp } from '../app.js';
+import { InMemoryTicketRepository } from '../models/ticket.model.js';
+import { TicketService } from '../services/ticket.service.js';
 
 const app = express();
 app.use(express.json());
@@ -145,7 +147,8 @@ describe('SupportController', () => {
 
 describe('createSupportApp', () => {
   it('GET /health conserva exactamente la forma de respuesta actual', async () => {
-    const res = await request(createSupportApp()).get('/health');
+    const ticketService = new TicketService(new InMemoryTicketRepository());
+    const res = await request(createSupportApp({ ticketService })).get('/health');
 
     expect(res.status).toBe(200);
     expect(Object.keys(res.body).sort()).toEqual(['service', 'status', 'timestamp', 'uptime']);

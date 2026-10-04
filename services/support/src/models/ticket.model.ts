@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import type { TicketRepository } from '../repositories/ticket.repository.js';
 
 // Definimos los posibles estados de un ticket de soporte
 export type TicketStatus = 'ABIERTO' | 'EN_PROCESO' | 'RESUELTO';
@@ -13,11 +14,11 @@ export interface Ticket {
 }
 
 // Repositorio en memoria (simula una base de datos)
-class TicketRepository {
+export class InMemoryTicketRepository implements TicketRepository {
   private tickets: Ticket[] = [];
 
   // Método para crear un nuevo ticket
-  crear(viajeId: string, motivo: string): Ticket {
+  async crear(viajeId: string, motivo: string): Promise<Ticket> {
     const nuevoTicket: Ticket = {
       id: crypto.randomUUID(), // Genera un ID único al azar
       viajeId,
@@ -25,19 +26,19 @@ class TicketRepository {
       estado: 'ABIERTO',
       fechaCreacion: new Date().toISOString()
     };
-    
+
     this.tickets.push(nuevoTicket);
     return nuevoTicket;
   }
 
   // Método para buscar un ticket por su ID
-  obtenerPorId(id: string): Ticket | undefined {
+  async obtenerPorId(id: string): Promise<Ticket | undefined> {
     return this.tickets.find(ticket => ticket.id === id);
   }
 
   // Método para actualizar el estado de un ticket
-  actualizarEstado(id: string, nuevoEstado: TicketStatus): Ticket | null {
-    const ticket = this.obtenerPorId(id);
+  async actualizarEstado(id: string, nuevoEstado: TicketStatus): Promise<Ticket | null> {
+    const ticket = await this.obtenerPorId(id);
     if (!ticket) {
       return null;
     }
@@ -46,10 +47,10 @@ class TicketRepository {
   }
 
   // Listar todos los tickets (útil para pruebas)
-  listarTodos(): Ticket[] {
+  async listarTodos(): Promise<Ticket[]> {
     return this.tickets;
   }
 }
 
 // Exportamos una única instancia (Singleton) para que toda la app comparta los mismos datos
-export const ticketRepository = new TicketRepository();
+export const ticketRepository = new InMemoryTicketRepository();

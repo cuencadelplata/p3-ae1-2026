@@ -3,20 +3,27 @@ import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
 import { apiReference } from '@scalar/express-api-reference';
-import { SupportController } from './controllers/support.controller.js';
+import { createSupportController, publicarEvento } from './controllers/support.controller.js';
+import type { TicketService } from './services/ticket.service.js';
+
+export interface SupportAppDeps {
+  ticketService: TicketService;
+}
 
 // Endpoints RF-8.5 (Gestión de tickets de Soporte). Es lo único que necesita
 // registrar una app común de M8.
-export function registerSupportRoutes(router: IRouter) {
-  router.post('/tickets', SupportController.crearTicket);
-  router.get('/tickets/:id', SupportController.obtenerTicket);
-  router.patch('/tickets/:id/estado', SupportController.actualizarEstado);
-  router.get('/tickets', SupportController.listarTodos); // Para pruebas
+export function registerSupportRoutes(router: IRouter, deps: SupportAppDeps) {
+  const controller = createSupportController(deps);
+
+  router.post('/tickets', controller.crearTicket);
+  router.get('/tickets/:id', controller.obtenerTicket);
+  router.patch('/tickets/:id/estado', controller.actualizarEstado);
+  router.get('/tickets', controller.listarTodos); // Para pruebas
 }
 
 // Endpoint RF-8.6 / Pruebas de RabbitMQ (heredado de AE1)
 export function registerLegacyEventRoutes(router: IRouter) {
-  router.post('/events/publish', SupportController.publicarEvento);
+  router.post('/events/publish', publicarEvento);
 }
 
 function loadOpenapi() {
@@ -35,7 +42,7 @@ function loadOpenapi() {
 
 // Aplicación HTTP de Support. Crearla no abre puertos ni conecta al broker:
 // eso lo hace el entrypoint (index.ts).
-export function createSupportApp(): Express {
+export function createSupportApp(deps: SupportAppDeps): Express {
   const app = express();
   app.use(express.json());
 
@@ -88,7 +95,7 @@ export function createSupportApp(): Express {
     });
   });
 
-  registerSupportRoutes(app);
+  registerSupportRoutes(app, deps);
   registerLegacyEventRoutes(app);
 
   return app;
