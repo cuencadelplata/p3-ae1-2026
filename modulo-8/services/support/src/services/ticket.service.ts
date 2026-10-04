@@ -1,3 +1,4 @@
+import { ticketNotFound } from '../errors/support-error.js';
 import type { SupportEventPublisher } from '../events/support-event-publisher.js';
 import type { Ticket, TicketStatus } from '../models/ticket.model.js';
 import type { TicketRepository } from '../repositories/ticket.repository.js';
@@ -16,15 +17,20 @@ export class TicketService {
     return nuevoTicket;
   }
 
-  obtenerTicket(id: string): Promise<Ticket | undefined> {
-    return this.repository.obtenerPorId(id);
+  async obtenerTicket(id: string): Promise<Ticket> {
+    const ticket = await this.repository.obtenerPorId(id);
+    if (!ticket) {
+      throw ticketNotFound();
+    }
+    return ticket;
   }
 
-  async actualizarEstado(id: string, nuevoEstado: TicketStatus): Promise<Ticket | null> {
+  async actualizarEstado(id: string, nuevoEstado: TicketStatus): Promise<Ticket> {
     const ticketActualizado = await this.repository.actualizarEstado(id, nuevoEstado);
-    if (ticketActualizado) {
-      await this.eventPublisher.publish('ticket.actualizado', ticketActualizado);
+    if (!ticketActualizado) {
+      throw ticketNotFound();
     }
+    await this.eventPublisher.publish('ticket.actualizado', ticketActualizado);
     return ticketActualizado;
   }
 
