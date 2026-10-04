@@ -161,4 +161,3 @@ export interface NotificationRequestedEnvelope {
   producer: "m8-notifications";
   data: NotificationRequestedData;
 }
-
