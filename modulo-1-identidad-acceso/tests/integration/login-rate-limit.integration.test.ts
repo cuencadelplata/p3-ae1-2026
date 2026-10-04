@@ -13,6 +13,9 @@ import { MAX_INTENTOS_FALLIDOS } from "../../src/services/login-attempts.service
 const email = `rate-limit-${Date.now()}@test.com`;
 const password = "123456";
 
+// DNI distinto en cada corrida: M1 no permite registrar dos usuarios con el mismo DNI.
+const dni = String(10_000_000 + Math.floor(Math.random() * 89_999_999));
+
 async function loginFallido() {
     return request(app)
         .post("/auth/iniciar-sesion")
@@ -32,7 +35,7 @@ describe.sequential(
                 .send({
                     nombre: "Rate",
                     apellido: "Limit",
-                    dni: "30123456",
+                    dni,
                     telefono: "11 5555 1234",
                     email,
                     password,

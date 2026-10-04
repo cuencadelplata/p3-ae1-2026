@@ -15,6 +15,9 @@ import { MAX_INTENTOS_FALLIDOS } from "../../src/services/login-attempts.service
 const email = `eventos-${Date.now()}@test.com`;
 const password = "123456";
 
+// DNI distinto en cada corrida: M1 no permite registrar dos usuarios con el mismo DNI.
+const dni = String(10_000_000 + Math.floor(Math.random() * 89_999_999));
+
 function mensajesPublicados(): { routingKey: string; contenido: any }[] {
     return (globalThis as any).__mensajesRabbit ?? [];
 }
@@ -37,7 +40,7 @@ describe.sequential(
                 .send({
                     nombre: "Eventos",
                     apellido: "Rabbit",
-                    dni: "30123456",
+                    dni,
                     telefono: "11 5555 1234",
                     email,
                     password,
