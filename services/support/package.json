@@ -12,7 +12,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:test": "tsc -p tsconfig.test.json",
-    "prueba:resiliencia": "node --test scripts/prueba-resiliencia-broker.mjs"
+    "prueba:resiliencia": "node --test scripts/prueba-resiliencia-broker.mjs",
+    "prueba:resiliencia:db": "node --test scripts/prueba-resiliencia-db.mjs"
   },
   "dependencies": {
     "@scalar/express-api-reference": "^0.10.18",
