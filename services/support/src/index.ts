@@ -1,88 +1,14 @@
-import express from 'express';
-import fs from 'node:fs';
-import path from 'node:path';
-import YAML from 'yaml';
-import { apiReference } from '@scalar/express-api-reference';
-import { SupportController } from './controllers/support.controller.js';
+import { createSupportApp } from './app.js';
 import { RabbitMQConsumer } from './rabbitmq/consumer.js';
 
-const app = express();
-app.use(express.json());
-
-// Configuración de Swagger (OpenAPI)
-const openapiPath = [
-  path.resolve(process.cwd(), 'openapi.yaml'),
-  path.resolve(process.cwd(), '../../openapi/support.openapi.yaml'),
-  path.resolve(process.cwd(), 'openapi/support.openapi.yaml'),
-].find((candidate) => fs.existsSync(candidate));
-
-if (!openapiPath) {
-  throw new Error('No se encontro el contrato OpenAPI canónico de Support.');
-}
-const fileContent = fs.readFileSync(openapiPath, 'utf8');
-const openapiDocument = YAML.parse(fileContent);
-
-app.use('/api-docs', apiReference({
-  pageTitle: 'M8 - Soporte API Reference',
-  theme: 'purple',
-  spec: { content: openapiDocument },
-}));
-
-// Servir la especificación OpenAPI en formato crudo (YAML y JSON)
-app.get('/openapi.yaml', (req, res) => {
-  res.setHeader('Content-Type', 'text/yaml');
-  res.send(fileContent);
-});
-
-app.get('/openapi.json', (req, res) => {
-  res.json(openapiDocument);
-});
-
-// Ruta raíz (Estado del servicio)
-app.get('/', (req, res) => {
-  res.json({
-    servicio: 'M8 - Soporte, Notificaciones y RabbitMQ',
-    estado: 'ACTIVO',
-    documentacion: '/api-docs',
-    health: '/health',
-    endpoints: [
-      'GET /health',
-      'GET /openapi.yaml',
-      'GET /openapi.json',
-      'POST /tickets',
-      'GET /tickets',
-      'GET /tickets/:id',
-      'PATCH /tickets/:id/estado',
-      'POST /events/publish'
-    ]
-  });
-});
-
-// Endpoint de Health Check
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'OK',
-    service: 'm8-soporte',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
-
-// Endpoints RF-8.5 (Gestión de tickets de Soporte)
-app.post('/tickets', SupportController.crearTicket);
-app.get('/tickets/:id', SupportController.obtenerTicket);
-app.patch('/tickets/:id/estado', SupportController.actualizarEstado);
-app.get('/tickets', SupportController.listarTodos); // Para pruebas
-
-// Endpoint RF-8.6 / Pruebas de RabbitMQ
-app.post('/events/publish', SupportController.publicarEvento);
+const app = createSupportApp();
 
 const PORT = process.env.PORT || 3000;
 const RABBIT_URL = process.env.RABBITMQ_URL || 'amqp://localhost:5672';
 
 app.listen(PORT, async () => {
   console.log(`[Server] Microservicio M8-Soporte ejecutándose en puerto ${PORT}`);
-  
+
   // Iniciamos el consumo asíncrono (RF-8.6)
   await RabbitMQConsumer.connect(RABBIT_URL);
 });

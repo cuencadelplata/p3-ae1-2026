@@ -2,6 +2,7 @@ import express from 'express';
 import request from 'supertest';
 import { describe, it, expect } from 'vitest';
 import { SupportController } from './support.controller.js';
+import { createSupportApp } from '../app.js';
 
 const app = express();
 app.use(express.json());
@@ -139,5 +140,18 @@ describe('SupportController', () => {
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty('error');
     });
+  });
+});
+
+describe('createSupportApp', () => {
+  it('GET /health conserva exactamente la forma de respuesta actual', async () => {
+    const res = await request(createSupportApp()).get('/health');
+
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body).sort()).toEqual(['service', 'status', 'timestamp', 'uptime']);
+    expect(res.body.status).toBe('OK');
+    expect(res.body.service).toBe('m8-soporte');
+    expect(new Date(res.body.timestamp).toISOString()).toBe(res.body.timestamp);
+    expect(typeof res.body.uptime).toBe('number');
   });
 });
