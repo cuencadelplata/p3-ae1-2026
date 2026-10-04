@@ -49,8 +49,41 @@ docker compose up --build -d
 | Variable | Valor por defecto | Descripción |
 | --- | --- | --- |
 | `PORT` | `3000` | Puerto HTTP del servicio. |
+| `SUPPORT_DATABASE_URL` | — (obligatoria) | Conexión a CommunicationsDB con el rol `m8_support`. Sin ella el servicio no arranca: no hay almacenamiento alternativo. |
+| `SUPPORT_DB_SCHEMA` | `support` | Schema propio de Support. Debe ser un identificador simple. |
+| `SUPPORT_DB_RETRY_MS` | `5000` | Espera entre intentos de aplicar las migraciones al arrancar. |
 | `RABBITMQ_URL` | `amqp://localhost:5672` | Broker usado por el consumer heredado de AE1. |
 | `SUPPORT_LEGACY_EVENTS` | `on` | `on`: conecta el consumer RabbitMQ de AE1, publica `ticket.creado` / `ticket.actualizado` y expone `POST /events/publish`. `off`: Support no se conecta al broker y la API de tickets funciona igual. Cualquier otro valor impide el arranque. |
+
+### Base de Datos (CommunicationsDB)
+
+Support guarda los tickets, su historial y las claves de idempotencia en el
+schema `support` del PostgreSQL compartido de M8, con el rol `m8_support`.
+
+- **Rol y schema:** los crea `infra/postgres/init/02-support.sh`. PostgreSQL
+  sólo lo ejecuta al inicializar un volumen vacío. En un volumen que ya
+  existía, aplicarlo a mano desde `modulo-8`, sin borrar datos:
+
+  ```bash
+  docker compose exec postgres sh /docker-entrypoint-initdb.d/02-support.sh
+  ```
+
+  En Git Bash sobre Windows anteponer `MSYS_NO_PATHCONV=1` para que la ruta
+  no se convierta a una ruta de Windows.
+- **Tablas e índices:** los crean las migraciones de Support en cada arranque.
+  Son idempotentes y seguras con varias instancias.
+- **Arranque sin base:** Support arranca igual, reintenta cada
+  `SUPPORT_DB_RETRY_MS` y registra la causa. Mientras tanto `GET /health`
+  responde 200, `GET /health/ready` responde 503 `unavailable` y los tickets
+  responden 503 `SUPPORT_DB_UNAVAILABLE`.
+
+### Health
+
+| Ruta | Respuesta |
+| --- | --- |
+| `GET /health` | 200 mientras el proceso vive (forma de AE1). |
+| `GET /health/live` | 200 mientras el proceso vive. |
+| `GET /health/ready` | 200 `ok` o `degraded` (broker heredado caído); 503 `unavailable` (base caída o migraciones pendientes). Incluye el detalle de `checks`. |
 
 ### Detener los Contenedores
 
@@ -60,20 +93,25 @@ docker compose down
 
 ---
 
-## 🧪 Ejecución de Pruebas Unitarias e Integración (Vitest)
+## 🧪 Ejecución de Pruebas
 
-Para ejecutar la suite de pruebas unitarias y de integración contra los controladores y modelos del microservicio:
+Desde `modulo-8`, después de `pnpm install`:
 
-```bash
-# Navegar a la carpeta del servicio
-cd m8-soporte
+| Comando | Qué prueba | Requiere |
+| --- | --- | --- |
+| `pnpm --filter m8-soporte run test` | Tests unitarios: API, reglas de tickets, contrato OpenAPI y repositorio en memoria. | Nada |
+| `pnpm --filter m8-soporte run test:integration` | Migraciones, repositorio PostgreSQL, concurrencia y rollback contra PostgreSQL real. Cada corrida usa un schema efímero `support_test_<aleatorio>` y lo borra al terminar. | `docker compose up -d postgres` |
+| `pnpm --filter m8-soporte run prueba:resiliencia` | Apaga RabbitMQ con un mensaje en proceso: Support sigue vivo y reconecta. | Stack completo |
+| `pnpm --filter m8-soporte run prueba:resiliencia:db` | Apaga PostgreSQL: tickets con 503 rápido, recuperación sin reinicio y sin estado a medias. | Stack completo |
+| `pnpm --filter m8-soporte run typecheck` y `typecheck:test` | Tipos del servicio, de los tests y de los scripts. | Nada |
 
-# Instalación de dependencias locales
-pnpm install
+Los tests de integración se conectan con el usuario administrador local
+(`SUPPORT_TEST_DATABASE_URL`, por defecto el de `compose.yaml`) y nunca tocan
+el schema `support` real. Las dos pruebas de resiliencia vuelven a iniciar el
+servicio que apagan aunque fallen.
 
-# Ejecución de pruebas con Vitest
-pnpm test
-```
+El repositorio en memoria y el de PostgreSQL pasan exactamente los mismos casos
+(`tests/shared/ticket-repository.contract.ts`).
 
 ---
 
@@ -81,10 +119,13 @@ pnpm test
 
 ### 🟢 RF-8.5: Gestión de Tickets de Soporte
 - `GET /` - Estado del servicio y mapa de endpoints.
-- `POST /tickets` - Crear un nuevo ticket de soporte asociado a un viaje (`viajeId`, `motivo`).
-- `GET /tickets/:id` - Consultar información de un ticket específico por su ID.
-- `PATCH /tickets/:id/estado` - Actualizar el estado de un ticket (`ABIERTO`, `EN_PROCESO`, `RESUELTO`).
-- `GET /tickets` - Listar todos los tickets almacenados en el repositorio.
+- `POST /tickets` - Crear un ticket asociado a un viaje (`tripId`, `motivo`). `viajeId` se acepta como alias deprecado. Cabeceras opcionales `Idempotency-Key` y `X-Actor-Id`.
+- `GET /tickets/:id` - Consultar un ticket por su ID.
+- `PATCH /tickets/:id/estado` - Cambiar el estado (`ABIERTO`, `EN_PROCESO`, `RESUELTO`) según las transiciones permitidas, con `expectedVersion` y `motivo` opcionales.
+- `GET /tickets/:id/historial` - Historial de estados del ticket, en orden cronológico.
+- `GET /tickets` - Listar tickets con filtros `tripId` y `estado` y paginación por `limit` y `cursor`.
+
+El contrato completo, con errores y ejemplos, está en `openapi/rf85-support.yaml` y se sirve en `/api-docs`.
 
 ### 🟣 RF-8.6: Consumo Asíncrono mediante RabbitMQ
 Consumo de eventos provenientes del broker en el intercambio `viajes_exchange` y la cola `m8_async_events`:

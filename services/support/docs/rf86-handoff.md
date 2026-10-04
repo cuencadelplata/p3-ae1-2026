@@ -69,6 +69,16 @@ const tickets = (await ticketRepository.listarTodos()).filter(t => t.viajeId ===
 - Los tickets publican a través de `SupportEventPublisher`; la implementación
   `LegacyRabbitSupportEventPublisher` usa el canal del consumer AE1.
 - Con `off`, Support no se conecta al broker y la API de tickets funciona igual.
+- **Estado actual:** el flag sigue en `on` por defecto, también en
+  `compose.yaml`, porque el E2E global usa `POST /events/publish`. Con `on`,
+  `/health/ready` informa `degraded` si el broker está caído; nunca
+  `unavailable`.
+
+### Lectura del estado del broker
+
+`consumer.ts` suma `RabbitMQConsumer.isConnected()`, un getter de sólo lectura
+que devuelve si hay un canal abierto. Lo usa el readiness de Support. No cambia
+el comportamiento del consumer.
 
 Cuando RF8.6 tenga su infraestructura, el camino es: poner el flag en `off`,
 retirar `consumer.ts`, `publicarEvento` y los mocks de `src/mocks/`, y, si los
