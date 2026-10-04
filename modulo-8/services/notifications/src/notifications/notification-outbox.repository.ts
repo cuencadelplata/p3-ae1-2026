@@ -1,10 +1,12 @@
-import type { LogicalNotification } from "./notification.types";
+import type { PoolClient } from "pg";
+
+import type { LogicalNotification, NotificationRequestedData, NotificationRequestedEnvelope } from "./notification.types";
 import type { SaveNotificationResult } from "./notification.repository";
 
 export const NOTIFICATION_REQUESTED_EVENT_TYPE = "NotificationRequested";
 export const NOTIFICATION_REQUESTED_ROUTING_KEY = "notification.requested";
 export const NOTIFICATION_REQUESTED_VERSION = 1;
-export const M8_PRODUCER = "m8";
+export const M8_PRODUCER = "m8-notifications";
 
 export interface NotificationOutboxIntent {
   messageId: string;
@@ -14,7 +16,7 @@ export interface NotificationOutboxIntent {
   correlationId: string;
   version: typeof NOTIFICATION_REQUESTED_VERSION;
   producer: typeof M8_PRODUCER;
-  payload: null;
+  payload: NotificationRequestedData;
   createdAt: string;
   publishedAt: string | null;
 }
@@ -39,6 +41,12 @@ export interface SaveNotificationWithOutboxResult extends SaveNotificationResult
 
 export interface NotificationWithOutboxRepository {
   saveWithOutbox(notification: LogicalNotification): Promise<SaveNotificationWithOutboxResult>;
+  saveWithOutboxUsingClient(
+    client: PoolClient,
+    notification: LogicalNotification,
+  ): Promise<SaveNotificationWithOutboxResult>;
   findPending(limit: number): Promise<NotificationDeliveryIntent[]>;
+  claimPendingForPublish(client: PoolClient, limit: number): Promise<NotificationRequestedEnvelope[]>;
   markPublished(messageId: string, publishedAt: string): Promise<boolean>;
+  markPublishedWithClient(client: PoolClient, messageId: string, publishedAt: string): Promise<boolean>;
 }

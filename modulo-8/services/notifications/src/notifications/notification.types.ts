@@ -32,6 +32,18 @@ export const HTTP_EVENT_TYPE_TO_TRIP_NOTIFICATION_EVENT_TYPE: Record<
   TRIP_COMPLETED: "TripCompleted",
 };
 
+export const TRIP_NOTIFICATION_EVENT_TYPE_TO_EVENT_TYPE: Record<
+  TripNotificationEventType,
+  EventType
+> = {
+  TripRequested: "TRIP_REQUESTED",
+  TripAssigned: "DRIVER_ASSIGNED",
+  DriverArrived: "DRIVER_ARRIVED",
+  TripStarted: "TRIP_STARTED",
+  TripCancelled: "TRIP_CANCELLED",
+  TripCompleted: "TRIP_COMPLETED",
+};
+
 export const NOTIFICATION_CHANNELS = ["PUSH"] as const; // los canales por los que se puede enviar la notificacion
 
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];

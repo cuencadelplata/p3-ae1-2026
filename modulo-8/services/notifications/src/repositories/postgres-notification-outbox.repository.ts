@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { Pool, PoolClient } from "pg";
 
+import { createNotificationRequestedData, createNotificationRequestedEnvelope } from "../notifications/notification-requested.mapper";
 import { NotificationPersistenceError } from "../notifications/notification-persistence.error";
 import {
   M8_PRODUCER,
@@ -13,7 +14,7 @@ import {
   type NotificationWithOutboxRepository,
   type SaveNotificationWithOutboxResult,
 } from "../notifications/notification-outbox.repository";
-import type { LogicalNotification } from "../notifications/notification.types";
+import type { LogicalNotification, NotificationRequestedData } from "../notifications/notification.types";
 import { saveNotificationIdempotent } from "./postgres-notification.repository";
 
 interface OutboxRow {
@@ -24,7 +25,7 @@ interface OutboxRow {
   correlation_id: string;
   version: typeof NOTIFICATION_REQUESTED_VERSION;
   producer: typeof M8_PRODUCER;
-  payload: null;
+  payload: NotificationRequestedData;
   created_at: Date;
   published_at: Date | null;
 }
@@ -78,11 +79,12 @@ async function ensureOutboxIntent(
   client: PoolClient,
   notification: LogicalNotification,
 ): Promise<NotificationOutboxIntent> {
+  const payload = createNotificationRequestedData(notification);
   await client.query(
-    `INSERT INTO notifications.outbox_events (
+    `INSERT INTO notifications.outbox_deliveries (
        message_id, notification_id, event_type, routing_key, correlation_id,
        version, producer, payload, created_at
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8)
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (notification_id, event_type) DO NOTHING`,
     [
       randomUUID(),
@@ -92,6 +94,7 @@ async function ensureOutboxIntent(
       notification.correlationId,
       NOTIFICATION_REQUESTED_VERSION,
       M8_PRODUCER,
+      JSON.stringify(payload),
       new Date().toISOString(),
     ],
   );
@@ -99,7 +102,7 @@ async function ensureOutboxIntent(
   const result = await client.query<OutboxRow>(
     `SELECT message_id, notification_id, event_type, routing_key, correlation_id,
             version, producer, payload, created_at, published_at
-       FROM notifications.outbox_events
+       FROM notifications.outbox_deliveries
       WHERE notification_id = $1 AND event_type = $2`,
     [notification.notificationId, NOTIFICATION_REQUESTED_EVENT_TYPE],
   );
@@ -117,6 +120,15 @@ function validatePendingLimit(limit: number): void {
   }
 }
 
+async function saveWithOutboxInClient(
+  client: PoolClient,
+  notification: LogicalNotification,
+): Promise<SaveNotificationWithOutboxResult> {
+  const saved = await saveNotificationIdempotent(client, notification);
+  const outbox = await ensureOutboxIntent(client, saved.notification);
+  return { ...saved, outbox };
+}
+
 export function createPostgresNotificationWithOutboxRepository(
   pool: Pool,
 ): NotificationWithOutboxRepository {
@@ -125,10 +137,9 @@ export function createPostgresNotificationWithOutboxRepository(
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
-        const saved = await saveNotificationIdempotent(client, notification);
-        const outbox = await ensureOutboxIntent(client, saved.notification);
+        const saved = await saveWithOutboxInClient(client, notification);
         await client.query("COMMIT");
-        return { ...saved, outbox };
+        return saved;
       } catch (error) {
         await client.query("ROLLBACK").catch(() => undefined);
         if (error instanceof NotificationPersistenceError) {
@@ -140,6 +151,22 @@ export function createPostgresNotificationWithOutboxRepository(
         );
       } finally {
         client.release();
+      }
+    },
+    async saveWithOutboxUsingClient(
+      client: PoolClient,
+      notification: LogicalNotification,
+    ): Promise<SaveNotificationWithOutboxResult> {
+      try {
+        return await saveWithOutboxInClient(client, notification);
+      } catch (error) {
+        if (error instanceof NotificationPersistenceError) {
+          throw error;
+        }
+        throw new NotificationPersistenceError(
+          "No se pudo persistir la notificaciÃ³n y su intenciÃ³n Outbox en la transacciÃ³n externa.",
+          error,
+        );
       }
     },
     async findPending(limit: number): Promise<NotificationDeliveryIntent[]> {
@@ -158,7 +185,7 @@ export function createPostgresNotificationWithOutboxRepository(
                   n.correlation_id,
                   n.created_at AS notification_created_at,
                   o.created_at AS outbox_created_at
-             FROM notifications.outbox_events o
+             FROM notifications.outbox_deliveries o
              JOIN notifications.notifications n ON n.notification_id = o.notification_id
             WHERE o.published_at IS NULL
             ORDER BY o.created_at ASC, o.message_id ASC
@@ -174,10 +201,49 @@ export function createPostgresNotificationWithOutboxRepository(
         throw new NotificationPersistenceError("No se pudieron leer intenciones Outbox pendientes.", error);
       }
     },
+    async claimPendingForPublish(client: PoolClient, limit: number) {
+      validatePendingLimit(limit);
+
+      try {
+        const result = await client.query<OutboxRow>(
+          `SELECT message_id, notification_id, event_type, routing_key, correlation_id,
+                  version, producer, payload, created_at, published_at
+             FROM notifications.outbox_deliveries
+            WHERE published_at IS NULL
+            ORDER BY created_at ASC, message_id ASC
+            LIMIT $1
+            FOR UPDATE SKIP LOCKED`,
+          [limit],
+        );
+
+        return result.rows.map(mapOutboxRow).map(createNotificationRequestedEnvelope);
+      } catch (error) {
+        throw new NotificationPersistenceError("No se pudieron reclamar intenciones Outbox pendientes.", error);
+      }
+    },
     async markPublished(messageId: string, publishedAt: string): Promise<boolean> {
       try {
         const result = await pool.query<{ message_id: string }>(
-          `UPDATE notifications.outbox_events
+          `UPDATE notifications.outbox_deliveries
+              SET published_at = COALESCE(published_at, $2)
+            WHERE message_id = $1
+            RETURNING message_id`,
+          [messageId, publishedAt],
+        );
+
+        return result.rowCount === 1;
+      } catch (error) {
+        throw new NotificationPersistenceError("No se pudo marcar la intencion Outbox como publicada.", error);
+      }
+    },
+    async markPublishedWithClient(
+      client: PoolClient,
+      messageId: string,
+      publishedAt: string,
+    ): Promise<boolean> {
+      try {
+        const result = await client.query<{ message_id: string }>(
+          `UPDATE notifications.outbox_deliveries
               SET published_at = COALESCE(published_at, $2)
             WHERE message_id = $1
             RETURNING message_id`,

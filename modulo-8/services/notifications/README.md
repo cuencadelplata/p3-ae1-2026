@@ -61,7 +61,7 @@ propio `m8_notifications` y el password local configurable mediante
 El contenedor `postgres` ejecuta `infra/postgres/init/03-notifications.sh` al
 inicializar un volumen vacio. Ese script prepara rol, schema y permisos, pero no
 crea tablas funcionales. Las tablas `notifications.notifications`,
-`notifications.outbox_events` y `notifications.schema_migrations` las crea
+`notifications.outbox_deliveries` y `notifications.schema_migrations` las crea
 RF8.1 con `runMigrations(pool)` durante `initialize()`.
 
 Si el volumen `m8-postgres` ya existia antes de agregar el init script, preparar

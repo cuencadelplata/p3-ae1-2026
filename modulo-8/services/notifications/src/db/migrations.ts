@@ -56,6 +56,66 @@ const migrations = [
        WHERE published_at IS NULL`,
     ],
   },
+  {
+    version: 4,
+    name: "align_notification_outbox_delivery_contract",
+    statements: [
+      `DO $$
+       BEGIN
+         IF to_regclass('notifications.outbox_events') IS NOT NULL
+            AND to_regclass('notifications.outbox_deliveries') IS NULL THEN
+           ALTER TABLE notifications.outbox_events RENAME TO outbox_deliveries;
+         END IF;
+       END $$`,
+      `DO $$
+       DECLARE
+         constraint_name text;
+       BEGIN
+         SELECT conname INTO constraint_name
+           FROM pg_constraint
+          WHERE conrelid = 'notifications.outbox_deliveries'::regclass
+            AND contype = 'c'
+            AND pg_get_constraintdef(oid) LIKE '%producer%'
+          LIMIT 1;
+
+         IF constraint_name IS NOT NULL THEN
+           EXECUTE format('ALTER TABLE notifications.outbox_deliveries DROP CONSTRAINT %I', constraint_name);
+         END IF;
+       END $$`,
+      `UPDATE notifications.outbox_deliveries
+          SET producer = 'm8-notifications'
+        WHERE producer = 'm8'`,
+      `ALTER TABLE notifications.outbox_deliveries
+         ADD CONSTRAINT notifications_outbox_deliveries_producer_check
+         CHECK (producer = 'm8-notifications')`,
+      `UPDATE notifications.outbox_deliveries o
+          SET payload = jsonb_build_object(
+            'notificationId', n.notification_id::text,
+            'tripId', n.trip_id,
+            'recipientId', n.recipient_id,
+            'eventType', CASE n.event_type
+              WHEN 'TripRequested' THEN 'TRIP_REQUESTED'
+              WHEN 'TripAssigned' THEN 'DRIVER_ASSIGNED'
+              WHEN 'DriverArrived' THEN 'DRIVER_ARRIVED'
+              WHEN 'TripStarted' THEN 'TRIP_STARTED'
+              WHEN 'TripCancelled' THEN 'TRIP_CANCELLED'
+              WHEN 'TripCompleted' THEN 'TRIP_COMPLETED'
+            END,
+            'channel', 'PUSH',
+            'message', n.message,
+            'createdAt', to_jsonb(to_char(n.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) #>> '{}'
+          )
+         FROM notifications.notifications n
+        WHERE n.notification_id = o.notification_id
+          AND o.payload IS NULL`,
+      `ALTER TABLE notifications.outbox_deliveries
+         ALTER COLUMN payload SET NOT NULL`,
+      `DROP INDEX IF EXISTS notifications.notifications_outbox_pending_created_at_idx`,
+      `CREATE INDEX IF NOT EXISTS notifications_outbox_deliveries_pending_created_at_idx
+       ON notifications.outbox_deliveries (created_at, message_id)
+       WHERE published_at IS NULL`,
+    ],
+  },
 ] as const;
 
 export async function runMigrations(pool: Pool): Promise<void> {
