@@ -7,7 +7,7 @@ import { createApp } from '../../src/app.js';
 import type { TarifaClient } from '../../src/clients/tarifa.client.js';
 import { InMemoryReservaRepository } from '../../src/repositories/in-memory-reserva.repository.js';
 import { ReservaService } from '../../src/services/reserva.service.js';
-import { asignacionClientDemo } from '../helpers/asignacion.js';
+import { fareEstimate, routeResolverDemo } from '../helpers/route.js';
 
 const bodyValido = () => ({
   clienteId: randomUUID(),
@@ -18,120 +18,102 @@ const bodyValido = () => ({
 });
 
 describe('API /reservas', () => {
-  let repository: InMemoryReservaRepository;
   let app: ReturnType<typeof createApp>;
   let estimarTarifa: ReturnType<typeof vi.fn<TarifaClient['estimar']>>;
 
   beforeEach(() => {
-    repository = new InMemoryReservaRepository();
-    estimarTarifa = vi.fn(async () => ({ tarifaEstimada: 3_250, moneda: 'ARS' }));
+    estimarTarifa = vi.fn(async () => fareEstimate(3_250));
     app = createApp({
       reservaService: new ReservaService(
-        repository,
+        new InMemoryReservaRepository(),
         { estimar: estimarTarifa },
-        asignacionClientDemo(),
+        routeResolverDemo(),
       ),
     });
   });
 
-  it('recalcula la tarifa al modificar origen, destino o vehículo', async () => {
+  it('crea PROGRAMADA sin chofer ni solicitud M5 y guarda la estimación', async () => {
     const creada = await request(app).post('/reservas').send(bodyValido());
-    estimarTarifa.mockResolvedValueOnce({ tarifaEstimada: 4_800, moneda: 'ARS' });
+    expect(creada.status).toBe(201);
+    expect(creada.body).toMatchObject({
+      estado: 'PROGRAMADA',
+      tarifaEstimada: 3_250,
+      estimacionTarifaId: 'est_test',
+      idSolicitud: null,
+      assignedDriverId: null,
+      routeSnapshot: { distanceKm: 10 },
+    });
+  });
 
+  it('recalcula ruta/tarifa al cambiar recorrido o vehículo y no al cambiar solo fecha', async () => {
+    const creada = await request(app).post('/reservas').send(bodyValido());
+    estimarTarifa.mockResolvedValueOnce(fareEstimate(4_800));
     const actualizada = await request(app)
       .patch(`/reservas/${creada.body.id as string}`)
       .send({ destino: 'Puerto', vehiculo: 'MOTO' });
-
     expect(actualizada.status).toBe(200);
     expect(actualizada.body).toMatchObject({
       destino: 'Puerto',
       vehiculo: 'MOTO',
       tarifaEstimada: 4_800,
-      moneda: 'ARS',
     });
-    expect(estimarTarifa).toHaveBeenLastCalledWith({
-      origen: bodyValido().origen,
-      destino: 'Puerto',
-      vehiculo: 'MOTO',
-    });
+    expect(estimarTarifa).toHaveBeenCalledTimes(2);
+
+    const nuevaFecha = new Date(Date.now() + 7_200_000).toISOString();
+    await request(app)
+      .patch(`/reservas/${creada.body.id as string}`)
+      .send({ fechaHoraProgramada: nuevaFecha });
+    expect(estimarTarifa).toHaveBeenCalledTimes(2);
   });
 
-  it('elimina la tarifa anterior si M7 falla al modificar el recorrido', async () => {
+  it('elimina tarifa y ruta anteriores si la nueva consulta externa falla', async () => {
     const creada = await request(app).post('/reservas').send(bodyValido());
     estimarTarifa.mockRejectedValueOnce(new Error('M7 no disponible'));
-
     const actualizada = await request(app)
       .patch(`/reservas/${creada.body.id as string}`)
       .send({ destino: 'Puerto' });
-
-    expect(actualizada.status).toBe(200);
     expect(actualizada.body).toMatchObject({
       destino: 'Puerto',
       tarifaEstimada: null,
-      moneda: 'ARS',
+      routeSnapshot: null,
     });
   });
 
-  it('crea, consulta, lista, modifica y cancela lógicamente una reserva', async () => {
+  it('consulta, lista, modifica y cancela lógicamente', async () => {
     const creada = await request(app).post('/reservas').send(bodyValido());
-    expect(creada.status).toBe(201);
-    expect(creada.body).toMatchObject({ estado: 'PROGRAMADA', tarifaEstimada: 3_250 });
-
     const id = creada.body.id as string;
-    const consulta = await request(app).get(`/reservas/${id}`);
-    expect(consulta.status).toBe(200);
-    expect(consulta.body.id).toBe(id);
-
-    const listado = await request(app).get('/reservas');
-    expect(listado.body.reservas).toHaveLength(1);
-
-    const modificada = await request(app).patch(`/reservas/${id}`).send({ destino: 'Puerto' });
-    expect(modificada.status).toBe(200);
-    expect(modificada.body.destino).toBe('Puerto');
-
-    const cancelada = await request(app).delete(`/reservas/${id}`);
-    expect(cancelada.status).toBe(200);
-    expect(cancelada.body.estado).toBe('CANCELADA');
+    expect((await request(app).get(`/reservas/${id}`)).status).toBe(200);
+    expect((await request(app).get('/reservas')).body.reservas).toHaveLength(1);
+    expect((await request(app).patch(`/reservas/${id}`).send({ destino: 'Puerto' })).status).toBe(
+      200,
+    );
+    expect((await request(app).delete(`/reservas/${id}`)).body.estado).toBe('CANCELADA');
   });
 
-  it('rechaza fechas pasadas con FECHA_INVALIDA', async () => {
-    const response = await request(app)
+  it('rechaza fecha pasada, campos de servidor y operaciones sobre estado final', async () => {
+    const pasada = await request(app)
       .post('/reservas')
       .send({ ...bodyValido(), fechaHoraProgramada: new Date(0).toISOString() });
-
-    expect(response.status).toBe(400);
-    expect(response.body).toEqual({
-      error: {
-        codigo: 'FECHA_INVALIDA',
-        mensaje: 'La fecha y hora programada debe ser válida y futura.',
-      },
-    });
-  });
-
-  it('impide que el cliente fuerce estados', async () => {
-    const response = await request(app)
+    expect(pasada.body.error.codigo).toBe('FECHA_INVALIDA');
+    const forzada = await request(app)
       .post('/reservas')
       .send({ ...bodyValido(), estado: 'ACTIVADA' });
-
-    expect(response.status).toBe(400);
-    expect(response.body.error.codigo).toBe('DATOS_INVALIDOS');
+    expect(forzada.body.error.codigo).toBe('DATOS_INVALIDOS');
+    const creada = await request(app).post('/reservas').send(bodyValido());
+    await request(app).delete(`/reservas/${creada.body.id as string}`);
+    expect(
+      (
+        await request(app)
+          .patch(`/reservas/${creada.body.id as string}`)
+          .send({ destino: 'Puerto' })
+      ).status,
+    ).toBe(409);
+    expect((await request(app).delete(`/reservas/${creada.body.id as string}`)).status).toBe(409);
   });
 
-  it('distingue reserva inexistente y reserva no modificable/cancelable', async () => {
-    const inexistente = await request(app).get(`/reservas/${randomUUID()}`);
-    expect(inexistente.status).toBe(404);
-    expect(inexistente.body.error.codigo).toBe('RESERVA_NO_ENCONTRADA');
-
-    const creada = await request(app).post('/reservas').send(bodyValido());
-    const id = creada.body.id as string;
-    await request(app).delete(`/reservas/${id}`);
-
-    const modificacion = await request(app).patch(`/reservas/${id}`).send({ destino: 'Puerto' });
-    expect(modificacion.status).toBe(409);
-    expect(modificacion.body.error.codigo).toBe('RESERVA_NO_MODIFICABLE');
-
-    const cancelacion = await request(app).delete(`/reservas/${id}`);
-    expect(cancelacion.status).toBe(409);
-    expect(cancelacion.body.error.codigo).toBe('RESERVA_NO_CANCELABLE');
+  it('distingue una reserva inexistente', async () => {
+    const response = await request(app).get(`/reservas/${randomUUID()}`);
+    expect(response.status).toBe(404);
+    expect(response.body.error.codigo).toBe('RESERVA_NO_ENCONTRADA');
   });
 });

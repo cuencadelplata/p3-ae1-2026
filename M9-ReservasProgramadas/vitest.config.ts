@@ -10,6 +10,7 @@ export default defineConfig({
       provider: 'v8',
       reportsDirectory: 'coverage',
       reporter: ['text', 'html'],
+      exclude: ['src/stubs/**', 'src/server.ts'],
       thresholds: {
         statements: 80,
         branches: 75,

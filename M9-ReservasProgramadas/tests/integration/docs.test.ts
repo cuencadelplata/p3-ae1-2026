@@ -21,7 +21,7 @@ describe('GET /docs', () => {
     expect(response.body).toEqual(openApiDocument);
   });
 
-  it('documenta ejemplos y la ausencia de autenticación propia en AE1', () => {
+  it('documenta ejemplos y la ausencia de autenticación propia', () => {
     expect(openApiDocument.security).toEqual([]);
     expect(openApiDocument.info.description).toContain('no implementa autenticación propia');
     expect(JSON.stringify(openApiDocument)).toContain('CrearReservaValida');
