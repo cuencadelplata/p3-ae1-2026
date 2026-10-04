@@ -2,7 +2,28 @@ version: '3.9'
 
 services:
   # ----------------------------------------------------
-  # 1. Backing Service: Redis (Caché, TTL y Locks)
+  # 1. Backing Service: PostgreSQL (DispatchDB de M5)
+  # ----------------------------------------------------
+  postgres-db:
+    image: postgres:16-alpine
+    container_name: m5-postgres-db
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=dispatch_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------
+  # 2. Backing Service: Redis (Caché, TTL y Locks)
   # ----------------------------------------------------
   redis:
     image: redis:7-alpine
@@ -19,7 +40,7 @@ services:
       retries: 5
 
   # ----------------------------------------------------
-  # 2. Backing Service: RabbitMQ (Broker de Mensajería)
+  # 3. Backing Service: RabbitMQ (Broker de Mensajería)
   # ----------------------------------------------------
   rabbitmq:
     image: rabbitmq:3-management-alpine
@@ -37,7 +58,7 @@ services:
       retries: 5
 
   # ----------------------------------------------------
-  # 3. Microservicio M5: Solicitud y Despacho
+  # 4. Microservicio M5: Solicitud y Despacho
   # ----------------------------------------------------
   dispatch-service:
     build:
@@ -50,9 +71,12 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3005
+      - DATABASE_URL=postgresql://postgres:postgres@postgres-db:5432/dispatch_db?schema=public
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
     depends_on:
+      postgres-db:
+        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -69,7 +93,7 @@ services:
       start_period: 10s
 
   # ----------------------------------------------------
-  # 4. Documentación Interactiva Scalar (Nginx)
+  # 5. Documentación Interactiva Scalar (Nginx)
   # ----------------------------------------------------
   scalar-docs:
     build:
@@ -87,5 +111,6 @@ services:
     restart: unless-stopped
 
 volumes:
+  postgres_data:
   redis_data:
   rabbitmq_data:
