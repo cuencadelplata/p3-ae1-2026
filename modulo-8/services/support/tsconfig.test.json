@@ -6,6 +6,6 @@
     "allowJs": true,
     "checkJs": true
   },
-  "include": ["src/**/*", "scripts/**/*.mjs"],
+  "include": ["src/**/*", "tests/**/*", "scripts/**/*.mjs", "vitest*.config.ts"],
   "exclude": ["node_modules", "dist"]
 }
