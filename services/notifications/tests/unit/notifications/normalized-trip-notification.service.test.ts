@@ -7,6 +7,7 @@ import {
   NOTIFICATION_REQUESTED_ROUTING_KEY,
   type NotificationWithOutboxRepository,
 } from "../../../src/notifications/notification-outbox.repository";
+import { createNotificationRequestedData } from "../../../src/notifications/notification-requested.mapper";
 import type { NotificationRepository } from "../../../src/notifications/notification.repository";
 import { processNormalizedTripNotificationEvent } from "../../../src/notifications/normalized-trip-notification.service";
 import { TRIP_NOTIFICATION_EVENT_TYPES, type LogicalNotification } from "../../../src/notifications/notification.types";
@@ -31,8 +32,11 @@ function createOutboxRepository(
 ): NotificationWithOutboxRepository {
   return {
     saveWithOutbox,
+    saveWithOutboxUsingClient: vi.fn(),
     findPending: vi.fn(async () => []),
+    claimPendingForPublish: vi.fn(async () => []),
     markPublished: vi.fn(async () => true),
+    markPublishedWithClient: vi.fn(async () => true),
   };
 }
 
@@ -116,7 +120,7 @@ describe("RF8.1 AE2 — persistencia de evento normalizado", () => {
         correlationId: notification.correlationId,
         version: 1 as const,
         producer: M8_PRODUCER as typeof M8_PRODUCER,
-        payload: null,
+        payload: createNotificationRequestedData(notification),
         createdAt: notification.createdAt,
         publishedAt: null,
       },
@@ -130,7 +134,8 @@ describe("RF8.1 AE2 — persistencia de evento normalizado", () => {
       expect(result.outbox).toMatchObject({
         eventType: "NotificationRequested",
         routingKey: "notification.requested",
-        payload: null,
+        producer: "m8-notifications",
+        payload: createNotificationRequestedData(result.data),
       });
     }
   });
@@ -159,7 +164,7 @@ describe("RF8.1 AE2 — persistencia de evento normalizado", () => {
         correlationId: notification.correlationId,
         version: 1 as const,
         producer: M8_PRODUCER as typeof M8_PRODUCER,
-        payload: null,
+        payload: createNotificationRequestedData(notification),
         createdAt: notification.createdAt,
         publishedAt: null,
       },
@@ -190,7 +195,7 @@ describe("RF8.1 AE2 — persistencia de evento normalizado", () => {
         correlationId: notification.correlationId,
         version: 1 as const,
         producer: M8_PRODUCER as typeof M8_PRODUCER,
-        payload: null,
+        payload: createNotificationRequestedData(notification),
         createdAt: notification.createdAt,
         publishedAt: null,
       },

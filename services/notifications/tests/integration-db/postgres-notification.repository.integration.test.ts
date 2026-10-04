@@ -41,7 +41,7 @@ async function countRows(sourceMessageId: string, recipientId: string): Promise<
 
 async function countOutboxRows(sourceMessageId: string, recipientId: string): Promise<number> {
   const result = await pool.query<{ count: string }>(
-    `SELECT count(*) FROM notifications.outbox_events o
+    `SELECT count(*) FROM notifications.outbox_deliveries o
      JOIN notifications.notifications n ON n.notification_id = o.notification_id
      WHERE n.source_message_id = $1 AND n.recipient_id = $2`,
     [sourceMessageId, recipientId],
@@ -70,7 +70,111 @@ describe("PostgreSQL NotificationRepository", () => {
       { version: 1, name: "create_notifications_table" },
       { version: 2, name: "create_notification_outbox_table" },
       { version: 3, name: "create_notification_outbox_pending_index" },
+      { version: 4, name: "align_notification_outbox_delivery_contract" },
     ]);
+  });
+
+  it("actualiza V1/V2/V3 a V4 sin perder filas ni messageId", async () => {
+    const notificationId = randomUUID();
+    const outboxMessageId = randomUUID();
+
+    await pool.query("DROP SCHEMA IF EXISTS notifications CASCADE");
+    await pool.query("CREATE SCHEMA notifications");
+    await pool.query(`CREATE TABLE notifications.schema_migrations (
+      version integer PRIMARY KEY,
+      name text NOT NULL,
+      applied_at timestamptz NOT NULL DEFAULT now()
+    )`);
+    await pool.query(
+      "INSERT INTO notifications.schema_migrations (version, name) VALUES (1, 'create_notifications_table'), (2, 'create_notification_outbox_table'), (3, 'create_notification_outbox_pending_index')",
+    );
+    await pool.query(`CREATE TABLE notifications.notifications (
+      notification_id uuid PRIMARY KEY,
+      source_message_id text NOT NULL,
+      trip_id text NOT NULL,
+      recipient_id text NOT NULL,
+      event_type text NOT NULL CHECK (event_type IN (
+        'TripRequested', 'TripAssigned', 'DriverArrived',
+        'TripStarted', 'TripCancelled', 'TripCompleted'
+      )),
+      title text NOT NULL,
+      message text NOT NULL,
+      correlation_id text NOT NULL,
+      occurred_at timestamptz NOT NULL,
+      created_at timestamptz NOT NULL,
+      CONSTRAINT notifications_source_message_recipient_key
+        UNIQUE (source_message_id, recipient_id)
+    )`);
+    await pool.query(`CREATE TABLE notifications.outbox_events (
+      message_id uuid PRIMARY KEY,
+      notification_id uuid NOT NULL REFERENCES notifications.notifications (notification_id),
+      event_type text NOT NULL CHECK (event_type = 'NotificationRequested'),
+      routing_key text NOT NULL CHECK (routing_key = 'notification.requested'),
+      correlation_id text NOT NULL,
+      version integer NOT NULL CHECK (version = 1),
+      producer text NOT NULL CHECK (producer = 'm8'),
+      payload jsonb NULL,
+      created_at timestamptz NOT NULL,
+      published_at timestamptz NULL,
+      CONSTRAINT notifications_outbox_notification_event_key UNIQUE (notification_id, event_type)
+    )`);
+    await pool.query(`CREATE INDEX notifications_outbox_pending_created_at_idx
+      ON notifications.outbox_events (created_at, message_id)
+      WHERE published_at IS NULL`);
+    await pool.query(
+      `INSERT INTO notifications.notifications (
+        notification_id, source_message_id, trip_id, recipient_id, event_type,
+        title, message, correlation_id, occurred_at, created_at
+      ) VALUES ($1, 'legacy-message', 'trip-legacy', 'user-legacy', 'TripAssigned',
+        'Conductor asignado', 'Se asignó un conductor a tu viaje.', 'trip-legacy',
+        '2026-10-03T15:30:00.000Z', '2026-10-03T15:31:00.000Z')`,
+      [notificationId],
+    );
+    await pool.query(
+      `INSERT INTO notifications.outbox_events (
+        message_id, notification_id, event_type, routing_key, correlation_id,
+        version, producer, payload, created_at, published_at
+      ) VALUES ($1, $2, 'NotificationRequested', 'notification.requested', 'trip-legacy',
+        1, 'm8', NULL, '2026-10-03T15:32:00.000Z', '2026-10-03T15:40:00.000Z')`,
+      [outboxMessageId, notificationId],
+    );
+
+    await runMigrations(pool);
+    await runMigrations(pool);
+
+    const oldTable = await pool.query<{ exists: string | null }>(
+      "SELECT to_regclass('notifications.outbox_events')::text AS exists",
+    );
+    const migrated = await pool.query<{
+      message_id: string;
+      producer: string;
+      payload: unknown;
+      published_at: Date | null;
+    }>(
+      "SELECT message_id, producer, payload, published_at FROM notifications.outbox_deliveries WHERE message_id = $1",
+      [outboxMessageId],
+    );
+
+    expect(oldTable.rows[0].exists).toBeNull();
+    expect(migrated.rows).toEqual([
+      {
+        message_id: outboxMessageId,
+        producer: "m8-notifications",
+        payload: {
+          notificationId,
+          tripId: "trip-legacy",
+          recipientId: "user-legacy",
+          eventType: "DRIVER_ASSIGNED",
+          channel: "PUSH",
+          message: "Se asignó un conductor a tu viaje.",
+          createdAt: "2026-10-03T15:31:00.000Z",
+        },
+        published_at: new Date("2026-10-03T15:40:00.000Z"),
+      },
+    ]);
+
+    await pool.query("DROP SCHEMA IF EXISTS notifications CASCADE");
+    await runMigrations(pool);
   });
 
   it("persiste todos los datos de una notificación lógica", async () => {
@@ -165,8 +269,16 @@ describe("PostgreSQL NotificationRepository", () => {
       routingKey: "notification.requested",
       correlationId: notification.tripId,
       version: 1,
-      producer: "m8",
-      payload: null,
+      producer: "m8-notifications",
+      payload: {
+        notificationId: notification.notificationId,
+        tripId: notification.tripId,
+        recipientId: notification.recipientId,
+        eventType: "DRIVER_ASSIGNED",
+        channel: "PUSH",
+        message: notification.message,
+        createdAt: notification.createdAt,
+      },
       publishedAt: null,
     });
     expect(saved.outbox.messageId).not.toBe(notification.sourceMessageId);
@@ -233,7 +345,7 @@ describe("PostgreSQL NotificationRepository", () => {
     await pool.query(`CREATE FUNCTION notifications.fail_outbox_insert()
       RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'controlled outbox failure'; END; $$ LANGUAGE plpgsql`);
     await pool.query(`CREATE TRIGGER notifications_fail_outbox_insert
-      BEFORE INSERT ON notifications.outbox_events
+      BEFORE INSERT ON notifications.outbox_deliveries
       FOR EACH ROW EXECUTE FUNCTION notifications.fail_outbox_insert()`);
 
     try {
@@ -241,7 +353,7 @@ describe("PostgreSQL NotificationRepository", () => {
         NotificationPersistenceError,
       );
     } finally {
-      await pool.query("DROP TRIGGER IF EXISTS notifications_fail_outbox_insert ON notifications.outbox_events");
+      await pool.query("DROP TRIGGER IF EXISTS notifications_fail_outbox_insert ON notifications.outbox_deliveries");
       await pool.query("DROP FUNCTION IF EXISTS notifications.fail_outbox_insert()");
     }
 
@@ -249,14 +361,14 @@ describe("PostgreSQL NotificationRepository", () => {
     expect(await countOutboxRows(notification.sourceMessageId, notification.recipientId)).toBe(0);
   });
 
-  it("lee pendientes como NotificationDeliveryIntent sin poblar payload", async () => {
+  it("lee pendientes como NotificationDeliveryIntent y conserva payload contractual", async () => {
     const notification = createNotification();
     const saved = await outboxRepository.saveWithOutbox(notification);
 
     const pending = await outboxRepository.findPending(10);
     const intent = pending.find((item) => item.outboxMessageId === saved.outbox.messageId);
     const storedPayload = await pool.query<{ payload: unknown }>(
-      "SELECT payload FROM notifications.outbox_events WHERE message_id = $1",
+      "SELECT payload FROM notifications.outbox_deliveries WHERE message_id = $1",
       [saved.outbox.messageId],
     );
 
@@ -273,17 +385,29 @@ describe("PostgreSQL NotificationRepository", () => {
       notificationCreatedAt: notification.createdAt,
       outboxCreatedAt: saved.outbox.createdAt,
     });
-    expect(storedPayload.rows).toEqual([{ payload: null }]);
+    expect(storedPayload.rows).toEqual([
+      {
+        payload: {
+          notificationId: notification.notificationId,
+          tripId: notification.tripId,
+          recipientId: notification.recipientId,
+          eventType: "DRIVER_ASSIGNED",
+          channel: "PUSH",
+          message: notification.message,
+          createdAt: notification.createdAt,
+        },
+      },
+    ]);
   });
 
   it("devuelve pendientes en orden FIFO y respeta limit", async () => {
     const first = await outboxRepository.saveWithOutbox(createNotification({ sourceMessageId: `fifo-a-${randomUUID()}` }));
     const second = await outboxRepository.saveWithOutbox(createNotification({ sourceMessageId: `fifo-b-${randomUUID()}` }));
-    await pool.query("UPDATE notifications.outbox_events SET created_at = $1 WHERE message_id = $2", [
+    await pool.query("UPDATE notifications.outbox_deliveries SET created_at = $1 WHERE message_id = $2", [
       "2026-10-03T10:00:00.000Z",
       first.outbox.messageId,
     ]);
-    await pool.query("UPDATE notifications.outbox_events SET created_at = $1 WHERE message_id = $2", [
+    await pool.query("UPDATE notifications.outbox_deliveries SET created_at = $1 WHERE message_id = $2", [
       "2026-10-03T10:00:01.000Z",
       second.outbox.messageId,
     ]);
@@ -305,7 +429,7 @@ describe("PostgreSQL NotificationRepository", () => {
 
     const pending = await outboxRepository.findPending(100);
     const stored = await pool.query<{ message_id: string; published_at: Date }>(
-      "SELECT message_id, published_at FROM notifications.outbox_events WHERE message_id = $1",
+      "SELECT message_id, published_at FROM notifications.outbox_deliveries WHERE message_id = $1",
       [saved.outbox.messageId],
     );
 
@@ -324,12 +448,123 @@ describe("PostgreSQL NotificationRepository", () => {
     ]);
 
     const stored = await pool.query<{ message_id: string; count: string }>(
-      "SELECT message_id, count(*) OVER () AS count FROM notifications.outbox_events WHERE message_id = $1",
+      "SELECT message_id, count(*) OVER () AS count FROM notifications.outbox_deliveries WHERE message_id = $1",
       [saved.outbox.messageId],
     );
 
     expect(results).toEqual([true, true]);
     expect(stored.rows).toEqual([{ message_id: saved.outbox.messageId, count: "1" }]);
+  });
+
+  it("reclama pendientes para publicar con FOR UPDATE SKIP LOCKED sin duplicar filas bloqueadas", async () => {
+    await pool.query("UPDATE notifications.outbox_deliveries SET published_at = COALESCE(published_at, now()) WHERE published_at IS NULL");
+    const first = await outboxRepository.saveWithOutbox(createNotification({ sourceMessageId: `claim-a-${randomUUID()}` }));
+    const second = await outboxRepository.saveWithOutbox(createNotification({ sourceMessageId: `claim-b-${randomUUID()}` }));
+    await pool.query("UPDATE notifications.outbox_deliveries SET created_at = $1 WHERE message_id = $2", [
+      "2026-10-03T11:00:00.000Z",
+      first.outbox.messageId,
+    ]);
+    await pool.query("UPDATE notifications.outbox_deliveries SET created_at = $1 WHERE message_id = $2", [
+      "2026-10-03T11:00:01.000Z",
+      second.outbox.messageId,
+    ]);
+
+    const clientA = await pool.connect();
+    const clientB = await pool.connect();
+
+    try {
+      await clientA.query("BEGIN");
+      const claimedByA = await outboxRepository.claimPendingForPublish(clientA, 2);
+      await clientB.query("BEGIN");
+      const claimedByB = await outboxRepository.claimPendingForPublish(clientB, 100);
+
+      const lockedByA = new Set(claimedByA.map((event) => event.messageId));
+      expect(lockedByA.has(first.outbox.messageId)).toBe(true);
+      expect(lockedByA.has(second.outbox.messageId)).toBe(true);
+      expect(claimedByB.some((event) => lockedByA.has(event.messageId))).toBe(false);
+    } finally {
+      await clientB.query("ROLLBACK").catch(() => undefined);
+      await clientA.query("ROLLBACK").catch(() => undefined);
+      clientB.release();
+      clientA.release();
+    }
+  });
+
+  it("marca published_at con client externo sin cambiar la semantica idempotente", async () => {
+    const saved = await outboxRepository.saveWithOutbox(createNotification());
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+      await expect(
+        outboxRepository.markPublishedWithClient(client, saved.outbox.messageId, "2026-10-03T17:30:00.000Z"),
+      ).resolves.toBe(true);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    const stored = await pool.query<{ published_at: Date | null }>(
+      "SELECT published_at FROM notifications.outbox_deliveries WHERE message_id = $1",
+      [saved.outbox.messageId],
+    );
+    expect(stored.rows[0].published_at?.toISOString()).toBe("2026-10-03T17:30:00.000Z");
+  });
+
+  it("permite que RF8.6 controle rollback y commit de la transaccion externa", async () => {
+    const application = createRf81Application({ pool });
+    const rollbackEvent: NormalizedTripNotificationEvent = {
+      messageId: `external-rollback-${randomUUID()}`,
+      eventType: "TripStarted",
+      tripId: "trip-external-rollback",
+      recipientId: "user-external",
+      correlationId: "trip-external-rollback",
+      occurredAt: "2026-10-03T18:10:00.000Z",
+    };
+    const commitEvent: NormalizedTripNotificationEvent = {
+      ...rollbackEvent,
+      messageId: `external-commit-${randomUUID()}`,
+      tripId: "trip-external-commit",
+      correlationId: "trip-external-commit",
+    };
+
+    const rollbackClient = await pool.connect();
+    try {
+      await rollbackClient.query("BEGIN");
+      const result = await application.processTripEventWithClient(rollbackClient, rollbackEvent);
+      expect(result).toMatchObject({ status: "SUCCESS_CREATED", valid: true, created: true });
+      const insideTransaction = await rollbackClient.query<{ count: string }>(
+        `SELECT count(*) FROM notifications.notifications
+         WHERE source_message_id = $1 AND recipient_id = $2`,
+        [rollbackEvent.messageId, rollbackEvent.recipientId],
+      );
+      expect(Number(insideTransaction.rows[0].count)).toBe(1);
+      await rollbackClient.query("ROLLBACK");
+    } finally {
+      rollbackClient.release();
+    }
+
+    expect(await countRows(rollbackEvent.messageId, rollbackEvent.recipientId)).toBe(0);
+    expect(await countOutboxRows(rollbackEvent.messageId, rollbackEvent.recipientId)).toBe(0);
+
+    const commitClient = await pool.connect();
+    try {
+      await commitClient.query("BEGIN");
+      const result = await application.processTripEventWithClient(commitClient, commitEvent);
+      expect(result).toMatchObject({ status: "SUCCESS_CREATED", valid: true, created: true });
+      await commitClient.query("COMMIT");
+    } catch (error) {
+      await commitClient.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      commitClient.release();
+    }
+
+    expect(await countRows(commitEvent.messageId, commitEvent.recipientId)).toBe(1);
+    expect(await countOutboxRows(commitEvent.messageId, commitEvent.recipientId)).toBe(1);
   });
 
   it("ejecuta el flujo autónomo completo de RF8.1 sin RabbitMQ", async () => {
@@ -367,7 +602,7 @@ describe("PostgreSQL NotificationRepository", () => {
     await expect(application.outbox.markPublished(intent.outboxMessageId, "2026-10-03T18:05:00.000Z")).resolves.toBe(true);
     const pendingAfter = await application.outbox.findPending(100);
     const published = await pool.query<{ published_at: Date | null }>(
-      "SELECT published_at FROM notifications.outbox_events WHERE message_id = $1",
+      "SELECT published_at FROM notifications.outbox_deliveries WHERE message_id = $1",
       [intent.outboxMessageId],
     );
 
