@@ -79,3 +79,19 @@ export async function buscarDocumentoDeConductor(
   if (error) throw new Error(`Error al buscar documento: ${error.message}`);
   return data ? filaADocumento(data as DocumentoFila) : null;
 }
+
+export async function actualizarEstadoDocumento(
+  documentId: string,
+  estado: "APROBADO" | "RECHAZADO",
+): Promise<void> {
+  const { error } = await supabase
+    .from("documentos")
+    .update({ estado })
+    .eq("id", documentId)
+    .eq("estado", "PENDIENTE"); // doble seguro de idempotencia a nivel SQL
+
+  if (error)
+    throw new Error(
+      `Error al actualizar estado del documento: ${error.message}`,
+    );
+}

@@ -1,5 +1,5 @@
 import { getChannel } from "../config/rabbitmq.js";
-import type { Documento } from "./documento-model.js";
+import type { Documento } from "./documents-model.js";
 
 export async function publicarDocumentoRegistrado(
   documento: Documento,
