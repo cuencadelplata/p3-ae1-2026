@@ -65,7 +65,13 @@ export async function runMigrations(pool: Pool): Promise<void> {
     client = await pool.connect();
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock($1)", [MIGRATION_LOCK_KEY]);
-    await client.query("CREATE SCHEMA IF NOT EXISTS notifications");
+    const schema = await client.query<{ exists: boolean }>(
+      "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = $1) AS exists",
+      ["notifications"],
+    );
+    if (schema.rows[0].exists !== true) {
+      await client.query("CREATE SCHEMA notifications");
+    }
     await client.query(`CREATE TABLE IF NOT EXISTS notifications.schema_migrations (
       version integer PRIMARY KEY,
       name text NOT NULL,
