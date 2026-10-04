@@ -87,3 +87,33 @@ export function authenticateToken(
         });
     }
 }
+
+/**
+ * Middleware para autorización basada en roles.
+ * Requiere que authenticateToken se haya ejecutado previamente.
+ */
+export function authorizeRoles(...allowedRoles: UserRole[]) {
+    return (
+        req: AuthenticatedRequest,
+        res: Response,
+        next: NextFunction
+    ): void => {
+        const user = req.usuarioAutenticado;
+
+        if (!user) {
+            res.status(401).json({
+                error: "Usuario no autenticado"
+            });
+            return;
+        }
+
+        if (!allowedRoles.includes(user.role)) {
+            res.status(403).json({
+                error: "Acceso denegado: No tienes los permisos suficientes"
+            });
+            return;
+        }
+
+        next();
+    };
+}

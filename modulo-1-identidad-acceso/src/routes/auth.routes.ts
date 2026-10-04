@@ -11,7 +11,7 @@ import {
     oauth2Callback,
     oauth2LinkAccount
 } from "../controllers/recovery.controller";
-import { authenticateToken } from "../middleware/auth.middleware";
+import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware";
 
 const router = Router();
 
@@ -61,3 +61,18 @@ router.post(
 );
 
 export default router;
+
+// ============ Demostración RF-1.3 (Roles) ============
+router.get(
+    "/admin-panel",
+    authenticateToken,
+    authorizeRoles("OPERADOR"),
+    (req, res) => { res.json({ message: "Bienvenido al panel de Operadores" }); }
+);
+
+router.get(
+    "/portal-conductor",
+    authenticateToken,
+    authorizeRoles("CONDUCTOR"),
+    (req, res) => { res.json({ message: "Bienvenido al portal de Conductores" }); }
+);
