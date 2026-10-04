@@ -21,47 +21,19 @@ export class AuthError extends Error {
     }
 }
 
-interface RegisterInput {
-    nombre: unknown;
-    apellido: unknown;
-    dni: unknown;
-    telefono: unknown;
-    email: unknown;
-    password: unknown;
-    rol: unknown;
-}
-
-interface LoginInput {
-    email: unknown;
-    password: unknown;
-}
+import { RegisterUserRequestDTO, RegisterUserResponseDTO } from "../types/auth.dto";
+import { validateRegisterRequest } from "../utils/validators";
 
 export async function registerUser(
-    input: RegisterInput
-) {
+    input: RegisterUserRequestDTO
+): Promise<RegisterUserResponseDTO> {
+    const { isValid, errors } = validateRegisterRequest(input);
+
+    if (!isValid) {
+        throw new AuthError(400, errors.join(", "));
+    }
+
     const { nombre, apellido, dni, telefono, email, password, rol } = input;
-
-    if (
-        typeof nombre !== "string" ||
-        typeof apellido !== "string" ||
-        typeof dni !== "string" ||
-        typeof telefono !== "string" ||
-        typeof email !== "string" ||
-        typeof password !== "string" ||
-        typeof rol !== "string"
-    ) {
-        throw new AuthError(
-            400,
-            "Nombre, apellido, DNI, telefono, email, password y rol son obligatorios"
-        );
-    }
-
-    if (!nombre.trim() || !apellido.trim() || !dni.trim() || !telefono.trim()) {
-        throw new AuthError(
-            400,
-            "Nombre, apellido, DNI y telefono son obligatorios"
-        );
-    }
 
     const nombreNormalizado = nombre.trim();
     const apellidoNormalizado = apellido.trim();
@@ -69,51 +41,17 @@ export async function registerUser(
     const telefonoNormalizado = telefono.trim();
     const emailNormalizado = normalizarEmail(email);
 
-    if (!esEmailValido(emailNormalizado)) {
-        throw new AuthError(
-            400,
-            "El email no es válido"
-        );
-    }
-
-    if (!esPasswordValida(password)) {
-        throw new AuthError(
-            400,
-            "La contraseña debe tener al menos 6 caracteres"
-        );
-    }
-
-    if (!esRolRegistrable(rol)) {
-        throw new AuthError(
-            400,
-            "El rol debe ser CLIENTE, CONDUCTOR u OPERADOR; el registro público sólo admite CLIENTE o CONDUCTOR"
-        );
-    }
-
-    const usuarioExistente =
-        findUserByEmail(emailNormalizado);
-
+    const usuarioExistente = findUserByEmail(emailNormalizado);
     if (usuarioExistente) {
-        throw new AuthError(
-            409,
-            "Ya existe un usuario con ese email"
-        );
+        throw new AuthError(409, "Ya existe un usuario con ese email");
     }
 
-    const usuarioConDniExistente =
-        findUserByDni(dniNormalizado);
-
+    const usuarioConDniExistente = findUserByDni(dniNormalizado);
     if (usuarioConDniExistente) {
-        throw new AuthError(
-            409,
-            "Ya existe un usuario con ese DNI"
-        );
+        throw new AuthError(409, "Ya existe un usuario con ese DNI");
     }
 
-    const passwordHash = await bcrypt.hash(
-        password,
-        10
-    );
+    const passwordHash = await bcrypt.hash(password, 10);
 
     const id = createUser(
         nombreNormalizado,
@@ -129,12 +67,15 @@ export async function registerUser(
         id,
         nombre: nombreNormalizado,
         apellido: apellidoNormalizado,
-        dni: dniNormalizado,
-        telefono: telefonoNormalizado,
         email: emailNormalizado,
         rol,
-        estado: "ACTIVO"
+        created_at: new Date().toISOString()
     };
+}
+
+interface LoginInput {
+    email: unknown;
+    password: unknown;
 }
 
 export async function loginUser(
