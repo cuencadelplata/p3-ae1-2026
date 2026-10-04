@@ -22,16 +22,24 @@ const MODULE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
 // Retardo con el que el consumer legacy procesa cada mensaje fuera de tests.
 const PROCESSING_DELAY_MS = 3000;
 
+/** @param {string[]} args */
 function docker(...args) {
   return execFileSync('docker', args, { cwd: MODULE_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
+/** @param {string[]} args */
 function compose(...args) {
   return docker('compose', ...args);
 }
 
+/** @param {number} ms */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * @param {() => boolean | Promise<boolean>} check
+ * @param {number} timeoutMs
+ * @param {string} description
+ */
 async function waitFor(check, timeoutMs, description) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -45,6 +53,11 @@ async function waitFor(check, timeoutMs, description) {
   assert.fail(`Tiempo agotado esperando: ${description}`);
 }
 
+/**
+ * @param {string} method
+ * @param {string} pathname
+ * @param {unknown} [body]
+ */
 async function requestJson(method, pathname, body) {
   const response = await fetch(`${SUPPORT}${pathname}`, {
     method,
@@ -54,6 +67,7 @@ async function requestJson(method, pathname, body) {
   return { status: response.status, body: await response.json() };
 }
 
+/** @param {string} viajeId */
 function publish(viajeId) {
   return requestJson('POST', '/events/publish', {
     routingKey: 'viaje.completado',
@@ -74,6 +88,7 @@ function supportStartedAt() {
 }
 
 const runId = `broker-${Date.now()}`;
+/** @type {string} */
 let startedAtBefore;
 
 after(async () => {
