@@ -1,13 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { procesarPagoMercadoPago } from "../metodo-pago/PagoCliente";
 
+const fetchOriginal = globalThis.fetch;
+
 describe("procesarPagoMercadoPago (cliente del mock de Mercado Pago)", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn());
+    globalThis.fetch = vi.fn() as unknown as typeof fetch;
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    globalThis.fetch = fetchOriginal;
   });
 
   it("devuelve paymentId y status cuando el mock aprueba el pago", async () => {

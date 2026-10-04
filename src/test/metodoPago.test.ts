@@ -21,16 +21,16 @@ describe("registrarMetodoPago", () => {
   });
 
 
-  it("lanza error si clienteId está vacío", () => {
+ it("lanza error si clienteId está vacío", () => {
     expect(() => registrarMetodoPago("", "viajeD", "efectivo")).toThrow(
-      "clienteId y viajeId debe existir"
+      "clienteId y viajeId deben existir"
     );
   });
 
 
   it("lanza error si viajeId está vacío", () => {
     expect(() => registrarMetodoPago("cliente1", "", "efectivo")).toThrow(
-      "clienteId y viajeId debe existir"
+      "clienteId y viajeId deben existir"
     );
   });
 
