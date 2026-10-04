@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";  //vi = para mocks 
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";  //vi = para mocks 
 import request from "supertest"; //simula los pedidos 
 import express from "express"; //armar servidor para manejar rutas, peticiones y respuestas HTTP sin tener que escribir todo eso a mano.
 import rutaPago from "../metodo-pago/rutaPago";
@@ -65,28 +65,79 @@ describe("GET /metodo-pago/:viajeId ruta ", () => {
 
 
 
-
-
-
 describe("POST /metodo-pago/:viajeId/autorizar", () => {
-  it("autoriza un pago pendiente y devuelve 200", async () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("autoriza un pago pendiente y devuelve 200 con el paymentId de Mercado Pago", async () => {
     await request(app)
       .post("/metodo-pago")
       .send({ clienteId: "cliente1", viajeId: "viaje-http-3", tipo: "efectivo" });
 
-    const respuesta = await request(app)   //guarda en respuest
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: "mp-mock-123", status: "approved", transaction_amount: 1500 }),
+    });
+
+    const respuesta = await request(app)
       .post("/metodo-pago/viaje-http-3/autorizar")
-      .send({ idOrden: "orden-http-3" });
+      .send({ idOrden: "orden-http-3", total: 1500 });
 
     expect(respuesta.status).toBe(200);
     expect(respuesta.body.estado).toBe("autorizado");
+    expect(respuesta.body.paymentId).toBe("mp-mock-123");
   });
 
+  it("devuelve 400 si falta el total", async () => {
+    await request(app)
+      .post("/metodo-pago")
+      .send({ clienteId: "cliente1", viajeId: "viaje-sin-total", tipo: "efectivo" });
+
+    const respuesta = await request(app)
+      .post("/metodo-pago/viaje-sin-total/autorizar")
+      .send({ idOrden: "orden-sin-total" });
+
+    expect(respuesta.status).toBe(400);
+  });
+
+  it("devuelve 400 si falta el idOrden", async () => {
+    await request(app)
+      .post("/metodo-pago")
+      .send({ clienteId: "cliente1", viajeId: "viaje-sin-orden", tipo: "efectivo" });
+
+    const respuesta = await request(app)
+      .post("/metodo-pago/viaje-sin-orden/autorizar")
+      .send({ total: 1500 });
+
+    expect(respuesta.status).toBe(400);
+  });
+
+  it("devuelve 402 si Mercado Pago rechaza el pago", async () => {
+    await request(app)
+      .post("/metodo-pago")
+      .send({ clienteId: "cliente1", viajeId: "viaje-rechazado-mp", tipo: "efectivo" });
+
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: "mp-mock-rejected", status: "rejected", transaction_amount: 1500 }),
+    });
+
+    const respuesta = await request(app)
+      .post("/metodo-pago/viaje-rechazado-mp/autorizar")
+      .send({ idOrden: "orden-rechazada", total: 1500 });
+
+    expect(respuesta.status).toBe(402);
+  });
 
   it("devuelve 400 si no existe método de pago para ese viaje", async () => {
-    const respuesta = await request(app).post(
-      "/metodo-pago/viaje-inexistente-http/autorizar"
-    );
+    const respuesta = await request(app)
+      .post("/metodo-pago/viaje-inexistente-http/autorizar")
+      .send({ idOrden: "orden-x", total: 1000 });
 
     expect(respuesta.status).toBe(400);
   });
