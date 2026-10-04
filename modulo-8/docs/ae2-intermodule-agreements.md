@@ -183,14 +183,12 @@ M9 tiene contratos de reservas programadas y un stub M5. No se encontró integra
 
 | Relación | Necesidad conceptual | Estado |
 | --- | --- | --- |
-| RF8.6 Event Consumer → RF8.1 Notifications | envelope común con `messageId`, tipo, correlación, viaje, destinatario y contexto | PENDIENTE DE ACUERDO CON PRODUCTORES EXTERNOS / objetivo interno congelado |
+| RF8.6 Event Consumer → RF8.1 Notifications | Envelope común con `messageId`, 6 eventos de viaje, correlación, `tripId`, `recipientId`, queue `m8.notifications.trip-events`, deduplicación Inbox | **CONGELADO Y CONFIRMADO** (Ver catálogo v1 sección 5.4) |
 | RF8.6 Event Consumer → RF8.3 Receipts | Snapshot suficiente sin consultas a DB ajena | PENDIENTE DE ACUERDO INTERNO |
-| RF8.1 Notifications → RF8.7 Delivery | `NotificationRequested` para solicitar delivery de una notificación lógica ya creada | CONTRATO INTERNO OBJETIVO AE2; payload pendiente de implementación |
+| RF8.1 Notifications → RF8.7 Delivery | `NotificationRequested` via Outbox Relay (`outbox_deliveries`) publicado por RF8.6 tras `published_at` | **CONGELADO Y CONFIRMADO** (Ver catálogo v1 sección 5.3) |
 
-RF8.1 no realiza la entrega. RF8.7 será responsable del proveedor, intentos,
-resultados, retry e idempotencia de delivery. Los estados concretos de delivery
-y el payload se cerrarán al implementar ambos RF, sin duplicar el significado
-del evento de viaje.
+RF8.1 genera la notificación lógica y persiste la orden de entrega en su Outbox. RF8.6 procesa la cola de Outbox, publica en RabbitMQ (`notification.requested`) y marca `published_at = NOW()` al recibir confirmación. RF8.7 es el responsable final del proveedor real/sandbox, reintentos e idempotencia de delivery.
+
 
 ## 15. HTTP / OpenAPI
 
