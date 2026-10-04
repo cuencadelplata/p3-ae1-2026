@@ -6,12 +6,16 @@ import { apiReference } from '@scalar/express-api-reference';
 import { createSupportController, publicarEvento } from './controllers/support.controller.js';
 import { correlationId } from './http/correlation.js';
 import { supportErrorHandler } from './http/error-handler.js';
+import type { SupportReadiness } from './http/readiness.js';
 import type { TicketService } from './services/ticket.service.js';
 
 export interface SupportAppDeps {
   ticketService: TicketService;
   // Expone POST /events/publish, heredado de AE1.
   legacyEvents: boolean;
+  // Estado de las dependencias para /health/ready. Sin él la app no declara
+  // dependencias externas y se informa lista.
+  readiness?: () => Promise<SupportReadiness>;
 }
 
 // Rutas de tickets, relativas a /tickets.
@@ -102,6 +106,8 @@ export function createSupportApp(deps: SupportAppDeps): Express {
       health: '/health',
       endpoints: [
         'GET /health',
+        'GET /health/live',
+        'GET /health/ready',
         'GET /openapi.yaml',
         'GET /openapi.json',
         'POST /tickets',
@@ -122,6 +128,18 @@ export function createSupportApp(deps: SupportAppDeps): Express {
       timestamp: new Date().toISOString(),
       uptime: process.uptime()
     });
+  });
+
+  // Vitalidad: responde mientras el proceso esté vivo.
+  app.get('/health/live', (req, res) => {
+    res.status(200).json({ status: 'ok', service: 'm8-soporte' });
+  });
+
+  // Disponibilidad: agrega el estado de las dependencias. Estas dos rutas son
+  // de la app standalone; una app común de M8 usa checkSupportReadiness().
+  app.get('/health/ready', async (req, res) => {
+    const readiness = deps.readiness ? await deps.readiness() : { status: 'ok' as const, checks: {} };
+    res.status(readiness.status === 'unavailable' ? 503 : 200).json({ ...readiness, service: 'm8-soporte' });
   });
 
   registerSupportRoutes(app, deps);

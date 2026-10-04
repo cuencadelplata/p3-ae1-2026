@@ -85,6 +85,11 @@ export class RabbitMQConsumer {
     }
   }
 
+  // Indica si hay un canal abierto con el broker (lo usa el readiness de Support).
+  static isConnected(): boolean {
+    return this.channel !== null;
+  }
+
   /**
    * Publica un evento asíncrono a RabbitMQ en el exchange 'viajes_exchange'
    */
