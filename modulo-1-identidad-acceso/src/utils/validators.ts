@@ -20,7 +20,8 @@ export function validateRegisterRequest(data: any): { isValid: boolean; errors: 
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!data.email || typeof data.email !== 'string' || !emailRegex.test(data.email)) {
+    const emailToValidate = typeof data.email === "string" ? data.email.trim() : data.email;
+    if (!emailToValidate || typeof emailToValidate !== 'string' || !emailRegex.test(emailToValidate)) {
         errors.push("El email es obligatorio y debe tener un formato válido.");
     }
 
