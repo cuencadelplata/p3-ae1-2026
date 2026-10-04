@@ -16,7 +16,7 @@ export interface QrServiceDeps {
 
 export interface QrService {
   generateQr(tripId: string): Promise<QrGenerationResponse>;
-  validateQr(tripId: string, token: string): QrValidationResponse;
+  validateQr(tripId: string, token: string): Promise<QrValidationResponse>;
 }
 
 export function createQrService(deps: QrServiceDeps): QrService {
@@ -42,14 +42,14 @@ export function createQrService(deps: QrServiceDeps): QrService {
       usedAt: null,
     };
 
-    deps.store.save(record);
+    await deps.store.save(record);
 
     return { token, qrDataUrl, expiresAt: expiresAt.toISOString() };
   }
 
-  function validateQr(tripId: string, token: string): QrValidationResponse {
+  async function validateQr(tripId: string, token: string): Promise<QrValidationResponse> {
     const tokenHash = createHash("sha256").update(token).digest("hex");
-    const outcome = deps.store.consumeIfValid(tokenHash, tripId, deps.now());
+    const outcome = await deps.store.consumeIfValid(tokenHash, tripId, deps.now());
 
     switch (outcome) {
       case "OK":

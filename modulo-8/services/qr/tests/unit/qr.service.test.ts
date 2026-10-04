@@ -23,10 +23,10 @@ interface DepsOverrides {
 }
 
 function createDeps(overrides: DepsOverrides = {}) {
-  const save = vi.fn<(record: unknown) => void>();
+  const save = vi.fn<(record: unknown) => Promise<void>>().mockResolvedValue(undefined);
   const consumeIfValid = vi
-    .fn<(tokenHash: string, tripId: string, now: Date) => ConsumeOutcome>()
-    .mockReturnValue(overrides.consumeOutcome ?? "OK");
+    .fn<(tokenHash: string, tripId: string, now: Date) => Promise<ConsumeOutcome>>()
+    .mockResolvedValue(overrides.consumeOutcome ?? "OK");
   const generateQrDataUrl =
     overrides.generateQrDataUrl ?? vi.fn<(token: string) => Promise<string>>().mockResolvedValue(QR_DATA_URL);
 
@@ -39,18 +39,6 @@ function createDeps(overrides: DepsOverrides = {}) {
   };
 
   return { deps, save, consumeIfValid, generateQrDataUrl };
-}
-
-function captureApiError(fn: () => unknown): ApiError {
-  try {
-    fn();
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return error;
-    }
-    throw error;
-  }
-  throw new Error("Se esperaba que la función lance un ApiError.");
 }
 
 async function captureAsyncApiError(fn: () => Promise<unknown>): Promise<ApiError> {
@@ -126,20 +114,20 @@ describe("createQrService — generateQr", () => {
 });
 
 describe("createQrService — validateQr", () => {
-  it("devuelve { valid: true } cuando el store confirma OK", () => {
+  it("devuelve { valid: true } cuando el store confirma OK", async () => {
     const { deps } = createDeps({ consumeOutcome: "OK" });
     const service = createQrService(deps);
 
-    const result = service.validateQr(TRIP_ID, TOKEN);
+    const result = await service.validateQr(TRIP_ID, TOKEN);
 
     expect(result).toEqual({ valid: true });
   });
 
-  it("le pasa a consumeIfValid el hash SHA-256 del token, nunca el token en claro", () => {
+  it("le pasa a consumeIfValid el hash SHA-256 del token, nunca el token en claro", async () => {
     const { deps, consumeIfValid } = createDeps({ consumeOutcome: "OK" });
     const service = createQrService(deps);
 
-    service.validateQr(TRIP_ID, TOKEN);
+    await service.validateQr(TRIP_ID, TOKEN);
 
     const expectedHash = createHash("sha256").update(TOKEN).digest("hex");
     expect(consumeIfValid).toHaveBeenCalledWith(expectedHash, TRIP_ID, NOW);
@@ -150,11 +138,11 @@ describe("createQrService — validateQr", () => {
     ["TRIP_MISMATCH", 404, "QR_NOT_FOUND"],
     ["ALREADY_USED", 409, "QR_ALREADY_USED"],
     ["EXPIRED", 410, "QR_EXPIRED"],
-  ])("traduce %s a %i %s", (outcome, expectedStatus, expectedCode) => {
+  ])("traduce %s a %i %s", async (outcome, expectedStatus, expectedCode) => {
     const { deps } = createDeps({ consumeOutcome: outcome });
     const service = createQrService(deps);
 
-    const error = captureApiError(() => service.validateQr(TRIP_ID, TOKEN));
+    const error = await captureAsyncApiError(() => service.validateQr(TRIP_ID, TOKEN));
 
     expect(error.status).toBe(expectedStatus);
     expect(error.code).toBe(expectedCode);
@@ -162,22 +150,22 @@ describe("createQrService — validateQr", () => {
 
   it.each<ConsumeOutcome>(["NOT_FOUND", "TRIP_MISMATCH", "ALREADY_USED", "EXPIRED"])(
     "el message del ApiError para %s no contiene el token ni el tripId recibidos",
-    (outcome) => {
+    async (outcome) => {
       const { deps } = createDeps({ consumeOutcome: outcome });
       const service = createQrService(deps);
 
-      const error = captureApiError(() => service.validateQr(TRIP_ID, TOKEN));
+      const error = await captureAsyncApiError(() => service.validateQr(TRIP_ID, TOKEN));
 
       expect(error.message).not.toContain(TOKEN);
       expect(error.message).not.toContain(TRIP_ID);
     },
   );
 
-  it("NOT_FOUND y TRIP_MISMATCH producen exactamente la misma respuesta hacia afuera", () => {
-    const notFoundError = captureApiError(() =>
+  it("NOT_FOUND y TRIP_MISMATCH producen exactamente la misma respuesta hacia afuera", async () => {
+    const notFoundError = await captureAsyncApiError(() =>
       createQrService(createDeps({ consumeOutcome: "NOT_FOUND" }).deps).validateQr(TRIP_ID, TOKEN),
     );
-    const tripMismatchError = captureApiError(() =>
+    const tripMismatchError = await captureAsyncApiError(() =>
       createQrService(createDeps({ consumeOutcome: "TRIP_MISMATCH" }).deps).validateQr(TRIP_ID, TOKEN),
     );
 
