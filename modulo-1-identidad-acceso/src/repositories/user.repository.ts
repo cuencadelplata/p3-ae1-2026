@@ -17,6 +17,16 @@ export function findUserByEmail(
         .get(email) as UserRow | undefined;
 }
 
+export function findUserByDni(
+    dni: string
+): UserRow | undefined {
+    return db
+        .prepare(
+            "SELECT * FROM usuarios WHERE dni = ?"
+        )
+        .get(dni) as UserRow | undefined;
+}
+
 export function findUserById(
     id: number
 ): UserRow | undefined {

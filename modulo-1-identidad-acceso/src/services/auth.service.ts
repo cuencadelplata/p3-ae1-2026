@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import {
     createUser,
+    findUserByDni,
     findUserByEmail
 } from "../repositories/user.repository";
 import {
@@ -96,6 +97,16 @@ export async function registerUser(
         throw new AuthError(
             409,
             "Ya existe un usuario con ese email"
+        );
+    }
+
+    const usuarioConDniExistente =
+        findUserByDni(dniNormalizado);
+
+    if (usuarioConDniExistente) {
+        throw new AuthError(
+            409,
+            "Ya existe un usuario con ese DNI"
         );
     }
 
