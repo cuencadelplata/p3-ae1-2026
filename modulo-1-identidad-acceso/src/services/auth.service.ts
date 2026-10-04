@@ -5,12 +5,9 @@ import {
     findUserByDni,
     findUserByEmail
 } from "../repositories/user.repository";
-import {
-    esEmailValido,
-    esPasswordValida,
-    esRolRegistrable,
-    normalizarEmail
-} from "../utils/auth.validators";
+import { normalizarEmail } from "../utils/auth.validators";
+import { RegisterUserRequestDTO, RegisterUserResponseDTO } from "../types/auth.dto";
+import { validateRegisterRequest } from "../utils/validators";
 
 export class AuthError extends Error {
     constructor(
@@ -21,8 +18,6 @@ export class AuthError extends Error {
     }
 }
 
-import { RegisterUserRequestDTO, RegisterUserResponseDTO } from "../types/auth.dto";
-import { validateRegisterRequest } from "../utils/validators";
 
 export async function registerUser(
     input: RegisterUserRequestDTO
