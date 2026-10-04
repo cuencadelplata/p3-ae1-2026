@@ -22,9 +22,6 @@ export function createSupportController({ ticketService }: SupportControllerDeps
 
       const nuevoTicket = await ticketService.crearTicket(viajeId, motivo);
 
-      // Disparar evento asíncrono a RabbitMQ
-      await RabbitMQConsumer.publishEvent('ticket.creado', nuevoTicket);
-
       res.status(201).json(nuevoTicket);
     },
 
@@ -58,9 +55,6 @@ export function createSupportController({ ticketService }: SupportControllerDeps
         res.status(404).json({ error: 'Ticket no encontrado' });
         return;
       }
-
-      // Disparar evento asíncrono a RabbitMQ
-      await RabbitMQConsumer.publishEvent('ticket.actualizado', ticketActualizado);
 
       res.json(ticketActualizado);
     },
