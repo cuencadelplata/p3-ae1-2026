@@ -47,9 +47,13 @@ export function leerNuevoTicket(body: unknown): { tripId: string; motivo: string
 }
 
 // Cuerpo de PATCH /tickets/:id/estado. motivo es opcional; en blanco equivale
-// a no enviarlo.
-export function leerCambioDeEstado(body: unknown): { estado: TicketStatus; motivo: string | null } {
-  const { estado, motivo } = comoObjeto(body);
+// a no enviarlo. expectedVersion es opcional: los clientes de AE1 no lo envían.
+export function leerCambioDeEstado(body: unknown): {
+  estado: TicketStatus;
+  motivo: string | null;
+  expectedVersion?: number;
+} {
+  const { estado, motivo, expectedVersion } = comoObjeto(body);
 
   const details: ErrorDetail[] = [];
   if (!ESTADOS_VALIDOS.includes(estado as TicketStatus)) {
@@ -58,11 +62,18 @@ export function leerCambioDeEstado(body: unknown): { estado: TicketStatus; motiv
   if (motivo !== undefined && typeof motivo !== 'string') {
     details.push({ field: 'motivo', reason: 'Debe ser un texto.' });
   }
+  if (expectedVersion !== undefined && !(Number.isInteger(expectedVersion) && (expectedVersion as number) >= 1)) {
+    details.push({ field: 'expectedVersion', reason: 'Debe ser un entero positivo.' });
+  }
   if (details.length > 0) {
     throw validationError(details);
   }
 
-  return { estado: estado as TicketStatus, motivo: esTextoNoVacio(motivo) ? motivo : null };
+  return {
+    estado: estado as TicketStatus,
+    motivo: esTextoNoVacio(motivo) ? motivo : null,
+    expectedVersion: expectedVersion as number | undefined,
+  };
 }
 
 const ACTOR_MAX_LENGTH = 255;

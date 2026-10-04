@@ -2,6 +2,7 @@ export type SupportErrorCode =
   | 'SUPPORT_VALIDATION_ERROR'
   | 'SUPPORT_TICKET_NOT_FOUND'
   | 'SUPPORT_INVALID_TRANSITION'
+  | 'SUPPORT_CONCURRENCY_CONFLICT'
   | 'SUPPORT_INTERNAL_ERROR';
 
 export interface ErrorDetail {
@@ -29,6 +30,14 @@ export function validationError(details: ErrorDetail[]): SupportError {
 
 export function ticketNotFound(): SupportError {
   return new SupportError(404, 'SUPPORT_TICKET_NOT_FOUND', 'Ticket no encontrado.');
+}
+
+export function concurrencyConflict(): SupportError {
+  return new SupportError(
+    409,
+    'SUPPORT_CONCURRENCY_CONFLICT',
+    'El ticket cambió desde la última lectura. Consultalo de nuevo y reintentá.',
+  );
 }
 
 export function invalidTransition(desde: string, hacia: string): SupportError {
