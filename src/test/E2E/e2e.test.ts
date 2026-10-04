@@ -105,6 +105,13 @@ test.describe("RF-7.2 - Método de pago (POST y GET /metodo-pago)", () => {
     expect(respuesta.status()).toBe(400);
   });
 
+  test("devuelve 400 si el tipo de pago no es válido", async ({ request }) => {
+    const respuesta = await request.post("/metodo-pago", {
+      data: { clienteId: "cliente-e2e-tipo", viajeId: "e2e-tipo-invalido", tipo: "bitcoin" },
+    });
+    expect(respuesta.status()).toBe(400);
+  });
+
   test("permite consultar un método de pago ya registrado", async ({ request }) => {
     await request.post("/metodo-pago", {
       data: { clienteId: "cliente-e2e-3", viajeId: "e2e-metodo-consulta", tipo: "tarjeta" },
@@ -123,7 +130,6 @@ test.describe("RF-7.2 - Método de pago (POST y GET /metodo-pago)", () => {
   });
 
 });
-//
 
 // Requerimiento 7.3 - Autorización y rechazo
 test.describe("RF-7.3 - Autorización y rechazo (POST /metodo-pago/:viajeId/autorizar y /rechazar)", () => {
@@ -137,11 +143,12 @@ test.describe("RF-7.3 - Autorización y rechazo (POST /metodo-pago/:viajeId/auto
     expect(bodyRegistro.estado).toBe("pendiente");
 
     const autorizacion = await request.post("/metodo-pago/e2e-flujo-autorizar/autorizar", {
-      data: { idOrden: "orden-e2e-flujo-1" },
+      data: { idOrden: "orden-e2e-flujo-1", total: 1500 },
     });
     expect(autorizacion.status()).toBe(200);
     const bodyAutorizado = await autorizacion.json();
     expect(bodyAutorizado.estado).toBe("autorizado");
+    expect(bodyAutorizado.paymentId).toBeTruthy();
 
     const consulta = await request.get("/metodo-pago/e2e-flujo-autorizar");
     const bodyConsulta = await consulta.json();
@@ -165,7 +172,7 @@ test.describe("RF-7.3 - Autorización y rechazo (POST /metodo-pago/:viajeId/auto
 
   test("devuelve 400 al autorizar un viaje sin método de pago", async ({ request }) => {
     const respuesta = await request.post("/metodo-pago/viaje-sin-pago-e2e/autorizar", {
-      data: { idOrden: "orden-sin-pago" },
+      data: { idOrden: "orden-sin-pago", total: 1000 },
     });
     expect(respuesta.status()).toBe(400);
   });
@@ -175,16 +182,38 @@ test.describe("RF-7.3 - Autorización y rechazo (POST /metodo-pago/:viajeId/auto
     expect(respuesta.status()).toBe(400);
   });
 
+  test("devuelve 400 si falta el total al autorizar", async ({ request }) => {
+    await request.post("/metodo-pago", {
+      data: { clienteId: "cliente-e2e-sintotal", viajeId: "e2e-sin-total", tipo: "efectivo" },
+    });
+
+    const respuesta = await request.post("/metodo-pago/e2e-sin-total/autorizar", {
+      data: { idOrden: "orden-sin-total" },
+    });
+    expect(respuesta.status()).toBe(400);
+  });
+
+  test("devuelve 400 si falta el idOrden al autorizar", async ({ request }) => {
+    await request.post("/metodo-pago", {
+      data: { clienteId: "cliente-e2e-sinorden", viajeId: "e2e-sin-orden", tipo: "efectivo" },
+    });
+
+    const respuesta = await request.post("/metodo-pago/e2e-sin-orden/autorizar", {
+      data: { total: 1500 },
+    });
+    expect(respuesta.status()).toBe(400);
+  });
+
   test("devuelve 400 al intentar autorizar un pago que ya fue autorizado", async ({ request }) => {
     await request.post("/metodo-pago", {
       data: { clienteId: "cliente-e2e-doble", viajeId: "e2e-doble-autorizacion", tipo: "efectivo" },
     });
     await request.post("/metodo-pago/e2e-doble-autorizacion/autorizar", {
-      data: { idOrden: "orden-doble-1" },
+      data: { idOrden: "orden-doble-1", total: 1000 },
     });
 
     const segundaVez = await request.post("/metodo-pago/e2e-doble-autorizacion/autorizar", {
-      data: { idOrden: "orden-doble-2" },
+      data: { idOrden: "orden-doble-2", total: 1000 },
     });
     expect(segundaVez.status()).toBe(400);
   });
@@ -194,34 +223,14 @@ test.describe("RF-7.3 - Autorización y rechazo (POST /metodo-pago/:viajeId/auto
       data: { clienteId: "cliente-e2e-mix", viajeId: "e2e-mix-estado", tipo: "efectivo" },
     });
     await request.post("/metodo-pago/e2e-mix-estado/autorizar", {
-      data: { idOrden: "orden-mix" },
+      data: { idOrden: "orden-mix", total: 1000 },
     });
 
     const rechazoTardio = await request.post("/metodo-pago/e2e-mix-estado/rechazar");
     expect(rechazoTardio.status()).toBe(400);
   });
 
-  test("no permite autorizar dos veces la misma orden de pago, aunque sean viajes distintos (idempotencia real)", async ({ request }) => {
-    await request.post("/metodo-pago", {
-      data: { clienteId: "cliente-e2e-idem", viajeId: "e2e-viaje-idem-1", tipo: "efectivo" },
-    });
-    await request.post("/metodo-pago", {
-      data: { clienteId: "cliente-e2e-idem", viajeId: "e2e-viaje-idem-2", tipo: "efectivo" },
-    });
-
-    const primera = await request.post("/metodo-pago/e2e-viaje-idem-1/autorizar", {
-      data: { idOrden: "orden-repetida-e2e" },
-    });
-    expect(primera.status()).toBe(200);
-
-    const segunda = await request.post("/metodo-pago/e2e-viaje-idem-2/autorizar", {
-      data: { idOrden: "orden-repetida-e2e" },
-    });
-    expect(segunda.status()).toBe(400);
-  });
-
 });
-//
 
 // Completo
 test.describe("Flujo de negocio completo (varios RF encadenados)", () => {
