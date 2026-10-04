@@ -5,7 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runMigrations } from "../../src/db/migrations";
 import { createNotificationsPool } from "../../src/db/pool";
 import { NotificationPersistenceError } from "../../src/notifications/notification-persistence.error";
-import type { LogicalNotification } from "../../src/notifications/notification.types";
+import { type LogicalNotification, type NormalizedTripNotificationEvent } from "../../src/notifications/notification.types";
+import { createRf81Application } from "../../src/notifications/rf81-application";
 import { createPostgresNotificationRepository } from "../../src/repositories/postgres-notification.repository";
 import { createPostgresNotificationWithOutboxRepository } from "../../src/repositories/postgres-notification-outbox.repository";
 
@@ -68,6 +69,7 @@ describe("PostgreSQL NotificationRepository", () => {
     expect(migrations.rows).toEqual([
       { version: 1, name: "create_notifications_table" },
       { version: 2, name: "create_notification_outbox_table" },
+      { version: 3, name: "create_notification_outbox_pending_index" },
     ]);
   });
 
@@ -245,5 +247,132 @@ describe("PostgreSQL NotificationRepository", () => {
 
     expect(await countRows(notification.sourceMessageId, notification.recipientId)).toBe(0);
     expect(await countOutboxRows(notification.sourceMessageId, notification.recipientId)).toBe(0);
+  });
+
+  it("lee pendientes como NotificationDeliveryIntent sin poblar payload", async () => {
+    const notification = createNotification();
+    const saved = await outboxRepository.saveWithOutbox(notification);
+
+    const pending = await outboxRepository.findPending(10);
+    const intent = pending.find((item) => item.outboxMessageId === saved.outbox.messageId);
+    const storedPayload = await pool.query<{ payload: unknown }>(
+      "SELECT payload FROM notifications.outbox_events WHERE message_id = $1",
+      [saved.outbox.messageId],
+    );
+
+    expect(intent).toEqual({
+      outboxMessageId: saved.outbox.messageId,
+      notificationId: notification.notificationId,
+      recipientId: notification.recipientId,
+      tripId: notification.tripId,
+      sourceMessageId: notification.sourceMessageId,
+      notificationEventType: notification.eventType,
+      title: notification.title,
+      message: notification.message,
+      correlationId: notification.correlationId,
+      notificationCreatedAt: notification.createdAt,
+      outboxCreatedAt: saved.outbox.createdAt,
+    });
+    expect(storedPayload.rows).toEqual([{ payload: null }]);
+  });
+
+  it("devuelve pendientes en orden FIFO y respeta limit", async () => {
+    const first = await outboxRepository.saveWithOutbox(createNotification({ sourceMessageId: `fifo-a-${randomUUID()}` }));
+    const second = await outboxRepository.saveWithOutbox(createNotification({ sourceMessageId: `fifo-b-${randomUUID()}` }));
+    await pool.query("UPDATE notifications.outbox_events SET created_at = $1 WHERE message_id = $2", [
+      "2026-10-03T10:00:00.000Z",
+      first.outbox.messageId,
+    ]);
+    await pool.query("UPDATE notifications.outbox_events SET created_at = $1 WHERE message_id = $2", [
+      "2026-10-03T10:00:01.000Z",
+      second.outbox.messageId,
+    ]);
+
+    const pending = await outboxRepository.findPending(2);
+
+    expect(pending.map((item) => item.outboxMessageId)).toEqual([
+      first.outbox.messageId,
+      second.outbox.messageId,
+    ]);
+  });
+
+  it("no devuelve una intención publicada y markPublished es idempotente", async () => {
+    const saved = await outboxRepository.saveWithOutbox(createNotification());
+    const publishedAt = "2026-10-03T16:00:00.000Z";
+
+    await expect(outboxRepository.markPublished(saved.outbox.messageId, publishedAt)).resolves.toBe(true);
+    await expect(outboxRepository.markPublished(saved.outbox.messageId, "2026-10-03T16:05:00.000Z")).resolves.toBe(true);
+
+    const pending = await outboxRepository.findPending(100);
+    const stored = await pool.query<{ message_id: string; published_at: Date }>(
+      "SELECT message_id, published_at FROM notifications.outbox_events WHERE message_id = $1",
+      [saved.outbox.messageId],
+    );
+
+    expect(pending.some((item) => item.outboxMessageId === saved.outbox.messageId)).toBe(false);
+    expect(stored.rows).toHaveLength(1);
+    expect(stored.rows[0].message_id).toBe(saved.outbox.messageId);
+    expect(stored.rows[0].published_at.toISOString()).toBe(publishedAt);
+  });
+
+  it("permite dos marcas concurrentes sin cambiar el messageId", async () => {
+    const saved = await outboxRepository.saveWithOutbox(createNotification());
+
+    const results = await Promise.all([
+      outboxRepository.markPublished(saved.outbox.messageId, "2026-10-03T17:00:00.000Z"),
+      outboxRepository.markPublished(saved.outbox.messageId, "2026-10-03T17:00:01.000Z"),
+    ]);
+
+    const stored = await pool.query<{ message_id: string; count: string }>(
+      "SELECT message_id, count(*) OVER () AS count FROM notifications.outbox_events WHERE message_id = $1",
+      [saved.outbox.messageId],
+    );
+
+    expect(results).toEqual([true, true]);
+    expect(stored.rows).toEqual([{ message_id: saved.outbox.messageId, count: "1" }]);
+  });
+
+  it("ejecuta el flujo autónomo completo de RF8.1 sin RabbitMQ", async () => {
+    const application = createRf81Application({ pool });
+    await application.initialize();
+    const event: NormalizedTripNotificationEvent = {
+      messageId: `component-${randomUUID()}`,
+      eventType: "TripCompleted",
+      tripId: "trip-component-123",
+      recipientId: "user-component-456",
+      correlationId: "trip-component-123",
+      occurredAt: "2026-10-03T18:00:00.000Z",
+    };
+
+    const created = await application.processTripEvent(event);
+    const repeated = await application.processTripEvent(event);
+    const pendingBefore = await application.outbox.findPending(100);
+
+    expect(created).toMatchObject({ status: "SUCCESS_CREATED", valid: true, created: true });
+    expect(repeated).toMatchObject({ status: "SUCCESS_ALREADY_PROCESSED", valid: true, created: false });
+    expect(await countRows(event.messageId, event.recipientId)).toBe(1);
+    expect(await countOutboxRows(event.messageId, event.recipientId)).toBe(1);
+
+    const intent = pendingBefore.find((item) => item.sourceMessageId === event.messageId);
+    expect(intent).toMatchObject({
+      recipientId: event.recipientId,
+      tripId: event.tripId,
+      notificationEventType: event.eventType,
+      correlationId: event.correlationId,
+    });
+    if (intent === undefined) {
+      throw new Error("El flujo completo no produjo una intención pendiente.");
+    }
+
+    await expect(application.outbox.markPublished(intent.outboxMessageId, "2026-10-03T18:05:00.000Z")).resolves.toBe(true);
+    const pendingAfter = await application.outbox.findPending(100);
+    const published = await pool.query<{ published_at: Date | null }>(
+      "SELECT published_at FROM notifications.outbox_events WHERE message_id = $1",
+      [intent.outboxMessageId],
+    );
+
+    expect(pendingAfter.some((item) => item.outboxMessageId === intent.outboxMessageId)).toBe(false);
+    expect(published.rows[0].published_at).toBeInstanceOf(Date);
+    await application.close();
   });
 });

@@ -19,10 +19,26 @@ export interface NotificationOutboxIntent {
   publishedAt: string | null;
 }
 
+export interface NotificationDeliveryIntent {
+  outboxMessageId: string;
+  notificationId: string;
+  recipientId: string;
+  tripId: string;
+  sourceMessageId: string;
+  notificationEventType: LogicalNotification["eventType"];
+  title: string;
+  message: string;
+  correlationId: string;
+  notificationCreatedAt: string;
+  outboxCreatedAt: string;
+}
+
 export interface SaveNotificationWithOutboxResult extends SaveNotificationResult {
   outbox: NotificationOutboxIntent;
 }
 
 export interface NotificationWithOutboxRepository {
   saveWithOutbox(notification: LogicalNotification): Promise<SaveNotificationWithOutboxResult>;
+  findPending(limit: number): Promise<NotificationDeliveryIntent[]>;
+  markPublished(messageId: string, publishedAt: string): Promise<boolean>;
 }
