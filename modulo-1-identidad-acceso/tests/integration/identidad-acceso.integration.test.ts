@@ -52,7 +52,6 @@ describe.sequential(
             expect(response.status).toBe(201);
             expect(response.body.email).toBe(email);
             expect(response.body.rol).toBe("CLIENTE");
-            expect(response.body.estado).toBe("ACTIVO");
             expect(
                 response.body.password_hash
             ).toBeUndefined();

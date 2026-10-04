@@ -60,8 +60,6 @@ router.post(
     oauth2LinkAccount
 );
 
-export default router;
-
 // ============ Demostración RF-1.3 (Roles) ============
 router.get(
     "/admin-panel",
@@ -75,4 +73,6 @@ router.get(
     authenticateToken,
     authorizeRoles("CONDUCTOR"),
     (req, res) => { res.json({ message: "Bienvenido al portal de Conductores" }); }
-);
+);
+
+export default router;

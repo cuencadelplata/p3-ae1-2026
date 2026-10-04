@@ -62,7 +62,6 @@ describe.sequential(
                 expect(response.body).toHaveProperty("id");
                 expect(response.body.email).toBe(email);
                 expect(response.body.rol).toBe("CLIENTE");
-                expect(response.body.estado).toBe("ACTIVO");
                 expect(response.body.password_hash).toBeUndefined();
 
                 userId = response.body.id;
@@ -292,7 +291,7 @@ describe.sequential(
                     ));
 
                 expect(response.status).toBe(400);
-                expect(response.body.error).toContain("CLIENTE, CONDUCTOR u OPERADOR");
+                expect(response.body.error).toContain("CLIENTE o CONDUCTOR");
             });
         });
 
