@@ -1,8 +1,8 @@
-const asignacionEjemplo = {
-  id: '40000000-0000-4000-8000-000000000001',
-  choferId: '30000000-0000-4000-8000-000000000001',
-  nombreChofer: 'Chofer Auto A (demo)',
-  valoracion: 4.9,
+const routeSnapshotEjemplo = {
+  origin: { latitude: -27.4514, longitude: -58.9867, address: 'Terminal de Ómnibus' },
+  destination: { latitude: -27.4692, longitude: -58.8306, address: 'Aeropuerto' },
+  distanceKm: 18.4,
+  estimatedDurationMin: 28,
 };
 
 const examplesBase = {
@@ -34,11 +34,13 @@ const examplesBase = {
       vehiculo: 'AUTO',
       fechaHoraProgramada: '2099-01-01T17:30:00.000Z',
       estado: 'PROGRAMADA',
-      asignacion: asignacionEjemplo,
       tarifaEstimada: 2500,
       moneda: 'ARS',
-      criterioAsignacion: 'MEJOR_CALIFICACION',
+      estimacionTarifaId: 'est_1234567890',
+      routeSnapshot: routeSnapshotEjemplo,
+      criterioAsignacion: null,
       idSolicitud: null,
+      assignedDriverId: null,
       creadoEn: '2099-01-01T14:00:00.000Z',
       actualizadoEn: '2099-01-01T14:00:00.000Z',
     },
@@ -53,11 +55,16 @@ const examplesBase = {
       vehiculo: 'AUTO',
       fechaHoraProgramada: '2099-01-01T17:30:00.000Z',
       estado: 'PROGRAMADA',
-      asignacion: asignacionEjemplo,
       tarifaEstimada: 2500,
       moneda: 'ARS',
-      criterioAsignacion: 'MEJOR_CALIFICACION',
+      estimacionTarifaId: 'est_1234567891',
+      routeSnapshot: {
+        ...routeSnapshotEjemplo,
+        destination: { ...routeSnapshotEjemplo.destination, address: 'Puerto de Buenos Aires' },
+      },
+      criterioAsignacion: null,
       idSolicitud: null,
+      assignedDriverId: null,
       creadoEn: '2099-01-01T14:00:00.000Z',
       actualizadoEn: '2099-01-01T14:05:00.000Z',
     },
@@ -72,11 +79,13 @@ const examplesBase = {
       vehiculo: 'AUTO',
       fechaHoraProgramada: '2099-01-01T17:30:00.000Z',
       estado: 'CANCELADA',
-      asignacion: null,
       tarifaEstimada: 2500,
       moneda: 'ARS',
-      criterioAsignacion: 'MEJOR_CALIFICACION',
+      estimacionTarifaId: 'est_1234567890',
+      routeSnapshot: routeSnapshotEjemplo,
+      criterioAsignacion: null,
       idSolicitud: null,
+      assignedDriverId: null,
       creadoEn: '2099-01-01T14:00:00.000Z',
       actualizadoEn: '2099-01-01T14:10:00.000Z',
     },
@@ -93,11 +102,13 @@ const examplesBase = {
           vehiculo: 'AUTO',
           fechaHoraProgramada: '2099-01-01T17:30:00.000Z',
           estado: 'PROGRAMADA',
-          asignacion: asignacionEjemplo,
           tarifaEstimada: 2500,
           moneda: 'ARS',
-          criterioAsignacion: 'MEJOR_CALIFICACION',
+          estimacionTarifaId: 'est_1234567890',
+          routeSnapshot: routeSnapshotEjemplo,
+          criterioAsignacion: null,
           idSolicitud: null,
+          assignedDriverId: null,
           creadoEn: '2099-01-01T14:00:00.000Z',
           actualizadoEn: '2099-01-01T14:00:00.000Z',
         },
@@ -122,7 +133,7 @@ const examplesBase = {
     value: {
       error: {
         codigo: 'RESERVA_NO_MODIFICABLE',
-        mensaje: 'Solo se pueden modificar reservas PROGRAMADA o PENDIENTE_ASIGNACION.',
+        mensaje: 'Solo se pueden modificar reservas PROGRAMADA.',
       },
     },
   },
@@ -131,7 +142,7 @@ const examplesBase = {
     value: {
       error: {
         codigo: 'RESERVA_NO_CANCELABLE',
-        mensaje: 'Solo se pueden cancelar reservas PROGRAMADA o PENDIENTE_ASIGNACION.',
+        mensaje: 'Solo se pueden cancelar reservas PROGRAMADA o ACTIVANDO.',
       },
     },
   },
@@ -141,26 +152,7 @@ const examplesBase = {
   },
 } as const;
 
-const examples = {
-  ...examplesBase,
-  ReservaPendiente: {
-    summary: 'Guardada sin chofer confirmado; se reintenta antes del horario',
-    value: {
-      ...examplesBase.ReservaProgramada.value,
-      estado: 'PENDIENTE_ASIGNACION',
-      asignacion: null,
-    },
-  },
-  ErrorAsignacion: {
-    summary: 'M5 no confirmó la liberación de la asignación',
-    value: {
-      error: {
-        codigo: 'SERVICIO_EXTERNO_NO_DISPONIBLE',
-        mensaje: 'No se pudo confirmar la asignación con M5. Reintente la operación.',
-      },
-    },
-  },
-} as const;
+const examples = examplesBase;
 
 type ExampleName = keyof typeof examples;
 
@@ -189,9 +181,9 @@ export const openApiDocument = {
   openapi: '3.0.3',
   info: {
     title: 'M9 – Reservas Programadas',
-    version: '1.0.0',
+    version: '2.0.0',
     description:
-      'API REST para administrar y activar reservas programadas. En AE1 M9 no implementa autenticación propia: la autenticación pertenece a M1 – Identidad y Acceso y su integración queda fuera del alcance actual del módulo.',
+      'API REST para administrar reservas programadas. M9 estima tarifas con M7 al crear o modificar y solicita el despacho a M5 únicamente al llegar el horario programado. M9 no implementa autenticación propia; el token de servicio para M5 depende del contrato pendiente con M1.',
     license: {
       name: 'Uso académico',
     },
@@ -222,6 +214,23 @@ export const openApiDocument = {
         },
       },
     },
+    '/readiness': {
+      get: {
+        tags: ['Salud'],
+        summary: 'Comprobar dependencias críticas del proceso',
+        operationId: 'getReadiness',
+        responses: {
+          '200': {
+            description: 'PostgreSQL, Redis y RabbitMQ están disponibles.',
+            ...jsonSchema('#/components/schemas/ReadinessResponse'),
+          },
+          '503': {
+            description: 'El proceso está vivo, pero alguna dependencia está degradada.',
+            ...jsonSchema('#/components/schemas/ReadinessResponse'),
+          },
+        },
+      },
+    },
     '/openapi.json': {
       get: {
         tags: ['Documentación'],
@@ -247,7 +256,7 @@ export const openApiDocument = {
         tags: ['Reservas'],
         summary: 'Crear una reserva programada',
         description:
-          'Guarda la reserva y solicita a M5 ofertas secuenciales a los conductores elegibles, por valoración descendente. Solo confirma asignación tras aceptación; rechazo o vencimiento pasa al siguiente. Devuelve PROGRAMADA con aceptación confirmada o PENDIENTE_ASIGNACION si se agotan candidatos o M5 no responde. En AE1 las respuestas de conductores se simulan explícitamente. Estado y asignación son administrados por el servidor.',
+          'Resuelve el recorrido, consulta la estimación de tarifa a M7 y guarda la reserva en PROGRAMADA. No invoca M5 ni asigna conductor durante la creación.',
         operationId: 'crearReserva',
         requestBody: {
           required: true,
@@ -255,16 +264,7 @@ export const openApiDocument = {
         },
         responses: {
           '201': {
-            description: 'Reserva guardada con chofer o pendiente de asignación.',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/Reserva' },
-                examples: {
-                  asignada: { $ref: '#/components/examples/ReservaProgramada' },
-                  pendiente: { $ref: '#/components/examples/ReservaPendiente' },
-                },
-              },
-            },
+            ...reservaResponse('Reserva guardada en estado PROGRAMADA.', 'ReservaProgramada'),
           },
           '400': errorResponse('Datos o fecha inválidos.', 'ErrorValidacion'),
           '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
@@ -320,9 +320,9 @@ export const openApiDocument = {
       },
       patch: {
         tags: ['Reservas'],
-        summary: 'Modificar una reserva PROGRAMADA o PENDIENTE_ASIGNACION',
+        summary: 'Modificar una reserva PROGRAMADA',
         description:
-          'Invalida la ronda y asignación previas y solicita nuevas ofertas con los datos actualizados. El mismo chofer debe aceptar de nuevo; las respuestas a ofertas anteriores no son válidas. Puede quedar pendiente si nadie acepta. Recalcula tarifa si recibe origen, destino o vehículo. Si M5 no confirma la liberación, responde 503 sin aplicar cambios locales; reintentar.',
+          'Solo permite modificar una reserva PROGRAMADA. Recalcula RouteSnapshot y tarifa M7 cuando cambia origen o destino; si cambia el vehículo reutiliza la ruta y recalcula la tarifa. Cambiar solo fecha/hora no invoca M7.',
         operationId: 'actualizarReserva',
         requestBody: {
           required: true,
@@ -333,22 +333,24 @@ export const openApiDocument = {
           '400': errorResponse('Datos, fecha o identificador inválidos.', 'ErrorValidacion'),
           '404': errorResponse('Reserva no encontrada.', 'ErrorNoEncontrada'),
           '409': errorResponse('Reserva no modificable.', 'ErrorNoModificable'),
-          '503': errorResponse('No se pudo confirmar la liberación en M5.', 'ErrorAsignacion'),
           '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
         },
       },
       delete: {
         tags: ['Reservas'],
-        summary: 'Cancelar una reserva PROGRAMADA o PENDIENTE_ASIGNACION',
+        summary: 'Cancelar una reserva PROGRAMADA o ACTIVANDO',
         description:
-          'Libera la asignación en M5 antes de cancelar localmente. Si M5 no responde, devuelve 503 y se debe reintentar.',
+          'Cancela localmente una reserva PROGRAMADA. Si está ACTIVANDO sin idSolicitud responde 409 para no competir con el despacho asíncrono; si ya posee idSolicitud, solicita primero la cancelación a M5 y no oculta sus conflictos.',
         operationId: 'cancelarReserva',
         responses: {
           '200': reservaResponse('Reserva cancelada.', 'ReservaCancelada'),
           '400': errorResponse('Identificador inválido.', 'ErrorValidacion'),
           '404': errorResponse('Reserva no encontrada.', 'ErrorNoEncontrada'),
           '409': errorResponse('Reserva no cancelable.', 'ErrorNoCancelable'),
-          '503': errorResponse('No se pudo confirmar la liberación en M5.', 'ErrorAsignacion'),
+          '503': errorResponse(
+            'M5 no está disponible para confirmar la cancelación.',
+            'ErrorInterno',
+          ),
           '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
         },
       },
@@ -364,6 +366,19 @@ export const openApiDocument = {
         properties: {
           service: { type: 'string', example: 'm9-reservas-programadas' },
           status: { type: 'string', enum: ['ok'] },
+        },
+      },
+      ReadinessResponse: {
+        type: 'object',
+        required: ['status', 'dependencies'],
+        additionalProperties: false,
+        properties: {
+          status: { type: 'string', enum: ['ready', 'degraded'] },
+          dependencies: {
+            type: 'object',
+            additionalProperties: { type: 'string', enum: ['up', 'down'] },
+            example: { postgres: 'up', redis: 'up', rabbitmq: 'up' },
+          },
         },
       },
       CrearReservaRequest: {
@@ -428,11 +443,13 @@ export const openApiDocument = {
           'vehiculo',
           'fechaHoraProgramada',
           'estado',
-          'asignacion',
           'tarifaEstimada',
           'moneda',
+          'estimacionTarifaId',
+          'routeSnapshot',
           'criterioAsignacion',
           'idSolicitud',
+          'assignedDriverId',
           'creadoEn',
           'actualizadoEn',
         ],
@@ -445,36 +462,41 @@ export const openApiDocument = {
           fechaHoraProgramada: { type: 'string', format: 'date-time' },
           estado: {
             type: 'string',
-            enum: [
-              'PENDIENTE_ASIGNACION',
-              'PROGRAMADA',
-              'ACTIVANDO',
-              'ACTIVADA',
-              'CANCELADA',
-              'FALLIDA',
-            ],
-          },
-          asignacion: {
-            type: 'object',
-            nullable: true,
-            readOnly: true,
-            description:
-              'Chofer que aceptó una oferta vigente en M5. El id corresponde a la oferta aceptada. En AE1 la aceptación es simulada. Null cuando no existe asignación.',
-            required: ['id', 'choferId', 'nombreChofer', 'valoracion'],
-            additionalProperties: false,
-            properties: {
-              id: { type: 'string', format: 'uuid' },
-              choferId: { type: 'string', format: 'uuid' },
-              nombreChofer: { type: 'string' },
-              valoracion: { type: 'number', minimum: 0, maximum: 5 },
-            },
+            enum: ['PROGRAMADA', 'ACTIVANDO', 'ACTIVADA', 'CANCELADA', 'FALLIDA'],
           },
           tarifaEstimada: { type: 'number', nullable: true },
           moneda: { type: 'string', nullable: true },
+          estimacionTarifaId: { type: 'string', nullable: true },
+          routeSnapshot: {
+            allOf: [{ $ref: '#/components/schemas/RouteSnapshot' }],
+            nullable: true,
+          },
           criterioAsignacion: { type: 'string', nullable: true },
           idSolicitud: { type: 'string', format: 'uuid', nullable: true },
+          assignedDriverId: { type: 'string', nullable: true },
           creadoEn: { type: 'string', format: 'date-time', nullable: true },
           actualizadoEn: { type: 'string', format: 'date-time', nullable: true },
+        },
+      },
+      RouteSnapshot: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['origin', 'destination', 'distanceKm', 'estimatedDurationMin'],
+        properties: {
+          origin: { $ref: '#/components/schemas/GeoLocation' },
+          destination: { $ref: '#/components/schemas/GeoLocation' },
+          distanceKm: { type: 'number', minimum: 0 },
+          estimatedDurationMin: { type: 'number', minimum: 0 },
+        },
+      },
+      GeoLocation: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['latitude', 'longitude', 'address'],
+        properties: {
+          latitude: { type: 'number', minimum: -90, maximum: 90 },
+          longitude: { type: 'number', minimum: -180, maximum: 180 },
+          address: { type: 'string' },
         },
       },
       ErrorResponse: {

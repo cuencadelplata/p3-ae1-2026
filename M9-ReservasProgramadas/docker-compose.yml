@@ -2,16 +2,42 @@ name: m9-reservas-programadas
 
 services:
   m9-reservas:
-    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v1.0.0}
+    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v2.0.0}
     build:
       context: .
       dockerfile: Dockerfile
     environment:
       NODE_ENV: production
       PORT: ${PORT:-3000}
-      M5_URL: http://m5-stub:3001
-      M7_URL: http://m7-stub:3002
-      RESERVATION_JOB_INTERVAL: ${RESERVATION_JOB_INTERVAL:-*/30 * * * * *}
+      M5_BASE_URL: http://m5-stub:3001
+      M7_BASE_URL: http://m7-stub:3002
+      M5_TIMEOUT_MS: ${M5_TIMEOUT_MS:-3000}
+      M7_TIMEOUT_MS: ${M7_TIMEOUT_MS:-3000}
+      DISPATCH_MODE: events
+      # Credencial no productiva aceptada únicamente por el stub local M5.
+      M5_SERVICE_TOKEN: ${M5_SERVICE_TOKEN:-m5-local-e2e-token}
+      ROUTE_RESOLVER_MODE: stub
+      ROUTE_STUB_ORIGIN_LATITUDE: ${ROUTE_STUB_ORIGIN_LATITUDE:--27.4514}
+      ROUTE_STUB_ORIGIN_LONGITUDE: ${ROUTE_STUB_ORIGIN_LONGITUDE:--58.9867}
+      ROUTE_STUB_DESTINATION_LATITUDE: ${ROUTE_STUB_DESTINATION_LATITUDE:--27.4692}
+      ROUTE_STUB_DESTINATION_LONGITUDE: ${ROUTE_STUB_DESTINATION_LONGITUDE:--58.8306}
+      ROUTE_STUB_DISTANCE_KM: ${ROUTE_STUB_DISTANCE_KM:-18.4}
+      ROUTE_STUB_DURATION_MIN: ${ROUTE_STUB_DURATION_MIN:-28}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-m9}:${POSTGRES_PASSWORD:-m9-local}@postgres:5432/${POSTGRES_DB:-m9_reservas}?schema=public
+      REDIS_URL: redis://redis:6379
+      REDIS_CACHE_TTL_SECONDS: ${REDIS_CACHE_TTL_SECONDS:-60}
+      REDIS_LOCK_TTL_MS: ${REDIS_LOCK_TTL_MS:-10000}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-m9.reservas.events}
+      RABBITMQ_RETRY_EXCHANGE: ${RABBITMQ_RETRY_EXCHANGE:-m9.reservas.events.retry}
+      RABBITMQ_DLQ_EXCHANGE: ${RABBITMQ_DLQ_EXCHANGE:-m9.reservas.events.dlx}
+      RABBITMQ_QUEUE: ${RABBITMQ_QUEUE:-m9.reservas}
+      RABBITMQ_RETRY_QUEUE: ${RABBITMQ_RETRY_QUEUE:-m9.reservas.retry}
+      RABBITMQ_DLQ: ${RABBITMQ_DLQ:-m9.reservas.dlq}
+      RABBITMQ_RETRY_LIMIT: ${RABBITMQ_RETRY_LIMIT:-3}
+      RABBITMQ_RETRY_DELAY_MS: ${RABBITMQ_RETRY_DELAY_MS:-1000}
+      OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-5000}
+      RESERVATION_JOB_INTERVAL: ${RESERVATION_JOB_INTERVAL:-*/5 * * * * *}
     ports:
       - '${PORT:-3000}:${PORT:-3000}'
     healthcheck:
@@ -24,16 +50,30 @@ services:
         condition: service_healthy
       m7-stub:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
     networks:
       - reservas-network
     restart: unless-stopped
 
   m5-stub:
-    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v1.0.0}
+    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v2.0.0}
     command: ['node', 'dist/stubs/m5/server.js']
     environment:
       PORT: 3001
-      M5_OFERTAS_ESCENARIO: ${M5_OFERTAS_ESCENARIO:-ACEPTAN}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-m9.reservas.events}
+      RABBITMQ_RETRY_EXCHANGE: ${M5_RABBITMQ_RETRY_EXCHANGE:-m5.reservas.events.retry}
+      RABBITMQ_DLQ_EXCHANGE: ${M5_RABBITMQ_DLQ_EXCHANGE:-m5.reservas.events.dlx}
+      M5_RABBITMQ_QUEUE: ${M5_RABBITMQ_QUEUE:-m5.reservas-dispatch-demo}
+      M5_RABBITMQ_RETRY_QUEUE: ${M5_RABBITMQ_RETRY_QUEUE:-m5.reservas-dispatch-demo.retry}
+      M5_RABBITMQ_DLQ: ${M5_RABBITMQ_DLQ:-m5.reservas-dispatch-demo.dlq}
+      RABBITMQ_RETRY_LIMIT: ${RABBITMQ_RETRY_LIMIT:-3}
+      RABBITMQ_RETRY_DELAY_MS: ${RABBITMQ_RETRY_DELAY_MS:-1000}
     expose:
       - '3001'
     healthcheck:
@@ -43,9 +83,12 @@ services:
       retries: 5
     networks:
       - reservas-network
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 
   m7-stub:
-    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v1.0.0}
+    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v2.0.0}
     command: ['node', 'dist/stubs/m7/server.js']
     environment:
       PORT: 3002
@@ -59,6 +102,72 @@ services:
     networks:
       - reservas-network
 
+  redis:
+    image: redis:7.4-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    expose:
+      - '6379'
+    ports:
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - reservas-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-m9}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-m9-local}
+      POSTGRES_DB: ${POSTGRES_DB:-m9_reservas}
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    expose:
+      - '5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - reservas-network
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:4.1-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-m9}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-m9-local}
+    ports:
+      - '127.0.0.1:${RABBITMQ_PORT:-5672}:5672'
+      - '127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672'
+    expose:
+      - '5672'
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 5s
+      timeout: 15s
+      retries: 12
+      start_period: 90s
+    networks:
+      - reservas-network
+    restart: unless-stopped
+
 networks:
   reservas-network:
     driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:

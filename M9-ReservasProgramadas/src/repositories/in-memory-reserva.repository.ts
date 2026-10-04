@@ -11,11 +11,15 @@ import type { ReservaRepository } from './reserva.repository.js';
 
 const clone = (reserva: Reserva): Reserva => ({
   ...reserva,
-  asignacion: reserva.asignacion === null ? null : { ...reserva.asignacion },
+  routeSnapshot:
+    reserva.routeSnapshot === null
+      ? null
+      : {
+          ...reserva.routeSnapshot,
+          origin: { ...reserva.routeSnapshot.origin },
+          destination: { ...reserva.routeSnapshot.destination },
+        },
 });
-
-const editable = (reserva: Reserva): boolean =>
-  reserva.estado === 'PROGRAMADA' || reserva.estado === 'PENDIENTE_ASIGNACION';
 
 export class InMemoryReservaRepository implements ReservaRepository {
   private readonly reservas = new Map<string, Reserva>();
@@ -29,12 +33,14 @@ export class InMemoryReservaRepository implements ReservaRepository {
       destino: input.destino,
       vehiculo: input.vehiculo,
       fechaHoraProgramada: input.fechaHoraProgramada,
-      estado: 'PENDIENTE_ASIGNACION',
-      asignacion: null,
+      estado: 'PROGRAMADA',
       tarifaEstimada: input.tarifaEstimada ?? null,
       moneda: input.moneda ?? 'ARS',
-      criterioAsignacion: 'MEJOR_CALIFICACION',
+      estimacionTarifaId: input.estimacionTarifaId ?? null,
+      routeSnapshot: input.routeSnapshot ?? null,
+      criterioAsignacion: null,
       idSolicitud: null,
+      assignedDriverId: null,
       creadoEn: now,
       actualizadoEn: now,
     };
@@ -56,21 +62,16 @@ export class InMemoryReservaRepository implements ReservaRepository {
 
   public async actualizarProgramada(id: string, input: CambiosReserva): Promise<Reserva | null> {
     const reserva = this.reservas.get(id);
-    if (reserva === undefined || !editable(reserva)) return null;
+    if (reserva === undefined || reserva.estado !== 'PROGRAMADA') return null;
 
     Object.assign(reserva, input, { actualizadoEn: new Date().toISOString() });
-    if (input.asignacion !== undefined) {
-      reserva.asignacion = input.asignacion === null ? null : { ...input.asignacion };
-      reserva.estado = reserva.asignacion === null ? 'PENDIENTE_ASIGNACION' : 'PROGRAMADA';
-    }
     return clone(reserva);
   }
 
-  public async cancelarProgramada(id: string): Promise<Reserva | null> {
+  public async cancelar(id: string, estadoEsperado: EstadoReserva): Promise<Reserva | null> {
     const reserva = this.reservas.get(id);
-    if (reserva === undefined || !editable(reserva)) return null;
+    if (reserva === undefined || reserva.estado !== estadoEsperado) return null;
     reserva.estado = 'CANCELADA';
-    reserva.asignacion = null;
     reserva.actualizadoEn = new Date().toISOString();
     return clone(reserva);
   }
@@ -79,9 +80,9 @@ export class InMemoryReservaRepository implements ReservaRepository {
     return [...this.reservas.values()]
       .filter(
         (reserva) =>
-          reserva.estado === 'PROGRAMADA' &&
-          reserva.asignacion !== null &&
-          Date.parse(reserva.fechaHoraProgramada) <= fechaLimite.getTime(),
+          (reserva.estado === 'ACTIVANDO' && reserva.idSolicitud !== null) ||
+          (reserva.estado === 'PROGRAMADA' &&
+            Date.parse(reserva.fechaHoraProgramada) <= fechaLimite.getTime()),
       )
       .sort((a, b) => Date.parse(a.fechaHoraProgramada) - Date.parse(b.fechaHoraProgramada))
       .slice(0, limite)
@@ -100,6 +101,8 @@ export class InMemoryReservaRepository implements ReservaRepository {
     reserva.estado = nuevoEstado;
     reserva.actualizadoEn = new Date().toISOString();
     if (cambio.idSolicitud !== undefined) reserva.idSolicitud = cambio.idSolicitud;
+    if (cambio.assignedDriverId !== undefined) reserva.assignedDriverId = cambio.assignedDriverId;
+    if (cambio.routeSnapshot !== undefined) reserva.routeSnapshot = cambio.routeSnapshot;
     return clone(reserva);
   }
 }

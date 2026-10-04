@@ -3,214 +3,175 @@ import { randomUUID } from 'node:crypto';
 import express from 'express';
 import { z } from 'zod';
 
-import { asignacionSchema } from '../../clients/asignacion.client.js';
-import type { AsignacionChofer, TipoVehiculo } from '../../domain/reserva.js';
-import { Ofertas, type RespuestaSimulada } from './ofertas.js';
+import type { TipoVehiculo } from '../../domain/reserva.js';
 
-export interface ChoferStub {
+type RideStatus =
+  | 'PENDING'
+  | 'SEARCHING'
+  | 'OFFERED'
+  | 'ASSIGNED'
+  | 'EXPIRED'
+  | 'NO_DRIVERS_AVAILABLE'
+  | 'CANCELLED';
+
+export interface RideRequestStub {
   id: string;
-  nombre: string;
-  valoracion: number;
-  vehiculo: TipoVehiculo;
-  respuestaSimulada?: RespuestaSimulada;
+  clientId: string;
+  origin: { latitude: number; longitude: number; address: string };
+  destination: { latitude: number; longitude: number; address: string };
+  vehicleType: TipoVehiculo;
+  status: RideStatus;
+  assignedDriverId: string | null;
+  estimatedFare: {
+    amount: number;
+    currency: string;
+    estimatedDistanceKm: number;
+    estimatedDurationMin: number;
+  };
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
 }
 
-export const CHOFERES_DEMO: ChoferStub[] = [
-  {
-    id: '30000000-0000-4000-8000-000000000001',
-    nombre: 'Chofer Auto A (demo)',
-    valoracion: 4.9,
-    vehiculo: 'AUTO',
-  },
-  {
-    id: '30000000-0000-4000-8000-000000000002',
-    nombre: 'Chofer Auto B (demo)',
-    valoracion: 4.7,
-    vehiculo: 'AUTO',
-  },
-  {
-    id: '30000000-0000-4000-8000-000000000003',
-    nombre: 'Chofer Moto A (demo)',
-    valoracion: 4.8,
-    vehiculo: 'MOTO',
-  },
-];
+export interface M5StubState {
+  rideRequests: Map<string, RideRequestStub>;
+  idempotencyRequests: Map<string, string>;
+}
 
-const reservaSchema = z.object({
-  id: z.string().uuid(),
-  origen: z.string().min(1),
-  destino: z.string().min(1),
-  vehiculo: z.enum(['AUTO', 'MOTO']),
-  fechaHoraProgramada: z.string().datetime({ offset: true }),
-  criterioAsignacion: z.literal('MEJOR_CALIFICACION'),
+export const createM5StubState = (): M5StubState => ({
+  rideRequests: new Map(),
+  idempotencyRequests: new Map(),
 });
-type DatosReserva = z.infer<typeof reservaSchema>;
-interface Ocupacion {
-  reserva: DatosReserva;
-  asignacion: AsignacionChofer;
-}
-const mismoViaje = (a: DatosReserva, b: DatosReserva): boolean =>
-  a.origen === b.origen &&
-  a.destino === b.destino &&
-  a.vehiculo === b.vehiculo &&
-  Date.parse(a.fechaHoraProgramada) === Date.parse(b.fechaHoraProgramada);
 
-export const createM5StubApp = (
-  choferes: readonly ChoferStub[] = CHOFERES_DEMO,
-  opciones: { plazoOfertaMs?: number; demoraRespuestaMs?: number } = {},
-) => {
-  const plazo = opciones.plazoOfertaMs ?? 200;
-  const demora = opciones.demoraRespuestaMs ?? 10;
-  if (!Number.isFinite(plazo) || plazo <= 0 || !Number.isFinite(demora) || demora < 0)
-    throw new Error('Los tiempos de oferta deben ser válidos.');
+const geoLocationSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  address: z.string().min(1),
+});
+const createRideRequestSchema = z
+  .object({
+    origin: geoLocationSchema,
+    destination: geoLocationSchema,
+    vehicleType: z.enum(['AUTO', 'MOTO']),
+  })
+  .strict();
+
+const error = (code: string, message: string) => ({
+  code,
+  message,
+  timestamp: new Date().toISOString(),
+});
+
+export const createStubRideRequest = (
+  state: M5StubState,
+  input: z.infer<typeof createRideRequestSchema>,
+  idempotencyKey: string,
+  status: RideStatus = 'SEARCHING',
+): RideRequestStub => {
+  const existingId = state.idempotencyRequests.get(idempotencyKey);
+  if (existingId !== undefined) return state.rideRequests.get(existingId)!;
+  const now = new Date();
+  const ride: RideRequestStub = {
+    id: randomUUID(),
+    clientId: 'm9-scheduled-reservation',
+    ...input,
+    status,
+    assignedDriverId: status === 'ASSIGNED' ? '30000000-0000-4000-8000-000000000001' : null,
+    estimatedFare: {
+      amount: 0,
+      currency: 'ARS',
+      estimatedDistanceKm: 0,
+      estimatedDurationMin: 0,
+    },
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + 180_000).toISOString(),
+  };
+  state.rideRequests.set(ride.id, ride);
+  state.idempotencyRequests.set(idempotencyKey, ride.id);
+  return ride;
+};
+
+export const createM5StubApp = (state: M5StubState = createM5StubState()) => {
   const app = express();
-  const ofertas = new Ofertas();
-  const ocupaciones = new Map<string, Ocupacion>();
-  const rondas = new Map<
-    string,
-    { id: string; reserva: DatosReserva; resultado: Promise<AsignacionChofer | null> }
-  >();
-  const enOferta = new Map<string, { choferId: string; reserva: DatosReserva }>();
-  const solicitudes = new Map<string, { solicitudId: string; estado: string }>();
-  const solapa = (a: DatosReserva, b: DatosReserva) =>
-    Math.abs(Date.parse(a.fechaHoraProgramada) - Date.parse(b.fechaHoraProgramada)) < 3_600_000;
-  const invalidar = (id: string) => {
-    const ronda = rondas.get(id);
-    rondas.delete(id);
-    ocupaciones.delete(id);
-    if (ronda) {
-      ofertas.cancelarRonda(ronda.id);
-      enOferta.delete(ronda.id);
-    }
-  };
-  const buscar = async (
-    reserva: DatosReserva,
-    rondaId: string,
-  ): Promise<AsignacionChofer | null> => {
-    const candidatos = choferes
-      .filter((c) => c.vehiculo === reserva.vehiculo)
-      .sort((a, b) => b.valoracion - a.valoracion || a.id.localeCompare(b.id));
-    for (const chofer of candidatos) {
-      if (rondas.get(reserva.id)?.id !== rondaId) return null;
-      if (
-        [...enOferta.values()].some(
-          (o) => o.choferId === chofer.id && solapa(o.reserva, reserva),
-        ) ||
-        [...ocupaciones.values()].some(
-          (o) => o.asignacion.choferId === chofer.id && solapa(o.reserva, reserva),
-        )
-      )
-        continue;
-      // La toma del candidato no contiene await: evita ofertas simultáneas solapadas.
-      enOferta.set(rondaId, { choferId: chofer.id, reserva });
-      const oferta = await ofertas.abrir(
-        reserva.id,
-        rondaId,
-        chofer.id,
-        chofer.respuestaSimulada ?? 'ACEPTAR',
-        plazo,
-        demora,
-      );
-      enOferta.delete(rondaId);
-      if (rondas.get(reserva.id)?.id !== rondaId) return null;
-      if (oferta.estado !== 'ACEPTADA') continue;
-      const asignacion = {
-        id: oferta.id,
-        choferId: chofer.id,
-        nombreChofer: chofer.nombre,
-        valoracion: chofer.valoracion,
-      };
-      ocupaciones.set(reserva.id, { reserva, asignacion });
-      return asignacion;
-    }
-    return null;
-  };
   app.disable('x-powered-by');
   app.use(express.json());
   app.get('/health', (_request, response) => response.status(200).json({ status: 'ok' }));
-  app.get('/asignaciones/:id/ofertas', (request, response) => {
-    response.json({ ofertas: ofertas.listar(request.params.id) });
-  });
-  app.post('/ofertas/:id/respuesta', (request, response) => {
-    const parsed = z
-      .object({ choferId: z.string().uuid(), decision: z.enum(['ACEPTAR', 'RECHAZAR']) })
-      .strict()
-      .safeParse(request.body);
+
+  app.post('/api/v1/ride-requests', (request, response) => {
+    if (request.header('authorization')?.startsWith('Bearer ') !== true) {
+      response.status(401).json(error('UNAUTHORIZED', 'Bearer requerido.'));
+      return;
+    }
+    const idempotencyKey = request.header('idempotency-key');
+    if (!z.string().uuid().safeParse(idempotencyKey).success) {
+      response.status(400).json(error('VALIDATION_ERROR', 'Idempotency-Key inválida.'));
+      return;
+    }
+    const existingId = state.idempotencyRequests.get(idempotencyKey!);
+    if (existingId !== undefined) {
+      response.status(201).json(state.rideRequests.get(existingId));
+      return;
+    }
+    const parsed = createRideRequestSchema.safeParse(request.body);
     if (!parsed.success) {
-      response.status(400).json({ error: 'Respuesta inválida.' });
+      response.status(400).json(error('VALIDATION_ERROR', 'Body inválido.'));
       return;
     }
-    const oferta = ofertas.responder(request.params.id, parsed.data.choferId, parsed.data.decision);
-    if (!oferta) {
-      response
-        .status(409)
-        .json({ error: 'La oferta no está vigente o no pertenece al conductor.' });
-      return;
-    }
-    response.json({ oferta });
-  });
-  app.put('/asignaciones/:id', async (request, response) => {
-    const parsed = reservaSchema.safeParse(request.body?.reserva);
-    if (!parsed.success || parsed.data.id !== request.params.id) {
-      response.status(400).json({ error: 'Reserva inválida.' });
-      return;
-    }
-    const reserva = parsed.data;
-    if (solicitudes.has(reserva.id)) {
-      response.status(409).json({ error: 'El despacho ya fue activado.' });
-      return;
-    }
-    const anterior = rondas.get(reserva.id);
-    if (anterior && mismoViaje(anterior.reserva, reserva)) {
-      response.json({ asignacion: await anterior.resultado });
-      return;
-    }
-    invalidar(reserva.id);
-    const ronda = {
-      id: randomUUID(),
-      reserva,
-      resultado: Promise.resolve<AsignacionChofer | null>(null),
-    };
-    rondas.set(reserva.id, ronda);
-    ronda.resultado = buscar(reserva, ronda.id);
-    const asignacion = await ronda.resultado;
-    // Sin aceptación, un próximo ciclo puede abrir otra ronda con nueva disponibilidad.
-    if (asignacion === null && rondas.get(reserva.id) === ronda) rondas.delete(reserva.id);
-    response.json({ asignacion });
-  });
-  app.delete('/asignaciones/:id', (request, response) => {
-    if (solicitudes.has(request.params.id)) {
-      response.status(409).json({ error: 'El despacho ya fue activado.' });
-      return;
-    }
-    invalidar(request.params.id);
-    response.sendStatus(204);
-  });
-  app.post('/solicitudes', (request, response) => {
-    const parsed = reservaSchema
-      .extend({ asignacion: asignacionSchema })
-      .safeParse(request.body?.reserva);
-    if (!parsed.success) {
-      response.status(400).json({ error: 'Se requiere una reserva con asignación.' });
-      return;
-    }
-    const reserva = parsed.data;
-    const ocupacion = ocupaciones.get(reserva.id);
     if (
-      ocupacion === undefined ||
-      ocupacion.asignacion.id !== reserva.asignacion.id ||
-      ocupacion.asignacion.choferId !== reserva.asignacion.choferId ||
-      !mismoViaje(ocupacion.reserva, reserva)
+      parsed.data.origin.latitude === parsed.data.destination.latitude &&
+      parsed.data.origin.longitude === parsed.data.destination.longitude
     ) {
-      response.status(409).json({ error: 'La asignación no está vigente para este viaje.' });
+      response.status(422).json(error('SEMANTIC_ERROR', 'Origen y destino idénticos.'));
       return;
     }
-    let solicitud = solicitudes.get(reserva.id);
-    if (solicitud === undefined) {
-      solicitud = { solicitudId: randomUUID(), estado: 'CREADA' };
-      solicitudes.set(reserva.id, solicitud);
-    }
-    response.status(201).json(solicitud);
+    const ride = createStubRideRequest(state, parsed.data, idempotencyKey!);
+    response.status(201).json(ride);
   });
+
+  app.get('/api/v1/ride-requests/:requestId', (request, response) => {
+    if (request.header('authorization')?.startsWith('Bearer ') !== true) {
+      response.status(401).json(error('UNAUTHORIZED', 'Bearer requerido.'));
+      return;
+    }
+    const ride = state.rideRequests.get(request.params.requestId);
+    if (ride === undefined) {
+      response.status(404).json(error('NOT_FOUND', 'Solicitud no encontrada.'));
+      return;
+    }
+    if (ride.status === 'SEARCHING') {
+      ride.status = 'ASSIGNED';
+      ride.assignedDriverId = '30000000-0000-4000-8000-000000000001';
+      ride.updatedAt = new Date().toISOString();
+    }
+    response.json(ride);
+  });
+
+  app.post('/api/v1/ride-requests/:requestId/cancel', (request, response) => {
+    if (request.header('authorization')?.startsWith('Bearer ') !== true) {
+      response.status(401).json(error('UNAUTHORIZED', 'Bearer requerido.'));
+      return;
+    }
+    const ride = state.rideRequests.get(request.params.requestId);
+    if (ride === undefined) {
+      response.status(404).json(error('NOT_FOUND', 'Solicitud no encontrada.'));
+      return;
+    }
+    if (ride.status === 'ASSIGNED') {
+      response.status(409).json(error('INVALID_STATE', 'La solicitud ya fue asignada.'));
+      return;
+    }
+    ride.status = 'CANCELLED';
+    ride.updatedAt = new Date().toISOString();
+    response.json({
+      requestId: ride.id,
+      clientId: ride.clientId,
+      status: 'CANCELLED',
+      reason: typeof request.body?.reason === 'string' ? request.body.reason : null,
+      cancelledAt: ride.updatedAt,
+      message: 'Solicitud de viaje cancelada exitosamente por el cliente.',
+    });
+  });
+
   return app;
 };

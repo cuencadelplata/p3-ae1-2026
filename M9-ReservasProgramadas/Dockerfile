@@ -6,7 +6,9 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY tsconfig.json ./
+COPY prisma ./prisma
 COPY src ./src
+RUN npm run db:generate
 RUN npm run build
 RUN npm prune --omit=dev && npm cache clean --force
 
@@ -18,9 +20,10 @@ ENV NODE_ENV=production
 COPY --from=build /app/package.json /app/package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/prisma ./prisma
 COPY public ./public
 
 EXPOSE 3000
 USER node
 
-CMD ["node", "dist/server.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]

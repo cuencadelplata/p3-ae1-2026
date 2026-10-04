@@ -151,13 +151,16 @@ const renderReservations = () => {
 
     const status = document.createElement('span');
     status.className = `status status-${reserva.estado.toLowerCase()}`;
-    status.textContent =
-      reserva.estado === 'PENDIENTE_ASIGNACION' ? 'Pendiente de asignación' : reserva.estado;
+    status.textContent = reserva.estado;
 
     const actions = document.createElement('div');
-    if (reserva.estado === 'PROGRAMADA' || reserva.estado === 'PENDIENTE_ASIGNACION') {
+    if (reserva.estado === 'PROGRAMADA') {
       actions.append(
         createActionButton('Editar', '', () => beginEdit(reserva)),
+        createActionButton('Cancelar', 'danger', () => void cancelReservation(reserva)),
+      );
+    } else if (reserva.estado === 'ACTIVANDO') {
+      actions.append(
         createActionButton('Cancelar', 'danger', () => void cancelReservation(reserva)),
       );
     } else {
@@ -173,11 +176,10 @@ const renderReservations = () => {
       createCell('Vehículo', reserva.vehiculo === 'AUTO' ? 'Auto' : 'Moto'),
       createCell(
         'Chofer',
-        reserva.asignacion
-          ? `${reserva.asignacion.nombreChofer} · ${reserva.asignacion.valoracion}/5 · Aceptó`
-          : reserva.estado === 'PENDIENTE_ASIGNACION'
-            ? 'Todavía no hay chofer confirmado'
-            : 'Sin asignación',
+        reserva.assignedDriverId ??
+          (reserva.estado === 'PROGRAMADA'
+            ? 'Se asignará al iniciar el despacho'
+            : 'Sin asignación'),
       ),
       createCell('Estado', status),
       createCell('Tarifa', formatFare(reserva)),
@@ -220,27 +222,21 @@ form.addEventListener('submit', async (event) => {
     };
 
     if (editingId === null) {
-      const created = await requestJson('/reservas', {
+      await requestJson('/reservas', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ clienteId: clienteInput.value.trim(), ...payload }),
       });
       showToast(
-        created.estado === 'PENDIENTE_ASIGNACION'
-          ? 'Reserva guardada, pendiente de asignación: todavía no hay chofer confirmado.'
-          : `Reserva creada. ${created.asignacion.nombreChofer} aceptó la oferta (simulación M5).`,
+        'Reserva programada. El despacho y la asignación se realizarán al llegar el horario.',
       );
     } else {
-      const updated = await requestJson(`/reservas/${editingId}`, {
+      await requestJson(`/reservas/${editingId}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      showToast(
-        updated.estado === 'PENDIENTE_ASIGNACION'
-          ? 'Reserva actualizada, pendiente de asignación: todavía no hay chofer confirmado.'
-          : `Reserva actualizada. ${updated.asignacion.nombreChofer} aceptó la nueva oferta (simulación M5).`,
-      );
+      showToast('Reserva actualizada correctamente.');
     }
 
     resetForm();

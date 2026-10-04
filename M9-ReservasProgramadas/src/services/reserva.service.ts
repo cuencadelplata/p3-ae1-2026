@@ -1,46 +1,51 @@
-import type { TarifaClient } from '../clients/tarifa.client.js';
-import type { AsignacionClient } from '../clients/asignacion.client.js';
-import { conReservaExclusiva } from './reserva-lock.js';
+import { NOOP_RESERVATION_CACHE, type ReservationCache } from '../cache/reservation-cache.js';
+import type { DispatchClient } from '../clients/m5-dispatch.client.js';
+import type { EstimacionTarifa, TarifaClient } from '../clients/tarifa.client.js';
 import type {
   ActualizarReserva,
   CambiosReserva,
   CrearReserva,
   Reserva,
 } from '../domain/reserva.js';
+import type { RouteSnapshot } from '../domain/route-snapshot.js';
 import { AppError } from '../errors/app.error.js';
+import type { RouteResolver } from '../integration/route-estimate.port.js';
+import type { DistributedLock } from '../locks/distributed-lock.js';
 import type { ReservaRepository } from '../repositories/reserva.repository.js';
+import { conReservaExclusiva } from './reserva-lock.js';
 
 const normalizarUbicacion = (value: string): string =>
   value.trim().normalize('NFKC').toLocaleLowerCase('es');
+
+interface RouteAndFare {
+  route: RouteSnapshot;
+  fare: EstimacionTarifa;
+}
 
 export class ReservaService {
   public constructor(
     private readonly repository: ReservaRepository,
     private readonly tarifaClient: TarifaClient,
-    private readonly asignacionClient: AsignacionClient,
+    private readonly routeResolver: RouteResolver,
+    private readonly cache: ReservationCache = NOOP_RESERVATION_CACHE,
+    private readonly distributedLock?: DistributedLock,
+    private readonly dispatchClient?: DispatchClient,
   ) {}
 
   public async crear(input: CrearReserva): Promise<Reserva> {
     this.validarFechaFutura(input.fechaHoraProgramada);
     this.validarOrigenDestino(input.origen, input.destino);
 
-    let tarifa: { tarifaEstimada: number; moneda: string } | null = null;
-    try {
-      tarifa = await this.tarifaClient.estimar({
-        origen: input.origen,
-        destino: input.destino,
-        vehiculo: input.vehiculo,
-      });
-    } catch {
-      // La política de degradación permite crear la reserva sin tarifa.
-    }
-
+    const pricing = await this.resolveRouteAndFare(input.origen, input.destino, input.vehiculo);
     const creada = await this.repository.crear({
       ...input,
-      tarifaEstimada: tarifa?.tarifaEstimada ?? null,
-      moneda: tarifa?.moneda ?? 'ARS',
+      tarifaEstimada: pricing?.fare.tarifaEstimada ?? null,
+      moneda: pricing?.fare.moneda ?? 'ARS',
+      estimacionTarifaId: pricing?.fare.estimacionId ?? null,
+      routeSnapshot: pricing?.route ?? null,
     });
-    return this.reintentarAsignacion(creada.id);
+    await this.cache.set(creada);
+    return creada;
   }
 
   public async listar(): Promise<Reserva[]> {
@@ -48,56 +53,65 @@ export class ReservaService {
   }
 
   public async obtenerPorId(id: string): Promise<Reserva> {
+    const cached = await this.cache.get(id);
+    if (cached !== null) return cached;
     const reserva = await this.repository.obtenerPorId(id);
     if (reserva === null) {
       throw new AppError(404, 'RESERVA_NO_ENCONTRADA', 'La reserva no existe.');
     }
+    await this.cache.set(reserva);
     return reserva;
   }
 
   public async actualizar(id: string, input: ActualizarReserva): Promise<Reserva> {
-    return conReservaExclusiva(this.repository, id, () => this.actualizarExclusiva(id, input));
+    return conReservaExclusiva(this.repository, id, () =>
+      this.withDistributedLock(`lock:reserva:${id}:modificacion`, async () => {
+        await this.cache.invalidate(id);
+        const result = await this.actualizarExclusiva(id, input);
+        await this.cache.set(result);
+        return result;
+      }),
+    );
   }
 
   private async actualizarExclusiva(id: string, input: ActualizarReserva): Promise<Reserva> {
     const actual = await this.obtenerPorId(id);
-    if (actual.estado !== 'PROGRAMADA' && actual.estado !== 'PENDIENTE_ASIGNACION') {
+    if (actual.estado !== 'PROGRAMADA') {
       throw new AppError(
         409,
         'RESERVA_NO_MODIFICABLE',
-        'Solo se pueden modificar reservas PROGRAMADA o PENDIENTE_ASIGNACION.',
+        'Solo se pueden modificar reservas PROGRAMADA.',
       );
     }
 
     const origen = input.origen ?? actual.origen;
     const destino = input.destino ?? actual.destino;
+    const vehiculo = input.vehiculo ?? actual.vehiculo;
     const fecha = input.fechaHoraProgramada ?? actual.fechaHoraProgramada;
     this.validarOrigenDestino(origen, destino);
     this.validarFechaFutura(fecha);
 
     const cambios: CambiosReserva = { ...input };
-    const requiereNuevaTarifa =
-      input.origen !== undefined || input.destino !== undefined || input.vehiculo !== undefined;
+    const cambiaRecorrido = input.origen !== undefined || input.destino !== undefined;
+    const requiereNuevaTarifa = cambiaRecorrido || input.vehiculo !== undefined;
 
     if (requiereNuevaTarifa) {
+      let route = cambiaRecorrido ? null : actual.routeSnapshot;
       try {
-        const tarifa = await this.tarifaClient.estimar({
-          origen,
-          destino,
-          vehiculo: input.vehiculo ?? actual.vehiculo,
-        });
-        cambios.tarifaEstimada = tarifa.tarifaEstimada;
-        cambios.moneda = tarifa.moneda;
+        route ??= await this.routeResolver.resolve(origen, destino);
+        const fare = await this.tarifaClient.estimar({ vehiculo, route });
+        cambios.routeSnapshot = route;
+        cambios.tarifaEstimada = fare.tarifaEstimada;
+        cambios.moneda = fare.moneda;
+        cambios.estimacionTarifaId = fare.estimacionId;
       } catch {
+        if (cambiaRecorrido) cambios.routeSnapshot = null;
         cambios.tarifaEstimada = null;
         cambios.moneda = actual.moneda ?? 'ARS';
+        cambios.estimacionTarifaId = null;
       }
     }
 
-    // Liberar primero evita conservar una asignación incompatible ante una edición.
-    // Si M5 no confirma la liberación, la edición se rechaza y puede reintentarse.
-    await this.asignacionClient.liberar(id);
-    cambios.asignacion = null;
     const actualizada = await this.repository.actualizarProgramada(id, cambios);
     if (actualizada === null) {
       throw new AppError(
@@ -106,25 +120,50 @@ export class ReservaService {
         'La reserva dejó de estar disponible para modificación.',
       );
     }
-    return this.asignarExclusiva(actualizada);
+    return actualizada;
   }
 
   public async cancelar(id: string): Promise<Reserva> {
-    return conReservaExclusiva(this.repository, id, () => this.cancelarExclusiva(id));
+    return conReservaExclusiva(this.repository, id, () =>
+      this.withDistributedLock(`lock:reserva:${id}:activacion`, async () => {
+        await this.cache.invalidate(id);
+        const result = await this.cancelarExclusiva(id);
+        await this.cache.set(result);
+        return result;
+      }),
+    );
   }
 
   private async cancelarExclusiva(id: string): Promise<Reserva> {
     const actual = await this.obtenerPorId(id);
-    if (actual.estado !== 'PROGRAMADA' && actual.estado !== 'PENDIENTE_ASIGNACION') {
+    if (actual.estado !== 'PROGRAMADA' && actual.estado !== 'ACTIVANDO') {
       throw new AppError(
         409,
         'RESERVA_NO_CANCELABLE',
-        'Solo se pueden cancelar reservas PROGRAMADA o PENDIENTE_ASIGNACION.',
+        'Solo se pueden cancelar reservas PROGRAMADA o ACTIVANDO.',
       );
     }
 
-    await this.asignacionClient.liberar(id);
-    const cancelada = await this.repository.cancelarProgramada(id);
+    if (actual.estado === 'ACTIVANDO' && actual.idSolicitud === null) {
+      throw new AppError(
+        409,
+        'RESERVA_EN_PROCESO',
+        'La reserva ya está siendo enviada a despacho y todavía no puede cancelarse.',
+      );
+    }
+
+    if (actual.idSolicitud !== null) {
+      if (this.dispatchClient === undefined) {
+        throw new AppError(
+          503,
+          'DESPACHO_NO_CONFIGURADO',
+          'No se puede cancelar la solicitud de despacho en este momento.',
+        );
+      }
+      await this.dispatchClient.cancelRequest(actual.idSolicitud, 'Reserva cancelada en M9');
+    }
+
+    const cancelada = await this.repository.cancelar(id, actual.estado);
     if (cancelada === null) {
       throw new AppError(
         409,
@@ -135,27 +174,25 @@ export class ReservaService {
     return cancelada;
   }
 
-  public async reintentarAsignacion(id: string): Promise<Reserva> {
-    return conReservaExclusiva(this.repository, id, async () => {
-      const reserva = await this.obtenerPorId(id);
-      if (
-        reserva.estado !== 'PENDIENTE_ASIGNACION' ||
-        Date.parse(reserva.fechaHoraProgramada) <= Date.now()
-      )
-        return reserva;
-      return this.asignarExclusiva(reserva);
-    });
+  private async resolveRouteAndFare(
+    origin: string,
+    destination: string,
+    vehiculo: CrearReserva['vehiculo'],
+  ): Promise<RouteAndFare | null> {
+    try {
+      const route = await this.routeResolver.resolve(origin, destination);
+      const fare = await this.tarifaClient.estimar({ vehiculo, route });
+      return { route, fare };
+    } catch {
+      // Política de degradación existente: la reserva puede guardarse sin tarifa.
+      return null;
+    }
   }
 
-  private async asignarExclusiva(reserva: Reserva): Promise<Reserva> {
-    let asignacion;
-    try {
-      asignacion = await this.asignacionClient.asignar(reserva);
-    } catch {
-      // La reserva ya está guardada: el scheduler reintentará mientras sea futura.
-      return reserva;
-    }
-    return (await this.repository.actualizarProgramada(reserva.id, { asignacion })) ?? reserva;
+  private async withDistributedLock<T>(key: string, action: () => Promise<T>): Promise<T> {
+    return this.distributedLock === undefined
+      ? action()
+      : this.distributedLock.runExclusive(key, action);
   }
 
   private validarFechaFutura(fecha: string): void {

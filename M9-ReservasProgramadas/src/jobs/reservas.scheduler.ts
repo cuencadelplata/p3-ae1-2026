@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto';
+
 import cron from 'node-cron';
 
+import { runWithRequestContext } from '../integration/request-context.js';
 import type { ReservaRepository } from '../repositories/reserva.repository.js';
 import type { ActivacionReservaService } from '../services/activacion-reserva.service.js';
-import type { ReservaService } from '../services/reserva.service.js';
 
 export interface ResultadoEjecucionScheduler {
   encontradas: number;
@@ -18,7 +20,6 @@ export class ReservasScheduler {
     private readonly activacionService: ActivacionReservaService,
     private readonly expresionCron: string,
     private readonly onError: (error: unknown) => void = console.error,
-    private readonly reservaService?: ReservaService,
   ) {}
 
   public start(): void {
@@ -38,30 +39,26 @@ export class ReservasScheduler {
   }
 
   public async ejecutar(fechaLimite = new Date()): Promise<ResultadoEjecucionScheduler> {
-    if (this.reservaService !== undefined) {
-      const sinChofer = (await this.repository.listar())
-        .filter(
-          (reserva) =>
-            reserva.estado === 'PENDIENTE_ASIGNACION' &&
-            Date.parse(reserva.fechaHoraProgramada) > Date.now(),
-        )
-        .slice(0, 100);
-      await Promise.allSettled(
-        sinChofer.map(({ id }) => this.reservaService!.reintentarAsignacion(id)),
-      );
-    }
     const pendientes = await this.repository.buscarPendientes(fechaLimite);
     const resultados = await Promise.allSettled(
-      pendientes.map(({ id }) => this.activacionService.activar(id)),
+      pendientes.map(({ id }) =>
+        runWithRequestContext({ correlationId: randomUUID() }, () =>
+          this.activacionService.activar(id),
+        ),
+      ),
     );
     const activadas = resultados.filter(
       (result) => result.status === 'fulfilled' && result.value.activada,
+    ).length;
+    const fallidas = resultados.filter(
+      (result) =>
+        result.status === 'rejected' || (result.status === 'fulfilled' && result.value.fallida),
     ).length;
 
     return {
       encontradas: pendientes.length,
       activadas,
-      fallidas: resultados.length - activadas,
+      fallidas,
     };
   }
 }

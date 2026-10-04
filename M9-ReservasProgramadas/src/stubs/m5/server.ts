@@ -1,21 +1,34 @@
-import { z } from 'zod';
-import { CHOFERES_DEMO, createM5StubApp } from './app.js';
-import type { RespuestaSimulada } from './ofertas.js';
+import { RabbitMqConnection } from '../../infrastructure/rabbitmq/rabbitmq.connection.js';
+import { createM5StubApp } from './app.js';
+import { createM5StubState } from './app.js';
+import { startM5StubMessaging } from './rabbitmq.js';
 
 const port = Number(process.env.PORT ?? 3001);
+const retryDelayMs = Number(process.env.RABBITMQ_RETRY_DELAY_MS ?? 1_000);
+const state = createM5StubState();
+const rabbitMq = new RabbitMqConnection(
+  process.env.RABBITMQ_URL ?? 'amqp://m9:m9-local@localhost:5672',
+  {
+    exchange: process.env.RABBITMQ_EXCHANGE ?? 'm9.reservas.events',
+    retryExchange: process.env.RABBITMQ_RETRY_EXCHANGE ?? 'm9.reservas.events.retry',
+    deadLetterExchange: process.env.RABBITMQ_DLQ_EXCHANGE ?? 'm9.reservas.events.dlx',
+    queue: process.env.M5_RABBITMQ_QUEUE ?? 'm5.reservas-dispatch-demo',
+    retryQueue: process.env.M5_RABBITMQ_RETRY_QUEUE ?? 'm5.reservas-dispatch-demo.retry',
+    deadLetterQueue: process.env.M5_RABBITMQ_DLQ ?? 'm5.reservas-dispatch-demo.dlq',
+    retryDelayMs,
+  },
+);
 
-const escenario = z
-  .enum(['ACEPTAN', 'RECHAZA_MEJOR', 'VENCE_MEJOR', 'RECHAZAN_TODOS'])
-  .default('ACEPTAN')
-  .parse(process.env.M5_OFERTAS_ESCENARIO);
-const choferes = CHOFERES_DEMO.map((c, i) => {
-  let respuestaSimulada: RespuestaSimulada = 'ACEPTAR';
-  if (escenario === 'RECHAZAN_TODOS' || (escenario === 'RECHAZA_MEJOR' && i === 0))
-    respuestaSimulada = 'RECHAZAR';
-  if (escenario === 'VENCE_MEJOR' && i === 0) respuestaSimulada = 'SIN_RESPUESTA';
-  return { ...c, respuestaSimulada };
+await rabbitMq.connect();
+await startM5StubMessaging(rabbitMq, state, Number(process.env.RABBITMQ_RETRY_LIMIT ?? 3));
+
+const server = createM5StubApp(state).listen(port, () => {
+  console.log(`M5 contract stub escuchando en el puerto ${port}.`);
 });
 
-createM5StubApp(choferes).listen(port, () => {
-  console.log(`M5 stub escuchando en el puerto ${port}.`);
-});
+const shutdown = (): void => {
+  server.close(() => void rabbitMq.close());
+};
+
+process.once('SIGINT', shutdown);
+process.once('SIGTERM', shutdown);
