@@ -48,7 +48,7 @@ export async function idempotencia(req: Request, res: Response, next: NextFuncti
         .set(redisKey, JSON.stringify({ status: res.statusCode, body }), {
           EX: TTL_SEGUNDOS,
         })
-        .catch((err) => {
+        .catch((err: any) => {
           console.error("[idempotencia] Error guardando en Redis:", err);
         });
     }

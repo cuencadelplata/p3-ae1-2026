@@ -3,7 +3,7 @@ import { TipoDocumento, type Documento } from "./documents-model.js";
 import type {
   DocumentoRequestDTO,
   DocumentoParaInsertar,
-} from "./documents-dto.ts";
+} from "./documents-dto.js";
 import {
   insertarDocumento,
   listarDocumentosPorConductor,
@@ -11,6 +11,7 @@ import {
 } from "./documents-repository.js";
 import { buscarVehiculoDeConductor } from "../vehiculos/vehiculo-repository.js";
 import { AppError } from "../errors/AppError.js";
+import { publicarDocumentoRegistrado } from "./documents.events.js";
 
 export async function registrarDocumento(
   driverId: string,
@@ -57,8 +58,15 @@ export async function registrarDocumento(
     archivoUrl: datos.archivoUrl.trim(),
   };
 
-  return insertarDocumento(payload);
-}
+  const documento = await insertarDocumento(payload);
+
+  // si falla la publicación, no debe romper el registro del documento.
+  publicarDocumentoRegistrado(documento).catch((err) =>
+    console.error("No se pudo publicar evento de documento:", err),
+  );
+
+  return documento;
+} 
 
 export async function listarDocumentos(driverId: string) {
   return listarDocumentosPorConductor(driverId);
