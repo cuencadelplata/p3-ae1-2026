@@ -55,6 +55,18 @@ export function idempotencyConflict(): SupportError {
   );
 }
 
+// La base de datos no puede atender el pedido ahora. cause conserva el error
+// original para el log; nunca sale en la respuesta.
+export function databaseUnavailable(cause?: unknown): SupportError {
+  const error = new SupportError(
+    503,
+    'SUPPORT_DB_UNAVAILABLE',
+    'El servicio de soporte no está disponible en este momento. Reintentá en unos instantes.',
+  );
+  error.cause = cause;
+  return error;
+}
+
 export function invalidTransition(desde: string, hacia: string): SupportError {
   return new SupportError(409, 'SUPPORT_INVALID_TRANSITION', 'El cambio de estado no está permitido.', [
     { field: 'estado', reason: `No se permite pasar de ${desde} a ${hacia}.` },

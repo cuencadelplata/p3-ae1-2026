@@ -52,6 +52,10 @@ const tickets = (await ticketRepository.listarTodos()).filter(t => t.viajeId ===
 - **No cambia el comportamiento:** el resultado sólo se usa para escribir una
   línea de log con la cantidad de tickets del viaje. El callback ya era
   asíncrono.
+- **Con PostgreSQL ese log siempre cuenta 0:** desde que los tickets se
+  persisten en CommunicationsDB, la instancia en memoria que lee el consumer
+  queda vacía en el runtime. No se cambió para no tocar el consumer; el dato
+  sólo se usa en ese log.
 - **A tener en cuenta en la extracción:** esa línea lee la instancia en memoria
   `ticketRepository`. Es un acceso del consumer a datos de RF8.5 dentro del
   mismo proceso; cuando el consumer salga de Support debe eliminarse o

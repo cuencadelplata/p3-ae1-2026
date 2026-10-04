@@ -25,6 +25,10 @@ export const supportErrorHandler: ErrorRequestHandler = (error, _req, res, next)
   }
 
   if (error instanceof SupportError) {
+    if (error.code === 'SUPPORT_DB_UNAVAILABLE') {
+      const cause = error.cause instanceof Error ? error.cause.message : String(error.cause ?? 'sin detalle');
+      console.error('[Support] Base de datos no disponible:', { correlationId: res.locals.correlationId, cause });
+    }
     sendError(res, error);
     return;
   }
