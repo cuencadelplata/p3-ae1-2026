@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as amqp from 'amqplib';
 import type { Channel, Connection } from 'amqplib';
+import { Pool } from 'pg';
 import {
   assertTopology,
   buildQueueTopology,
@@ -15,65 +17,43 @@ const POSTGRES_URL = process.env.POSTGRES_URL || 'postgres://m8_admin:m8_admin_l
 const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672';
 
 describe('RF8.6 Real Infrastructure - PostgreSQL (messaging.inbox_events & outbox_events) + RabbitMQ Real', () => {
-  let pgClient: any = null;
-  let amqpConn: Connection | null = null;
-  let amqpChannel: Channel | null = null;
-  let isInfraAvailable = false;
+  let pgPool: Pool;
+  let amqpConn: Connection;
+  let amqpChannel: Channel;
 
   beforeAll(async () => {
-    // Intento de conexion dinamica a PostgreSQL y RabbitMQ reales
+    // 1. Conectar a PostgreSQL real
     try {
-      // 1. Intentar conectar a PostgreSQL
-      let PgPool: any;
-      try {
-        const pgPkg = await import('pg');
-        PgPool = pgPkg.default?.Pool || pgPkg.Pool;
-      } catch {
-        // Module pg opcional
-      }
+      pgPool = new Pool({ connectionString: POSTGRES_URL, connectionTimeoutMillis: 2000 });
+      await pgPool.query('SELECT 1');
+    } catch (err) {
+      throw new Error(
+        `[RF8.6 Real Infra Error] No se pudo conectar a PostgreSQL real en ${POSTGRES_URL}.\n` +
+        `Asegurate de haber iniciado los contenedores con 'docker compose up -d postgres rabbitmq'. Error: ${(err as Error).message}`
+      );
+    }
 
-      if (PgPool) {
-        const pool = new PgPool({ connectionString: POSTGRES_URL, connectionTimeoutMillis: 1500 });
-        const client = await pool.connect();
-        await client.query('CREATE SCHEMA IF NOT EXISTS messaging');
-        await client.query(`
-          CREATE TABLE IF NOT EXISTS messaging.inbox_events (
-            consumer_id VARCHAR(255) NOT NULL,
-            message_id VARCHAR(255) NOT NULL,
-            event_type VARCHAR(255) NOT NULL,
-            status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
-            processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            PRIMARY KEY (consumer_id, message_id)
-          );
-        `);
-        await client.query(`
-          CREATE TABLE IF NOT EXISTS messaging.outbox_events (
-            id VARCHAR(255) PRIMARY KEY,
-            event_type VARCHAR(255) NOT NULL,
-            routing_key VARCHAR(255),
-            correlation_id VARCHAR(255),
-            payload JSONB NOT NULL,
-            status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
-            error_message TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            published_at TIMESTAMPTZ
-          );
-        `);
-        client.release();
-        pgClient = pool;
-      }
-
-      // 2. Intentar conectar a RabbitMQ
+    // 2. Conectar a RabbitMQ real
+    try {
       amqpConn = await amqp.connect(RABBITMQ_URL);
       amqpChannel = await amqpConn.createConfirmChannel();
+    } catch (err) {
+      if (pgPool) await pgPool.end().catch(() => {});
+      throw new Error(
+        `[RF8.6 Real Infra Error] No se pudo conectar a RabbitMQ real en ${RABBITMQ_URL}.\n` +
+        `Asegurate de haber iniciado los contenedores con 'docker compose up -d postgres rabbitmq'. Error: ${(err as Error).message}`
+      );
+    }
 
-      if (pgClient && amqpChannel) {
-        isInfraAvailable = true;
-      }
-    } catch {
-      isInfraAvailable = false;
-      console.log('[RF8.6 Integration] Postgres o RabbitMQ real no disponibles en localhost. Saltando ejecucion contra contenedores reales.');
+    // 3. Verificar que el esquema messaging y las tablas existen (creados por 02-messaging.sh init script)
+    try {
+      await pgPool.query('SELECT 1 FROM messaging.inbox_events LIMIT 1');
+      await pgPool.query('SELECT 1 FROM messaging.outbox_events LIMIT 1');
+    } catch (err) {
+      throw new Error(
+        `[RF8.6 Real Infra Error] Las tablas messaging.inbox_events u outbox_events no existen en la base de datos real.\n` +
+        `Verifica que el script de inicializacion 02-messaging.sh se haya ejecutado. Error: ${(err as Error).message}`
+      );
     }
   });
 
@@ -84,31 +64,23 @@ describe('RF8.6 Real Infrastructure - PostgreSQL (messaging.inbox_events & outbo
     if (amqpConn) {
       await amqpConn.close().catch(() => {});
     }
-    if (pgClient && typeof pgClient.end === 'function') {
-      await pgClient.end().catch(() => {});
+    if (pgPool) {
+      await pgPool.end().catch(() => {});
     }
   });
 
-  it('demuestra el flujo E2E completo: Postgres Inbox (claim/complete), RabbitMQ Confirm, Retry/DLQ y Outbox SKIP LOCKED', async () => {
-    if (!isInfraAvailable || !pgClient || !amqpChannel) {
-      console.log('Skipping real infra test because containers are not running locally.');
-      expect(true).toBe(true);
-      return;
-    }
-
+  it('demuestra Inbox real, deduplicacion e idempotencia ante redelivery en PostgreSQL', async () => {
     const testRun = Date.now();
     const topology = buildQueueTopology({
-      queue: `test.m8.real-infra.${testRun}`,
+      queue: `test.m8.real-inbox.${testRun}`,
       routingKey: 'trip.completed',
     });
 
-    // 1. Configurar topologia real en RabbitMQ
     await assertTopology(amqpChannel, topology);
 
-    // 2. Inicializar Inbox persistido en PostgreSQL real
-    const inbox = new PostgresTechnicalInbox(pgClient);
+    const inbox = new PostgresTechnicalInbox(pgPool);
     const consumer = new EventConsumer({
-      consumerId: 'm8.real-infra-consumer',
+      consumerId: `m8.real-consumer-${testRun}`,
       topology: { queue: topology.queue, routingKey: topology.routingKey },
       inboxStore: inbox,
     });
@@ -119,25 +91,27 @@ describe('RF8.6 Real Infrastructure - PostgreSQL (messaging.inbox_events & outbo
       expect(envelope.data['tripId']).toBe('777');
     });
 
+    const msgId = randomUUID();
+    const correlationId = randomUUID();
     const payload = JSON.stringify({
-      messageId: `msg-real-${testRun}`,
+      messageId: msgId,
       eventType: 'TripCompleted',
       version: 1,
       occurredAt: new Date().toISOString(),
-      correlationId: `corr-${testRun}`,
+      correlationId: correlationId,
       producer: 'm6',
       data: { tripId: '777' },
     });
 
-    // 3. Publicar en RabbitMQ real con Publisher Confirm
+    // Publicar evento en RabbitMQ real con Publisher Confirm
     await publishWithConfirm(amqpChannel, topology.exchange, 'trip.completed', Buffer.from(payload), {
       persistent: true,
       contentType: 'application/json',
     });
 
-    // 4. Consumir mensaje con EventConsumer real
+    // Consumir mensaje inicial
     const msg = await new Promise<amqp.ConsumeMessage | null>((resolve) => {
-      amqpChannel!.get(topology.queue, { noAck: false }).then(resolve);
+      amqpChannel.get(topology.queue, { noAck: false }).then(resolve);
     });
 
     expect(msg).not.toBeNull();
@@ -147,40 +121,145 @@ describe('RF8.6 Real Infrastructure - PostgreSQL (messaging.inbox_events & outbo
 
     expect(handledCount).toBe(1);
 
-    // 5. Verificar persistencia real en PostgreSQL (messaging.inbox_events)
-    const dbCheck = await pgClient.query(
+    // Verificar en PostgreSQL real (messaging.inbox_events)
+    const dbCheck = await pgPool.query(
       `SELECT status FROM messaging.inbox_events WHERE consumer_id = $1 AND message_id = $2`,
-      ['m8.real-infra-consumer', `msg-real-${testRun}`]
+      [`m8.real-consumer-${testRun}`, msgId]
     );
     expect(dbCheck.rows.length).toBe(1);
     expect(dbCheck.rows[0].status).toBe('PROCESSED');
 
-    // 6. Probar idempotencia ante redelivery en Postgres real
+    // Simular redelivery del mismo mensaje -> Inbox previene re-ejecucion
     if (msg) {
       await consumer.processMessage(amqpChannel, msg);
     }
-    expect(handledCount).toBe(1); // No vuelve a ejecutarse
+    expect(handledCount).toBe(1); // Mantiene 1 ejecucion
 
-    // 7. Probar Outbox real con FOR UPDATE SKIP LOCKED
-    await pgClient.query(
-      `INSERT INTO messaging.outbox_events (id, event_type, payload, status)
-       VALUES ($1, $2, $3, 'PENDING')`,
-      [`ob-real-${testRun}`, 'ReceiptIssued', JSON.stringify({ messageId: `msg-ob-${testRun}`, data: {} })]
+    // Limpiar colas de test
+    await amqpChannel.deleteQueue(topology.queue);
+    await amqpChannel.deleteQueue(topology.retryQueue);
+    await amqpChannel.deleteQueue(topology.deadLetterQueue);
+  });
+
+  it('demuestra retry (3 reintentos) y derivacion a DLQ real en RabbitMQ ante fallos del handler', async () => {
+    const testRun = Date.now();
+    const topology = buildQueueTopology({
+      queue: `test.m8.real-retry-dlq.${testRun}`,
+      routingKey: 'trip.cancelled',
+    });
+
+    await assertTopology(amqpChannel, topology);
+
+    const inbox = new PostgresTechnicalInbox(pgPool);
+    const consumer = new EventConsumer({
+      consumerId: `m8.real-failing-consumer-${testRun}`,
+      topology: { queue: topology.queue, routingKey: topology.routingKey },
+      inboxStore: inbox,
+      maxRetries: 3,
+      retryDelayMs: 100,
+    });
+
+    let attempts = 0;
+    consumer.registerHandler('TripCancelled', async () => {
+      attempts++;
+      throw new Error(`Fallo simulado en intento ${attempts}`);
+    });
+
+    const msgId = randomUUID();
+    const correlationId = randomUUID();
+    const payload = JSON.stringify({
+      messageId: msgId,
+      eventType: 'TripCancelled',
+      version: 1,
+      occurredAt: new Date().toISOString(),
+      correlationId: correlationId,
+      producer: 'm6',
+      data: { tripId: '888' },
+    });
+
+    await publishWithConfirm(amqpChannel, topology.exchange, 'trip.cancelled', Buffer.from(payload), {
+      persistent: true,
+      contentType: 'application/json',
+    });
+
+    // Simular ciclo de intentos y re-ejecuciones
+    for (let i = 0; i <= 3; i++) {
+      const msg = await new Promise<amqp.ConsumeMessage | null>((resolve) => {
+        amqpChannel.get(i === 0 ? topology.queue : topology.retryQueue, { noAck: false }).then(resolve);
+      });
+      if (msg) {
+        await consumer.processMessage(amqpChannel, msg);
+      }
+    }
+
+    expect(attempts).toBe(4); // 1 intento inicial + 3 reintentos
+
+    // Verificar que el mensaje termino en la DLQ real
+    const dlqMsg = await new Promise<amqp.ConsumeMessage | null>((resolve) => {
+      amqpChannel.get(topology.deadLetterQueue, { noAck: true }).then(resolve);
+    });
+
+    expect(dlqMsg).not.toBeNull();
+    if (dlqMsg) {
+      expect(dlqMsg.properties.headers['x-dlq-reason']).toContain('Fallo simulado');
+    }
+
+    await amqpChannel.deleteQueue(topology.queue);
+    await amqpChannel.deleteQueue(topology.retryQueue);
+    await amqpChannel.deleteQueue(topology.deadLetterQueue);
+  });
+
+  it('demuestra Outbox concurrente con 2 publicadores usando FOR UPDATE SKIP LOCKED en PostgreSQL real', async () => {
+    const testRun = Date.now();
+    const topology = buildQueueTopology({
+      queue: `test.m8.real-outbox-concurrent.${testRun}`,
+      routingKey: 'receipt.issued',
+    });
+
+    await assertTopology(amqpChannel, topology);
+
+    // Insertar 6 eventos outbox PENDING en PostgreSQL real
+    const outboxIds: string[] = [];
+    for (let i = 1; i <= 6; i++) {
+      const id = randomUUID();
+      outboxIds.push(id);
+      await pgPool.query(
+        `INSERT INTO messaging.outbox_events (id, event_type, payload, status)
+         VALUES ($1, $2, $3, 'PENDING')`,
+        [id, 'ReceiptIssued', JSON.stringify({ messageId: id, data: { receiptNo: i } })]
+      );
+    }
+
+    const storeA = new PostgresOutboxStore(pgPool);
+    const storeB = new PostgresOutboxStore(pgPool);
+    const publisherA = new OutboxPublisher(storeA, topology.exchange);
+    const publisherB = new OutboxPublisher(storeB, topology.exchange);
+
+    // Crear un segundo canal para el segundo publisher
+    const channelB = await amqpConn.createConfirmChannel();
+
+    // Ejecutar ambos publicadores concurrentemente
+    const [countA, countB] = await Promise.all([
+      publisherA.publishPending(amqpChannel, 6),
+      publisherB.publishPending(channelB, 6),
+    ]);
+
+    expect(countA + countB).toBe(6); // Total de 6 eventos procesados entre los 2 publicadores
+    expect(countA).toBeGreaterThan(0);
+    expect(countB).toBeGreaterThan(0);
+
+    // Verificar en PostgreSQL que los 6 eventos quedaron en estado PUBLISHED
+    const dbCheck = await pgPool.query(
+      `SELECT status FROM messaging.outbox_events WHERE id = ANY($1::varchar[])`,
+      [outboxIds]
     );
 
-    const outboxStore = new PostgresOutboxStore(pgClient);
-    const publisher = new OutboxPublisher(outboxStore, topology.exchange);
-    const publishedCount = await publisher.publishPending(amqpChannel, 10);
+    expect(dbCheck.rows.length).toBe(6);
+    for (const row of dbCheck.rows) {
+      expect(row.status).toBe('PUBLISHED');
+    }
 
-    expect(publishedCount).toBe(1);
-
-    const outboxCheck = await pgClient.query(
-      `SELECT status FROM messaging.outbox_events WHERE id = $1`,
-      [`ob-real-${testRun}`]
-    );
-    expect(outboxCheck.rows[0].status).toBe('PUBLISHED');
-
-    // Limpieza de colas
+    await channelB.close().catch(() => {});
     await amqpChannel.deleteQueue(topology.queue);
     await amqpChannel.deleteQueue(topology.retryQueue);
     await amqpChannel.deleteQueue(topology.deadLetterQueue);
