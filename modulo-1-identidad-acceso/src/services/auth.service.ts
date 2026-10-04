@@ -4,13 +4,12 @@ import {
     createUser,
     findUserByEmail
 } from "../repositories/user.repository";
-import { UserRole } from "../types/user.types";
-
-const ROLES_VALIDOS: UserRole[] = [
-    "CLIENTE",
-    "CONDUCTOR",
-    "OPERADOR"
-];
+import {
+    esEmailValido,
+    esPasswordValida,
+    esRolRegistrable,
+    normalizarEmail
+} from "../utils/auth.validators";
 
 export class AuthError extends Error {
     constructor(
@@ -63,28 +62,30 @@ export async function registerUser(
         );
     }
 
-    const emailNormalizado = email
-        .trim()
-        .toLowerCase();
+    const nombreNormalizado = nombre.trim();
+    const apellidoNormalizado = apellido.trim();
+    const dniNormalizado = dni.trim();
+    const telefonoNormalizado = telefono.trim();
+    const emailNormalizado = normalizarEmail(email);
 
-    if (!emailNormalizado.includes("@")) {
+    if (!esEmailValido(emailNormalizado)) {
         throw new AuthError(
             400,
             "El email no es válido"
         );
     }
 
-    if (password.length < 6) {
+    if (!esPasswordValida(password)) {
         throw new AuthError(
             400,
             "La contraseña debe tener al menos 6 caracteres"
         );
     }
 
-    if (!ROLES_VALIDOS.includes(rol as UserRole)) {
+    if (!esRolRegistrable(rol)) {
         throw new AuthError(
             400,
-            "El rol debe ser CLIENTE, CONDUCTOR u OPERADOR"
+            "El rol debe ser CLIENTE, CONDUCTOR u OPERADOR; el registro público sólo admite CLIENTE o CONDUCTOR"
         );
     }
 
@@ -104,21 +105,21 @@ export async function registerUser(
     );
 
     const id = createUser(
-        nombre.trim(),
-        apellido.trim(),
-        dni.trim(),
-        telefono.trim(),
+        nombreNormalizado,
+        apellidoNormalizado,
+        dniNormalizado,
+        telefonoNormalizado,
         emailNormalizado,
         passwordHash,
-        rol as UserRole
+        rol
     );
 
     return {
         id,
-        nombre: nombre.trim(),
-        apellido: apellido.trim(),
-        dni: dni.trim(),
-        telefono: telefono.trim(),
+        nombre: nombreNormalizado,
+        apellido: apellidoNormalizado,
+        dni: dniNormalizado,
+        telefono: telefonoNormalizado,
         email: emailNormalizado,
         rol,
         estado: "ACTIVO"
