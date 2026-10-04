@@ -44,7 +44,16 @@ const migrations = [
          created_at timestamptz NOT NULL,
          published_at timestamptz NULL,
          CONSTRAINT notifications_outbox_notification_event_key UNIQUE (notification_id, event_type)
-       )`,
+      )`,
+    ],
+  },
+  {
+    version: 3,
+    name: "create_notification_outbox_pending_index",
+    statements: [
+      `CREATE INDEX IF NOT EXISTS notifications_outbox_pending_created_at_idx
+       ON notifications.outbox_events (created_at, message_id)
+       WHERE published_at IS NULL`,
     ],
   },
 ] as const;

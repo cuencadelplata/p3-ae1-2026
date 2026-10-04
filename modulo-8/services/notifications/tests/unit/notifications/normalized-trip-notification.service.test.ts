@@ -9,7 +9,7 @@ import {
 } from "../../../src/notifications/notification-outbox.repository";
 import type { NotificationRepository } from "../../../src/notifications/notification.repository";
 import { processNormalizedTripNotificationEvent } from "../../../src/notifications/normalized-trip-notification.service";
-import type { LogicalNotification } from "../../../src/notifications/notification.types";
+import { TRIP_NOTIFICATION_EVENT_TYPES, type LogicalNotification } from "../../../src/notifications/notification.types";
 
 const event = {
   messageId: "message-123",
@@ -29,7 +29,11 @@ function createRepository(
 function createOutboxRepository(
   saveWithOutbox: NotificationWithOutboxRepository["saveWithOutbox"],
 ): NotificationWithOutboxRepository {
-  return { saveWithOutbox };
+  return {
+    saveWithOutbox,
+    findPending: vi.fn(async () => []),
+    markPublished: vi.fn(async () => true),
+  };
 }
 
 describe("RF8.1 AE2 — persistencia de evento normalizado", () => {
@@ -41,7 +45,7 @@ describe("RF8.1 AE2 — persistencia de evento normalizado", () => {
 
     const result = await processNormalizedTripNotificationEvent(event, createRepository(saveIdempotent));
 
-    expect(result).toMatchObject({ valid: true, created: true });
+    expect(result).toMatchObject({ status: "SUCCESS_CREATED", valid: true, created: true });
     expect(saveIdempotent).toHaveBeenCalledOnce();
     if (result.valid) {
       expect(result.data).toMatchObject({
@@ -69,7 +73,12 @@ describe("RF8.1 AE2 — persistencia de evento normalizado", () => {
 
     const result = await processNormalizedTripNotificationEvent(event, createRepository(saveIdempotent));
 
-    expect(result).toEqual({ valid: true, data: existing, created: false });
+    expect(result).toEqual({
+      status: "SUCCESS_ALREADY_PROCESSED",
+      valid: true,
+      data: existing,
+      created: false,
+    });
   });
 
   it("no persiste un evento inválido", async () => {
@@ -80,19 +89,19 @@ describe("RF8.1 AE2 — persistencia de evento normalizado", () => {
       createRepository(saveIdempotent),
     );
 
-    expect(result).toMatchObject({ valid: false });
+    expect(result).toMatchObject({ status: "INVALID_EVENT", valid: false });
     expect(saveIdempotent).not.toHaveBeenCalled();
   });
 
-  it("propaga un error clasificado de persistencia", async () => {
+  it("clasifica un error de persistencia", async () => {
     const persistenceError = new NotificationPersistenceError("CommunicationsDB no disponible.");
     const saveIdempotent = vi.fn(async () => {
       throw persistenceError;
     });
 
-    await expect(
-      processNormalizedTripNotificationEvent(event, createRepository(saveIdempotent)),
-    ).rejects.toBe(persistenceError);
+    const result = await processNormalizedTripNotificationEvent(event, createRepository(saveIdempotent));
+
+    expect(result).toEqual({ status: "PERSISTENCE_FAILURE", valid: false, error: persistenceError });
   });
 
   it("usa el puerto transaccional cuando está disponible", async () => {
@@ -115,7 +124,7 @@ describe("RF8.1 AE2 — persistencia de evento normalizado", () => {
 
     const result = await processNormalizedTripNotificationEvent(event, createOutboxRepository(saveWithOutbox));
 
-    expect(result).toMatchObject({ valid: true, created: true });
+    expect(result).toMatchObject({ status: "SUCCESS_CREATED", valid: true, created: true });
     expect(saveWithOutbox).toHaveBeenCalledOnce();
     if (result.valid) {
       expect(result.outbox).toMatchObject({
@@ -158,9 +167,46 @@ describe("RF8.1 AE2 — persistencia de evento normalizado", () => {
 
     const result = await processNormalizedTripNotificationEvent(event, createOutboxRepository(saveWithOutbox));
 
-    expect(result).toMatchObject({ valid: true, data: notification, created: false });
+    expect(result).toMatchObject({
+      status: "SUCCESS_ALREADY_PROCESSED",
+      valid: true,
+      data: notification,
+      created: false,
+    });
     if (result.valid) {
       expect(result.outbox?.messageId).toBe("47b9d9d8-7ca4-4dd1-b4e8-904100000002");
     }
+  });
+
+  it("acepta los seis eventos semÃ¡nticos de viaje en el puerto de aplicaciÃ³n", async () => {
+    const saveWithOutbox: NotificationWithOutboxRepository["saveWithOutbox"] = vi.fn(async (notification: LogicalNotification) => ({
+      notification,
+      created: true,
+      outbox: {
+        messageId: `47b9d9d8-7ca4-4dd1-b4e8-9041${notification.eventType.length.toString().padStart(8, "0")}`,
+        notificationId: notification.notificationId,
+        eventType: NOTIFICATION_REQUESTED_EVENT_TYPE as typeof NOTIFICATION_REQUESTED_EVENT_TYPE,
+        routingKey: NOTIFICATION_REQUESTED_ROUTING_KEY as typeof NOTIFICATION_REQUESTED_ROUTING_KEY,
+        correlationId: notification.correlationId,
+        version: 1 as const,
+        producer: M8_PRODUCER as typeof M8_PRODUCER,
+        payload: null,
+        createdAt: notification.createdAt,
+        publishedAt: null,
+      },
+    }));
+
+    const results = await Promise.all(
+      TRIP_NOTIFICATION_EVENT_TYPES.map((eventType) =>
+        processNormalizedTripNotificationEvent(
+          { ...event, messageId: `message-${eventType}`, eventType },
+          createOutboxRepository(saveWithOutbox),
+        ),
+      ),
+    );
+
+    expect(results).toHaveLength(6);
+    expect(results.every((result) => result.status === "SUCCESS_CREATED")).toBe(true);
+    expect(saveWithOutbox).toHaveBeenCalledTimes(6);
   });
 });
