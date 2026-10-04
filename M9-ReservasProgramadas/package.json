@@ -15,6 +15,10 @@
     "local:up": "docker compose --parallel 1 up --build -d",
     "local:down": "docker compose down",
     "local:clean": "docker compose down --volumes --remove-orphans",
+    "db:generate": "prisma generate",
+    "db:validate": "prisma validate",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "node scripts/run-compose-e2e.mjs",
@@ -28,6 +32,7 @@
     "verify": "npm run typecheck && npm run lint && npm run format:check && npm test"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.0",
     "cors": "2.8.6",
     "dotenv": "17.4.2",
     "express": "5.2.1",
@@ -48,6 +53,7 @@
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.12.0",
     "prettier": "^3.9.6",
+    "prisma": "^6.19.0",
     "supertest": "7.2.2",
     "tsx": "4.23.13",
     "typescript": "^6.0.3",
