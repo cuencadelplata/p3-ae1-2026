@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { ticketRepository, TicketStatus } from '../models/ticket.model.js';
+import { TicketStatus } from '../models/ticket.model.js';
 import { RabbitMQConsumer } from '../rabbitmq/consumer.js';
 import { TicketService } from '../services/ticket.service.js';
 
@@ -103,10 +103,3 @@ export async function publicarEvento(req: Request, res: Response) {
     enviadosExitosamente: exitosos
   });
 }
-
-// Controlador sobre el repositorio compartido en memoria, tal como lo usan
-// los tests actuales.
-export const SupportController = {
-  ...createSupportController({ ticketService: new TicketService(ticketRepository) }),
-  publicarEvento,
-};

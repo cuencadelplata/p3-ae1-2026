@@ -1,5 +1,4 @@
 import { EventEmitter } from 'node:events';
-import express from 'express';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -56,6 +55,14 @@ describe('RabbitMQConsumer ante un broker caído', () => {
   async function loadConsumer() {
     const { RabbitMQConsumer } = await import('./consumer.js');
     return RabbitMQConsumer;
+  }
+
+  // La app debe cargarse después del reset para compartir ese mismo consumer.
+  async function loadApp() {
+    const { createSupportApp } = await import('../app.js');
+    const { InMemoryTicketRepository } = await import('../models/ticket.model.js');
+    const { TicketService } = await import('../services/ticket.service.js');
+    return createSupportApp({ ticketService: new TicketService(new InMemoryTicketRepository()) });
   }
 
   beforeEach(() => {
@@ -136,17 +143,10 @@ describe('RabbitMQConsumer ante un broker caído', () => {
 
   it('la API de tickets sigue funcionando con el broker caído', async () => {
     const consumer = await loadConsumer();
-    const { SupportController } = await import('../controllers/support.controller.js');
+    const app = await loadApp();
     await consumer.connect('amqp://test');
     dropBroker(connections[0]);
     vi.useRealTimers();
-
-    const app = express();
-    app.use(express.json());
-    app.post('/tickets', SupportController.crearTicket);
-    app.get('/tickets/:id', SupportController.obtenerTicket);
-    app.patch('/tickets/:id/estado', SupportController.actualizarEstado);
-    app.post('/events/publish', SupportController.publicarEvento);
 
     const created = await request(app).post('/tickets').send({ viajeId: 'viaje-sin-broker', motivo: 'Demora' });
     expect(created.status).toBe(201);
@@ -167,16 +167,12 @@ describe('RabbitMQConsumer ante un broker caído', () => {
 
   it('crear un ticket no falla si publicar lanza con el canal aún asignado', async () => {
     const consumer = await loadConsumer();
-    const { SupportController } = await import('../controllers/support.controller.js');
+    const app = await loadApp();
     await consumer.connect('amqp://test');
     connections[0].channel.publish.mockImplementation(() => {
       throw channelClosedError();
     });
     vi.useRealTimers();
-
-    const app = express();
-    app.use(express.json());
-    app.post('/tickets', SupportController.crearTicket);
 
     const created = await request(app).post('/tickets').send({ viajeId: 'viaje-canal-roto', motivo: 'Demora' });
     expect(created.status).toBe(201);
