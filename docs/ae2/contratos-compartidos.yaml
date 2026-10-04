@@ -1,0 +1,191 @@
+# ==============================================================================
+# Paradigmas y Lenguajes de Programación III — 2026
+# Actividad de Evaluación 2 (AE2) — Profundización Arquitectónica
+# ==============================================================================
+# Alumno: Agustín Quetglas
+# Rama Git: ae2/agustin-quetglas
+# Módulo Asignado: Módulo 5 (Solicitud y Despacho)
+# Alcance Individual Comprometido: RF-5.1 (Solicitud de Viaje)
+# ==============================================================================
+
+informacion_actividad:
+  materia: "Paradigmas y Lenguajes de Programación III"
+  ano: 2026
+  instancia: "AE2 - Evolución Individual v2.0"
+  alumno: "Agustín Quetglas"
+  modulo: "Módulo 5: Solicitud y Despacho"
+  requisito_funcional_individual: "RF-5.1: Solicitud de viaje"
+
+alcance_individual:
+  descripcion: |
+    El cliente solicita un viaje indicando origen, destino y tipo de vehículo (Auto/Moto).
+    En AE2, se evoluciona la implementación base de AE1 resolviendo:
+    1. Comunicación Síncrona REST con el Módulo 7 (Tarifas, Pagos y Liquidaciones) para la estimación de la tarifa (RF-7.1), reemplazando stubs locales en memoria.
+    2. Incorporación de Redis para control de idempotencia distribuida (RNF-08) y candado atómico de viaje activo por cliente (RNF-09) con TTL.
+    3. Manejo explícito de fallos y resiliencia ante indisponibilidad del servicio de tarifas.
+  modulos_excluidos_individual: |
+    Los requerimientos RF-5.2 a RF-5.8 (búsqueda de candidatos, despacho de ofertas, aceptación/rechazo concurrente y cancelación de despacho)
+    corresponden a los demás compañeros del equipo para la etapa grupal posterior.
+
+# ==============================================================================
+# CONTRATOS COMPARTIDOS — COMUNICACIÓN SÍNCRONA (REST / HTTP)
+# ==============================================================================
+contratos_sincronos:
+  - id: "INTEGRACION-M5-M7-TARIFA"
+    titulo: "Consulta de Estimación de Tarifa"
+    consumidor: "Módulo 5 (Solicitud y Despacho - Agustín Quetglas)"
+    proveedor: "Módulo 7 (Tarifas, Pagos y Liquidaciones)"
+    requisito_relacionado: "RF-7.1 (Estimación de tarifa) -> RF-5.1 (Solicitud de viaje)"
+    protocolo: "REST / HTTP"
+    metodo: "POST"
+    ruta_sugerida: "/api/v1/tarifas/estimar"
+    archivo_origen_proveedor: "src/estimacion-tarifa.ts"
+    headers:
+      Content-Type: "application/json"
+    request:
+      schema:
+        type: "object"
+        required:
+          - origen
+          - destino
+          - distanciaKm
+          - tiempoEstimadoMin
+          - vehicleType
+        properties:
+          origen:
+            type: "object"
+            required:
+              - lat
+              - lng
+            properties:
+              lat:
+                type: "number"
+                format: "double"
+                example: -34.6037
+              lng:
+                type: "number"
+                format: "double"
+                example: -58.3816
+              direccion:
+                type: "string"
+                example: "Av. 9 de Julio 500"
+          destino:
+            type: "object"
+            required:
+              - lat
+              - lng
+            properties:
+              lat:
+                type: "number"
+                format: "double"
+                example: -34.5885
+              lng:
+                type: "number"
+                format: "double"
+                example: -58.3974
+              direccion:
+                type: "string"
+                example: "Av. Santa Fe 2500"
+          distanciaKm:
+            type: "number"
+            minimum: 0.1
+            description: "Distancia calculada en kilómetros para el trayecto"
+            example: 3.8
+          tiempoEstimadoMin:
+            type: "number"
+            minimum: 1
+            description: "Tiempo estimado en minutos para el trayecto"
+            example: 12
+          vehicleType:
+            type: "string"
+            enum: ["auto", "moto"]
+            description: "Tipo de vehículo solicitado por el cliente"
+            example: "auto"
+      ejemplo:
+        origen:
+          lat: -34.6037
+          lng: -58.3816
+          direccion: "Av. 9 de Julio 500"
+        destino:
+          lat: -34.5885
+          lng: -58.3974
+          direccion: "Av. Santa Fe 2500"
+        distanciaKm: 3.8
+        tiempoEstimadoMin: 12
+        vehicleType: "auto"
+
+    responses:
+      200:
+        description: "Tarifa calculada con éxito por el Módulo 7"
+        schema:
+          type: "object"
+          required:
+            - estimacionId
+            - distanciaKm
+            - tiempoEstimadoMin
+            - vehicleType
+            - estimatedFare
+            - currency
+            - desglose
+            - calculadoEn
+          properties:
+            estimacionId:
+              type: "string"
+              example: "est_1728073200000"
+            distanciaKm:
+              type: "number"
+              example: 3.8
+            tiempoEstimadoMin:
+              type: "number"
+              example: 12
+            vehicleType:
+              type: "string"
+              example: "auto"
+            estimatedFare:
+              type: "number"
+              description: "Monto total calculado para el viaje en la moneda indicada"
+              example: 2050.00
+            currency:
+              type: "string"
+              example: "ARS"
+            desglose:
+              type: "object"
+              properties:
+                tarifaBase:
+                  type: "number"
+                  example: 500
+                costoDistancia:
+                  type: "number"
+                  example: 950
+                costoTiempo:
+                  type: "number"
+                  example: 600
+                multiplicadorVehiculo:
+                  type: "number"
+                  example: 1.0
+            calculadoEn:
+              type: "string"
+              format: "date-time"
+              example: "2026-10-04T19:42:00.000Z"
+        ejemplo:
+          estimacionId: "est_1728073200000"
+          distanciaKm: 3.8
+          tiempoEstimadoMin: 12
+          vehicleType: "auto"
+          estimatedFare: 2050.00
+          currency: "ARS"
+          desglose:
+            tarifaBase: 500
+            costoDistancia: 950
+            costoTiempo: 600
+            multiplicadorVehiculo: 1.0
+          calculadoEn: "2026-10-04T19:42:00.000Z"
+
+      400:
+        description: "Error de validación en parámetros de cálculo"
+        schema:
+          type: "object"
+          properties:
+            error:
+              type: "string"
+              example: "distanciaKm debe ser un número mayor a 0"
