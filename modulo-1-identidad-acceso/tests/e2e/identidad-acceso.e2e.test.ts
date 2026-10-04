@@ -15,6 +15,7 @@ const timestamp = Date.now();
 const email = `usuario-${timestamp}@test.com`;
 const password = "123456";
 const email2 = `conductor-${timestamp}@test.com`;
+const inicioPrueba = Date.now() % 1000000;
 
 let token = "";
 let tokenConductor = "";
@@ -25,10 +26,21 @@ function registrationData(
     userPassword: string,
     role: string
 ) {
+    const dni = String(
+        30000000 +
+        inicioPrueba +
+        Array.from(userEmail)
+            .reduce(
+                (total, caracter) =>
+                    total * 31 + caracter.charCodeAt(0),
+                0
+            ) % 1000000
+    );
+
     return {
         nombre: "Usuario",
         apellido: "Prueba",
-        dni: "30123456",
+        dni,
         telefono: "11 5555 1234",
         email: userEmail,
         password: userPassword,

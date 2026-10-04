@@ -7,6 +7,7 @@ import {
 import {
     esEmailValido,
     esPasswordValida,
+    esRolRegistrable,
     esRolValido,
     normalizarEmail
 } from "../../src/utils/auth.validators";
@@ -72,6 +73,23 @@ describe(
 
                 expect(
                     esRolValido("ROL_INVALIDO")
+                ).toBe(false);
+            }
+        );
+
+        it(
+            "Permitir registrar sólo clientes y conductores",
+            () => {
+                expect(
+                    esRolRegistrable("CLIENTE")
+                ).toBe(true);
+
+                expect(
+                    esRolRegistrable("CONDUCTOR")
+                ).toBe(true);
+
+                expect(
+                    esRolRegistrable("OPERADOR")
                 ).toBe(false);
             }
         );

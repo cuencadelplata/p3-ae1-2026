@@ -7,7 +7,10 @@ Esta carpeta contiene la implementación consolidada del Módulo 1 y todos sus r
 ### Registro y autenticación
 
 - Registro de usuarios con nombre, apellido, DNI, teléfono, email, contraseña y rol.
-- Roles disponibles: `CLIENTE`, `CONDUCTOR` y `OPERADOR`.
+- Roles del sistema: `CLIENTE`, `CONDUCTOR` y `OPERADOR`.
+- El registro público permite crear únicamente usuarios `CLIENTE` o
+  `CONDUCTOR`; las cuentas `OPERADOR` deben ser provisionadas mediante una
+  operación administrativa.
 - Inicio de sesión mediante email y contraseña.
 - Generación de tokens JWT con una duración de una hora.
 - Validación protegida de identidad y rol.
@@ -121,7 +124,9 @@ Tests       47 passed
 Tests       0 failed
 ```
 
-Las pruebas cubren registro, autenticación, validación de tokens, bloqueo de usuarios, recuperación de contraseña, OAuth2 y casos de validación.
+Las pruebas cubren registro de clientes y conductores, validación de DNI y
+email únicos, autenticación, validación de tokens, bloqueo de usuarios,
+recuperación de contraseña, OAuth2 y casos de validación.
 
 ## Persistencia
 

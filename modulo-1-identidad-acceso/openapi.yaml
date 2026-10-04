@@ -195,6 +195,10 @@ components:
     UserRole:
       type: string
       enum: [CLIENTE, CONDUCTOR, OPERADOR]
+    RegisterRole:
+      type: string
+      description: Rol permitido para el registro público de identidad.
+      enum: [CLIENTE, CONDUCTOR]
     RegisterRequest:
       type: object
       required: [nombre, apellido, dni, telefono, email, password, rol]
@@ -205,7 +209,7 @@ components:
         telefono: { type: string, example: '11 1234 5678' }
         email: { type: string, format: email }
         password: { type: string, minLength: 6, format: password }
-        rol: { $ref: '#/components/schemas/UserRole' }
+        rol: { $ref: '#/components/schemas/RegisterRole' }
     LoginRequest:
       type: object
       required: [email, password]
