@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ReservationStatus {
+  PROGRAMADA
+  ACTIVANDO
+  ACTIVADA
+  CANCELADA
+  FALLIDA
+}
+
+enum VehicleType {
+  AUTO
+  MOTO
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+model Reservation {
+  id                     String            @id @db.Uuid
+  clientId               String            @map("client_id") @db.Uuid
+  origin                 String
+  destination            String
+  vehicleType            VehicleType       @map("vehicle_type")
+  scheduledAt            DateTime          @map("scheduled_at") @db.Timestamptz(3)
+  status                 ReservationStatus @default(PROGRAMADA)
+  estimatedFare          Decimal?          @map("estimated_fare") @db.Decimal(12, 2)
+  currency               String?           @db.VarChar(3)
+  fareEstimateId         String?           @map("fare_estimate_id")
+  routeSnapshot          Json?             @map("route_snapshot")
+  assignmentCriteria     String?           @map("assignment_criteria")
+  dispatchRequestId      String?           @unique @map("dispatch_request_id") @db.Uuid
+  assignedDriverId       String?           @map("assigned_driver_id") @db.Uuid
+  dispatchIdempotencyKey String?           @unique @map("dispatch_idempotency_key") @db.Uuid
+  version                Int               @default(0)
+  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([status, scheduledAt], map: "reservations_status_scheduled_at_idx")
+  @@index([clientId], map: "reservations_client_id_idx")
+  @@map("reservations")
+}
+
+model OutboxEvent {
+  id            String       @id @db.Uuid
+  eventId       String       @unique @map("event_id") @db.Uuid
+  aggregateId   String       @map("aggregate_id") @db.Uuid
+  eventType     String       @map("event_type")
+  eventVersion  Int          @map("event_version")
+  routingKey    String       @map("routing_key")
+  payload       Json
+  correlationId String       @map("correlation_id")
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  lastError     String?      @map("last_error")
+  nextAttemptAt DateTime     @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  publishedAt   DateTime?    @map("published_at") @db.Timestamptz(3)
+
+  @@index([status, nextAttemptAt, createdAt], map: "outbox_status_next_attempt_idx")
+  @@index([aggregateId, createdAt], map: "outbox_aggregate_created_idx")
+  @@map("outbox_events")
+}
+
+model InboxEvent {
+  eventId       String   @id @map("event_id") @db.Uuid
+  eventType     String   @map("event_type")
+  aggregateId   String   @map("aggregate_id") @db.Uuid
+  correlationId String   @map("correlation_id")
+  processedAt   DateTime @default(now()) @map("processed_at") @db.Timestamptz(3)
+
+  @@index([aggregateId, processedAt], map: "inbox_aggregate_processed_idx")
+  @@map("inbox_events")
+}

@@ -11,7 +11,7 @@ export interface ReservaRepository {
   obtenerPorId(id: string): Promise<Reserva | null>;
   listar(): Promise<Reserva[]>;
   actualizarProgramada(id: string, input: CambiosReserva): Promise<Reserva | null>;
-  cancelarProgramada(id: string): Promise<Reserva | null>;
+  cancelar(id: string, estadoEsperado: EstadoReserva): Promise<Reserva | null>;
   buscarPendientes(fechaLimite: Date, limite?: number): Promise<Reserva[]>;
   cambiarEstado(
     id: string,
