@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { leerActor, leerCambioDeEstado, leerNuevoTicket } from '../http/ticket-requests.js';
+import { leerActor, leerCambioDeEstado, leerIdempotencyKey, leerNuevoTicket } from '../http/ticket-requests.js';
 import { RabbitMQConsumer } from '../rabbitmq/consumer.js';
 import { TicketService } from '../services/ticket.service.js';
 
@@ -15,10 +15,12 @@ export function createSupportController({ ticketService }: SupportControllerDeps
     async crearTicket(req: Request, res: Response) {
       const { tripId, motivo } = leerNuevoTicket(req.body);
       const actor = leerActor(req.get('X-Actor-Id'));
+      const idempotencyKey = leerIdempotencyKey(req.get('Idempotency-Key'));
 
-      const nuevoTicket = await ticketService.crearTicket(tripId, motivo, { actor });
+      const { ticket, creado } = await ticketService.crearTicket(tripId, motivo, { actor, idempotencyKey });
 
-      res.status(201).json(nuevoTicket);
+      // 200 cuando la Idempotency-Key ya había creado este ticket.
+      res.status(creado ? 201 : 200).json(ticket);
     },
 
     // Endpoint: GET /tickets/:id

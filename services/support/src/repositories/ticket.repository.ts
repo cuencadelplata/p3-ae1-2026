@@ -14,6 +14,20 @@ export interface CambioDeEstado {
   expectedVersion?: number;
 }
 
+export interface ClaveDeIdempotencia {
+  clave: string;
+  // Huella del pedido normalizado: distingue un reintento de un pedido distinto.
+  hash: string;
+}
+
+// La clave ya está asociada a un pedido con otra huella.
+export class IdempotencyKeyConflictError extends Error {
+  constructor() {
+    super('La clave de idempotencia ya se usó con un pedido distinto.');
+    this.name = 'IdempotencyKeyConflictError';
+  }
+}
+
 // El ticket existe pero ya no está en la versión esperada.
 export class TicketVersionConflictError extends Error {
   constructor() {
@@ -29,8 +43,18 @@ export class TicketVersionConflictError extends Error {
 // una sola operación: nunca queda uno sin el otro. actualizarEstado compara la
 // versión y escribe de forma atómica; si no coincide lanza
 // TicketVersionConflictError, y devuelve null si el ticket no existe.
+//
+// crearConClave crea a lo sumo un ticket por clave, también ante pedidos
+// simultáneos: si la clave ya existe con la misma huella devuelve ese ticket
+// con creado: false, y con otra huella lanza IdempotencyKeyConflictError.
 export interface TicketRepository {
   crear(tripId: string, motivo: string, opciones?: OpcionesDeCreacion): Promise<Ticket>;
+  crearConClave(
+    tripId: string,
+    motivo: string,
+    idempotencia: ClaveDeIdempotencia,
+    opciones?: OpcionesDeCreacion,
+  ): Promise<{ ticket: Ticket; creado: boolean }>;
   obtenerPorId(id: string): Promise<Ticket | undefined>;
   actualizarEstado(id: string, nuevoEstado: TicketStatus, cambio?: CambioDeEstado): Promise<Ticket | null>;
   // Historial del ticket en orden cronológico.

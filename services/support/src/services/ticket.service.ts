@@ -1,9 +1,30 @@
-import { concurrencyConflict, invalidTransition, ticketNotFound, validationError } from '../errors/support-error.js';
+import { createHash } from 'node:crypto';
+import {
+  concurrencyConflict,
+  idempotencyConflict,
+  invalidTransition,
+  ticketNotFound,
+  validationError,
+} from '../errors/support-error.js';
 import type { SupportEventPublisher } from '../events/support-event-publisher.js';
 import { TRANSICIONES_PERMITIDAS } from '../models/ticket.model.js';
 import type { Ticket, TicketHistoryEntry, TicketStatus } from '../models/ticket.model.js';
-import { TicketVersionConflictError } from '../repositories/ticket.repository.js';
+import { IdempotencyKeyConflictError, TicketVersionConflictError } from '../repositories/ticket.repository.js';
 import type { CambioDeEstado, OpcionesDeCreacion, TicketRepository } from '../repositories/ticket.repository.js';
+
+export interface OpcionesDeNuevoTicket extends OpcionesDeCreacion {
+  // Si se indica, repetir el pedido con la misma clave no crea otro ticket.
+  idempotencyKey?: string;
+}
+
+// Huella del pedido ya normalizado, con las claves ordenadas: no depende de si
+// el cliente envió tripId o viajeId ni del orden de los campos.
+function huellaDelPedido(pedido: Record<string, string>): string {
+  const ordenado = Object.keys(pedido)
+    .sort()
+    .map((clave) => [clave, pedido[clave]]);
+  return createHash('sha256').update(JSON.stringify(ordenado)).digest('hex');
+}
 
 // Casos de uso de tickets (RF-8.5). No conoce Express, el motor de
 // persistencia ni el broker: recibe sus dependencias por constructor.
@@ -13,10 +34,32 @@ export class TicketService {
     private readonly eventPublisher: SupportEventPublisher,
   ) {}
 
-  async crearTicket(tripId: string, motivo: string, opciones: OpcionesDeCreacion = {}): Promise<Ticket> {
-    const nuevoTicket = await this.repository.crear(tripId, motivo, opciones);
-    await this.eventPublisher.publish('ticket.creado', nuevoTicket);
-    return nuevoTicket;
+  async crearTicket(
+    tripId: string,
+    motivo: string,
+    { idempotencyKey, ...opciones }: OpcionesDeNuevoTicket = {},
+  ): Promise<{ ticket: Ticket; creado: boolean }> {
+    const resultado = idempotencyKey === undefined
+      ? { ticket: await this.repository.crear(tripId, motivo, opciones), creado: true }
+      : await this.crearUnaSolaVez(tripId, motivo, idempotencyKey, opciones);
+
+    // Un reintento devuelve el ticket existente sin volver a publicar.
+    if (resultado.creado) {
+      await this.eventPublisher.publish('ticket.creado', resultado.ticket);
+    }
+    return resultado;
+  }
+
+  private async crearUnaSolaVez(tripId: string, motivo: string, clave: string, opciones: OpcionesDeCreacion) {
+    try {
+      const hash = huellaDelPedido({ tripId, motivo });
+      return await this.repository.crearConClave(tripId, motivo, { clave, hash }, opciones);
+    } catch (error) {
+      if (error instanceof IdempotencyKeyConflictError) {
+        throw idempotencyConflict();
+      }
+      throw error;
+    }
   }
 
   async obtenerTicket(id: string): Promise<Ticket> {
