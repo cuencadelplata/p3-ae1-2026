@@ -3,6 +3,7 @@ export type SupportErrorCode =
   | 'SUPPORT_TICKET_NOT_FOUND'
   | 'SUPPORT_INVALID_TRANSITION'
   | 'SUPPORT_CONCURRENCY_CONFLICT'
+  | 'SUPPORT_IDEMPOTENCY_CONFLICT'
   | 'SUPPORT_INTERNAL_ERROR';
 
 export interface ErrorDetail {
@@ -37,6 +38,14 @@ export function concurrencyConflict(): SupportError {
     409,
     'SUPPORT_CONCURRENCY_CONFLICT',
     'El ticket cambió desde la última lectura. Consultalo de nuevo y reintentá.',
+  );
+}
+
+export function idempotencyConflict(): SupportError {
+  return new SupportError(
+    409,
+    'SUPPORT_IDEMPOTENCY_CONFLICT',
+    'La Idempotency-Key ya se usó con un pedido distinto.',
   );
 }
 

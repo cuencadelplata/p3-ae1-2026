@@ -1,6 +1,11 @@
 import crypto from 'node:crypto';
-import { TicketVersionConflictError } from '../repositories/ticket.repository.js';
-import type { CambioDeEstado, OpcionesDeCreacion, TicketRepository } from '../repositories/ticket.repository.js';
+import { IdempotencyKeyConflictError, TicketVersionConflictError } from '../repositories/ticket.repository.js';
+import type {
+  CambioDeEstado,
+  ClaveDeIdempotencia,
+  OpcionesDeCreacion,
+  TicketRepository,
+} from '../repositories/ticket.repository.js';
 
 // Definimos los posibles estados de un ticket de soporte
 export type TicketStatus = 'ABIERTO' | 'EN_PROCESO' | 'RESUELTO';
@@ -44,9 +49,36 @@ export interface TicketHistoryEntry {
 export class InMemoryTicketRepository implements TicketRepository {
   private tickets: Ticket[] = [];
   private historial: TicketHistoryEntry[] = [];
+  private claves = new Map<string, { hash: string; ticketId: string }>();
 
   // Método para crear un nuevo ticket
   async crear(tripId: string, motivo: string, opciones: OpcionesDeCreacion = {}): Promise<Ticket> {
+    return { ...this.insertar(tripId, motivo, opciones) };
+  }
+
+  // Crea a lo sumo un ticket por clave. La búsqueda de la clave y la creación
+  // ocurren sin ningún await en el medio: son atómicas.
+  async crearConClave(
+    tripId: string,
+    motivo: string,
+    idempotencia: ClaveDeIdempotencia,
+    opciones: OpcionesDeCreacion = {},
+  ): Promise<{ ticket: Ticket; creado: boolean }> {
+    const existente = this.claves.get(idempotencia.clave);
+    if (existente) {
+      if (existente.hash !== idempotencia.hash) {
+        throw new IdempotencyKeyConflictError();
+      }
+      const ticket = this.tickets.find(ticket => ticket.id === existente.ticketId)!;
+      return { ticket: { ...ticket }, creado: false };
+    }
+
+    const ticket = this.insertar(tripId, motivo, opciones);
+    this.claves.set(idempotencia.clave, { hash: idempotencia.hash, ticketId: ticket.id });
+    return { ticket: { ...ticket }, creado: true };
+  }
+
+  private insertar(tripId: string, motivo: string, opciones: OpcionesDeCreacion): Ticket {
     const ahora = new Date().toISOString();
     const nuevoTicket: Ticket = {
       id: crypto.randomUUID(), // Genera un ID único al azar
@@ -61,7 +93,7 @@ export class InMemoryTicketRepository implements TicketRepository {
 
     this.tickets.push(nuevoTicket);
     this.registrarCambio(nuevoTicket.id, null, nuevoTicket.estado, opciones.actor, null, nuevoTicket.fechaCreacion);
-    return { ...nuevoTicket };
+    return nuevoTicket;
   }
 
   // Método para buscar un ticket por su ID

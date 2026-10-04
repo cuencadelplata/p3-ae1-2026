@@ -76,6 +76,24 @@ export function leerCambioDeEstado(body: unknown): {
   };
 }
 
+const IDEMPOTENCY_KEY_MAX_LENGTH = 255;
+
+// Cabecera Idempotency-Key: opcional. Si viene, no puede estar vacía.
+export function leerIdempotencyKey(header: string | undefined): string | undefined {
+  if (header === undefined) {
+    return undefined;
+  }
+  if (!esTextoNoVacio(header)) {
+    throw validationError([{ field: 'Idempotency-Key', reason: 'No puede estar vacía.' }]);
+  }
+  if (header.length > IDEMPOTENCY_KEY_MAX_LENGTH) {
+    throw validationError([
+      { field: 'Idempotency-Key', reason: `No puede superar los ${IDEMPOTENCY_KEY_MAX_LENGTH} caracteres.` },
+    ]);
+  }
+  return header;
+}
+
 const ACTOR_MAX_LENGTH = 255;
 
 // Cabecera X-Actor-Id: quién hace el pedido. String opaco; null si no viene.
