@@ -1,184 +1,85 @@
-# Historial Financiero — RF-7.7
+# M7: Tarifas, Pagos y Liquidaciones (AE2 Integrado)
 
-API que mantiene la trazabilidad de operaciones financieras y su estado (pendiente, completada, fallida, cancelada).
+Backend unificado que consolida todos los requerimientos funcionales del **Módulo 7**, orquestado con **Docker Compose** e implementando el patrón de diseño **Circuit Breaker** para resiliencia ante caídas de Backing Services.
 
-## Requisitos
+---
 
-- [Node.js](https://nodejs.org/) v20 o superior
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (opcional, para correr en contenedor)
+## 📋 Requerimientos Cubiertos (RF-7.1 al RF-7.7)
 
-## Instalación
+| RF | Requerimiento | Endpoints / Eventos | Implementación |
+|---|---|---|---|
+| **RF-7.1** | Estimación de tarifa | `POST /tarifa/estimacion` | Cálculo según distancia, tiempo y tipo de vehículo (auto/moto). |
+| **RF-7.2** | Registro de método de pago | `POST /metodo-pago`, `GET /metodo-pago/:viajeId` | Gestión de efectivo, tarjeta y transferencia en estado pendiente. |
+| **RF-7.3** | Autorización de pago | `POST /metodo-pago/:viajeId/autorizar`, `rechazar` | Integración y autorización con mock de pasarela (Mercado Pago). |
+| **RF-7.4** | Cargo por cancelación | `POST /cancelacion/cargo` | Reglas de gracia (120s), cancelación por conductor ($0) y penalizaciones. |
+| **RF-7.5** | Prevención de pagos duplicados | `GET /pagos/:idOrden/duplicado` | Idempotencia rápida con Redis y persistencia de respaldo en PostgreSQL. |
+| **RF-7.6** | Reintegro por viaje cancelado | `POST /reintegro`, Consumer RabbitMQ | Reintegro del 95% ante eventos de cancelación publicados por M6. |
+| **RF-7.7** | Historial financiero | `GET /operations`, `POST /operations`, `PATCH /operations/:id/status` | Trazabilidad completa con persistencia en PostgreSQL / memoria. |
 
-Clonar el repositorio e instalar las dependencias:
+---
 
-```bash
-npm install
-```
+## 🛡️ Patrón de Diseño: Circuit Breaker (Disyuntor)
 
-## Ejecutar en local
+Para evitar sobrecargar servicios caídos o bloquear la aplicación con esperas infinitas, se implementó el patrón **Circuit Breaker** en `src/patrones/circuitBreaker.ts`:
 
-Compilar el proyecto TypeScript:
+1. **Estado CLOSED (Normal)**:
+   - Las consultas a Redis o al servicio de cancelación se ejecutan normalmente.
+2. **Estado OPEN (Disparado ante caídas)**:
+   - Al detectar fallos consecutivos (por ejemplo si se ejecuta `docker stop redis`), el circuito se **abre inmediatamente** (*fail-fast*).
+   - **Degradación elegante / Fallback**: No se bloquea la API con timeouts ni se bombardea el servicio con reintentos; el sistema desvía el flujo automáticamente a **PostgreSQL** o memoria.
+   - En el endpoint `GET /health` se puede visualizar el estado en vivo de los circuitos (`OPEN` / `CLOSED`).
+3. **Estado HALF-OPEN (Reconexión inteligente)**:
+   - Tras un tiempo de enfriamiento (cooldown de 15s), el circuito permite una prueba. Si el servicio fue levantado (`docker start`), el circuito se **cierra** y regresa a operación normal.
 
-```bash
-npm run build
-```
+---
 
-Levantar el servidor:
+## 🚀 Cómo Ejecutar con Docker Compose
 
-```bash
-npm start
-```
-
-El servidor queda escuchando en `http://localhost:3000`.
-
-## Ejecutar con Docker
-
-La aplicación y PostgreSQL se ejecutan en contenedores separados. Compose crea además un volumen persistente para que los datos no se pierdan al recrear los contenedores.
+Levanta la base de datos PostgreSQL, Redis, RabbitMQ y la aplicación completa en un solo comando:
 
 ```bash
 docker compose up --build
 ```
 
-La API queda disponible en `http://localhost:3000`. Para detener los servicios:
+- **API y Documentación interactiva (Scalar)**: `http://localhost:3000/docs`
+- **Healthcheck y estado de Circuit Breakers**: `http://localhost:3000/health`
+- **Panel de control de RabbitMQ**: `http://localhost:15672` (usuario: `guest`, contraseña: `guest`)
+- **Base de datos PostgreSQL**: puerto `5432` (db: `historial`, user: `postgres`, pass: `postgres`)
 
+Para detener los servicios:
 ```bash
 docker compose down
 ```
 
-Para eliminar también los datos persistidos de PostgreSQL:
+---
+
+## 🧪 Pruebas en Vivo para la Presentación
+
+### 1. Demostración de Resiliencia y Circuit Breaker (Apagar Backing Services):
+
+1. Con todo levantado, verifica la salud:
+   ```bash
+   curl http://localhost:3000/health
+   # Respuesta: {"status":"ok", "circuitos":{"redis":"CLOSED", ...}}
+   ```
+2. Simular la caída de Redis:
+   ```bash
+   docker stop m7-redis
+   ```
+3. Consultar pagos duplicados o el healthcheck:
+   - La API responde inmediatamente sin trabarse porque el Circuit Breaker entra en `OPEN` y consulta directo en PostgreSQL.
+4. Volver a levantar Redis:
+   ```bash
+   docker start m7-redis
+   ```
+   - El circuito pasa a `HALF-OPEN` y luego regresa a `CLOSED` de forma transparente.
+
+### 2. Ejecutar los tests automatizados:
 
 ```bash
-docker compose down -v
-```
+# Tests unitarios y validación del Circuit Breaker (Vitest)
+npm run test:unit
 
-Cuando `DATABASE_URL` está definida, la API crea automáticamente la tabla `financial_operations` al iniciar y persiste allí las operaciones. Si se ejecuta localmente sin esa variable, conserva el modo en memoria para facilitar el desarrollo.
-
-## Endpoints
-
-| Método | Ruta                        | Descripción                          |
-|--------|-----------------------------|---------------------------------------|
-| GET    | `/operations`                | Consultar el historial de operaciones |
-| POST   | `/operations`                | Registrar una nueva operación         |
-| PATCH  | `/operations/{id}/status`    | Actualizar el estado de una operación |
-
-La documentación completa de la API está en [`openapi.yaml`](./openapi.yaml).
-
-## Documentación interactiva (Scalar)
-
-Con el servidor corriendo, se puede explorar y probar la API de forma interactiva en:
-
-```
-http://localhost:3000/docs
-```
-
-Esta vista se genera automáticamente a partir de `openapi.yaml` usando [Scalar](https://scalar.com/), y permite ver ejemplos de request/response de cada endpoint y ejecutar pedidos de prueba directamente desde el navegador.
-
-**Importante:** si se edita `openapi.yaml`, hay que reiniciar el servidor (`Ctrl+C` y `npm start` de nuevo) para que los cambios se reflejen, ya que el archivo se lee una sola vez al arrancar.
-
-### Ejemplo — crear una operación
-
-```bash
-curl -X POST http://localhost:3000/operations \
-  -H "Content-Type: application/json" \
-  -d '{"type":"payment","amount":1500}'
-```
-
-### Ejemplo — actualizar el estado
-
-```bash
-curl -X PATCH http://localhost:3000/operations/op_123/status \
-  -H "Content-Type: application/json" \
-  -d '{"status":"completed"}'
-```
-
-## Tests
-
-Los tests automatizados usan [Playwright](https://playwright.dev/) y prueban la API real contra un servidor corriendo en `http://localhost:3000`. Cubren las 3 rutas (`GET`, `POST`, `PATCH`) con casos válidos e inválidos.
-
-### Ejecutar los tests en local
-
-1. Instalar las dependencias del proyecto (si no se hizo antes):
-
-```bash
-npm install
-```
-
-2. Instalar los navegadores que necesita Playwright (solo la primera vez):
-
-```bash
-npx playwright install
-```
-
-3. Compilar el proyecto:
-
-```bash
-npm run build
-```
-
-4. Ejecutar los tests:
-
-```bash
-npm test
-```
-
-Los tests esperan que la API ya esté disponible en `http://localhost:3000`.
-
-### Ejecutar los tests en Docker
-
-Construir la imagen:
-
-```bash
-docker build -f dockerfile -t historial-financiero:test .
-```
-
-Levantar la API en segundo plano:
-
-```bash
-docker run -d --name historial-financiero -p 3000:3000 lautaro0910/ae1repo:latest
-```
-
-Ejecutar los tests desde otra terminal:
-
-```bash
-npm test
-```
-
-Si se detiene el contenedor, `npm test` debe fallar por conexión rechazada. Para detenerlo:
-
-```bash
-docker stop historial-financiero
-```
-
-### Resultado esperado
-
-Los 8 tests deberían pasar, cubriendo:
-- Consulta del historial (inicial y tras registrar operaciones)
-- Registro de una operación válida
-- Rechazo de `amount` inválido (no numérico)
-- Rechazo de `type` inválido
-- Actualización de estado válida
-- Rechazo de un nuevo estado inválido
-- Actualización sobre un `id` inexistente (`404`)
-
-### Reportes adicionales
-
-Para ver los tests corriendo con más detalle visual, o generar un reporte HTML:
-
-```bash
-npm run test:headed
-npm run test:report
-```
-
-## Estructura del proyecto
-
-```
-historial-financiero/
-├── src/
-│   └── index.ts          # Lógica + servidor Express
-├── tests/
-│   └── financialHistory.spec.ts
-├── openapi.yaml           # Contrato de la API
-├── Dockerfile
-├── package.json
-└── tsconfig.json
+# Tests de integración y resiliencia completa (Playwright)
+npm run test:e2e
 ```

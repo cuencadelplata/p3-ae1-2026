@@ -1,30 +1,39 @@
 {
-  "name": "historial-financiero",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "m7-tarifas-pagos-liquidaciones",
+  "version": "2.0.0",
+  "description": "M7 - Módulo integral de Tarifas, Pagos y Liquidaciones (RF-7.1 al RF-7.7) con Circuit Breaker y Docker Compose",
+  "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
-    "test:report": "playwright test --reporter=html"
+    "dev": "tsc -w",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:reconexion": "playwright test tests/reconexion.spec.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module",
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "@types/amqplib": "^0.10.8",
     "@types/express": "^5.0.6",
-    "@types/node": "^26.4.1",
+    "@types/node": "^22.10.2",
     "@types/pg": "^8.23.1",
-    "typescript": "^7.0.2"
+    "@types/supertest": "^7.2.1",
+    "@vitest/coverage-v8": "^3.0.5",
+    "supertest": "^7.3.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.5"
   },
   "dependencies": {
     "@scalar/express-api-reference": "^0.10.18",
+    "amqplib": "^2.1.0",
     "express": "^5.2.1",
     "pg": "^8.23.0",
+    "redis": "^6.2.1",
     "yaml": "^2.9.1"
   }
 }

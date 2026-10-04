@@ -1,89 +1,67 @@
-import {type MetodoPago, type TipoPago} from "./metodoPago";
-import { esPagoDuplicado } from "../5-pago-duplicado/verificaPagoDuplicado";
-import { registrosDeEjemplo } from "../mock/registroPagoMock";
+import { MetodoPago, TipoPago } from "./metodoPago";
 
-const metodosPago: MetodoPago[]=[]; //como una "BD"
+const metodosPago: MetodoPago[] = [];
 
-function generarId():string{
-    return Math.random().toString();
+function generarId(): string {
+  return `pago_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 }
 
-export function registrarMetodoPago(clienteId:string, viajeId: string, tipo: TipoPago): MetodoPago{
+export function registrarMetodoPago(clienteId: string, viajeId: string, tipo: TipoPago): MetodoPago {
+  if (!clienteId || !viajeId) {
+    throw new Error("clienteId y viajeId deben existir");
+  }
 
-    if (!clienteId || !viajeId){
-        throw new Error("clienteId y viajeId debe existir"); 
-    }
+  const tiposValidos: string[] = ["efectivo", "tarjeta", "transferencia"];
+  if (!tiposValidos.includes(tipo)) {
+    throw new Error("tipo de pago inválido");
+  }
 
-    const tiposValidos: string[] = ["efectivo", "tarjeta", "transferencia"];
-    if (!tiposValidos.includes(tipo)) {
-        throw new Error("tipo de pago inválido");
-    }
-    
-const nuevoMetodo: MetodoPago={
+  const nuevoMetodo: MetodoPago = {
     pagoId: generarId(),
-    clienteId: clienteId,
-    viajeId: viajeId,
-    tipo: tipo,
-    fecha: new Date().toLocaleDateString(),
+    clienteId,
+    viajeId,
+    tipo,
+    fecha: new Date().toISOString(),
     detalle: "",
-    estado: "pendiente", 
-};
-metodosPago.push(nuevoMetodo);  //.push() agrega un elemento de metodoNuevo y lo coloca al final de la lista de MétododePago
-    return nuevoMetodo;
-};
+    estado: "pendiente",
+  };
+  metodosPago.push(nuevoMetodo);
+  return nuevoMetodo;
+}
 
+export function buscarPagoPorViaje(viajeId: string): MetodoPago | undefined {
+  return metodosPago.find((metodo) => metodo.viajeId === viajeId);
+}
 
-//buscar el pago de in vieja seggun su id
-export function buscarPagoPorViaje(viajeId: string): MetodoPago | undefined{ //la forma de pago de un viaje en particular 
+export function autorizarPago(viajeId: string, idOrden: string, paymentId?: string): MetodoPago {
+  const metodoPago = buscarPagoPorViaje(viajeId);
 
-   return metodosPago.find( (metodoPago) => metodoPago.viajeId === viajeId );
-} // .find()  busca dentro de un array un elemento en particular, es utiliza para BD 
+  if (!metodoPago) {
+    throw new Error("no existe un tipo de pago registrado que este asociado para dicho viaje");
+  }
 
+  if (metodoPago.estado !== "pendiente") {
+    throw new Error("El pago no fue procesado aún o ya fue modificado");
+  }
 
-export function autorizarPago(viajeId: string, idOrden: string): MetodoPago {
+  metodoPago.estado = "autorizado";
+  if (paymentId) {
+    metodoPago.paymentId = paymentId;
+  }
 
-    const metodoPago = buscarPagoPorViaje(viajeId);
-
-    if (!metodoPago) {
-        throw new Error("no existe un tipo de pago registrado que este asociado para dicho viaje");
-    }
-
-    if (metodoPago.estado !== "pendiente") {
-        throw new Error("El pago no fue procesado aún");
-    }
-
-    // RF-7.6: antes de autorizar el cobro, verificamos que esa orden
-    // no haya sido procesada antes (idempotencia)
-    if (esPagoDuplicado(idOrden, registrosDeEjemplo)) {
-        throw new Error("Esta orden de pago ya fue procesada anteriormente");
-    }
-
-    metodoPago.estado = "autorizado";
-
-    // Registramos la orden como procesada, para que futuras verificaciones
-    // de idempotencia la detecten
-    registrosDeEjemplo.push({
-        idOrden,
-        idViaje: viajeId,
-        monto: 0, // placeholder: el monto real vendría de RF-7.1/7.4
-        fecha: new Date(),
-    });
-
-    return metodoPago;
+  return metodoPago;
 }
 
 export function rechazarPago(viajeId: string): MetodoPago {
+  const metodoPago = buscarPagoPorViaje(viajeId);
 
-    const metodoPago = buscarPagoPorViaje(viajeId);
+  if (!metodoPago) {
+    throw new Error("no existe un tipo de pago registrado que este asociado para dicho viaje");
+  }
+  if (metodoPago.estado !== "pendiente") {
+    throw new Error("El pago no fue procesado aún o ya fue modificado");
+  }
+  metodoPago.estado = "rechazado";
 
-    if (!metodoPago) {
-        throw new Error("no existe un tipo de pago registrado que este asociado para dicho viaje");
-    }
-    if (metodoPago.estado !== "pendiente") {
-        throw new Error("El pago no fue procesado aún");
-    }
-    metodoPago.estado = "rechazado";
-
-    return metodoPago;
-
+  return metodoPago;
 }

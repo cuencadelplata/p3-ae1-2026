@@ -2,31 +2,24 @@
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "./dist",
-
-    "module": "nodenext",
-    "target": "esnext",
-
-    "types": ["node"],
-
+    "module": "commonjs",
+    "target": "es2022",
+    "moduleResolution": "node",
     "sourceMap": true,
     "declaration": true,
     "declarationMap": true,
-
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-
-    "strict": true,
-    "verbatimModuleSyntax": true,
-    "isolatedModules": true,
-    "noUncheckedSideEffectImports": true,
-    "moduleDetection": "force",
-    "skipLibCheck": true
+    "strict": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true
   },
   "include": ["src/**/*.ts"],
   "exclude": [
     "node_modules",
     "dist",
     "tests",
+    "src/test",
     "playwright.config.ts"
   ]
 }
