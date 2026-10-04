@@ -1,10 +1,16 @@
-export type SupportErrorCode =
-  | 'SUPPORT_VALIDATION_ERROR'
-  | 'SUPPORT_TICKET_NOT_FOUND'
-  | 'SUPPORT_INVALID_TRANSITION'
-  | 'SUPPORT_CONCURRENCY_CONFLICT'
-  | 'SUPPORT_IDEMPOTENCY_CONFLICT'
-  | 'SUPPORT_INTERNAL_ERROR';
+// Catálogo de códigos de error de Support. Debe coincidir con el enum del
+// contrato OpenAPI (openapi/rf85-support.yaml); lo verifica el test de contrato.
+export const SUPPORT_ERROR_CODES = [
+  'SUPPORT_VALIDATION_ERROR',
+  'SUPPORT_TICKET_NOT_FOUND',
+  'SUPPORT_INVALID_TRANSITION',
+  'SUPPORT_CONCURRENCY_CONFLICT',
+  'SUPPORT_IDEMPOTENCY_CONFLICT',
+  'SUPPORT_DB_UNAVAILABLE',
+  'SUPPORT_INTERNAL_ERROR',
+] as const;
+
+export type SupportErrorCode = (typeof SUPPORT_ERROR_CODES)[number];
 
 export interface ErrorDetail {
   field: string;
