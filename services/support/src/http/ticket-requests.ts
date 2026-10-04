@@ -76,6 +76,41 @@ export function leerCambioDeEstado(body: unknown): {
   };
 }
 
+export const LIMITE_MAXIMO = 100;
+
+// Query de GET /tickets. Todos los filtros son opcionales; un parámetro
+// presente pero vacío, repetido o fuera de rango es un error.
+export function leerConsultaDeTickets(query: unknown): {
+  tripId?: string;
+  estado?: TicketStatus;
+  limit?: number;
+  cursor?: string;
+} {
+  const { tripId, viajeId, estado, limit, cursor } = comoObjeto(query);
+
+  const details: ErrorDetail[] = tripId === undefined && viajeId === undefined ? [] : validarTripId(tripId, viajeId);
+  if (estado !== undefined && !ESTADOS_VALIDOS.includes(estado as TicketStatus)) {
+    details.push({ field: 'estado', reason: 'Valores permitidos: ABIERTO, EN_PROCESO, RESUELTO.' });
+  }
+  const limite = typeof limit === 'string' && /^[0-9]+$/.test(limit) ? Number(limit) : NaN;
+  if (limit !== undefined && !(limite >= 1 && limite <= LIMITE_MAXIMO)) {
+    details.push({ field: 'limit', reason: `Debe ser un entero entre 1 y ${LIMITE_MAXIMO}.` });
+  }
+  if (cursor !== undefined && !esTextoNoVacio(cursor)) {
+    details.push({ field: 'cursor', reason: 'No es un cursor válido.' });
+  }
+  if (details.length > 0) {
+    throw validationError(details);
+  }
+
+  return {
+    tripId: (tripId ?? viajeId) as string | undefined,
+    estado: estado as TicketStatus | undefined,
+    limit: limit === undefined ? undefined : limite,
+    cursor: cursor as string | undefined,
+  };
+}
+
 const IDEMPOTENCY_KEY_MAX_LENGTH = 255;
 
 // Cabecera Idempotency-Key: opcional. Si viene, no puede estar vacía.
