@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EstadoReserva {
+  PENDIENTE_ASIGNACION
+  PROGRAMADA
+  ACTIVANDO
+  ACTIVADA
+  CANCELADA
+  FALLIDA
+
+  @@map("estado_reserva")
+}
+
+enum TipoVehiculo {
+  AUTO
+  MOTO
+
+  @@map("tipo_vehiculo")
+}
+
+model ReservaVersion {
+  reservaId             String         @default(uuid()) @map("reserva_id") @db.Uuid
+  version               Int
+  clienteId             String         @map("cliente_id") @db.Uuid
+  origen                String         @db.VarChar(200)
+  destino               String         @db.VarChar(200)
+  vehiculo              TipoVehiculo
+  fechaHoraProgramada   DateTime       @map("fecha_hora_programada") @db.Timestamptz(3)
+  estado                EstadoReserva  @default(PENDIENTE_ASIGNACION)
+  asignacionId          String?        @map("asignacion_id")
+  choferId              String?        @map("chofer_id")
+  nombreChofer          String?        @map("nombre_chofer") @db.VarChar(200)
+  valoracion            Decimal?       @db.Decimal(3, 2)
+  tarifaEstimada        Decimal?       @map("tarifa_estimada") @db.Decimal(12, 2)
+  moneda                String?        @default("ARS") @db.VarChar(3)
+  criterioAsignacion    String?        @map("criterio_asignacion") @db.VarChar(80)
+  idSolicitud           String?        @map("id_solicitud")
+  creadoEn              DateTime       @default(now()) @map("creado_en") @db.Timestamptz(3)
+  actualizadoEn         DateTime       @default(now()) @map("actualizado_en") @db.Timestamptz(3)
+
+  @@id([reservaId, version])
+  @@index([estado, fechaHoraProgramada, reservaId, version])
+  @@index([clienteId, fechaHoraProgramada, reservaId, version])
+  @@map("reserva_versiones")
+}
