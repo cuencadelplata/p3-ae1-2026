@@ -25,6 +25,7 @@ export function registerSupportRoutes(router: IRouter, deps: SupportAppDeps) {
   tickets.post('/', controller.crearTicket);
   tickets.get('/:id', controller.obtenerTicket);
   tickets.patch('/:id/estado', controller.actualizarEstado);
+  tickets.get('/:id/historial', controller.obtenerHistorial);
   tickets.get('/', controller.listarTodos); // Para pruebas
   tickets.use(supportErrorHandler);
 
@@ -91,6 +92,7 @@ export function createSupportApp(deps: SupportAppDeps): Express {
         'GET /tickets',
         'GET /tickets/:id',
         'PATCH /tickets/:id/estado',
+        'GET /tickets/:id/historial',
         'POST /events/publish'
       ]
     });
