@@ -1,5 +1,5 @@
-import { createViajeApi, HttpRf6ApiClient } from './src/api.js';
-import { RabbitMqEventPublisher } from './src/rabbitmq.js';
+import { createViajeApi, HttpRf6ApiClient } from './api.js';
+import { RabbitMqEventPublisher } from './rabbitmq.js';
 
 const events = new RabbitMqEventPublisher(process.env.RABBITMQ_URL ?? 'amqp://rabbitmq:5672');
 const server = createViajeApi({

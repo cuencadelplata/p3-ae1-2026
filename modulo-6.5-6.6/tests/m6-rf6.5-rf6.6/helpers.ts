@@ -1,5 +1,5 @@
 import type { Server } from 'node:http';
-import { createViajeApi, type CancellationEventPublisher, type Rf6ApiClient, type Rf6Viaje } from '../src/api.js';
+import { createViajeApi, type CancellationEventPublisher, type Rf6ApiClient, type Rf6Viaje } from '../../src/m6-rf6.5-rf6.6/api.js';
 
 export async function startServices(viajes: Map<string, Rf6Viaje>): Promise<{
   api: Server;

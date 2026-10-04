@@ -29,7 +29,7 @@ Cuando se hayan descargado todos los archivos, vaya arriba a la izquierda `Termi
 ahora tenesmos que ubicarnos en la raiz del proyecto, para eso ejecute el siguiente comando
 
 ```sh
-cd modulo-6.4-6.7 
+cd modulo-6.5-6.6
 ```
 ### Paso 4
 Desde la terminal de Visual Studio Code, ubicada en la raíz del proyecto:
@@ -62,7 +62,7 @@ pnpm test:e2e
 
 ## Endpoints provistos por la API
 
-La especificación completa se encuentra en [openapi.yaml](openapi.yaml).
+La especificación completa se encuentra en [docs/m6-rf6.5-rf6.6/openapi.yaml](docs/m6-rf6.5-rf6.6/openapi.yaml).
 
 ### Cancelar por cliente
 
@@ -86,4 +86,4 @@ Respuesta exitosa: `200 OK`, con el viaje cancelado y el resultado del retorno a
  - `RABBITMQ_URL`: URL del broker. Por defecto: `amqp://rabbitmq:5672`.
  - `PORT`: puerto de esta API. Por defecto: `3001`.
 
-El contrato consumido por esta API se documenta en [simulator/rf-6-apis.yaml](simulator/rf-6-apis.yaml). El directorio conserva ese contrato, pero ya no contiene un servidor simulador.
+El contrato consumido por esta API se documenta en [simulator/m6-rf6.5-rf6.6/rf-6-apis.yaml](simulator/m6-rf6.5-rf6.6/rf-6-apis.yaml). El directorio conserva ese contrato, pero ya no contiene un servidor simulador.

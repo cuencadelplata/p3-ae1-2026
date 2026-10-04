@@ -5,15 +5,12 @@ export const rf6ApiUrl = process.env.RF6_API_URL ?? 'http://127.0.0.1:3000';
 export const rabbitMqUrl = process.env.RABBITMQ_URL ?? 'amqp://127.0.0.1:5672';
 
 export async function crearViajeRf6(estado: 'SOLICITADO' | 'CONDUCTOR_EN_CAMINO'): Promise<string> {
-  const id = `E2E-${estado}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const testId = `E2E-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const response = await fetch(`${rf6ApiUrl}/api/viajes`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      id,
-      clienteId: `cliente-${id}`,
-      conductorId: `conductor-${id}`,
-      estado,
+      clienteId: `cliente-${testId}`,
       origen: 'Calle A',
       destino: 'Calle B',
     }),
@@ -21,6 +18,20 @@ export async function crearViajeRf6(estado: 'SOLICITADO' | 'CONDUCTOR_EN_CAMINO'
 
   if (!response.ok) {
     throw new Error(`No se pudo crear el viaje RF-6: ${response.status} ${await response.text()}`);
+  }
+  const viaje = await response.json() as { id?: string | number };
+  if (viaje.id === undefined) throw new Error('RF-6 creó el viaje pero no devolvió su ID');
+
+  const id = String(viaje.id);
+  if (estado === 'CONDUCTOR_EN_CAMINO') {
+    const asignacion = await fetch(`${rf6ApiUrl}/api/viajes/${encodeURIComponent(id)}/asignar`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ conductorId: `conductor-${testId}` }),
+    });
+    if (!asignacion.ok) {
+      throw new Error(`No se pudo asignar el viaje RF-6: ${asignacion.status} ${await asignacion.text()}`);
+    }
   }
   return id;
 }
