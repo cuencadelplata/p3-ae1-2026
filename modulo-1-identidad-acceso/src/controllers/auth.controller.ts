@@ -31,14 +31,15 @@ function handleError(
     });
 }
 
+import { RegisterUserRequestDTO } from "../types/auth.dto";
+
 export async function register(
     req: Request,
     res: Response
 ): Promise<void> {
     try {
-        const usuario = await registerUser(
-            req.body
-        );
+        const input: RegisterUserRequestDTO = req.body;
+        const usuario = await registerUser(input);
 
         res.status(201).json(usuario);
     } catch (error) {
