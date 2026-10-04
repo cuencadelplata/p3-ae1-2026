@@ -4,6 +4,8 @@ import path from 'node:path';
 import YAML from 'yaml';
 import { apiReference } from '@scalar/express-api-reference';
 import { createSupportController, publicarEvento } from './controllers/support.controller.js';
+import { correlationId } from './http/correlation.js';
+import { supportErrorHandler } from './http/error-handler.js';
 import type { TicketService } from './services/ticket.service.js';
 
 export interface SupportAppDeps {
@@ -13,14 +15,20 @@ export interface SupportAppDeps {
 }
 
 // Endpoints RF-8.5 (Gestión de tickets de Soporte). Es lo único que necesita
-// registrar una app común de M8.
+// registrar una app común de M8: incluye su correlationId y su manejo de
+// errores, acotados a /tickets.
 export function registerSupportRoutes(router: IRouter, deps: SupportAppDeps) {
   const controller = createSupportController(deps);
+  const tickets = express.Router();
 
-  router.post('/tickets', controller.crearTicket);
-  router.get('/tickets/:id', controller.obtenerTicket);
-  router.patch('/tickets/:id/estado', controller.actualizarEstado);
-  router.get('/tickets', controller.listarTodos); // Para pruebas
+  tickets.use(correlationId);
+  tickets.post('/', controller.crearTicket);
+  tickets.get('/:id', controller.obtenerTicket);
+  tickets.patch('/:id/estado', controller.actualizarEstado);
+  tickets.get('/', controller.listarTodos); // Para pruebas
+  tickets.use(supportErrorHandler);
+
+  router.use('/tickets', tickets);
 }
 
 // Endpoint RF-8.6 / Pruebas de RabbitMQ (heredado de AE1)
@@ -46,6 +54,7 @@ function loadOpenapi() {
 // eso lo hace el entrypoint (index.ts).
 export function createSupportApp(deps: SupportAppDeps): Express {
   const app = express();
+  app.use(correlationId);
   app.use(express.json());
 
   // Configuración de Swagger (OpenAPI)
@@ -101,6 +110,9 @@ export function createSupportApp(deps: SupportAppDeps): Express {
   if (deps.legacyEvents) {
     registerLegacyEventRoutes(app);
   }
+
+  // Errores fuera de /tickets, como un cuerpo JSON malformado.
+  app.use(supportErrorHandler);
 
   return app;
 }
