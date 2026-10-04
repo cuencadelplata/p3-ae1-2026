@@ -6,6 +6,7 @@ import {
   NonRetryableMessagingError,
   OutboxPublisher,
   parseEnvelope,
+  PostgresOutboxStore,
   PostgresTechnicalInbox,
 } from '../../src';
 
@@ -137,7 +138,7 @@ describe('RF8.6 - Inbox Tecnico, Atomisidad e Idempotencia (UNIQUE(consumerId, m
     await pgInbox.claim('consumer1', 'msg1', 'Event1');
     expect(mockSql.query).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO messaging.inbox_events'),
-      ['consumer1', 'msg1', 'Event1']
+      ['consumer1', 'msg1', 'Event1', 300]
     );
 
     await pgInbox.markAsCompleted('consumer1', 'msg1');
@@ -327,6 +328,7 @@ describe('RF8.6 - Publicador Outbox con Publisher Confirms', () => {
         cb();
         return true;
       }),
+      waitForConfirms: vi.fn().mockResolvedValue(true),
     } as any;
 
     const publisher = new OutboxPublisher(outboxStore);
@@ -341,5 +343,107 @@ describe('RF8.6 - Publicador Outbox con Publisher Confirms', () => {
       expect.any(Function)
     );
     expect(outboxStore.markAsPublished).toHaveBeenCalledWith('ob-1');
+  });
+
+  it('debe soportar claimPending en PostgresOutboxStore con FOR UPDATE SKIP LOCKED', async () => {
+    const mockSql = {
+      query: vi.fn().mockResolvedValue({
+        rows: [{ id: 'ob-99', eventType: 'TripStarted', payload: { messageId: 'm-99' } }],
+      }),
+    };
+    const store = new PostgresOutboxStore(mockSql);
+    const result = await store.claimPending(5);
+
+    expect(result.length).toBe(1);
+    expect(mockSql.query).toHaveBeenCalledWith(
+      expect.stringContaining('FOR UPDATE SKIP LOCKED'),
+      [5]
+    );
+  });
+});
+
+describe('RF8.6 - Recuperacion de claims PENDING y Enforcement de Confirms', () => {
+  it('debe recuperar un claim PENDING expirado en InMemoryTechnicalInbox', async () => {
+    const inbox = new InMemoryTechnicalInbox(50); // 50ms timeout
+    const consumer = 'm8.notifications';
+    const msgId = 'msg-pending-timeout';
+
+    const first = await inbox.claim(consumer, msgId, 'TripStarted');
+    expect(first).toBe(true);
+
+    const immediateSecond = await inbox.claim(consumer, msgId, 'TripStarted');
+    expect(immediateSecond).toBe(false);
+
+    // Esperar a que expire el lease
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    const afterExpired = await inbox.claim(consumer, msgId, 'TripStarted');
+    expect(afterExpired).toBe(true);
+  });
+
+  it('debe rechazar publicar si el canal no soporta Publisher Confirms', async () => {
+    const invalidChannel = {
+      publish: vi.fn(), // sin callback (4 params) y sin waitForConfirms
+    } as any;
+
+    const inbox = new InMemoryTechnicalInbox();
+    const consumer = new EventConsumer({
+      consumerId: 'm8.test',
+      topology: { queue: 'q', routingKey: 'rk' },
+      inboxStore: inbox,
+    });
+
+    const msg = {
+      content: Buffer.from('invalid'),
+      fields: { routingKey: 'rk' },
+      properties: { headers: {} },
+    } as any;
+
+    // processMessage intentara enviar a DLQ con publishWithConfirm, el cual fallara por falta de ConfirmChannel
+    await expect(consumer.processMessage(invalidChannel, msg)).rejects.toThrow('ConfirmChannel');
+  });
+
+  it('debe enviar a DLQ cuando llega un eventType desconocido o sin handler registrado', async () => {
+    const inbox = new InMemoryTechnicalInbox();
+    const channel = {
+      ack: vi.fn(),
+      publish: vi.fn((_ex: string, _rk: string, _buf: Buffer, _opt: any, cb: (err?: any) => void) => {
+        if (typeof cb === 'function') cb();
+        return true;
+      }),
+      waitForConfirms: vi.fn().mockResolvedValue(true),
+    } as any;
+
+    const consumer = new EventConsumer({
+      consumerId: 'm8.test',
+      topology: { queue: 'q', routingKey: 'rk' },
+      inboxStore: inbox,
+    });
+
+    const msg = {
+      content: Buffer.from(JSON.stringify({
+        messageId: 'b1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
+        eventType: 'EventoInexistente',
+        version: 1,
+        occurredAt: new Date().toISOString(),
+        correlationId: '123',
+        producer: 'test',
+        data: {},
+      })),
+      fields: { routingKey: 'rk' },
+      properties: { headers: {} },
+    } as any;
+
+    await consumer.processMessage(channel, msg);
+
+    expect(channel.publish).toHaveBeenCalledWith(
+      'mobility.events.dlx',
+      'q',
+      expect.any(Buffer),
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-dlq-reason': expect.stringContaining('Sin handler') }),
+      }),
+      expect.any(Function)
+    );
   });
 });

@@ -33,7 +33,7 @@ describe('RF8.6 Integration - PostgreSQL Inbox (messaging.inbox_events)', () => 
     const claimed = await pgInbox.claim(consumerId, messageId, eventType);
     expect(claimed).toBe(true);
     expect(executedQueries[0].sql).toContain('INSERT INTO messaging.inbox_events');
-    expect(executedQueries[0].params).toEqual([consumerId, messageId, eventType]);
+    expect(executedQueries[0].params).toEqual([consumerId, messageId, eventType, 300]);
 
     // 2. Marcar como completado
     await pgInbox.markAsCompleted(consumerId, messageId);
