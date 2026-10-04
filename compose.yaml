@@ -8,6 +8,11 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
+      NOTIFICATIONS_DATABASE_URL: "postgres://m8_notifications:${NOTIFICATIONS_DB_PASSWORD:-m8_notifications_local}@postgres:5432/${POSTGRES_DB:-m8}"
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   qr:
     build:
@@ -91,6 +96,7 @@ services:
       POSTGRES_USER: "${POSTGRES_USER:-m8_admin}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-m8_admin_local}"
       RECEIPTS_DB_PASSWORD: "${RECEIPTS_DB_PASSWORD:-m8_receipts_local}"
+      NOTIFICATIONS_DB_PASSWORD: "${NOTIFICATIONS_DB_PASSWORD:-m8_notifications_local}"
     volumes:
       - m8-postgres:/var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
