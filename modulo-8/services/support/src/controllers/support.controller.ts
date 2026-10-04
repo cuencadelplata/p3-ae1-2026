@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { leerCambioDeEstado, leerNuevoTicket } from '../http/ticket-requests.js';
+import { leerActor, leerCambioDeEstado, leerNuevoTicket } from '../http/ticket-requests.js';
 import { RabbitMQConsumer } from '../rabbitmq/consumer.js';
 import { TicketService } from '../services/ticket.service.js';
 
@@ -14,8 +14,9 @@ export function createSupportController({ ticketService }: SupportControllerDeps
     // Endpoint: POST /tickets
     async crearTicket(req: Request, res: Response) {
       const { tripId, motivo } = leerNuevoTicket(req.body);
+      const actor = leerActor(req.get('X-Actor-Id'));
 
-      const nuevoTicket = await ticketService.crearTicket(tripId, motivo);
+      const nuevoTicket = await ticketService.crearTicket(tripId, motivo, { actor });
 
       res.status(201).json(nuevoTicket);
     },
@@ -31,11 +32,20 @@ export function createSupportController({ ticketService }: SupportControllerDeps
     // Endpoint: PATCH /tickets/:id/estado
     async actualizarEstado(req: Request, res: Response) {
       const id = req.params.id as string;
-      const { estado } = leerCambioDeEstado(req.body);
+      const { estado, motivo } = leerCambioDeEstado(req.body);
+      const actor = leerActor(req.get('X-Actor-Id'));
 
-      const ticketActualizado = await ticketService.actualizarEstado(id, estado);
+      const ticketActualizado = await ticketService.actualizarEstado(id, estado, { actor, motivo });
 
       res.json(ticketActualizado);
+    },
+
+    // Endpoint: GET /tickets/:id/historial
+    async obtenerHistorial(req: Request, res: Response) {
+      const id = req.params.id as string;
+      const historial = await ticketService.obtenerHistorial(id);
+
+      res.json(historial);
     },
 
     // Endpoint: GET /tickets (solo para revisión y pruebas)

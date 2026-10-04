@@ -1,6 +1,7 @@
 export type SupportErrorCode =
   | 'SUPPORT_VALIDATION_ERROR'
   | 'SUPPORT_TICKET_NOT_FOUND'
+  | 'SUPPORT_INVALID_TRANSITION'
   | 'SUPPORT_INTERNAL_ERROR';
 
 export interface ErrorDetail {
@@ -28,4 +29,10 @@ export function validationError(details: ErrorDetail[]): SupportError {
 
 export function ticketNotFound(): SupportError {
   return new SupportError(404, 'SUPPORT_TICKET_NOT_FOUND', 'Ticket no encontrado.');
+}
+
+export function invalidTransition(desde: string, hacia: string): SupportError {
+  return new SupportError(409, 'SUPPORT_INVALID_TRANSITION', 'El cambio de estado no está permitido.', [
+    { field: 'estado', reason: `No se permite pasar de ${desde} a ${hacia}.` },
+  ]);
 }

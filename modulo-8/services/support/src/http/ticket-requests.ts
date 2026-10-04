@@ -46,13 +46,34 @@ export function leerNuevoTicket(body: unknown): { tripId: string; motivo: string
   return { tripId: (tripId ?? viajeId) as string, motivo: motivo as string };
 }
 
-// Cuerpo de PATCH /tickets/:id/estado.
-export function leerCambioDeEstado(body: unknown): { estado: TicketStatus } {
-  const { estado } = comoObjeto(body);
+// Cuerpo de PATCH /tickets/:id/estado. motivo es opcional; en blanco equivale
+// a no enviarlo.
+export function leerCambioDeEstado(body: unknown): { estado: TicketStatus; motivo: string | null } {
+  const { estado, motivo } = comoObjeto(body);
 
+  const details: ErrorDetail[] = [];
   if (!ESTADOS_VALIDOS.includes(estado as TicketStatus)) {
-    throw validationError([{ field: 'estado', reason: 'Valores permitidos: ABIERTO, EN_PROCESO, RESUELTO.' }]);
+    details.push({ field: 'estado', reason: 'Valores permitidos: ABIERTO, EN_PROCESO, RESUELTO.' });
+  }
+  if (motivo !== undefined && typeof motivo !== 'string') {
+    details.push({ field: 'motivo', reason: 'Debe ser un texto.' });
+  }
+  if (details.length > 0) {
+    throw validationError(details);
   }
 
-  return { estado: estado as TicketStatus };
+  return { estado: estado as TicketStatus, motivo: esTextoNoVacio(motivo) ? motivo : null };
+}
+
+const ACTOR_MAX_LENGTH = 255;
+
+// Cabecera X-Actor-Id: quién hace el pedido. String opaco; null si no viene.
+export function leerActor(header: string | undefined): string | null {
+  if (!esTextoNoVacio(header)) {
+    return null;
+  }
+  if (header.length > ACTOR_MAX_LENGTH) {
+    throw validationError([{ field: 'X-Actor-Id', reason: `No puede superar los ${ACTOR_MAX_LENGTH} caracteres.` }]);
+  }
+  return header;
 }
