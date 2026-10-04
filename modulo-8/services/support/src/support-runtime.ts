@@ -8,8 +8,8 @@ import {
   NoopSupportEventPublisher,
 } from './events/support-event-publisher.js';
 import { checkSupportReadiness, type ReadinessProbes } from './http/readiness.js';
-import { ticketRepository as inMemoryTicketRepository } from './models/ticket.model.js';
 import { RabbitMQConsumer } from './rabbitmq/consumer.js';
+import { PostgresTicketRepository } from './repositories/postgres-ticket.repository.js';
 import type { TicketRepository } from './repositories/ticket.repository.js';
 import { TicketService } from './services/ticket.service.js';
 
@@ -44,8 +44,9 @@ export function createSupportRuntime(
 }
 
 // Arma Support a partir de las variables de entorno, como lo hace el
-// entrypoint. La base de datos es obligatoria: sin SUPPORT_DATABASE_URL lanza
-// y el proceso no arranca. Crear el pool no abre conexiones.
+// entrypoint. Los tickets se persisten en PostgreSQL y la base es obligatoria:
+// sin SUPPORT_DATABASE_URL lanza y el proceso no arranca. El repositorio en
+// memoria queda sólo para los tests. Crear el pool no abre conexiones.
 export function buildSupportFromEnv(env: NodeJS.ProcessEnv = process.env) {
   const config = loadSupportConfig(env);
   const dbConfig = loadSupportDbConfig(env);
@@ -53,7 +54,8 @@ export function buildSupportFromEnv(env: NodeJS.ProcessEnv = process.env) {
 
   const pool = createSupportPool(dbConfig.databaseUrl);
   const database = new SupportDatabase({ pool, schema: dbConfig.schema, retryMs });
-  const runtime = createSupportRuntime(config, inMemoryTicketRepository, database);
+  const ticketRepository = new PostgresTicketRepository(pool, dbConfig.schema);
+  const runtime = createSupportRuntime(config, ticketRepository, database);
 
   return { config, pool, database, ...runtime };
 }

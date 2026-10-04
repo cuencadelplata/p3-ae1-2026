@@ -30,6 +30,7 @@ export interface ConsultaDeTickets {
 }
 
 const LIMITE_POR_DEFECTO = 50;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // El cursor es opaco para el cliente: codifica la posición del último ticket
 // de la página.
@@ -40,7 +41,7 @@ function codificarCursor({ fechaCreacion, id }: PosicionDeListado): string {
 function decodificarCursor(cursor: string): PosicionDeListado {
   try {
     const [fechaCreacion, id] = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
-    if (typeof fechaCreacion === 'string' && typeof id === 'string' && !Number.isNaN(Date.parse(fechaCreacion))) {
+    if (typeof fechaCreacion === 'string' && typeof id === 'string' && UUID.test(id) && !Number.isNaN(Date.parse(fechaCreacion))) {
       return { fechaCreacion, id };
     }
   } catch {
