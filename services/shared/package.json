@@ -1,0 +1,21 @@
+{
+  "name": "@m8/shared",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.4"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.5",
+    "@types/node": "^24.13.3",
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.11"
+  }
+}
