@@ -2,6 +2,7 @@ import type { Express } from 'express';
 import request from 'supertest';
 import { beforeEach, describe, it, expect } from 'vitest';
 import { createSupportApp } from '../app.js';
+import { NoopSupportEventPublisher } from '../events/support-event-publisher.js';
 import { InMemoryTicketRepository } from '../models/ticket.model.js';
 import { TicketService } from '../services/ticket.service.js';
 
@@ -9,7 +10,8 @@ import { TicketService } from '../services/ticket.service.js';
 let app: Express;
 
 beforeEach(() => {
-  app = createSupportApp({ ticketService: new TicketService(new InMemoryTicketRepository()) });
+  const ticketService = new TicketService(new InMemoryTicketRepository(), new NoopSupportEventPublisher());
+  app = createSupportApp({ ticketService, legacyEvents: true });
 });
 
 describe('SupportController', () => {

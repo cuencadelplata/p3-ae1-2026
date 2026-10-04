@@ -59,10 +59,10 @@ describe('RabbitMQConsumer ante un broker caído', () => {
 
   // La app debe cargarse después del reset para compartir ese mismo consumer.
   async function loadApp() {
-    const { createSupportApp } = await import('../app.js');
+    const { createSupportRuntime } = await import('../support-runtime.js');
     const { InMemoryTicketRepository } = await import('../models/ticket.model.js');
-    const { TicketService } = await import('../services/ticket.service.js');
-    return createSupportApp({ ticketService: new TicketService(new InMemoryTicketRepository()) });
+    const config = { port: 0, rabbitUrl: 'amqp://test', legacyEvents: true };
+    return createSupportRuntime(config, new InMemoryTicketRepository()).app;
   }
 
   beforeEach(() => {

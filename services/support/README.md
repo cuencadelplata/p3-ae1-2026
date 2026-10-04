@@ -44,6 +44,14 @@ docker compose up --build -d
   *(Credenciales por defecto: Usuario: `guest` | Contraseña: `guest`)*
 - **Broker RabbitMQ (Puerto AMQP):** `amqp://localhost:5672`
 
+### Variables de Entorno
+
+| Variable | Valor por defecto | Descripción |
+| --- | --- | --- |
+| `PORT` | `3000` | Puerto HTTP del servicio. |
+| `RABBITMQ_URL` | `amqp://localhost:5672` | Broker usado por el consumer heredado de AE1. |
+| `SUPPORT_LEGACY_EVENTS` | `on` | `on`: conecta el consumer RabbitMQ de AE1, publica `ticket.creado` / `ticket.actualizado` y expone `POST /events/publish`. `off`: Support no se conecta al broker y la API de tickets funciona igual. Cualquier otro valor impide el arranque. |
+
 ### Detener los Contenedores
 
 ```bash

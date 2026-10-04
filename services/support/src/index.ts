@@ -1,16 +1,12 @@
-import { createSupportApp } from './app.js';
+import { loadSupportConfig } from './config/env.js';
 import { ticketRepository } from './models/ticket.model.js';
-import { RabbitMQConsumer } from './rabbitmq/consumer.js';
-import { TicketService } from './services/ticket.service.js';
+import { createSupportRuntime } from './support-runtime.js';
 
-const app = createSupportApp({ ticketService: new TicketService(ticketRepository) });
+const config = loadSupportConfig();
+const runtime = createSupportRuntime(config, ticketRepository);
 
-const PORT = process.env.PORT || 3000;
-const RABBIT_URL = process.env.RABBITMQ_URL || 'amqp://localhost:5672';
+runtime.app.listen(config.port, async () => {
+  console.log(`[Server] Microservicio M8-Soporte ejecutándose en puerto ${config.port}`);
 
-app.listen(PORT, async () => {
-  console.log(`[Server] Microservicio M8-Soporte ejecutándose en puerto ${PORT}`);
-
-  // Iniciamos el consumo asíncrono (RF-8.6)
-  await RabbitMQConsumer.connect(RABBIT_URL);
+  await runtime.startLegacyEvents();
 });

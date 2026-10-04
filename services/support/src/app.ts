@@ -8,6 +8,8 @@ import type { TicketService } from './services/ticket.service.js';
 
 export interface SupportAppDeps {
   ticketService: TicketService;
+  // Expone POST /events/publish, heredado de AE1.
+  legacyEvents: boolean;
 }
 
 // Endpoints RF-8.5 (Gestión de tickets de Soporte). Es lo único que necesita
@@ -96,7 +98,9 @@ export function createSupportApp(deps: SupportAppDeps): Express {
   });
 
   registerSupportRoutes(app, deps);
-  registerLegacyEventRoutes(app);
+  if (deps.legacyEvents) {
+    registerLegacyEventRoutes(app);
+  }
 
   return app;
 }
