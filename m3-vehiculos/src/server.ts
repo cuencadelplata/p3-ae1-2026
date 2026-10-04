@@ -8,6 +8,7 @@ import { errorHandler } from "./middlewares/errorHandler.js";
 import { vehiculoRoutes } from "./vehiculos/vehiculo-routes.js";
 import { documentoRoutes } from "./documents/documents-routes.js";
 import { redis } from "./config/redisClient.js";
+import { iniciarConsumidores } from "./documents/documents-consumers.js";
 
 dotenv.config();
 
@@ -43,6 +44,10 @@ app.listen(PORT, () => {
   console.log(`   Health check: http://localhost:8083/health`);
   console.log(`   Docs (Swagger UI): http://localhost:8083/docs`);
 });
+
+iniciarConsumidores().catch((err) =>
+  console.error("Error iniciando consumidores:", err),
+);
 
 // TODO: montar acá los Routess cuando existan
 // app.use("/api/v1/drivers/:driverId/vehicles", vehiculoroutes);
