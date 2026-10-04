@@ -9,5 +9,6 @@ export interface MetodoPago{
     detalle: string; //ej: digitos de tarjeta, alias 
     fecha: string; 
     estado: estadoPago; 
+     paymentId?: string;  //completa con el mockeo 
 }
 

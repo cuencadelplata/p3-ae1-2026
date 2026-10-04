@@ -1,6 +1,4 @@
-import {type MetodoPago, type TipoPago} from "./metodoPago";
-import { esPagoDuplicado } from "../5-pago-duplicado/verificaPagoDuplicado";
-import { registrosDeEjemplo } from "../mock/registroPagoMock";
+import {type MetodoPago, type TipoPago} from "./metodoPago.js";
 
 const metodosPago: MetodoPago[]=[]; //como una "BD"
 
@@ -28,16 +26,15 @@ const nuevoMetodo: MetodoPago={
     detalle: "",
     estado: "pendiente", 
 };
-metodosPago.push(nuevoMetodo);  //.push() agrega un elemento de metodoNuevo y lo coloca al final de la lista de MétododePago
+metodosPago.push(nuevoMetodo);
     return nuevoMetodo;
 };
 
 
-//buscar el pago de in vieja seggun su id
-export function buscarPagoPorViaje(viajeId: string): MetodoPago | undefined{ //la forma de pago de un viaje en particular 
+export function buscarPagoPorViaje(viajeId: string): MetodoPago | undefined{
 
    return metodosPago.find( (metodoPago) => metodoPago.viajeId === viajeId );
-} // .find()  busca dentro de un array un elemento en particular, es utiliza para BD 
+}
 
 
 export function autorizarPago(viajeId: string, idOrden: string): MetodoPago {
@@ -52,22 +49,7 @@ export function autorizarPago(viajeId: string, idOrden: string): MetodoPago {
         throw new Error("El pago no fue procesado aún");
     }
 
-    // RF-7.6: antes de autorizar el cobro, verificamos que esa orden
-    // no haya sido procesada antes (idempotencia)
-    if (esPagoDuplicado(idOrden, registrosDeEjemplo)) {
-        throw new Error("Esta orden de pago ya fue procesada anteriormente");
-    }
-
     metodoPago.estado = "autorizado";
-
-    // Registramos la orden como procesada, para que futuras verificaciones
-    // de idempotencia la detecten
-    registrosDeEjemplo.push({
-        idOrden,
-        idViaje: viajeId,
-        monto: 0, // placeholder: el monto real vendría de RF-7.1/7.4
-        fecha: new Date(),
-    });
 
     return metodoPago;
 }
@@ -85,5 +67,4 @@ export function rechazarPago(viajeId: string): MetodoPago {
     metodoPago.estado = "rechazado";
 
     return metodoPago;
-
 }
