@@ -142,6 +142,9 @@ importers:
       amqplib:
         specifier: ^0.10.4
         version: 0.10.9
+      pg:
+        specifier: ^8.13.1
+        version: 8.23.0
     devDependencies:
       '@types/amqplib':
         specifier: ^0.10.5
@@ -149,6 +152,9 @@ importers:
       '@types/node':
         specifier: ^24.13.3
         version: 24.19.0
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.23.1
       typescript:
         specifier: ^5.5.4
         version: 5.9.3
