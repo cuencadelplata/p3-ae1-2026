@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { TicketVersionConflictError } from '../repositories/ticket.repository.js';
 import type { CambioDeEstado, OpcionesDeCreacion, TicketRepository } from '../repositories/ticket.repository.js';
 
 // Definimos los posibles estados de un ticket de soporte
@@ -21,7 +22,10 @@ export interface Ticket {
   viajeId: string;
   motivo: string;
   estado: TicketStatus;
+  // Empieza en 1 y sube en cada cambio de estado (control optimista).
+  version: number;
   fechaCreacion: string;
+  fechaActualizacion: string;
 }
 
 // Cambio de estado registrado en el historial de un ticket.
@@ -43,13 +47,16 @@ export class InMemoryTicketRepository implements TicketRepository {
 
   // Método para crear un nuevo ticket
   async crear(tripId: string, motivo: string, opciones: OpcionesDeCreacion = {}): Promise<Ticket> {
+    const ahora = new Date().toISOString();
     const nuevoTicket: Ticket = {
       id: crypto.randomUUID(), // Genera un ID único al azar
       tripId,
       viajeId: tripId,
       motivo,
       estado: 'ABIERTO',
-      fechaCreacion: new Date().toISOString()
+      version: 1,
+      fechaCreacion: ahora,
+      fechaActualizacion: ahora
     };
 
     this.tickets.push(nuevoTicket);
@@ -63,15 +70,22 @@ export class InMemoryTicketRepository implements TicketRepository {
     return ticket && { ...ticket };
   }
 
-  // Método para actualizar el estado de un ticket
+  // Método para actualizar el estado de un ticket. La comparación de versión
+  // y la escritura ocurren sin ningún await en el medio: son atómicas.
   async actualizarEstado(id: string, nuevoEstado: TicketStatus, cambio: CambioDeEstado = {}): Promise<Ticket | null> {
     const ticket = this.tickets.find(ticket => ticket.id === id);
     if (!ticket) {
       return null;
     }
+    if (cambio.expectedVersion !== undefined && cambio.expectedVersion !== ticket.version) {
+      throw new TicketVersionConflictError();
+    }
     const estadoAnterior = ticket.estado;
+    const ahora = new Date().toISOString();
     ticket.estado = nuevoEstado;
-    this.registrarCambio(id, estadoAnterior, nuevoEstado, cambio.actor, cambio.motivo, new Date().toISOString());
+    ticket.version += 1;
+    ticket.fechaActualizacion = ahora;
+    this.registrarCambio(id, estadoAnterior, nuevoEstado, cambio.actor, cambio.motivo, ahora);
     return { ...ticket };
   }
 

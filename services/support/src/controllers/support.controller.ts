@@ -32,10 +32,10 @@ export function createSupportController({ ticketService }: SupportControllerDeps
     // Endpoint: PATCH /tickets/:id/estado
     async actualizarEstado(req: Request, res: Response) {
       const id = req.params.id as string;
-      const { estado, motivo } = leerCambioDeEstado(req.body);
+      const { estado, motivo, expectedVersion } = leerCambioDeEstado(req.body);
       const actor = leerActor(req.get('X-Actor-Id'));
 
-      const ticketActualizado = await ticketService.actualizarEstado(id, estado, { actor, motivo });
+      const ticketActualizado = await ticketService.actualizarEstado(id, estado, { actor, motivo, expectedVersion });
 
       res.json(ticketActualizado);
     },
