@@ -23,6 +23,7 @@ export interface EventConsumerOptions {
 
 /**
  * Publica en RabbitMQ con soporte de Publisher Confirm antes de confirmar el mensaje original.
+ * Exige un ConfirmChannel o un canal con soporte de confirmacion; de lo contrario falla.
  */
 export async function publishWithConfirm(
   channel: Channel,
@@ -32,6 +33,14 @@ export async function publishWithConfirm(
   options: Record<string, unknown>
 ): Promise<void> {
   const chAny = channel as any;
+  const isConfirmChannel =
+    (typeof chAny.publish === 'function' && chAny.publish.length >= 5) ||
+    typeof chAny.waitForConfirms === 'function';
+
+  if (!isConfirmChannel) {
+    throw new Error('El canal proporcionado no es un ConfirmChannel de RabbitMQ (no soporta Publisher Confirms)');
+  }
+
   if (typeof chAny.publish === 'function' && chAny.publish.length >= 5) {
     await new Promise<void>((resolve, reject) => {
       const ok = chAny.publish(exchange, routingKey, content, options, (err: any) => {
@@ -44,9 +53,7 @@ export async function publishWithConfirm(
     });
   } else {
     channel.publish(exchange, routingKey, content, options as any);
-    if (typeof chAny.waitForConfirms === 'function') {
-      await chAny.waitForConfirms();
-    }
+    await chAny.waitForConfirms();
   }
 }
 
@@ -125,6 +132,15 @@ export class EventConsumer {
       return;
     }
 
+    // Validacion formal del sobre canonico M8
+    const validation = parseEnvelope(JSON.stringify(envelope));
+    if (!validation.ok) {
+      const reason = `Envelope M8 invalido: ${(validation.errors || []).join('; ')}`;
+      this.logger.error(`${reason}. Enviando a DLQ (no reintentable).`);
+      await this.sendToDLQ(channel, msg, reason);
+      return;
+    }
+
     // 1. Reclamo atomico en Inbox tecnico (Deduplicacion y proteccion de concurrencia)
     let claimed = false;
     try {
@@ -147,10 +163,10 @@ export class EventConsumer {
 
     // 2. Localizar handler registrado
     const handler = this.handlers.get(envelope.eventType);
-    if (!handler) {
-      this.logger.warn(`No hay handler registrado para eventType ${envelope.eventType}. ACK.`);
-      await this.inboxStore.markAsCompleted(this.consumerId, envelope.messageId);
-      channel.ack(msg);
+    if (!handler || envelope.eventType === 'UnknownEvent') {
+      this.logger.warn(`No hay handler registrado para eventType ${envelope.eventType}. Enviando a DLQ (no reintentable).`);
+      await this.inboxStore.releaseClaim(this.consumerId, envelope.messageId);
+      await this.sendToDLQ(channel, msg, `Sin handler registrado para eventType: ${envelope.eventType}`);
       return;
     }
 
@@ -201,4 +217,3 @@ export class EventConsumer {
     channel.ack(msg);
   }
 }
-
