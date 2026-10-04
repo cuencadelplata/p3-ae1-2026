@@ -40,16 +40,25 @@ export async function autorizarMetodoPago(req: Request, res: Response) {
     const viajeId = String(req.params.viajeId);
     const { idOrden, total } = req.body;
 
-    const montoTotal = typeof total === "number" ? total : 1000;
+    if (!idOrden) {
+      res.status(400).json({ mensaje: "idOrden es requerido" });
+      return;
+    }
+    if (typeof total !== "number") {
+      res.status(400).json({ mensaje: "total es requerido" });
+      return;
+    }
 
-    const resultadoPago = await procesarPagoMercadoPago(viajeId, montoTotal);
+    const resultadoPago = await procesarPagoMercadoPago(viajeId, total);
 
     if (resultadoPago.status !== "approved") {
       res.status(402).json({ mensaje: "El pago fue rechazado por Mercado Pago" });
       return;
     }
 
-    const metodoPago = autorizarPago(viajeId, idOrden ?? `ord_${Date.now()}`, resultadoPago.paymentId);
+    const metodoPago = autorizarPago(viajeId, idOrden);
+    metodoPago.paymentId = resultadoPago.paymentId;
+
     res.status(200).json(metodoPago);
   } catch (error) {
     res.status(400).json({
