@@ -14,6 +14,24 @@ export interface SupportAppDeps {
   legacyEvents: boolean;
 }
 
+// Rutas de tickets, relativas a /tickets.
+const TICKET_ROUTES = [
+  { method: 'post', path: '/', handler: 'crearTicket' },
+  { method: 'get', path: '/:id', handler: 'obtenerTicket' },
+  { method: 'patch', path: '/:id/estado', handler: 'actualizarEstado' },
+  { method: 'get', path: '/:id/historial', handler: 'obtenerHistorial' },
+  { method: 'get', path: '/', handler: 'listarTodos' },
+] as const;
+
+const LEGACY_EVENT_ROUTE = { method: 'post', path: '/events/publish' } as const;
+
+// Rutas de la API que documenta el contrato OpenAPI (openapi/rf85-support.yaml).
+// El test de contrato verifica que ambas listas coincidan.
+export const SUPPORT_API_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
+  ...TICKET_ROUTES.map(({ method, path }) => ({ method, path: path === '/' ? '/tickets' : `/tickets${path}` })),
+  LEGACY_EVENT_ROUTE,
+];
+
 // Endpoints RF-8.5 (Gestión de tickets de Soporte). Es lo único que necesita
 // registrar una app común de M8: incluye su correlationId y su manejo de
 // errores, acotados a /tickets.
@@ -22,11 +40,9 @@ export function registerSupportRoutes(router: IRouter, deps: SupportAppDeps) {
   const tickets = express.Router();
 
   tickets.use(correlationId);
-  tickets.post('/', controller.crearTicket);
-  tickets.get('/:id', controller.obtenerTicket);
-  tickets.patch('/:id/estado', controller.actualizarEstado);
-  tickets.get('/:id/historial', controller.obtenerHistorial);
-  tickets.get('/', controller.listarTodos);
+  for (const { method, path, handler } of TICKET_ROUTES) {
+    tickets[method](path, controller[handler]);
+  }
   tickets.use(supportErrorHandler);
 
   router.use('/tickets', tickets);
@@ -34,14 +50,14 @@ export function registerSupportRoutes(router: IRouter, deps: SupportAppDeps) {
 
 // Endpoint RF-8.6 / Pruebas de RabbitMQ (heredado de AE1)
 export function registerLegacyEventRoutes(router: IRouter) {
-  router.post('/events/publish', publicarEvento);
+  router[LEGACY_EVENT_ROUTE.method](LEGACY_EVENT_ROUTE.path, publicarEvento);
 }
 
 function loadOpenapi() {
   const openapiPath = [
     path.resolve(process.cwd(), 'openapi.yaml'),
-    path.resolve(process.cwd(), '../../openapi/support.openapi.yaml'),
-    path.resolve(process.cwd(), 'openapi/support.openapi.yaml'),
+    path.resolve(process.cwd(), '../../openapi/rf85-support.yaml'),
+    path.resolve(process.cwd(), 'openapi/rf85-support.yaml'),
   ].find((candidate) => fs.existsSync(candidate));
 
   if (!openapiPath) {
