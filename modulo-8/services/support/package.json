@@ -17,6 +17,7 @@
     "@scalar/express-api-reference": "^0.10.18",
     "amqplib": "^0.10.4",
     "express": "5.0.0",
+    "pg": "^8.23.0",
     "qrcode": "^1.5.3",
     "yaml": "^2.5.0"
   },
@@ -24,6 +25,7 @@
     "@types/amqplib": "^0.10.5",
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.5",
     "@types/supertest": "^6.0.2",
     "playwright": "^1.46.0",
