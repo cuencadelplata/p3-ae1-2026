@@ -1,0 +1,68 @@
+services:
+  m7-app:
+    build: .
+    container_name: m7-app
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/historial
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      CARGO_CANCELACION_URL: http://cargo-cancelacion:3007
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      cargo-cancelacion:
+        condition: service_started
+    restart: on-failure
+
+  db:
+    image: postgres:16-alpine
+    container_name: m7-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: historial
+    volumes:
+      - m7-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d historial"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: m7-redis
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: m7-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+
+  cargo-cancelacion:
+    image: node:20-alpine
+    container_name: m7-cargo-cancelacion
+    ports:
+      - "3007:3007"
+    command: >
+      node -e "require('http').createServer((q,s)=>{let b='';q.on('data',d=>b+=d);q.on('end',()=>{const r=JSON.parse(b||'{}');s.setHeader('Content-Type','application/json');s.end(JSON.stringify({tripId:r.tripId,requestedBy:r.requestedBy,charge:r.requestedBy==='cliente'?1000:0,currency:'ARS'}))})}).listen(3007)"
+
+volumes:
+  m7-db-data:
