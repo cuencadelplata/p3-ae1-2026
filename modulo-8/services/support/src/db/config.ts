@@ -5,6 +5,7 @@ export interface SupportDbConfig {
 }
 
 export const DEFAULT_SUPPORT_SCHEMA = 'support';
+const DEFAULT_RETRY_MS = 5000;
 
 // El nombre del schema se interpola en el SQL (no admite parámetros), por eso
 // sólo se acepta un identificador simple en minúsculas.
@@ -31,4 +32,13 @@ export function loadSupportDbConfig(env: NodeJS.ProcessEnv = process.env): Suppo
     databaseUrl,
     schema: assertSchemaIdentifier(env.SUPPORT_DB_SCHEMA ?? DEFAULT_SUPPORT_SCHEMA),
   };
+}
+
+// Espera entre intentos de aplicar las migraciones al arrancar, en milisegundos.
+export function loadDatabaseRetryMs(env: NodeJS.ProcessEnv = process.env): number {
+  const retryMs = env.SUPPORT_DB_RETRY_MS === undefined ? DEFAULT_RETRY_MS : Number(env.SUPPORT_DB_RETRY_MS);
+  if (!Number.isInteger(retryMs) || retryMs < 1) {
+    throw new Error(`SUPPORT_DB_RETRY_MS debe ser un entero positivo de milisegundos: "${env.SUPPORT_DB_RETRY_MS}"`);
+  }
+  return retryMs;
 }

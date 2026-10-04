@@ -65,7 +65,8 @@ function statements(schema: string): string[] {
 /** Clave arbitraria del bloqueo consultivo que serializa las migraciones de Support. */
 const MIGRATION_LOCK_KEY = 8_005_001;
 
-const SCHEMA_SETUP_COMMAND = 'docker compose exec postgres sh /docker-entrypoint-initdb.d/02-support.sh';
+/** Crea el rol y el schema de Support en un volumen PostgreSQL que ya existía. */
+export const SCHEMA_SETUP_COMMAND = 'docker compose exec postgres sh /docker-entrypoint-initdb.d/02-support.sh';
 
 /** El schema de Support todavía no existe en la base: falta correr el init. */
 export class SupportSchemaMissingError extends Error {
