@@ -3,6 +3,31 @@ import { TicketStatus } from '../models/ticket.model.js';
 import { RabbitMQConsumer } from '../rabbitmq/consumer.js';
 import { TicketService } from '../services/ticket.service.js';
 
+function esTextoNoVacio(valor: unknown): valor is string {
+  return typeof valor === 'string' && valor.trim() !== '';
+}
+
+// tripId identifica el viaje; viajeId se acepta como alias deprecado. Son
+// strings opacos: un número u objeto no se convierte, se rechaza.
+function resolverTripId(body: Record<string, unknown>): { tripId: string } | { error: string } {
+  const { tripId, viajeId } = body;
+
+  if (tripId === undefined && viajeId === undefined) {
+    return { error: 'tripId es requerido' };
+  }
+  if (tripId !== undefined && !esTextoNoVacio(tripId)) {
+    return { error: 'tripId debe ser un texto no vacío' };
+  }
+  if (viajeId !== undefined && !esTextoNoVacio(viajeId)) {
+    return { error: 'viajeId debe ser un texto no vacío' };
+  }
+  if (tripId !== undefined && viajeId !== undefined && tripId !== viajeId) {
+    return { error: 'tripId y viajeId no coinciden' };
+  }
+
+  return { tripId: (tripId ?? viajeId) as string };
+}
+
 export interface SupportControllerDeps {
   ticketService: TicketService;
 }
@@ -12,15 +37,20 @@ export function createSupportController({ ticketService }: SupportControllerDeps
 
     // Endpoint: POST /tickets
     async crearTicket(req: Request, res: Response) {
-      const { viajeId, motivo } = req.body;
+      const body = req.body ?? {};
 
       // Validación básica
-      if (!viajeId || !motivo) {
-        res.status(400).json({ error: 'viajeId y motivo son requeridos' });
+      const viaje = resolverTripId(body);
+      if ('error' in viaje) {
+        res.status(400).json({ error: viaje.error });
+        return;
+      }
+      if (!esTextoNoVacio(body.motivo)) {
+        res.status(400).json({ error: 'motivo debe ser un texto no vacío' });
         return;
       }
 
-      const nuevoTicket = await ticketService.crearTicket(viajeId, motivo);
+      const nuevoTicket = await ticketService.crearTicket(viaje.tripId, body.motivo);
 
       res.status(201).json(nuevoTicket);
     },
