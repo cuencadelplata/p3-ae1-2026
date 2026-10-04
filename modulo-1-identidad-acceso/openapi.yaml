@@ -84,6 +84,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: >-
+            Demasiados intentos fallidos desde la misma IP (por defecto 5 en 60 segundos).
+            El contador se guarda en Redis.
+          headers:
+            Retry-After:
+              description: Segundos que faltan para poder volver a intentar
+              schema: { type: integer, example: 42 }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string, example: Demasiados intentos fallidos. Intentá de nuevo más tarde }
+                  retryAfterSeconds: { type: integer, example: 42 }
   /auth/validar-identidad-y-rol:
     get:
       tags: [Identidad y acceso]

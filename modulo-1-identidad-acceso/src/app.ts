@@ -9,6 +9,12 @@ import authRoutes from "./routes/auth.routes";
 
 const app = express();
 
+// Solo si la API corre detrás de un proxy (nginx, gateway) que agrega X-Forwarded-For.
+// Si se activa sin proxy, un cliente podría falsificar su IP y saltearse el rate limit.
+if (process.env.TRUST_PROXY === "true") {
+    app.set("trust proxy", true);
+}
+
 const openapiPath = path.join(
     process.cwd(),
     "openapi.yaml"

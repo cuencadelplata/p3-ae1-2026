@@ -12,6 +12,7 @@ import {
     oauth2LinkAccount
 } from "../controllers/recovery.controller";
 import { authenticateToken } from "../middleware/auth.middleware";
+import { loginRateLimit } from "../middleware/login-rate-limit.middleware";
 
 const router = Router();
 
@@ -21,8 +22,10 @@ router.post(
     register
 );
 
+// RF-1.2: rate limiting con Redis antes de validar credenciales
 router.post(
     "/iniciar-sesion",
+    loginRateLimit,
     login
 );
 
