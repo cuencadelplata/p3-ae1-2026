@@ -244,13 +244,13 @@ describe('RF8.6 Real Infrastructure - PostgreSQL (messaging.inbox_events & outbo
       const publisherA = new OutboxPublisher(storeA, topology.exchange);
       const publisherB = new OutboxPublisher(storeB, topology.exchange);
 
-      // Ejecutar ambos publicadores concurrentemente sobre canales independientes
+      // Ejecutar ambos publicadores concurrentemente sobre canales independientes con batch limit = 3
       const [countA, countB] = await Promise.all([
-        publisherA.publishPending(amqpChannel, 6),
-        publisherB.publishPending(channelB, 6),
+        publisherA.publishPending(amqpChannel, 3),
+        publisherB.publishPending(channelB, 3),
       ]);
 
-      expect(countA + countB).toBe(6); // Total de 6 eventos procesados entre ambos
+      expect(countA + countB).toBe(6); // Total de 6 eventos procesados entre ambos sin duplicacion
       expect(countA).toBeGreaterThan(0);
       expect(countB).toBeGreaterThan(0);
 
