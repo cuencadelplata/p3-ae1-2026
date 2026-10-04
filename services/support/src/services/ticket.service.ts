@@ -10,8 +10,8 @@ export class TicketService {
     private readonly eventPublisher: SupportEventPublisher,
   ) {}
 
-  async crearTicket(viajeId: string, motivo: string): Promise<Ticket> {
-    const nuevoTicket = await this.repository.crear(viajeId, motivo);
+  async crearTicket(tripId: string, motivo: string): Promise<Ticket> {
+    const nuevoTicket = await this.repository.crear(tripId, motivo);
     await this.eventPublisher.publish('ticket.creado', nuevoTicket);
     return nuevoTicket;
   }

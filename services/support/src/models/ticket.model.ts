@@ -7,6 +7,9 @@ export type TicketStatus = 'ABIERTO' | 'EN_PROCESO' | 'RESUELTO';
 // Interfaz que define cómo luce un Ticket
 export interface Ticket {
   id: string;
+  // Identificador del viaje: string opaco definido por otro módulo.
+  tripId: string;
+  // Alias deprecado de tripId; se mantiene mientras dure la transición.
   viajeId: string;
   motivo: string;
   estado: TicketStatus;
@@ -18,10 +21,11 @@ export class InMemoryTicketRepository implements TicketRepository {
   private tickets: Ticket[] = [];
 
   // Método para crear un nuevo ticket
-  async crear(viajeId: string, motivo: string): Promise<Ticket> {
+  async crear(tripId: string, motivo: string): Promise<Ticket> {
     const nuevoTicket: Ticket = {
       id: crypto.randomUUID(), // Genera un ID único al azar
-      viajeId,
+      tripId,
+      viajeId: tripId,
       motivo,
       estado: 'ABIERTO',
       fechaCreacion: new Date().toISOString()
