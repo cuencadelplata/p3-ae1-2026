@@ -1,13 +1,11 @@
 ﻿import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
 import { redis } from '../../src/cache/redis';
-import { env } from '../../src/config/env';
 import { AppError } from '../../src/errors/app-error';
 import {
   authorizeReceiptPermission,
-  verifyM1Token,
+  createM1IdentityValidator,
   type AuthenticatedUser,
 } from '../../src/middlewares/auth.middleware';
 import type { Receipt } from '../../src/models/receipt';
@@ -20,18 +18,13 @@ import {
 } from '../../src/services/resend-protection.service';
 import { validateResendRequest } from '../../src/validators/receipt.validator';
 
-function makeJwt(payload: object, secret: string = env.jwtSecret): string {
-  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const signature = createHmac('sha256', secret).update(`${header}.${body}`).digest('base64url');
-  return `${header}.${body}.${signature}`;
-}
-
 const mockReceipt: Receipt = {
   receiptId: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
   receiptNumber: 'CMP-2026-TEST001',
   tripId: 'trip-resend-test-01',
   issuedAt: new Date().toISOString(),
+  customerUserId: 101,
+  driverUserId: 202,
   customer: {
     id: 'cli-101',
     fullName: 'Lucas Cremaschi',
@@ -68,59 +61,71 @@ const mockReceipt: Receipt = {
 
 describe('RF-8.4: Reenvio de comprobante (Lucas Cremaschi)', () => {
   describe('Integracion con M1 - Autenticacion y Permisos', () => {
-    it('debe validar un token JWT correcto emitido por M1', () => {
-      const token = makeJwt({ userId: 'cli-101', role: 'CLIENTE' });
-      const user = verifyM1Token(token);
-      assert.equal(user.userId, 'cli-101');
+    it('debe usar M1 para validar el Bearer y conservar el userId numerico', async () => {
+      let authorization = '';
+      const validator = createM1IdentityValidator(
+        'http://m1.test/auth/validar-identidad-y-rol',
+        100,
+        async (_url, options) => {
+          authorization = new Headers(options?.headers).get('authorization') ?? '';
+          return new Response(JSON.stringify({ userId: 101, role: 'CLIENTE' }), { status: 200 });
+        },
+      );
+
+      const user = await validator('Bearer token-de-m1');
+      assert.equal(authorization, 'Bearer token-de-m1');
+      assert.equal(user.userId, 101);
       assert.equal(user.role, 'CLIENTE');
     });
 
-    it('debe rechazar un token con firma alterada', () => {
-      const token = makeJwt({ userId: 'cli-101', role: 'CLIENTE' }, 'clave-falsa');
-      assert.throws(() => verifyM1Token(token), (err: unknown) => {
-        return err instanceof AppError && err.code === 'INVALID_TOKEN_SIGNATURE';
+    it('debe rechazar una identidad M1 con userId no numerico', async () => {
+      const validator = createM1IdentityValidator(
+        'http://m1.test/auth/validar-identidad-y-rol',
+        100,
+        async () => new Response(JSON.stringify({ userId: '101', role: 'CLIENTE' }), { status: 200 }),
+      );
+      await assert.rejects(() => validator('Bearer token-de-m1'), (err: unknown) => {
+        return err instanceof AppError && err.code === 'M1_IDENTITY_INVALID_RESPONSE';
       });
     });
 
-    it('debe rechazar un token expirado', () => {
-      const expiredTimestamp = Math.floor(Date.now() / 1000) - 100;
-      const token = makeJwt({ userId: 'cli-101', role: 'CLIENTE', exp: expiredTimestamp });
-      assert.throws(() => verifyM1Token(token), (err: unknown) => {
-        return err instanceof AppError && err.code === 'TOKEN_EXPIRED';
+    it('debe propagar el rechazo de un Bearer informado por M1', async () => {
+      const validator = createM1IdentityValidator(
+        'http://m1.test/auth/validar-identidad-y-rol',
+        100,
+        async () => new Response(null, { status: 401 }),
+      );
+      await assert.rejects(() => validator('Bearer token-invalido'), (err: unknown) => {
+        return err instanceof AppError && err.status === 401 && err.code === 'INVALID_AUTH_TOKEN';
       });
     });
 
     it('debe autorizar a un CLIENTE que es dueno del comprobante', () => {
-      const user: AuthenticatedUser = { userId: 'cli-101', role: 'CLIENTE' };
-      assert.doesNotThrow(() => authorizeReceiptPermission(mockReceipt, user));
-    });
-
-    it('debe autorizar a un CLIENTE con ID numerico normalizado (101 vs cli-101)', () => {
-      const user: AuthenticatedUser = { userId: '101', role: 'CLIENTE' };
+      const user: AuthenticatedUser = { userId: 101, role: 'CLIENTE' };
       assert.doesNotThrow(() => authorizeReceiptPermission(mockReceipt, user));
     });
 
     it('debe denegar acceso a un CLIENTE sobre el comprobante de otro cliente (403)', () => {
-      const user: AuthenticatedUser = { userId: 'cli-999', role: 'CLIENTE' };
+      const user: AuthenticatedUser = { userId: 999, role: 'CLIENTE' };
       assert.throws(() => authorizeReceiptPermission(mockReceipt, user), (err: unknown) => {
         return err instanceof AppError && err.status === 403 && err.code === 'INSUFFICIENT_PERMISSIONS';
       });
     });
 
     it('debe autorizar al CONDUCTOR que realizo el viaje', () => {
-      const user: AuthenticatedUser = { userId: 'cnd-202', role: 'CONDUCTOR' };
+      const user: AuthenticatedUser = { userId: 202, role: 'CONDUCTOR' };
       assert.doesNotThrow(() => authorizeReceiptPermission(mockReceipt, user));
     });
 
     it('debe denegar acceso a un CONDUCTOR ajeno al viaje (403)', () => {
-      const user: AuthenticatedUser = { userId: 'cnd-999', role: 'CONDUCTOR' };
+      const user: AuthenticatedUser = { userId: 999, role: 'CONDUCTOR' };
       assert.throws(() => authorizeReceiptPermission(mockReceipt, user), (err: unknown) => {
         return err instanceof AppError && err.status === 403 && err.code === 'INSUFFICIENT_PERMISSIONS';
       });
     });
 
     it('debe autorizar a un usuario con rol OPERADOR sobre cualquier comprobante', () => {
-      const user: AuthenticatedUser = { userId: 'op-001', role: 'OPERADOR' };
+      const user: AuthenticatedUser = { userId: 1, role: 'OPERADOR' };
       assert.doesNotThrow(() => authorizeReceiptPermission(mockReceipt, user));
     });
   });

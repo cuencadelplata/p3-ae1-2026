@@ -29,8 +29,8 @@ servers:
   - url: /api/v1
     description: Servidor relativo
 
-# Sin autenticacion propia: la identidad y los permisos son responsabilidad de la
-# plataforma (M1 - Identidad), fuera del alcance de este servicio en AE2.
+# M8 no administra credenciales propias. Las operaciones RF-8.4 que corresponden
+# a un usuario validan el Bearer mediante M1 - Identidad.
 security: []
 
 tags:
@@ -75,6 +75,8 @@ paths:
               $ref: '#/components/schemas/ReceiptRequest'
             example:
               tripId: "trip-2026-000123"
+              customerUserId: 91
+              driverUserId: 457
               customer:
                 id: "cli-0091"
                 fullName: "Lucia Fernandez"
@@ -195,8 +197,10 @@ paths:
       summary: Consulta los metadatos y enlaces de descarga del comprobante
       description: >-
         Devuelve la información detallada del comprobante emitido, su historial de entregas y los enlaces de descarga.
-        Ruta de uso interno y de operación: no tiene control de acceso hasta la integración con M1 en AE4 (ver ADR-003, decisión 5).
+        Requiere un Bearer de usuario validado por M1 y autorización sobre el comprobante.
       operationId: getReceipt
+      security:
+        - BearerAuth: []
       parameters:
         - name: tripId
           in: path
@@ -217,7 +221,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: No existe un comprobante para el tripId indicado
           content:
@@ -234,9 +242,11 @@ paths:
       summary: Descarga directa del archivo PDF del comprobante (RF-8.3)
       description: >-
         Retorna el flujo binario del archivo PDF generado, con encabezado `Content-Disposition: attachment`.
-        Ruta de uso interno y de operación: no tiene control de acceso hasta la integración con M1 en AE4.
+        Requiere un Bearer de usuario validado por M1 y autorización sobre el comprobante.
         La entrega al cliente se hace con el enlace temporal (`/receipts/downloads/{token}`); ver ADR-003, decisión 5.
       operationId: downloadReceiptPdf
+      security:
+        - BearerAuth: []
       parameters:
         - name: tripId
           in: path
@@ -258,7 +268,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: Comprobante no encontrado
           content:
@@ -332,6 +346,8 @@ paths:
       description: |
         Vuelve a solicitar el envío del comprobante enviando el tripId en el cuerpo de la petición JSON.
       operationId: resendReceiptWithBody
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -354,7 +370,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: Comprobante no encontrado
           content:
@@ -385,6 +405,8 @@ paths:
         Vuelve a solicitar el envío del comprobante por correo electrónico, SMS o notificación push.
         Si no se indica destino en el cuerpo, utiliza el email registrado del cliente.
       operationId: resendReceipt
+      security:
+        - BearerAuth: []
       parameters:
         - name: tripId
           in: path
@@ -414,7 +436,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: Comprobante no encontrado
           content:
@@ -536,7 +562,25 @@ paths:
                 $ref: '#/components/schemas/ReadinessResponse'
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Bearer del usuario validado por M1 mediante su endpoint de identidad.
   responses:
+    Unauthorized:
+      description: Falta el Bearer o M1 no lo reconoce.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: El usuario autenticado no es dueño del comprobante ni operador autorizado.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     DependencyUnavailable:
       description: |
         Una dependencia no está disponible: la base de datos (`DATABASE_UNAVAILABLE`), el autorizador
@@ -643,6 +687,18 @@ components:
           type: string
           pattern: '^[A-Za-z0-9_-]{1,64}$'
           example: "trip-2026-000123"
+        customerUserId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Identificador canónico numérico del cliente en M1. Se conserva para autorizar consultas y reenvíos de RF-8.4.
+          example: 91
+        driverUserId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Identificador canónico numérico del conductor en M1. Se conserva para autorizar consultas y reenvíos de RF-8.4.
+          example: 457
         customer:
           $ref: '#/components/schemas/Customer'
         driver:

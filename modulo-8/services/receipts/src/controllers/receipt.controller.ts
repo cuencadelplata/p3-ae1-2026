@@ -19,8 +19,9 @@ function readTripId(raw: unknown): string {
 }
 
 function toResponse(receipt: Receipt) {
+  const { customerUserId: _customerUserId, driverUserId: _driverUserId, ...publicReceipt } = receipt;
   return {
-    ...receipt,
+    ...publicReceipt,
     pdf: {
       downloadUrl: `${env.publicBaseUrl}${env.apiPrefix}/receipts/${receipt.tripId}/pdf`,
     },
