@@ -71,7 +71,7 @@ test('Infraestructura Real - PostgreSQL + RabbitMQ E2E (RF8.7 + RF8.6)', async (
   await t.test('E2E Real: Publicacion en mobility.events -> Consumo real -> Persistencia PostgreSQL -> Push Sandbox', async () => {
     const testUserId = Math.floor(Math.random() * 800000) + 100000;
     const testToken = `fcm_real_infra_${randomUUID()}`;
-    const testMessageId = `real-msg-${randomUUID()}`;
+    const testMessageId = randomUUID();
     const testNotificationId = randomUUID();
     const testTripId = `trip-real-${randomUUID().slice(0, 8)}`;
 
@@ -121,7 +121,12 @@ test('Infraestructura Real - PostgreSQL + RabbitMQ E2E (RF8.7 + RF8.6)', async (
     assert.ok(deliveryRecord?.attempts.length >= 1, 'Debe haber al menos 1 intento registrado en PostgreSQL');
 
     // 4. Verificar Inbox técnico persistido en messaging.inbox_events
-    const hasBeenProcessed = await inboxStore.hasBeenProcessed('m8.delivery.notification-requested', testMessageId);
+    let hasBeenProcessed = false;
+    for (let i = 0; i < 25; i++) {
+      hasBeenProcessed = await inboxStore.hasBeenProcessed('m8.delivery.notification-requested', testMessageId);
+      if (hasBeenProcessed) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
     assert.equal(hasBeenProcessed, true, 'messaging.inbox_events debe registrar el evento como completado');
 
     // 5. Redelivery del mismo mensaje: no debe duplicar en PostgreSQL ni en sandbox
