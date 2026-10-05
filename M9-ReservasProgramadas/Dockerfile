@@ -3,10 +3,12 @@ FROM node:22-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm install
 
 COPY tsconfig.json ./
+COPY prisma ./prisma
 COPY src ./src
+RUN npx prisma generate --schema=./prisma/schema.prisma
 RUN npm run build
 RUN npm prune --omit=dev && npm cache clean --force
 

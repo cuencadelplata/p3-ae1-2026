@@ -17,6 +17,8 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+    networks:
+      - reservas-network
 
   m9-reservas:
     image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v1.0.0}
@@ -26,6 +28,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: ${PORT:-3000}
+      DATABASE_URL: postgresql://reservas:reservas_dev@postgres:5432/reservas?schema=public
       M5_URL: http://m5-stub:3001
       M7_URL: http://m7-stub:3002
       RESERVATION_JOB_INTERVAL: ${RESERVATION_JOB_INTERVAL:-*/30 * * * * *}
@@ -37,6 +40,8 @@ services:
       timeout: 3s
       retries: 5
     depends_on:
+      postgres:
+        condition: service_healthy
       m5-stub:
         condition: service_healthy
       m7-stub:
