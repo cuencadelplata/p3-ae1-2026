@@ -23,6 +23,18 @@ export type FinalizacionAtomicaResult =
     | { kind: 'invalid-state'; estado: string }
     | { kind: 'completed'; viaje: Viaje; finalizacion: FinalizacionPersistida };
 
+export interface HistorialTransicion {
+    from: string;
+    to: string;
+    timestamp: Date;
+    detalle?: string;
+}
+
+export interface ViajeConHistorial extends Omit<Viaje, 'codigoVerificacion' | 'qrCode' | 'qrExpiresAt'> {
+    finalizacion: FinalizacionPersistida | null;
+    historialTransiciones: HistorialTransicion[];
+}
+
 let extensionSchemaPromise: Promise<void> | undefined;
 
 async function ensureExtensionSchema(): Promise<void> {
@@ -42,6 +54,8 @@ async function ensureExtensionSchema(): Promise<void> {
         );
         CREATE INDEX IF NOT EXISTS viaje_transiciones_viaje_id_id_idx
             ON viaje_transiciones(viaje_id, id);
+        CREATE INDEX IF NOT EXISTS viajes_cliente_id_fecha_idx
+            ON viajes(cliente_id, fecha_creacion DESC, id DESC);
     `).then(() => undefined).catch((error: unknown) => {
         extensionSchemaPromise = undefined;
         throw error;
@@ -92,6 +106,55 @@ export async function buscarPorId(id: string): Promise<Viaje | null> {
     const { rows } = await pool.query('SELECT * FROM viajes WHERE id = $1', [id]);
     if (rows.length === 0) return null;
     return mapRow(rows[0]);
+}
+
+export async function buscarViajesPorCliente(clienteId: string): Promise<ViajeConHistorial[]> {
+    await ensureExtensionSchema();
+    const { rows } = await pool.query(
+        `SELECT viajes.*, viaje_finalizaciones.data AS finalizacion_data
+         FROM viajes
+         LEFT JOIN viaje_finalizaciones ON viaje_finalizaciones.viaje_id = viajes.id
+         WHERE viajes.cliente_id = $1
+         ORDER BY viajes.fecha_creacion DESC, viajes.id DESC`,
+        [clienteId]
+    );
+    if (rows.length === 0) return [];
+
+    const viajes: ViajeConHistorial[] = rows.map((row) => {
+        const viaje = mapRow(row);
+        return {
+            id: viaje.id,
+            clienteId: viaje.clienteId,
+            ...(viaje.conductorId ? { conductorId: viaje.conductorId } : {}),
+            estado: viaje.estado,
+            origen: viaje.origen,
+            destino: viaje.destino,
+            fechaCreacion: viaje.fechaCreacion,
+            finalizacion: parseFinalizacion(row.finalizacion_data),
+            historialTransiciones: [],
+        };
+    });
+    const viajesPorId = new Map(viajes.map((viaje) => [viaje.id, viaje]));
+    const ids = viajes.map((viaje) => viaje.id);
+    const historialResult = await pool.query(
+        `SELECT viaje_id, estado_anterior, estado_nuevo, timestamp, detalle
+         FROM viaje_transiciones
+         WHERE viaje_id = ANY($1::varchar[])
+         ORDER BY viaje_id, id`,
+        [ids]
+    );
+
+    for (const row of historialResult.rows) {
+        const viaje = viajesPorId.get(row.viaje_id as string);
+        if (!viaje) continue;
+        viaje.historialTransiciones.push({
+            from: estadoHistorial(row.estado_anterior as string),
+            to: estadoHistorial(row.estado_nuevo as string),
+            timestamp: row.timestamp as Date,
+            ...(row.detalle ? { detalle: row.detalle as string } : {}),
+        });
+    }
+    return viajes;
 }
 
 export async function cancelarSiCancelable(id: string, actor?: string, motivo?: string): Promise<Viaje | null> {
@@ -207,6 +270,35 @@ export async function finalizarSiEnCurso(
     } finally {
         client.release();
     }
+}
+
+export function estadoHistorial(estado: string): string {
+    switch (estado) {
+        case EstadoViaje.SOLICITADO:
+            return 'solicitado';
+        case EstadoViaje.CONDUCTOR_EN_CAMINO:
+        case EstadoViaje.ARRIBADO:
+            return 'asignado';
+        case EstadoViaje.EN_CURSO:
+            return 'en curso';
+        case EstadoViaje.COMPLETADO:
+            return 'completado';
+        case EstadoViaje.CANCELADO:
+            return 'cancelado';
+        default:
+            return estado.toLowerCase();
+    }
+}
+
+function parseFinalizacion(value: unknown): FinalizacionPersistida | null {
+    if (!value) return null;
+    const data = typeof value === 'string'
+        ? JSON.parse(value) as FinalizacionPersistida
+        : value as FinalizacionPersistida;
+    return {
+        ...data,
+        horaFin: new Date(data.horaFin),
+    };
 }
 
 export async function buscarHistorialTransiciones(

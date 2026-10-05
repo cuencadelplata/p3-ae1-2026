@@ -1,5 +1,6 @@
 import express from 'express';
 import viajesRoutes from './routes/viajes.routes.js';
+import clientesRoutes from './routes/clientes.routes.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,6 +14,7 @@ app.get('/health', (_req, res) => {
 
 // Enlazamos las rutas del modulo
 app.use('/api/viajes', viajesRoutes);
+app.use('/api/clientes', clientesRoutes);
 
 app.listen(PORT, () => {
     console.log(`Servidor del modulo corriendo en http://localhost:${PORT}`);

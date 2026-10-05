@@ -12,6 +12,7 @@ import {
     type CoordenadasFinalizacion,
     type DatosFinalizacion,
 } from '../services/finalizacion.service.js';
+import { estadoHistorial } from '../repositories/viaje.repository.js';
 
 class ErrorValidacionFinalizacion extends Error {}
 
@@ -265,23 +266,20 @@ export const obtenerHistorialTransiciones = async (req: Request, res: Response):
     }
 };
 
-function estadoHistorial(estado: string): string {
-    switch (estado) {
-        case EstadoViaje.SOLICITADO:
-            return 'solicitado';
-        case EstadoViaje.CONDUCTOR_EN_CAMINO:
-        case EstadoViaje.ARRIBADO:
-            return 'asignado';
-        case EstadoViaje.EN_CURSO:
-            return 'en curso';
-        case EstadoViaje.COMPLETADO:
-            return 'completado';
-        case EstadoViaje.CANCELADO:
-            return 'cancelado';
-        default:
-            return estado.toLowerCase();
+export const obtenerViajesDeCliente = async (req: Request, res: Response): Promise<any> => {
+    const { clienteId } = req.params;
+    if (typeof clienteId !== 'string' || !clienteId.trim()) {
+        return res.status(400).json({ error: 'Falta el id del cliente en la URL' });
     }
-}
+
+    try {
+        const viajes = await viajeRepo.buscarViajesPorCliente(clienteId);
+        return res.json({ clienteId, viajes });
+    } catch (error) {
+        console.error('ERROR EN viajeRepo.buscarViajesPorCliente:', error);
+        return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
+    }
+};
 
 export const asignarConductor = async (req: Request, res: Response): Promise<any> => {
     const { id } = req.params;

@@ -225,6 +225,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/clientes/{clienteId}/viajes:
+    get:
+      tags:
+        - Viajes
+      summary: Consultar viajes e historial de un cliente
+      description: |
+        Devuelve los viajes del cliente, cada uno con su historial de transiciones y los datos de finalización si existen.
+        Este endpoint no tiene autenticación ni autorización propias; debe restringirse a consumidores de confianza en la red o gateway.
+      operationId: obtenerViajesDeCliente
+      parameters:
+        - name: clienteId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Viajes del cliente; la lista puede estar vacía
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajesClienteResponse'
+        '503':
+          description: TripDB no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/viajes/{id}/asignar:
     post:
       tags:
@@ -574,6 +603,52 @@ components:
               to: { type: string }
               timestamp: { type: string, format: date-time }
               detalle: { type: string }
+
+    ViajesClienteResponse:
+      type: object
+      required: [clienteId, viajes]
+      properties:
+        clienteId:
+          type: string
+        viajes:
+          type: array
+          items:
+            type: object
+            required: [id, clienteId, estado, historialTransiciones, finalizacion]
+            properties:
+              id: { type: string }
+              clienteId: { type: string }
+              conductorId: { type: string, nullable: true }
+              estado:
+                $ref: '#/components/schemas/EstadoViaje'
+              origen: { type: string }
+              destino: { type: string }
+              fechaCreacion: { type: string, format: date-time }
+              finalizacion:
+                $ref: '#/components/schemas/FinalizacionDetails'
+                nullable: true
+              historialTransiciones:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HistorialTransicionesResponse/properties/historial/items'
+
+    FinalizacionDetails:
+      type: object
+      required: [tiempoMinutos, distanciaKm, horaFin, metodoPago, total, tipoVehiculo, fuenteMetrica, metricasEstimadas, paymentId]
+      properties:
+        tiempoMinutos: { type: number }
+        distanciaKm: { type: number }
+        horaFin: { type: string, format: date-time }
+        metodoPago: { type: string }
+        total: { type: number }
+        origen:
+          $ref: '#/components/schemas/CoordenadasFinalizacion'
+        destino:
+          $ref: '#/components/schemas/CoordenadasFinalizacion'
+        tipoVehiculo: { type: string, enum: [auto, moto] }
+        fuenteMetrica: { type: string, enum: [M4] }
+        metricasEstimadas: { type: boolean, enum: [true] }
+        paymentId: { type: string }
 
     AsignarConductorRequest:
       type: object
