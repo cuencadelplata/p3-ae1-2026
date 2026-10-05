@@ -19,6 +19,7 @@
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@types/amqplib": "^0.10.8",
+    "@types/dotenv": "^6.1.1",
     "@types/express": "^5.0.6",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.23.1",

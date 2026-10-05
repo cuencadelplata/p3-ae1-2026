@@ -1,4 +1,5 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config();
 import express from "express";
 import { apiReference } from "@scalar/express-api-reference";
 import fs from "fs";
@@ -9,7 +10,7 @@ import { config } from "./config";
 import { inicializarBaseDatos } from "./infraestructura/basedatos";
 import { conectarRedis, redisBreaker } from "./infraestructura/redis";
 import { iniciarRabbit } from "./infraestructura/rabbit";
-import { cargoCancelacionBreaker } from "./reintegro/cargoCancelacionClient";
+import { cargoCancelacionBreaker } from "./reintegro/obtenerCargo";
 
 import estimacionTarifaRouter from "./estimacion-tarifa/estimacion-tarifa";
 import rutaPago from "./metodo-pago/rutaPago";
