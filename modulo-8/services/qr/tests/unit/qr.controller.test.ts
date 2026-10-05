@@ -27,7 +27,7 @@ function createRes(): Response {
 function createServiceDouble(): QrService {
   return {
     generateQr: vi.fn<(tripId: string) => Promise<QrGenerationResponse>>(),
-    validateQr: vi.fn<(tripId: string, token: string) => QrValidationResponse>(),
+    validateQr: vi.fn<(tripId: string, token: string) => Promise<QrValidationResponse>>(),
   };
 }
 
@@ -135,14 +135,14 @@ describe("createQrHandlers — generateQr", () => {
 });
 
 describe("createQrHandlers — validateQr", () => {
-  it("responde 400 VALIDATION_ERROR con los details del validador cuando el body es inválido", () => {
+  it("responde 400 VALIDATION_ERROR con los details del validador cuando el body es inválido", async () => {
     const service = createServiceDouble();
     const handlers = createQrHandlers(service);
     const req = createReq({ tripId: "trip-demo-001" });
     const res = createRes();
     const next = vi.fn();
 
-    handlers.validateQr(req, res, next);
+    await handlers.validateQr(req, res, next);
 
     expect(service.validateQr).not.toHaveBeenCalled();
     const error = next.mock.calls[0][0] as ApiError;
@@ -151,14 +151,14 @@ describe("createQrHandlers — validateQr", () => {
     expect(error.details).toEqual([{ field: "token", reason: "Es un campo requerido." }]);
   });
 
-  it("responde 415 cuando el content-type no es application/json", () => {
+  it("responde 415 cuando el content-type no es application/json", async () => {
     const service = createServiceDouble();
     const handlers = createQrHandlers(service);
     const req = createReq({ tripId: "trip-demo-001", token: "abc" }, false);
     const res = createRes();
     const next = vi.fn();
 
-    handlers.validateQr(req, res, next);
+    await handlers.validateQr(req, res, next);
 
     expect(service.validateQr).not.toHaveBeenCalled();
     const error = next.mock.calls[0][0] as ApiError;
@@ -166,15 +166,15 @@ describe("createQrHandlers — validateQr", () => {
     expect(error.code).toBe("UNSUPPORTED_MEDIA_TYPE");
   });
 
-  it("con body válido llama al service con tripId y token, y responde 200 con el cuerpo del contrato", () => {
+  it("con body válido llama al service con tripId y token, y responde 200 con el cuerpo del contrato", async () => {
     const service = createServiceDouble();
-    vi.mocked(service.validateQr).mockReturnValue({ valid: true });
+    vi.mocked(service.validateQr).mockResolvedValue({ valid: true });
     const handlers = createQrHandlers(service);
     const req = createReq({ tripId: "trip-demo-001", token: "valor-opaco" });
     const res = createRes();
     const next = vi.fn();
 
-    handlers.validateQr(req, res, next);
+    await handlers.validateQr(req, res, next);
 
     expect(service.validateQr).toHaveBeenCalledWith("trip-demo-001", "valor-opaco");
     expect(res.status).toHaveBeenCalledWith(200);
@@ -182,35 +182,31 @@ describe("createQrHandlers — validateQr", () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it("un ApiError lanzado por el service llega a next() sin transformarse ni perderse", () => {
+  it("un ApiError lanzado por el service llega a next() sin transformarse ni perderse", async () => {
     const serviceError = new ApiError(410, "QR_EXPIRED", "El QR ha vencido.");
     const service = createServiceDouble();
-    vi.mocked(service.validateQr).mockImplementation(() => {
-      throw serviceError;
-    });
+    vi.mocked(service.validateQr).mockRejectedValue(serviceError);
     const handlers = createQrHandlers(service);
     const req = createReq({ tripId: "trip-demo-001", token: "valor-opaco" });
     const res = createRes();
     const next = vi.fn();
 
-    handlers.validateQr(req, res, next);
+    await handlers.validateQr(req, res, next);
 
     expect(next).toHaveBeenCalledWith(serviceError);
     expect(res.status).not.toHaveBeenCalled();
   });
 
-  it("un ApiError 409 QR_ALREADY_USED del service llega a next() con status y code intactos", () => {
+  it("un ApiError 409 QR_ALREADY_USED del service llega a next() con status y code intactos", async () => {
     const serviceError = new ApiError(409, "QR_ALREADY_USED", "El QR ya fue utilizado.");
     const service = createServiceDouble();
-    vi.mocked(service.validateQr).mockImplementation(() => {
-      throw serviceError;
-    });
+    vi.mocked(service.validateQr).mockRejectedValue(serviceError);
     const handlers = createQrHandlers(service);
     const req = createReq({ tripId: "trip-demo-001", token: "valor-opaco" });
     const res = createRes();
     const next = vi.fn();
 
-    handlers.validateQr(req, res, next);
+    await handlers.validateQr(req, res, next);
 
     expect(next).toHaveBeenCalledTimes(1);
     const error = next.mock.calls[0][0] as ApiError;

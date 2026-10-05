@@ -24,6 +24,12 @@ services:
       NODE_ENV: production
       PORT: "3000"
       QR_TTL_SECONDS: "${QR_TTL_SECONDS:-300}"
+      QR_EXPIRED_GRACE_SECONDS: "${QR_EXPIRED_GRACE_SECONDS:-3600}"
+      REDIS_URL: redis://redis:6379
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
 
   receipts:
     build:

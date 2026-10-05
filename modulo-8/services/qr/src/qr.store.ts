@@ -2,24 +2,60 @@ import type { QrRecord } from "./qr.types";
 
 export type ConsumeOutcome = "OK" | "NOT_FOUND" | "TRIP_MISMATCH" | "ALREADY_USED" | "EXPIRED";
 
-export interface QrStore {
-  save(record: QrRecord): void;
-  consumeIfValid(tokenHash: string, tripId: string, now: Date): ConsumeOutcome;
+export type QrStoreOperation = "save" | "consume";
+
+// El almacenamiento no pudo completar la operación por una falla de infraestructura (sin
+// conexión, demora, error informado por el almacenamiento). La causa original queda en
+// `cause` sólo para diagnóstico: no se serializa en respuestas ni se registra completa.
+//
+// outcomeUnknown indica que la operación pudo haberse aplicado igual (por ejemplo, el comando
+// se envió y la respuesta no llegó a tiempo): un reintento puede encontrar el QR ya consumido.
+export class QrStoreUnavailableError extends Error {
+  constructor(
+    readonly operation: QrStoreOperation,
+    readonly outcomeUnknown: boolean,
+    options: { cause: unknown },
+  ) {
+    super(`El almacenamiento de QR no está disponible (${operation}).`, options);
+    this.name = "QrStoreUnavailableError";
+  }
+
+  // Tipo del error original, para registrar la falla sin su mensaje. Algunos errores del
+  // cliente Redis no definen name: en ese caso se usa el nombre de su clase.
+  get causeName(): string {
+    if (!(this.cause instanceof Error)) {
+      return typeof this.cause;
+    }
+    return this.cause.name !== "Error" ? this.cause.name : this.cause.constructor.name;
+  }
 }
 
-export function createQrStore(): QrStore {
+// Contrato de almacenamiento de QR. Es asíncrono para admitir un almacenamiento externo
+// compartido entre instancias; cada implementación debe garantizar que consumeIfValid
+// compruebe y marque el uso como una única operación atómica.
+//
+// `now` es la hora del proceso que valida. Un store con reloj propio (por ejemplo, Redis)
+// puede ignorarlo y decidir el vencimiento con su propia hora.
+export interface QrStore {
+  save(record: QrRecord): Promise<void>;
+  consumeIfValid(tokenHash: string, tripId: string, now: Date): Promise<ConsumeOutcome>;
+}
+
+// Implementación en memoria: el estado vive en el proceso, se pierde al reiniciar y no se
+// comparte entre instancias.
+export function createInMemoryQrStore(): QrStore {
   const records = new Map<string, QrRecord>();
 
-  function save(record: QrRecord): void {
+  async function save(record: QrRecord): Promise<void> {
     records.set(record.tokenHash, record);
   }
 
-  // Debe permanecer síncrona de punta a punta. La comprobación de estado y la marca de
-  // usedAt tienen que ocurrir en la misma ejecución del event loop: si esta función
-  // ganara un await/callback en el medio, dos validaciones concurrentes del mismo QR
-  // podrían intercalarse entre el chequeo y la marca, y ambas terminarían consumiéndolo
-  // con éxito.
-  function consumeIfValid(tokenHash: string, tripId: string, now: Date): ConsumeOutcome {
+  // El cuerpo no debe contener ningún await. Una función async se ejecuta de forma
+  // síncrona hasta su primer await, así que la comprobación de estado y la marca de
+  // usedAt ocurren en la misma ejecución del event loop. Si se agregara un await en el
+  // medio, dos validaciones concurrentes del mismo QR podrían intercalarse entre el
+  // chequeo y la marca, y ambas terminarían consumiéndolo con éxito.
+  async function consumeIfValid(tokenHash: string, tripId: string, now: Date): Promise<ConsumeOutcome> {
     const record = records.get(tokenHash);
 
     if (record === undefined) {
