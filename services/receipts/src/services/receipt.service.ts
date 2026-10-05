@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { AppError } from '../errors/app-error';
 import { fiscalClient } from '../integrations/fiscal-authorizer';
-import { ensureAuthorized, paymentsClient } from '../integrations/m7-payments';
+import { applyM7Amount, ensureAuthorized, paymentsClient } from '../integrations/m7-payments';
 import { buildReceiptIssuedEvent } from '../messaging/receipt-issued';
 import type { DeliveryChannel, DeliveryRecord, Receipt, ReceiptRequest } from '../models/receipt';
 import * as repository from '../repositories/receipt.repository';
@@ -51,10 +51,22 @@ export async function issueReceipt(request: ReceiptRequest): Promise<IssueResult
   }
 
   // M7 es la fuente de verdad del pago: solo se emite con el pago autorizado, y
-  // el medio de pago registrado en M7 reemplaza al informado en la entrada.
+  // el medio de pago y el importe cobrado registrados en M7 reemplazan a los
+  // informados en la entrada.
   const payment = ensureAuthorized(await paymentsClient.getPayment(request.tripId), request.tripId);
+  const fare = applyM7Amount(request.fare, payment.amount);
+  if (fare.total !== request.fare.total || fare.currency !== request.fare.currency) {
+    log('info', 'importe tomado de M7', {
+      tripId: request.tripId,
+      requestedTotal: request.fare.total,
+      chargedTotal: fare.total,
+      currency: fare.currency,
+      breakdownKept: fare.baseFare + fare.distanceAmount + fare.timeAmount > 0,
+    });
+  }
   const receipt = buildReceipt({
     ...request,
+    fare,
     payment: { ...request.payment, method: payment.method, status: payment.status },
   });
 
