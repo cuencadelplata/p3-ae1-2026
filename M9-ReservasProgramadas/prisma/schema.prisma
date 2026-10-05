@@ -25,8 +25,36 @@ enum TipoVehiculo {
   @@map("tipo_vehiculo")
 }
 
+model Reserva {
+  id                   String          @id @default(uuid()) @db.Uuid
+  clienteId            String          @map("cliente_id") @db.Uuid
+  origen               String          @db.VarChar(200)
+  destino              String          @db.VarChar(200)
+  vehiculo             TipoVehiculo
+  fechaHoraProgramada  DateTime        @map("fecha_hora_programada") @db.Timestamptz(3)
+  estado               EstadoReserva   @default(PENDIENTE_ASIGNACION)
+  asignacionId         String?         @map("asignacion_id")
+  choferId             String?         @map("chofer_id")
+  nombreChofer         String?         @map("nombre_chofer") @db.VarChar(200)
+  valoracion           Decimal?        @db.Decimal(3, 2)
+  tarifaEstimada       Decimal?        @map("tarifa_estimada") @db.Decimal(12, 2)
+  moneda               String?         @default("ARS") @db.VarChar(3)
+  criterioAsignacion   String?         @map("criterio_asignacion") @db.VarChar(80)
+  idSolicitud          String?         @map("id_solicitud")
+  version              Int             @default(1)
+  creadoEn             DateTime        @default(now()) @map("creado_en") @db.Timestamptz(3)
+  actualizadoEn        DateTime        @default(now()) @map("actualizado_en") @db.Timestamptz(3)
+
+  versiones            ReservaVersion[]
+  outboxEvents         OutboxEvent[]
+
+  @@index([estado, fechaHoraProgramada, id])
+  @@index([clienteId, fechaHoraProgramada, id])
+  @@map("reservas")
+}
+
 model ReservaVersion {
-  reservaId             String         @default(uuid()) @map("reserva_id") @db.Uuid
+  reservaId             String         @map("reserva_id") @db.Uuid
   version               Int
   clienteId             String         @map("cliente_id") @db.Uuid
   origen                String         @db.VarChar(200)
@@ -44,9 +72,27 @@ model ReservaVersion {
   idSolicitud           String?        @map("id_solicitud")
   creadoEn              DateTime       @default(now()) @map("creado_en") @db.Timestamptz(3)
   actualizadoEn         DateTime       @default(now()) @map("actualizado_en") @db.Timestamptz(3)
+  reserva               Reserva        @relation(fields: [reservaId], references: [id], onDelete: Cascade)
 
   @@id([reservaId, version])
   @@index([estado, fechaHoraProgramada, reservaId, version])
   @@index([clienteId, fechaHoraProgramada, reservaId, version])
   @@map("reserva_versiones")
+}
+
+model OutboxEvent {
+  id            String    @id @default(uuid()) @db.Uuid
+  tipo          String    @db.VarChar(100)
+  aggregateType String    @map("aggregate_type") @db.VarChar(50)
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  payload       Json
+  status        String    @default("PENDING") @db.VarChar(20)
+  creadoEn      DateTime  @default(now()) @map("creado_en") @db.Timestamptz(3)
+  procesadoEn   DateTime? @map("procesado_en") @db.Timestamptz(3)
+  reservaId     String?   @map("reserva_id") @db.Uuid
+  reserva       Reserva?  @relation(fields: [reservaId], references: [id], onDelete: SetNull)
+
+  @@index([status, creadoEn])
+  @@index([aggregateType, aggregateId, creadoEn])
+  @@map("outbox_eventos")
 }
