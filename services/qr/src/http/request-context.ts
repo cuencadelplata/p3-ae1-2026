@@ -12,6 +12,15 @@ const VALID_CORRELATION_ID = /^[A-Za-z0-9._-]{1,128}$/;
 
 const log = createLogger("http");
 
+// Un 503 indica una dependencia no disponible, ya informada en warn por quien la detectó; el
+// resto de los 5xx son fallas del servicio.
+function levelForStatus(status: number): "info" | "warn" | "error" {
+  if (status === 503) {
+    return "warn";
+  }
+  return status >= 500 ? "error" : "info";
+}
+
 export function resolveCorrelationId(incoming: string | undefined): string {
   return incoming !== undefined && VALID_CORRELATION_ID.test(incoming) ? incoming : randomUUID();
 }
@@ -38,7 +47,7 @@ export const requestContext: RequestHandler = (request, response, next) => {
       return;
     }
     withCorrelationId(correlationId, () =>
-      log(response.statusCode >= 500 ? "error" : "info", "solicitud atendida", {
+      log(levelForStatus(response.statusCode), "solicitud atendida", {
         method: request.method,
         path: loggablePath(request),
         status: response.statusCode,

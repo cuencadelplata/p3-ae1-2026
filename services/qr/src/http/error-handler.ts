@@ -22,11 +22,15 @@ function sendError(response: Response, status: number, body: ErrorResponse): voi
   response.status(status).json(body);
 }
 
-// Los errores 5xx se registran con su detalle; la respuesta mantiene el formato de error del
-// servicio y nunca incluye la pila ni el mensaje interno de un error inesperado.
+// Los errores 500 se registran con su detalle; la respuesta mantiene el formato de error del
+// servicio y nunca incluye la pila ni el mensaje interno de un error inesperado. Un 503 por
+// dependencia no disponible ya lo registra quien lo detecta, una vez por solicitud.
 export const errorHandler: ErrorRequestHandler = (error, request, response, _next) => {
   if (error instanceof ApiError) {
-    if (error.status >= 500) {
+    for (const [name, value] of Object.entries(error.headers ?? {})) {
+      response.setHeader(name, value);
+    }
+    if (error.status >= 500 && error.status !== 503) {
       log("error", "error del servicio al atender la solicitud", {
         method: request.method,
         status: error.status,

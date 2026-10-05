@@ -54,6 +54,16 @@ redis.call('HSET', KEYS[1], 'usedAt', string.format('%d', nowMs))
 return 'OK'
 `;
 
+// Respuesta de un script que no corresponde a ninguna prevista: indica un defecto del
+// servicio (scripts y código desalineados), no una falla de Redis. Por eso no se traduce a
+// "almacenamiento no disponible" y termina en 500.
+export class QrScriptReplyError extends Error {
+  constructor(script: "qrSave" | "qrConsume") {
+    super(`Respuesta inesperada del script ${script}.`);
+    this.name = "QrScriptReplyError";
+  }
+}
+
 const CONSUME_OUTCOMES: ReadonlySet<string> = new Set<ConsumeOutcome>([
   "OK",
   "NOT_FOUND",
@@ -89,7 +99,7 @@ export const qrRedisScripts = {
     },
     transformReply: (reply: unknown): void => {
       if (String(reply) !== "OK") {
-        throw new Error("Respuesta inesperada del script de guardado de QR.");
+        throw new QrScriptReplyError("qrSave");
       }
     },
   }),
@@ -103,7 +113,7 @@ export const qrRedisScripts = {
     transformReply: (reply: unknown): ConsumeOutcome => {
       const outcome = String(reply);
       if (!CONSUME_OUTCOMES.has(outcome)) {
-        throw new Error("Respuesta inesperada del script de consumo de QR.");
+        throw new QrScriptReplyError("qrConsume");
       }
       return outcome as ConsumeOutcome;
     },

@@ -1,4 +1,7 @@
-import type { QrStore } from "./qr.store";
+import { ClientClosedError, ClientOfflineError, ErrorReply } from "redis";
+
+import { QrScriptReplyError, type SaveScriptArgs } from "./qr.redis-scripts";
+import { QrStoreUnavailableError, type ConsumeOutcome, type QrStore, type QrStoreOperation } from "./qr.store";
 import type { QrRecord } from "./qr.types";
 import type { QrRedisClient } from "./redis-client";
 
@@ -11,6 +14,26 @@ export interface RedisQrStoreOptions {
   // EXPIRED; después Redis borra la clave y la validación responde NOT_FOUND. Admite
   // fracciones de segundo.
   readonly expiredGraceSeconds: number;
+}
+
+// Errores en los que se sabe que el comando no se aplicó: el cliente no lo envió (cerrado o
+// sin conexión) o Redis lo rechazó con un error. En cualquier otro caso (demora, conexión
+// cortada con el comando en vuelo, error desconocido) pudo haberse ejecutado.
+function commandWasNotApplied(error: unknown): boolean {
+  return error instanceof ClientClosedError || error instanceof ClientOfflineError || error instanceof ErrorReply;
+}
+
+// Traduce cualquier falla del cliente Redis a QrStoreUnavailableError. Una respuesta
+// inesperada de un script es un defecto del servicio y se propaga sin traducir.
+async function translateRedisFailure<T>(operation: QrStoreOperation, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    if (error instanceof QrScriptReplyError) {
+      throw error;
+    }
+    throw new QrStoreUnavailableError(operation, !commandWasNotApplied(error), { cause: error });
+  }
 }
 
 // Almacenamiento de QR en Redis, compartido por todas las instancias del servicio.
@@ -34,7 +57,7 @@ export function createRedisQrStore(options: RedisQrStoreOptions): QrStore {
   const keyFor = (tokenHash: string): string => `${keyPrefix}${tokenHash}`;
 
   async function save(record: QrRecord): Promise<void> {
-    await client.qrSave({
+    const args: SaveScriptArgs = {
       key: keyFor(record.tokenHash),
       id: record.id,
       tripId: record.tripId,
@@ -42,11 +65,13 @@ export function createRedisQrStore(options: RedisQrStoreOptions): QrStore {
       expiresAtMs: record.expiresAt.getTime(),
       usedAtMs: record.usedAt === null ? null : record.usedAt.getTime(),
       graceMs,
-    });
+    };
+    await translateRedisFailure("save", () => client.qrSave(args));
   }
 
-  async function consumeIfValid(tokenHash: string, tripId: string, _now: Date) {
-    return client.qrConsume(keyFor(tokenHash), tripId);
+  async function consumeIfValid(tokenHash: string, tripId: string, _now: Date): Promise<ConsumeOutcome> {
+    const key = keyFor(tokenHash);
+    return translateRedisFailure("consume", () => client.qrConsume(key, tripId));
   }
 
   return { save, consumeIfValid };

@@ -6,8 +6,9 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { createQrService, type QrServiceDeps } from "../../src/qr.service";
-import type { ConsumeOutcome } from "../../src/qr.store";
+import { QrScriptReplyError } from "../../src/qr.redis-scripts";
+import { createQrService, STORE_RETRY_AFTER_SECONDS, type QrServiceDeps } from "../../src/qr.service";
+import { QrStoreUnavailableError, type ConsumeOutcome } from "../../src/qr.store";
 import { ApiError } from "../../src/http/api-error";
 
 const TRIP_ID = "trip-demo-001";
@@ -173,5 +174,80 @@ describe("createQrService — validateQr", () => {
     expect(tripMismatchError.status).toBe(notFoundError.status);
     expect(tripMismatchError.code).toBe(notFoundError.code);
     expect(tripMismatchError.message).toBe(notFoundError.message);
+  });
+});
+
+describe("createQrService — almacenamiento no disponible", () => {
+  const STORE_UNAVAILABLE_MESSAGE =
+    "El servicio de QR no está disponible en este momento. Intente nuevamente más tarde.";
+
+  function unavailable(operation: "save" | "consume", outcomeUnknown: boolean): QrStoreUnavailableError {
+    const cause = Object.assign(new Error("connect ECONNREFUSED 10.0.0.5:6379"), { name: "ConnectionError" });
+    return new QrStoreUnavailableError(operation, outcomeUnknown, { cause });
+  }
+
+  function expectStoreUnavailable(error: ApiError): void {
+    expect(error.status).toBe(503);
+    expect(error.code).toBe("QR_STORE_UNAVAILABLE");
+    expect(error.message).toBe(STORE_UNAVAILABLE_MESSAGE);
+    expect(error.details).toBeUndefined();
+    expect(error.headers).toEqual({ "Retry-After": String(STORE_RETRY_AFTER_SECONDS) });
+    expect(STORE_RETRY_AFTER_SECONDS).toBe(5);
+  }
+
+  it("generateQr responde 503 si falla el guardado y no devuelve el token", async () => {
+    const { deps, save } = createDeps();
+    save.mockRejectedValue(unavailable("save", false));
+
+    const error = await captureAsyncApiError(() => createQrService(deps).generateQr(TRIP_ID));
+
+    expectStoreUnavailable(error);
+    expect(vi.mocked(deps.log)).toHaveBeenCalledWith("warn", "almacenamiento de QR no disponible", {
+      event: "qr.store_unavailable",
+      operation: "save",
+      tripId: TRIP_ID,
+      errorName: "ConnectionError",
+    });
+    expect(vi.mocked(deps.log).mock.calls.some(([, , fields]) => fields?.event === "qr.issued")).toBe(false);
+  });
+
+  it("validateQr responde 503 si falla el consumo y nunca aprueba el QR (fail-closed)", async () => {
+    const { deps, consumeIfValid } = createDeps();
+    consumeIfValid.mockRejectedValue(unavailable("consume", true));
+
+    const error = await captureAsyncApiError(() => createQrService(deps).validateQr(TRIP_ID, TOKEN));
+
+    expectStoreUnavailable(error);
+    expect(vi.mocked(deps.log)).toHaveBeenCalledWith("warn", "almacenamiento de QR no disponible", {
+      event: "qr.store_unavailable",
+      operation: "consume",
+      tripId: TRIP_ID,
+      errorName: "ConnectionError",
+      outcomeUnknown: true,
+    });
+    expect(vi.mocked(deps.log).mock.calls.some(([, , fields]) => fields?.event === "qr.validated")).toBe(false);
+  });
+
+  it("el log de la falla no incluye el token, el mensaje de la causa ni la pila", async () => {
+    const { deps, consumeIfValid } = createDeps();
+    consumeIfValid.mockRejectedValue(unavailable("consume", false));
+
+    await captureAsyncApiError(() => createQrService(deps).validateQr(TRIP_ID, TOKEN));
+
+    const logged = JSON.stringify(vi.mocked(deps.log).mock.calls);
+    expect(logged).not.toContain(TOKEN);
+    expect(logged).not.toContain("ECONNREFUSED");
+    expect(logged).not.toContain("stack");
+  });
+
+  it.each([
+    ["una respuesta inesperada de script", () => new QrScriptReplyError("qrConsume")],
+    ["un error inesperado", () => new TypeError("defecto")],
+  ])("%s del store no se traduce a 503", async (_label, makeError) => {
+    const { deps, consumeIfValid } = createDeps();
+    const storeError = makeError();
+    consumeIfValid.mockRejectedValue(storeError);
+
+    await expect(createQrService(deps).validateQr(TRIP_ID, TOKEN)).rejects.toBe(storeError);
   });
 });
