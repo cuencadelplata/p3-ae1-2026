@@ -1,31 +1,57 @@
 version: '3.9'
 
 services:
+  # 1. PostgreSQL (DispatchDB)
+  postgres-db:
+    image: postgres:16-alpine
+    container_name: m5-postgres-db
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=dispatch_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. Redis (TTL y Locks Atómicos)
   redis:
     image: redis:7-alpine
     container_name: m5-redis
     ports:
       - '6379:6379'
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
 
+  # 3. RabbitMQ (Exchange mobility.events)
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: m5-rabbitmq
     ports:
-      - '5672:5672'
-      - '15672:15672'
-    healthcheck:
-      test: ['CMD', 'rabbitmq-diagnostics', 'ping']
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - '5672:5672'    # AMQP
+      - '15672:15672'  # Panel Web (user: guest / pass: guest)
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 15s
+      timeout: 10s
+      retries: 5
 
+  # 4. Microservicio M5 (Solicitud y Despacho)
   dispatch-service:
     build:
       context: .
@@ -37,9 +63,12 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3005
+      - DATABASE_URL=postgresql://postgres:postgres@postgres-db:5432/dispatch_db?schema=public
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
     depends_on:
+      postgres-db:
+        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -55,6 +84,7 @@ services:
       retries: 3
       start_period: 10s
 
+  # 5. Documentación Interactiva Scalar
   scalar-docs:
     build:
       context: .
@@ -70,3 +100,7 @@ services:
       - dispatch-service
     restart: unless-stopped
 
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
