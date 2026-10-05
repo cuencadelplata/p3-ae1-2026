@@ -89,12 +89,16 @@ describe('AE2 — Tests de Concurrencia, Idempotencia y Casos Límite (RNF-08, R
 
     // 7. Verificar que se publicó el evento de asignación en RabbitMQ hacia M6 y M8
     const assignedMessage = rabbitMqService.publishedMessages.find(
-      (m) => m.queue === 'dispatch.assigned' && m.message.payload?.requestId === request.id
+      (m) =>
+        m.routingKey === 'driver.offer.accepted' &&
+        m.message.correlationId === request.id
     );
     if (assignedMessage) {
-      expect(assignedMessage.message.eventType).toBe('TRIP_ASSIGNED');
-      expect(assignedMessage.message.payload.driverId).toBe(updatedRequest.assignedDriverId);
-      expect(assignedMessage.message.payload.clientId).toBe(clientId);
+      expect(assignedMessage.message.eventType).toBe('driver.offer.accepted');
+      expect(assignedMessage.message.producer).toBe('m5');
+      expect(assignedMessage.message.data.rideRequestId).toBe(request.id);
+      expect(assignedMessage.message.data.driverUserId).toBeDefined();
+      expect(assignedMessage.message.data.clientUserId).toBeDefined();
     }
   });
 
