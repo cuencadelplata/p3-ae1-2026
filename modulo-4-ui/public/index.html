@@ -10,7 +10,7 @@
   <body>
     <header class="topbar">
       <div>
-        <p class="eyebrow">Plataforma de movilidad urbana · AE1</p>
+        <p class="eyebrow">Plataforma de movilidad urbana · AE2</p>
         <h1>M4 - Ubicacion y disponibilidad</h1>
         <p class="subtitle">Panel independiente para demostrar ubicaciones temporales y conductores cercanos.</p>
       </div>
@@ -22,7 +22,7 @@
 
     <main>
       <section class="card intro">
-        <div><p class="eyebrow">Recorrido sugerido</p><h2>Publicar, buscar y retirar</h2><p>Registrá dos conductores, buscá candidatos cerca de la facultad y cambiá su disponibilidad. Los datos se conservan en memoria y vencen por TTL.</p></div>
+        <div><p class="eyebrow">Recorrido sugerido</p><h2>Autenticar, publicar y buscar</h2><p>Ingresá un token de conductor emitido por M1, publicá su ubicación y buscá candidatos. Redis conserva el estado vigente y PostgreSQL el historial.</p></div>
         <div class="steps" aria-label="Pasos del recorrido"><span><b>1</b> Publicar</span><span><b>2</b> Buscar</span><span><b>3</b> Actualizar</span></div>
       </section>
 
@@ -30,10 +30,11 @@
         <section class="card">
           <div class="section-title"><div><p class="eyebrow">RF-4.1</p><h2>Ubicacion del conductor</h2></div><span class="tag">TTL 60 s</span></div>
           <form id="location-form">
-            <label>ID del conductor<input id="driver-id" value="driver-1" required /></label>
+            <label>Token JWT de M1<input id="auth-token" type="password" placeholder="Pegá el token sin escribir Bearer" required /></label>
+            <label>User ID del conductor<input id="driver-id" type="number" min="1" step="1" value="13" required /></label>
             <div class="two-columns"><label>Latitud<input id="latitude" type="number" step="any" value="-27.4692" required /></label><label>Longitud<input id="longitude" type="number" step="any" value="-58.8306" required /></label></div>
             <div class="two-columns"><label>Vehiculo<select id="vehicle-type"><option>AUTO</option><option>MOTO</option></select></label><label>Estado<select id="available"><option value="true">Disponible</option><option value="false">No disponible</option></select></label></div>
-            <div class="actions"><button type="submit">Publicar ubicacion</button><button id="load-demo" type="button" class="secondary">Cargar 2 demos</button></div>
+            <div class="actions"><button type="submit">Publicar ubicación autenticada</button></div>
           </form>
         </section>
 

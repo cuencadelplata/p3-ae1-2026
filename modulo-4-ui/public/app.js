@@ -6,6 +6,8 @@ const candidates = document.querySelector('#candidates');
 async function callApi(url, options = {}) {
   responseStatus.textContent = 'Consultando...';
   try {
+    const token = document.querySelector('#auth-token')?.value.trim();
+    if (token) options.headers = { ...options.headers, Authorization: `Bearer ${token}` };
     const response = await fetch(url, options);
     const data = response.status === 204 ? null : await response.json();
     responseStatus.textContent = `HTTP ${response.status}`;
@@ -30,17 +32,9 @@ async function checkHealth() {
 
 document.querySelector('#location-form').addEventListener('submit', async (event) => {
   event.preventDefault();
-  const driverId = document.querySelector('#driver-id').value.trim();
+  const driverId = Number(document.querySelector('#driver-id').value);
   const body = { latitude: Number(document.querySelector('#latitude').value), longitude: Number(document.querySelector('#longitude').value), vehicleType: document.querySelector('#vehicle-type').value, available: document.querySelector('#available').value === 'true' };
   try { await callApi(`${api}/drivers/${encodeURIComponent(driverId)}/location`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); } catch {}
-});
-
-document.querySelector('#load-demo').addEventListener('click', async () => {
-  const demos = [['driver-auto', { latitude: -27.4693, longitude: -58.8307, vehicleType: 'AUTO', available: true }], ['driver-moto', { latitude: -27.4701, longitude: -58.8312, vehicleType: 'MOTO', available: true }]];
-  try {
-    for (const [id, body] of demos) await callApi(`${api}/drivers/${id}/location`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    responseStatus.textContent = '2 demos publicadas';
-  } catch {}
 });
 
 document.querySelector('#search-form').addEventListener('submit', async (event) => {
