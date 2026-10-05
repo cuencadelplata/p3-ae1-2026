@@ -1,0 +1,26 @@
+{
+  "name": "p3-ae1-2026",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts tests-e2e",
+    "test:e2e:resilience": "vitest run --config vitest.e2e.config.ts tests-e2e -t \"keeps API alive while simulator is stopped\"",
+    "docker:e2e:up": "docker compose up -d --build",
+    "docker:e2e:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/opossum": "^8.1.9",
+    "@types/pg": "^8.23.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "opossum": "^10.0.0",
+    "pg": "^8.16.3"
+  }
+}
