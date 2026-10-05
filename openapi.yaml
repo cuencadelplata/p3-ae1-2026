@@ -1,10 +1,10 @@
-openapi: 3.0.3
+openapi: 4.0.0
 info:
   title: M7 - Tarifas, Pagos y Liquidaciones
   description: >
     API del módulo M7, correspondiente a los requerimientos RF-7.1
     (Estimación de tarifa), RF-7.2 (Método de pago), RF-7.3 (Autorización/captura),
-    RF-7.4 (Cargo de cancelación), RF-7.5 (Prevención de pago duplicado), RF-7.6 (Reintegro)
+    RF-7.4 (Cargo de cancelación), RF-7.5 (Reintegro por bus), RF-7.6 (Idempotencia)
     y RF-7.7 (Historial financiero).
   version: 2.0.0
 
@@ -125,50 +125,20 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /reintegro:
-    post:
-      summary: Calcula el reintegro correspondiente a una cancelación
-      description: >
-        RF-7.6. Devuelve el 95% del monto cobrado como cargo de cancelación.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [montoCancelacion, viajeId]
-              properties:
-                montoCancelacion: { type: number, example: 1000 }
-                viajeId: { type: string, example: "v1" }
-      responses:
-        '200':
-          description: Reintegro calculado correctamente
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  monto: { type: number, example: 950 }
-                  viajeId: { type: string, example: "v1" }
-        '400':
-          description: Datos inválidos o faltantes
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
   /pagos/{idOrden}/duplicado:
     get:
-      summary: Verifica si una orden de pago ya fue procesada
+      summary: Verifica si una orden ya fue procesada (idempotencia)
       description: >
-        RF-7.5. Consulta si una orden ya tiene un pago registrado, para evitar cobros duplicados.
+        RF-7.6. Consulta interna que M7 usa antes de procesar un reintegro.
+        Devuelve true si la orden ya se procesó (está en Redis o en la base),
+        false si es nueva. No tiene consumer externo: es solo para consulta.
       parameters:
         - name: idOrden
           in: path
           required: true
           schema:
             type: string
-          example: "o1"
+          example: "viaje-123"
       responses:
         '200':
           description: Resultado de la verificación
@@ -177,8 +147,8 @@ paths:
               schema:
                 type: object
                 properties:
-                  idOrden: { type: string, example: "o1" }
-                  esDuplicado: { type: boolean, example: true }
+                  idOrden: { type: string, example: "viaje-123" }
+                  esDuplicado: { type: boolean, example: false }
 
   /metodo-pago:
     post:
@@ -374,6 +344,110 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+
+webhooks:
+  reintegroDesdeM6:
+    post:
+      summary: M6 publica evento de cancelación de viaje
+      description: >
+        RF-7.5. M7 escucha este evento en el bus (RabbitMQ, exchange "viajes").
+        Cuando llega, calcula el reintegro verificando idempotencia (RF-7.6) y publica
+        el evento reintegro.procesado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [viajeId, clienteId, conductorId, evento, timestamp]
+              properties:
+                viajeId:
+                  type: string
+                  example: "viaje-123"
+                  description: ID del viaje que se cancela (se usa como idOrden para idempotencia)
+                clienteId:
+                  type: string
+                  example: "cliente-45"
+                conductorId:
+                  type: string
+                  example: "conductor-67"
+                motivo:
+                  type: string
+                  example: "tardó demasiado en llegar"
+                evento:
+                  type: string
+                  enum: [cancelacion_cliente, despacho.reabrir]
+                  description: >
+                    cancelacion_cliente = cliente cancela, hay cargo.
+                    despacho.reabrir = conductor cancela, sin cargo.
+                  example: "cancelacion_cliente"
+                timestamp:
+                  type: string
+                  format: date-time
+                  example: "2026-10-05T20:30:00Z"
+            examples:
+              clienteCancela:
+                summary: Cliente cancela el viaje
+                value:
+                  viajeId: "viaje-123"
+                  clienteId: "cliente-45"
+                  conductorId: "conductor-67"
+                  motivo: "tardó demasiado en llegar"
+                  evento: "cancelacion_cliente"
+                  timestamp: "2026-10-05T20:30:00Z"
+              conductorCancela:
+                summary: Conductor cancela (reabre la solicitud)
+                value:
+                  viajeId: "viaje-124"
+                  clienteId: "cliente-46"
+                  conductorId: "conductor-68"
+                  motivo: "cliente no llegó al punto de retiro"
+                  evento: "despacho.reabrir"
+                  timestamp: "2026-10-05T20:35:00Z"
+      responses:
+        "202":
+          description: >
+            Evento recibido y en cola para procesar.
+            M7 devuelve 202 (Aceptado) al consumer de RabbitMQ.
+
+  reintegroProcessado:
+    post:
+      summary: M7 publica resultado del cálculo de reintegro
+      description: >
+        RF-7.5. M7 publica este evento en el bus (RabbitMQ, exchange "m7.eventos")
+        después de procesar el reintegro. M8 u otros servicios lo pueden consumir
+        para dar aviso, guardar historial, etc.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idOrden, viajeId, montoReintegro]
+              properties:
+                idOrden:
+                  type: string
+                  example: "viaje-123"
+                  description: Same as viajeId from cancelacion_cliente event
+                viajeId:
+                  type: string
+                  example: "viaje-123"
+                montoReintegro:
+                  type: number
+                  example: 950
+                  description: "95% del cargo de cancelación"
+                timestamp:
+                  type: string
+                  format: date-time
+                  example: "2026-10-05T20:30:15Z"
+            example:
+              idOrden: "viaje-123"
+              viajeId: "viaje-123"
+              montoReintegro: 950
+              timestamp: "2026-10-05T20:30:15Z"
+      responses:
+        "202":
+          description: Evento publicado en el bus (RabbitMQ)
 
 components:
   schemas:

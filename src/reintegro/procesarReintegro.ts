@@ -1,5 +1,5 @@
 import { calculoReintegro } from "./calculoReintegro";
-import { obtenerCargo, type CargoRequest } from "./cargoCancelacionClient";
+import { obtenerCargo, type CargoRequest } from "./obtenerCargo";
 import { existeOrden, insertarReintegro } from "./reintegroBD";
 import { estaEnCache, marcarEnCache } from "../infraestructura/redis";
 import { publicar } from "../infraestructura/rabbit";

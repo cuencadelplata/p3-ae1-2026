@@ -1,7 +1,7 @@
 import type { ConsumeMessage, Channel } from "amqplib";
 import { config } from "../config";
 import { QUEUE_CANCELADO } from "../infraestructura/rabbit";
-import { ErrorPermanente } from "./cargoCancelacionClient";
+import { ErrorPermanente } from "./obtenerCargo";
 import { procesarReintegro, type EventoCancelacionM6 } from "./procesarReintegro";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
