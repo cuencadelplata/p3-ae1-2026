@@ -1,170 +1,62 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import CircuitBreaker from 'opossum';
-import {
-  Viaje,
-  type CoordenadasViaje,
-  type CrearViajeInput,
-  type TipoVehiculoViaje,
-} from './Viaje.js';
-import { MapViajeRepository, type ViajeRepository } from './ViajeRepository.js';
-import { BadGatewayError, ExternalApiResponseError, ServiceUnavailableError } from './errors.js';
+import { BadGatewayError, ServiceUnavailableError } from './errors.js';
 
-export interface ExternalApisClient {
-  estimateDistance(input: {
-    origen: CoordenadasViaje;
-    destino: CoordenadasViaje;
-  }): Promise<{ distanciaKm: number; tiempoEstimadoMin: number }>;
-  estimateFare(input: {
-    origen: CoordenadasViaje;
-    destino: CoordenadasViaje;
-    distanciaKm: number;
-    tiempoEstimadoMin: number;
-    tipoVehiculo: TipoVehiculoViaje;
-  }): Promise<number>;
-  registerPayment(input: { clienteId: string; viajeId: string; metodoPago: string }): Promise<string>;
-  authorizePayment(viajeId: string): Promise<string>;
+interface UpstreamResponse {
+  status: number;
+  body: unknown;
 }
 
-export class HttpExternalApisClient implements ExternalApisClient {
-  private readonly breakers = new Map<string, CircuitBreaker<[unknown], unknown>>();
+export interface ViajesApiClient {
+  crearViaje(input: { clienteId: string; origen: string; destino: string }): Promise<UpstreamResponse>;
+  finalizarViaje(id: string, input: Record<string, unknown>): Promise<UpstreamResponse>;
+  obtenerHistorial(id: string): Promise<UpstreamResponse>;
+}
 
-  constructor(
-    private readonly m7BaseUrl: string,
-    private readonly m4BaseUrl = `${m7BaseUrl}/api/v1`,
-  ) {}
+export class HttpViajesApiClient implements ViajesApiClient {
+  constructor(private readonly baseUrl: string) {}
 
-  private async post<T>(baseUrl: string, path: string, body: unknown): Promise<T> {
+  crearViaje(input: { clienteId: string; origen: string; destino: string }): Promise<UpstreamResponse> {
+    return this.request('/api/viajes', 'POST', input);
+  }
+
+  finalizarViaje(id: string, input: Record<string, unknown>): Promise<UpstreamResponse> {
+    return this.request(`/api/viajes/${encodeURIComponent(id)}/finalizacion`, 'POST', input);
+  }
+
+  obtenerHistorial(id: string): Promise<UpstreamResponse> {
+    return this.request(`/api/viajes/${encodeURIComponent(id)}/historial-transiciones`, 'GET');
+  }
+
+  private async request(path: string, method: 'GET' | 'POST', input?: unknown): Promise<UpstreamResponse> {
+    let response: Response;
     try {
-      return await this.breaker(baseUrl, path).fire(body) as T;
+      response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}${path}`, {
+        method,
+        headers: method === 'POST' ? { 'content-type': 'application/json' } : undefined,
+        body: method === 'POST' ? JSON.stringify(input) : undefined,
+        signal: AbortSignal.timeout(5000),
+      });
     } catch (error) {
-      if (error instanceof ExternalApiResponseError && error.status < 500) {
-        throw new BadGatewayError(error.message);
-      }
-      throw new ServiceUnavailableError(`Dependencia externa no disponible: ${path}`);
-    }
-  }
-
-  private breaker(baseUrl: string, path: string): CircuitBreaker<[unknown], unknown> {
-    const key = `${baseUrl}${path}`;
-    let breaker = this.breakers.get(key);
-    if (!breaker) {
-      breaker = new CircuitBreaker(
-        (body: unknown) => this.send(baseUrl, path, body),
-        {
-          name: key,
-          timeout: 2500,
-          resetTimeout: 5000,
-          errorThresholdPercentage: 50,
-          volumeThreshold: 1,
-          rollingCountTimeout: 10000,
-          errorFilter: (error: unknown) => error instanceof ExternalApiResponseError && error.status < 500,
-        },
+      throw new ServiceUnavailableError(
+        `No se pudo conectar con el módulo Viajes: ${error instanceof Error ? error.message : 'error de red'}`,
       );
-      this.breakers.set(key, breaker);
     }
-    return breaker;
-  }
 
-  private async send(baseUrl: string, path: string, body: unknown): Promise<unknown> {
-    const response = await fetch(`${baseUrl}${path}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(2000),
-    });
-    if (!response.ok) throw new ExternalApiResponseError(response.status);
-    return response.json();
-  }
-
-  async estimateDistance(input: {
-    origen: CoordenadasViaje;
-    destino: CoordenadasViaje;
-  }): Promise<{ distanciaKm: number; tiempoEstimadoMin: number }> {
-    const result = await this.post<{ distanceKm?: number; estimatedEtaMinutes?: number }>(
-      this.m4BaseUrl,
-      '/estimate',
-      {
-        origin: { latitude: input.origen.latitude, longitude: input.origen.longitude },
-        destination: { latitude: input.destino.latitude, longitude: input.destino.longitude },
-      },
-    );
-    if (!isPositiveFiniteNumber(result.distanceKm) || !isPositiveFiniteNumber(result.estimatedEtaMinutes)) {
-      throw new BadGatewayError('M4 devolvió una estimación de distancia o ETA inválida');
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      throw new BadGatewayError(`El módulo Viajes devolvió una respuesta JSON inválida (${response.status})`);
     }
-    return { distanciaKm: result.distanceKm, tiempoEstimadoMin: result.estimatedEtaMinutes };
+    return { status: response.status, body };
   }
-
-  async estimateFare(input: {
-    origen: CoordenadasViaje;
-    destino: CoordenadasViaje;
-    distanciaKm: number;
-    tiempoEstimadoMin: number;
-    tipoVehiculo: TipoVehiculoViaje;
-  }): Promise<number> {
-    const result = await this.post<{ estimatedFare?: number }>(this.m7BaseUrl, '/tarifa/estimacion', {
-      origen: {
-        lat: input.origen.latitude,
-        lng: input.origen.longitude,
-        direccion: input.origen.address ?? '',
-      },
-      destino: {
-        lat: input.destino.latitude,
-        lng: input.destino.longitude,
-        direccion: input.destino.address ?? '',
-      },
-      distanciaKm: input.distanciaKm,
-      tiempoEstimadoMin: input.tiempoEstimadoMin,
-      vehicleType: input.tipoVehiculo,
-    });
-    if (!isFiniteNumber(result.estimatedFare) || result.estimatedFare < 0) {
-      throw new BadGatewayError('M7 devolvió una tarifa estimada inválida');
-    }
-    return result.estimatedFare;
-  }
-
-  async registerPayment(input: { clienteId: string; viajeId: string; metodoPago: string }): Promise<string> {
-    const result = await this.post<{ pagoId?: string; estado?: string }>(this.m7BaseUrl, '/metodo-pago', {
-      clienteId: input.clienteId,
-      viajeId: input.viajeId,
-      tipo: input.metodoPago,
-    });
-    if (typeof result.pagoId !== 'string' || result.pagoId.length === 0 || result.estado !== 'pendiente') {
-      throw new BadGatewayError('M7 devolvió una respuesta inválida al registrar el método de pago');
-    }
-    return result.pagoId;
-  }
-
-  async authorizePayment(viajeId: string): Promise<string> {
-    const result = await this.post<{ pagoId?: string; estado?: string }>(
-      this.m7BaseUrl,
-      `/metodo-pago/${encodeURIComponent(viajeId)}/autorizar`,
-      { idOrden: `ORD-${viajeId}` },
-    );
-    if (typeof result.pagoId !== 'string' || result.pagoId.length === 0 || result.estado !== 'autorizado') {
-      throw new BadGatewayError('M7 no confirmó la autorización del pago');
-    }
-    return result.pagoId;
-  }
-
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function isPositiveFiniteNumber(value: unknown): value is number {
-  return isFiniteNumber(value) && value > 0;
 }
 
 export interface ViajeApiOptions {
-  externalApis: ExternalApisClient;
-  repository?: ViajeRepository;
-  viajes?: Map<string, Viaje>;
+  viajesApi: ViajesApiClient;
 }
 
 export function createViajeApi(options: ViajeApiOptions): Server {
-  const repository = options.repository ?? new MapViajeRepository(options.viajes);
-
   return createServer(async (request, response) => {
     try {
       if (request.method === 'GET' && request.url === '/health') {
@@ -172,141 +64,96 @@ export function createViajeApi(options: ViajeApiOptions): Server {
       }
 
       if (request.method === 'POST' && request.url === '/api/viajes') {
-        const viaje = crearViaje(await readJson(request) as unknown as CrearViajeInput);
-        await repository.save(viaje);
-        return send(response, 201, { viaje });
+        const input = await readJson(request);
+        const { clienteId, origen, destino } = input;
+        if (
+          typeof clienteId !== 'string' || !clienteId.trim() ||
+          typeof origen !== 'string' || !origen.trim() ||
+          typeof destino !== 'string' || !destino.trim()
+        ) {
+          return send(response, 400, { error: 'clienteId, origen y destino son obligatorios' });
+        }
+        if (input.estado !== undefined && input.estado !== 'SOLICITADO' && input.estado !== 'solicitado') {
+          return send(response, 400, {
+            error: 'El estado inicial debe ser SOLICITADO; los cambios de estado pertenecen al módulo Viajes',
+          });
+        }
+
+        const result = await options.viajesApi.crearViaje({
+          clienteId: clienteId.trim(),
+          origen: origen.trim(),
+          destino: destino.trim(),
+        });
+        if (result.status < 200 || result.status >= 300) {
+          return send(response, result.status, result.body);
+        }
+
+        const viaje = asRecord(result.body);
+        if (
+          typeof viaje.id !== 'string' ||
+          typeof viaje.clienteId !== 'string' ||
+          typeof viaje.estado !== 'string'
+        ) {
+          throw new BadGatewayError('El módulo Viajes devolvió datos incompletos al crear el viaje');
+        }
+        return send(response, result.status, {
+          viaje: {
+            id: viaje.id,
+            clienteId: viaje.clienteId,
+            conductorId: viaje.conductorId ?? null,
+            estado: viaje.estado.toLowerCase(),
+            inicio: viaje.fechaCreacion,
+          },
+        });
       }
 
       const match = request.url?.match(/^\/api\/viajes\/([^/]+)\/(finalizacion|historial-transiciones)$/);
       if (!match) return send(response, 404, { error: 'Ruta no encontrada' });
 
-      const viaje = await repository.get(match[1]);
-      if (!viaje) return send(response, 404, { error: 'Viaje no encontrado' });
+      const id = decodeURIComponent(match[1]);
+      if (request.method === 'POST' && match[2] === 'finalizacion') {
+        const input = await readJson(request);
+        const result = await options.viajesApi.finalizarViaje(id, input);
+        return send(response, result.status, result.body);
+      }
 
       if (request.method === 'GET' && match[2] === 'historial-transiciones') {
-        return send(response, 200, { historial: viaje.historialTransiciones });
+        const result = await options.viajesApi.obtenerHistorial(id);
+        return send(response, result.status, result.body);
       }
 
-      if (request.method !== 'POST') return send(response, 404, { error: 'Ruta no encontrada' });
-      const input = await readJson(request);
-
-      if (match[2] === 'finalizacion') {
-        viaje.validarFinalizacion();
-        const data = validarFinalizacion(input, viaje.inicio);
-        const estimacion = await options.externalApis.estimateDistance({
-          origen: data.origen,
-          destino: data.destino,
-        });
-        const total = await options.externalApis.estimateFare({
-          origen: data.origen,
-          destino: data.destino,
-          distanciaKm: estimacion.distanciaKm,
-          tiempoEstimadoMin: estimacion.tiempoEstimadoMin,
-          tipoVehiculo: data.tipoVehiculo,
-        });
-        await options.externalApis.registerPayment({
-          clienteId: viaje.clienteId,
-          viajeId: viaje.id,
-          metodoPago: data.metodoPago,
-        });
-        const paymentId = await options.externalApis.authorizePayment(viaje.id);
-        viaje.finalizar({
-          tiempoMinutos: estimacion.tiempoEstimadoMin,
-          distanciaKm: estimacion.distanciaKm,
-          horaFin: data.horaFin,
-          metodoPago: data.metodoPago,
-          total,
-          origen: data.origen,
-          destino: data.destino,
-          tipoVehiculo: data.tipoVehiculo,
-          fuenteMetrica: 'M4',
-          metricasEstimadas: true,
-        });
-        await repository.save(viaje);
-        return send(response, 200, {
-          viaje,
-          paymentId,
-          metricasEstimadas: true,
-          fuenteMetrica: 'M4',
-        });
-      }
-
+      return send(response, 404, { error: 'Ruta no encontrada' });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Solicitud inválida';
-      const status = error instanceof ServiceUnavailableError ? 503 : error instanceof BadGatewayError ? 502 : 400;
-      return send(response, status, { error: message });
+      if (error instanceof ServiceUnavailableError) {
+        console.error('ERROR conectando con el módulo Viajes:', error.message);
+        return send(response, 503, { error: error.message });
+      }
+      if (error instanceof BadGatewayError) {
+        console.error('ERROR en la respuesta del módulo Viajes:', error.message);
+        return send(response, 502, { error: error.message });
+      }
+      if (error instanceof SyntaxError) {
+        return send(response, 400, { error: 'El cuerpo debe contener JSON válido' });
+      }
+      console.error('ERROR procesando solicitud RF-6.4/6.7:', error);
+      return send(response, 500, { error: 'Error interno del servidor' });
     }
   });
-}
-
-export function crearViaje(data: CrearViajeInput): Viaje {
-  return new Viaje(data);
-}
-
-interface FinalizarViajeRequest {
-  origen: CoordenadasViaje;
-  destino: CoordenadasViaje;
-  tipoVehiculo: TipoVehiculoViaje;
-  horaFin: Date;
-  metodoPago: string;
-}
-
-function validarFinalizacion(input: Record<string, unknown>, inicio: Date): FinalizarViajeRequest {
-  const origen = validarCoordenadas(input.origen, 'origen');
-  const destino = validarCoordenadas(input.destino, 'destino');
-  if (origen.latitude === destino.latitude && origen.longitude === destino.longitude) {
-    throw new Error('El origen y el destino no pueden ser iguales');
-  }
-  if (input.tipoVehiculo !== 'auto' && input.tipoVehiculo !== 'moto') {
-    throw new Error('tipoVehiculo debe ser auto o moto');
-  }
-  if (!['efectivo', 'tarjeta', 'transferencia'].includes(String(input.metodoPago))) {
-    throw new Error('metodoPago debe ser efectivo, tarjeta o transferencia');
-  }
-  const horaFin = new Date(String(input.horaFin));
-  if (Number.isNaN(horaFin.getTime()) || horaFin < inicio) {
-    throw new Error('horaFin debe ser una fecha válida posterior al inicio del viaje');
-  }
-  return {
-    origen,
-    destino,
-    tipoVehiculo: input.tipoVehiculo,
-    horaFin,
-    metodoPago: String(input.metodoPago),
-  };
-}
-
-function validarCoordenadas(value: unknown, nombre: string): CoordenadasViaje {
-  if (!value || typeof value !== 'object') {
-    throw new Error(`${nombre} es obligatorio y debe contener coordenadas`);
-  }
-  const coordinates = value as Record<string, unknown>;
-  const latitude = coordinates.latitude;
-  const longitude = coordinates.longitude;
-  if (
-    !isFiniteNumber(latitude) ||
-    latitude < -90 ||
-    latitude > 90 ||
-    !isFiniteNumber(longitude) ||
-    longitude < -180 ||
-    longitude > 180
-  ) {
-    throw new Error(`${nombre} debe tener latitud y longitud válidas`);
-  }
-  if (coordinates.address !== undefined && typeof coordinates.address !== 'string') {
-    throw new Error(`${nombre}.address debe ser texto`);
-  }
-  return {
-    latitude,
-    longitude,
-    ...(typeof coordinates.address === 'string' ? { address: coordinates.address } : {}),
-  };
 }
 
 async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
   let body = '';
   for await (const chunk of request) body += chunk;
-  return body ? JSON.parse(body) as Record<string, unknown> : {};
+  if (!body) return {};
+  const parsed: unknown = JSON.parse(body);
+  return asRecord(parsed);
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new SyntaxError('Se esperaba un objeto JSON');
+  }
+  return value as Record<string, any>;
 }
 
 function send(response: ServerResponse, status: number, body: unknown): void {

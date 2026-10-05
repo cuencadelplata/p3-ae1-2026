@@ -3,14 +3,16 @@ import { execFileSync } from 'node:child_process';
 
 describe('RF-6.4 - Finalización del viaje en Docker', () => {
   it('registra la finalización y autoriza el pago mediante el simulador', async () => {
-    const viajeId = `E2E-64-${Date.now()}`;
-    await crearViaje({ id: viajeId, estado: 'en curso' });
+    const viajeId = await crearViaje({
+      clienteId: `E2E-64-${Date.now()}`,
+      iniciar: true,
+    });
 
     const { response, body } = await post(`/api/viajes/${viajeId}/finalizacion`, {
       origen: { latitude: 0, longitude: 0 },
       destino: { latitude: 0, longitude: 0.01 },
       tipoVehiculo: 'auto',
-      horaFin: '2026-09-01T10:42:00Z',
+      horaFin: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
       metodoPago: 'tarjeta',
     });
 
@@ -26,24 +28,25 @@ describe('RF-6.4 - Finalización del viaje en Docker', () => {
   });
 
   it('rechaza finalizar un viaje ya completado', async () => {
-    const viajeId = `E2E-64-completado-${Date.now()}`;
-    await crearViaje({ id: viajeId, estado: 'completado' });
+    const viajeId = await crearViaje({ clienteId: `E2E-64-no-iniciado-${Date.now()}` });
 
     const { response, body } = await post(`/api/viajes/${viajeId}/finalizacion`, {
       origen: { latitude: -34.6, longitude: -58.4 },
       destino: { latitude: -34.7, longitude: -58.5 },
       tipoVehiculo: 'auto',
-      horaFin: '2026-09-01T08:30:00Z',
+      horaFin: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
       metodoPago: 'efectivo',
     });
 
     expect(response.status).toBe(400);
-    expect(body.error).toContain('ya finalizado');
+    expect(body.error).toContain('estado SOLICITADO');
   });
 
   it('keeps API alive while simulator is stopped', async () => {
-    const viajeId = `E2E-64-outage-${Date.now()}`;
-    await crearViaje({ id: viajeId, estado: 'en curso' });
+    const viajeId = await crearViaje({
+      clienteId: `E2E-64-outage-${Date.now()}`,
+      iniciar: true,
+    });
 
     execFileSync('docker', ['compose', 'stop', 'simulador']);
     try {
@@ -51,10 +54,10 @@ describe('RF-6.4 - Finalización del viaje en Docker', () => {
         origen: { latitude: 0, longitude: 0 },
         destino: { latitude: 0, longitude: 0.01 },
         tipoVehiculo: 'auto',
-        horaFin: '2026-09-01T10:42:00Z',
+        horaFin: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
         metodoPago: 'tarjeta',
       });
-      const health = await fetch(`${process.env.E2E_API_URL ?? 'http://127.0.0.1:3000'}/health`);
+      const health = await fetch(`${process.env.E2E_API_URL ?? 'http://127.0.0.1:3002'}/health`);
 
       expect(response.status).toBe(503);
       expect(health.status).toBe(200);

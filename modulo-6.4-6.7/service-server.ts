@@ -1,20 +1,9 @@
-import { createViajeApi, HttpExternalApisClient } from './src/m6-rf-6.4-rf6.7/api.js';
-import { Pool } from 'pg';
-import { PostgresViajeRepository } from './src/m6-rf-6.4-rf6.7/ViajeRepository.js';
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  connectionTimeoutMillis: 2000,
-  query_timeout: 2500,
-});
-pool.on('error', (error) => console.error('Error en conexión PostgreSQL inactiva:', error.message));
+import { createViajeApi, HttpViajesApiClient } from './src/m6-rf-6.4-rf6.7/api.js';
 
 const server = createViajeApi({
-  externalApis: new HttpExternalApisClient(
-    process.env.M7_URL ?? process.env.SIMULATOR_URL ?? 'http://127.0.0.1:3001',
-    process.env.M4_URL ?? `${process.env.SIMULATOR_URL ?? 'http://127.0.0.1:3001'}/api/v1`,
+  viajesApi: new HttpViajesApiClient(
+    process.env.RF6_API_URL ?? 'http://127.0.0.1:3000',
   ),
-  repository: new PostgresViajeRepository(pool),
 });
 server.listen(Number(process.env.PORT ?? 3000), '0.0.0.0', () => {
   console.log(`API M6 escuchando en ${process.env.PORT ?? 3000}`);
