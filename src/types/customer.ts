@@ -75,6 +75,21 @@ export const CustomerProfileSchema = z.object({
 }).strict();
 export type CustomerProfile = Readonly<z.infer<typeof CustomerProfileSchema>>;
 
+/** Datos personales del usuario, propiedad de M1 (GET /auth/me). M2 no los persiste. */
+export interface CustomerIdentity {
+  nombre: string;
+  apellido: string;
+  dni: string | null;
+  telefono: string | null;
+  email: string;
+  rol: string;
+  estado: string;
+  creadoEn: string | null;
+}
+
+/** Perfil de M2 con los datos de M1; identity es null si no son del solicitante o M1 no respondió. */
+export type CustomerProfileWithIdentity = CustomerProfile & { identity: CustomerIdentity | null };
+
 export interface AccountStatusResponse {
   customerId: string;
   status: AccountStatusEnum;

@@ -119,7 +119,7 @@
     "/v1/customers/me": {
       "get": {
         "summary": "Obtener mi perfil (RF-2.1)",
-        "description": "Requiere un JWT de M1. Devuelve 404 si el userId autenticado todavía no tiene perfil.",
+        "description": "Requiere un JWT de M1. Devuelve 404 si el userId autenticado todavía no tiene perfil. Incluye en identity los datos personales del usuario (M1 GET /auth/me); identity es null si M1 no responde.",
         "operationId": "getCurrentCustomerProfile",
         "security": [
           {
@@ -132,7 +132,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CustomerProfile"
+                  "$ref": "#/components/schemas/CustomerProfileWithIdentity"
                 }
               }
             }
@@ -155,7 +155,7 @@
     "/v1/customers/{id}": {
       "get": {
         "summary": "Obtener perfil de cliente por ID (RF-2.1)",
-        "description": "Requiere un JWT de usuario. El identificador es el customerId interno cust_xxx.",
+        "description": "Requiere un JWT de usuario. El identificador es el customerId interno cust_xxx. identity trae los datos personales de M1 solo cuando quien consulta es el dueño del perfil; para otros usuarios, o si M1 no responde, es null.",
         "operationId": "getCustomerProfile",
         "security": [
           {
@@ -191,7 +191,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CustomerProfile"
+                  "$ref": "#/components/schemas/CustomerProfileWithIdentity"
                 }
               }
             }
@@ -1966,6 +1966,102 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "CustomerIdentity": {
+        "type": "object",
+        "description": "Datos personales del usuario, propiedad de M1 (GET /auth/me). M2 no los guarda: los consulta en cada request.",
+        "required": [
+          "nombre",
+          "apellido",
+          "email",
+          "rol",
+          "estado"
+        ],
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "example": "Ana"
+          },
+          "apellido": {
+            "type": "string",
+            "example": "Pérez"
+          },
+          "dni": {
+            "type": "string",
+            "nullable": true,
+            "example": "30111222"
+          },
+          "telefono": {
+            "type": "string",
+            "nullable": true,
+            "example": "+54 9 362 4111222"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "ana.perez@example.com"
+          },
+          "rol": {
+            "type": "string",
+            "example": "CLIENTE"
+          },
+          "estado": {
+            "type": "string",
+            "example": "ACTIVO"
+          },
+          "creadoEn": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "CustomerProfileWithIdentity": {
+        "type": "object",
+        "required": [
+          "customerId",
+          "userId",
+          "preferences",
+          "status",
+          "createdAt",
+          "identity"
+        ],
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "pattern": "^cust_[A-Za-z0-9]+$",
+            "example": "cust_823a7b9c"
+          },
+          "userId": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1,
+            "example": 12
+          },
+          "preferences": {
+            "$ref": "#/components/schemas/Preferences"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CustomerStatus"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "identity": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CustomerIdentity"
+              }
+            ],
+            "nullable": true,
+            "description": "null si quien consulta no es el dueño del perfil o si M1 no responde."
           }
         }
       },

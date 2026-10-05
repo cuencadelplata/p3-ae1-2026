@@ -14,6 +14,18 @@ export interface Preferences {
   notificationChannel: NotificationChannel;
 }
 
+/** Datos personales del usuario, propiedad de M1 (los trae M2 al consultar el perfil). */
+export interface CustomerIdentity {
+  nombre: string;
+  apellido: string;
+  dni: string | null;
+  telefono: string | null;
+  email: string;
+  rol: string;
+  estado: string;
+  creadoEn: string | null;
+}
+
 export interface CustomerProfile {
   customerId: string;
   userId: number;
@@ -21,6 +33,8 @@ export interface CustomerProfile {
   status: AccountStatusEnum;
   createdAt: string;
   updatedAt?: string;
+  /** null si M1 no respondió o el perfil no es del usuario autenticado. */
+  identity?: CustomerIdentity | null;
 }
 
 export interface AccountStatusResponse {

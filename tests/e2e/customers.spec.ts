@@ -62,7 +62,8 @@ test.describe('M2 Customers E2E', () => {
     test('demo scenario lands on the profile detail page', async ({ page }) => {
       await openDemo(page, 'Perfil habilitado');
 
-      await expect(page.getByRole('heading', { name: 'Usuario #12' })).toBeVisible();
+      // El nombre viene de M1 (GET /auth/me), consultado por M2 al pedir el perfil
+      await expect(page.getByRole('heading', { name: 'Ana Pérez' })).toBeVisible();
       await expect(page.getByText(/^cust_[0-9a-f]+$/)).toBeVisible();
     });
 
@@ -80,6 +81,15 @@ test.describe('M2 Customers E2E', () => {
       await page.waitForURL(/\/customers\/cust_[0-9a-f]+/);
       await expect(page.getByLabel('Preferred vehicle')).toHaveValue('moto');
       await expect(page.getByLabel('Notification channel')).toHaveValue('push');
+    });
+
+    test('profile shows the personal data that M2 gets from M1', async ({ page }) => {
+      await openDemo(page, 'Perfil habilitado');
+
+      await expect(page.getByRole('heading', { name: 'Datos personales' })).toBeVisible();
+      await expect(page.getByText('cliente12@example.com')).toBeVisible();
+      await expect(page.getByText('+54 9 362 4111222')).toBeVisible();
+      await expect(page.getByText('30111222')).toBeVisible();
     });
 
     test('onboarding without a token redirects to index', async ({ page }) => {
@@ -108,7 +118,7 @@ test.describe('M2 Customers E2E', () => {
     test('updates customer preferences', async ({ page, request }) => {
       await openFreshProfile(page, request);
       const heading = await page.getByRole('heading', { level: 1 }).textContent();
-      expect(heading).toMatch(/^Usuario #\d+$/);
+      expect(heading?.trim()).toBeTruthy();
 
       await page.getByLabel('Preferred vehicle').selectOption('auto');
       await page.getByLabel('Notification channel').selectOption('email');

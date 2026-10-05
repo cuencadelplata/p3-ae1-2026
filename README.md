@@ -130,7 +130,9 @@ El token es emitido por M1 (Auth). M2 lo valida llamando a `GET /auth/validar-id
 | `PUT` | `/v1/customers/:id/status` | 🔒 dueño | RF-2.5 | Cambiar estado (baja, bloqueo, etc.) |
 | `GET` | `/v1/customers/:id/trips` | 🔒 | RF-2.3 | Historial de viajes (via M6) |
 
-El `POST` acepta body vacío o solo `preferences`; sin preferencias aplica `auto` y `email`. El `customerId` interno tiene formato `cust_xxx`. El perfil se devuelve sin datos personales de M1:
+El `POST` acepta body vacío o solo `preferences`; sin preferencias aplica `auto` y `email`. El `customerId` interno tiene formato `cust_xxx`.
+
+`GET /v1/customers/me` y `GET /v1/customers/:id` devuelven además, en `identity`, los datos personales del usuario que M2 consulta en el momento a M1 (`GET /auth/me`, con el token de quien pide). M2 no los guarda ni los cachea. M1 solo entrega los datos del dueño del token, así que `identity` es `null` cuando el perfil es de otro usuario o si M1 no responde (el perfil se devuelve igual):
 
 ```json
 {
@@ -138,7 +140,11 @@ El `POST` acepta body vacío o solo `preferences`; sin preferencias aplica `auto
   "userId": 12,
   "preferences": { "preferredVehicleType": "auto", "notificationChannel": "email" },
   "status": "ACTIVO",
-  "createdAt": "2026-10-04T18:00:00.000Z"
+  "createdAt": "2026-10-04T18:00:00.000Z",
+  "identity": {
+    "nombre": "Ana", "apellido": "Pérez", "dni": "30111222", "telefono": "+54 9 362 4111222",
+    "email": "cliente12@example.com", "rol": "CLIENTE", "estado": "ACTIVO", "creadoEn": "2026-09-01T12:00:00.000Z"
+  }
 }
 ```
 
@@ -286,7 +292,9 @@ M2 consume (no provee) estos endpoints:
 
 ```
 M1:      GET /auth/validar-identidad-y-rol   Authorization: Bearer <jwt>
-         → 200 { valid, userId, role } | 401
+         → 200 { valid, userId, role, ... } | 401   (valid: false → M2 responde 401)
+M1:      GET /auth/me   Authorization: Bearer <jwt>
+         → 200 { userId, nombre, apellido, dni, telefono, email, rol, estado, creadoEn } | 401 | 403 | 404
 
 Soporte: GET /usuarios/{userId}/penalizaciones   X-Secret-Key: <SOPORTE_SECRET_KEY>
          → 200 { userId, total, penalizaciones: [...] }

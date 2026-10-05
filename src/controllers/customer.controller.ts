@@ -3,11 +3,39 @@ import { customerService, CustomerService } from '../services/customer.service.j
 import { CreateCustomerSchema, UpdatePreferencesSchema, UserIdSchema } from '../types/customer.js';
 import { CustomerAlreadyExistsError } from '../errors/customer-already-exists.error.js';
 import { findOwnedCustomer } from './ownership.js';
+import { m1ProfileClient, M1ProfileClient } from '../clients/m1-profile.client.js';
+import { logger } from '../observability/logging.js';
+import type { CustomerIdentity, CustomerProfile, CustomerProfileWithIdentity } from '../types/customer.js';
+
+/**
+ * Agrega al perfil los datos personales de M1 (nombre, email, teléfono, DNI).
+ * M1 solo los entrega al dueño del token: para un tercero, o si M1 no responde,
+ * identity es null y el perfil se devuelve igual. No se cachean ni se guardan en M2.
+ */
+async function withIdentity(
+  customer: CustomerProfile,
+  req: Request,
+  profiles: M1ProfileClient
+): Promise<CustomerProfileWithIdentity> {
+  const auth = req.auth;
+  if (!auth || auth.userId !== customer.userId) return { ...customer, identity: null };
+  try {
+    const result = await profiles.getIdentity(auth.token);
+    if (!result || result.userId !== customer.userId) return { ...customer, identity: null };
+    const { userId: _userId, ...identity } = result;
+    return { ...customer, identity: identity satisfies CustomerIdentity };
+  } catch (error) {
+    logger.warn({ err: error, customerId: customer.customerId }, 'm1.identity.unavailable');
+    return { ...customer, identity: null };
+  }
+}
 
 export class CustomerController {
   private service: CustomerService;
+  private profiles: M1ProfileClient;
 
-  constructor(service: CustomerService = customerService) {
+  constructor(service: CustomerService = customerService, profiles: M1ProfileClient = m1ProfileClient) {
+    this.profiles = profiles;
     this.service = service;
   }
 
@@ -54,7 +82,7 @@ export class CustomerController {
       return;
     }
 
-    res.status(200).json(customer);
+    res.status(200).json(await withIdentity(customer, req, this.profiles));
   };
 
   /**
@@ -72,7 +100,8 @@ export class CustomerController {
       return;
     }
 
-    res.set('X-Data-Source', source).status(200).json(customer);
+    // X-Data-Source se refiere al perfil de M2; los datos de M1 siempre se consultan en el momento
+    res.set('X-Data-Source', source).status(200).json(await withIdentity(customer, req, this.profiles));
   };
 
   /**

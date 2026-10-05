@@ -45,7 +45,9 @@ export default function CustomerDetail() {
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
         <Link to="/" style={{ color: '#6366f1', fontSize: '0.875rem' }}>← Inicio</Link>
         <span style={{ color: '#d1d5db' }}>|</span>
-        <h1 style={{ fontSize: '1.3rem' }}>Usuario #{customer.userId}</h1>
+        <h1 style={{ fontSize: '1.3rem' }}>
+          {customer.identity ? `${customer.identity.nombre} ${customer.identity.apellido}` : `Usuario #${customer.userId}`}
+        </h1>
         <span className={`badge ${statusBadge(customer.status)}`}>{customer.status}</span>
       </div>
 
@@ -97,8 +99,28 @@ function ProfileTab({ customer, onUpdate }: { customer: CustomerProfile; onUpdat
           <dt style={dtStyle}>Alta</dt>
           <dd>{formatDate(customer.createdAt)}</dd>
         </dl>
+
+        <h2 style={{ ...sectionTitle, marginTop: '20px' }}>Datos personales</h2>
+        {customer.identity ? (
+          <dl style={dlStyle}>
+            <dt style={dtStyle}>Nombre</dt>
+            <dd>{customer.identity.nombre} {customer.identity.apellido}</dd>
+            <dt style={dtStyle}>Email</dt>
+            <dd>{customer.identity.email}</dd>
+            <dt style={dtStyle}>Teléfono</dt>
+            <dd>{customer.identity.telefono ?? '—'}</dd>
+            <dt style={dtStyle}>DNI</dt>
+            <dd>{customer.identity.dni ?? '—'}</dd>
+            <dt style={dtStyle}>Estado en M1</dt>
+            <dd>{customer.identity.estado}</dd>
+          </dl>
+        ) : (
+          <p style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+            No se pudieron obtener los datos personales desde M1.
+          </p>
+        )}
         <p style={{ marginTop: '16px', fontSize: '0.78rem', color: '#9ca3af', lineHeight: 1.4 }}>
-          El nombre, teléfono y correo pertenecen a M1. M2 solo guarda el vínculo por <code>userId</code> y las preferencias.
+          Los datos personales pertenecen a M1 y se consultan en el momento; M2 solo guarda el vínculo por <code>userId</code> y las preferencias.
         </p>
       </div>
       <PreferencesEditor customer={customer} onUpdate={onUpdate} />

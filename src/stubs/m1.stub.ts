@@ -123,6 +123,38 @@ m1StubRouter.get('/auth/validar-identidad-y-rol', (req, res) => {
   });
 });
 
+// Datos personales de ejemplo (en M1 real salen de su base de usuarios)
+const DEMO_USERS: Record<number, { nombre: string; apellido: string; dni: string; telefono: string }> = {
+  12: { nombre: 'Ana', apellido: 'Pérez', dni: '30111222', telefono: '+54 9 362 4111222' },
+  13: { nombre: 'Bruno', apellido: 'Gómez', dni: '31222333', telefono: '+54 9 362 4222333' },
+  14: { nombre: 'Carla', apellido: 'Díaz', dni: '32333444', telefono: '+54 9 362 4333444' }
+};
+
+// Mismo contrato que M1 real (GET /auth/me): solo los datos del dueño del token
+m1StubRouter.get('/auth/me', (req, res) => {
+  const token = bearerToken(req.header('Authorization'));
+  const payload = token === null ? null : verifyToken(token);
+  if (payload === null) {
+    res.status(401).json({ error: 'Unauthorized', message: 'Token ausente, inválido o vencido' });
+    return;
+  }
+
+  const demo = DEMO_USERS[payload.userId] ?? {
+    nombre: 'Cliente',
+    apellido: String(payload.userId),
+    dni: String(40_000_000 + payload.userId),
+    telefono: `+54 9 362 4${String(payload.userId).padStart(6, '0')}`
+  };
+  res.json({
+    userId: payload.userId,
+    ...demo,
+    email: `cliente${payload.userId}@example.com`,
+    rol: payload.role,
+    estado: 'ACTIVO',
+    creadoEn: '2026-09-01T12:00:00.000Z'
+  });
+});
+
 m1StubRouter.get('/health', (_req, res) => {
   res.json({ status: 'UP', service: 'm1-stub' });
 });
