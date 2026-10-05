@@ -34,6 +34,16 @@ El servicio consume `payment.confirmed` desde su propia cola
 `POST /receipts` se conserva: sirve para pruebas, reemisiones manuales y
 compatibilidad con AE1. Ambos caminos usan la misma lógica de emisión.
 
+**Actualización 2026-10-04.** M7 (RF-7.3) informó que se integra solo por API y no
+publicará `payment.confirmed`: en AE4 debe usar la API de Mercado Pago (hoy la
+simula) y prefirió no cambiar la forma de integración dos veces. En la práctica, M7
+usará la primera alternativa de la tabla, que este servicio ya soporta sin cambios.
+El costo señalado (M7 reintenta por su cuenta si el servicio no responde) queda
+acotado porque la emisión es idempotente por `tripId`: un reintento devuelve el
+mismo comprobante con `200` en lugar de emitir otro. La entrada por evento se
+mantiene, con productor simulado en AE2, porque cumple la comunicación asíncrona
+exigida y sirve a cualquier productor futuro. Ver catálogo, sección 5.1.
+
 ## Decisión 2: fallos del consumidor con cola de reintentos y DLQ
 
 | Tipo de fallo | Tratamiento |
@@ -118,7 +128,10 @@ en `/health/ready`.
 * **Pendiente:** M7 respondió el 2026-09-30 con un modelo de pago sin importes ni datos
   del viaje, que no alcanza para emitir el comprobante. Se mantiene la alternativa 1 del
   catálogo de forma provisoria y el cierre queda para la integración de AE4 (catálogo,
-  sección 5.1).
+  sección 5.1). El 2026-10-04 M7 informó que se integra por API (ver la actualización
+  de la decisión 1) y que su pedido incluirá el medio de pago y la tarifa (total,
+  moneda y detalle, provista por RF-7.1). Los datos del cliente, el conductor y el
+  recorrido no son de M7 y siguen pendientes para AE4.
 
 ## Evidencia
 
