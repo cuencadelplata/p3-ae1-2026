@@ -4,6 +4,7 @@ import { isDatabaseUnavailable } from '../db/errors';
 import { AppError } from '../errors/app-error';
 import { DependencyUnavailableError } from '../errors/dependency-unavailable.error';
 import { FiscalAuthorizationRejectedError } from '../integrations/fiscal-authorizer';
+import { PaymentNotAuthorizedError } from '../integrations/m7-payments';
 import { createLogger, errorFields, errorMessage } from '../observability/logger';
 
 const log = createLogger('http');
@@ -62,6 +63,16 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
     });
     res.setHeader('Retry-After', String(unavailable.retryAfterSeconds));
     res.status(503).json(buildBody(unavailable.code, unavailable.message, req.originalUrl));
+    return;
+  }
+
+  // Pendiente o sin registrar se puede repetir mas tarde (409); un pago
+  // rechazado por M7 no genera comprobante (422).
+  if (error instanceof PaymentNotAuthorizedError) {
+    if (error.retryable) {
+      res.setHeader('Retry-After', '5');
+    }
+    res.status(error.retryable ? 409 : 422).json(buildBody(error.code, error.message, req.originalUrl));
     return;
   }
 

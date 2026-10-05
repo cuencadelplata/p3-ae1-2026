@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 
 const RECEIPTS = process.env.RECEIPTS_URL ?? "http://localhost:3008";
+const M7 = process.env.M7_URL ?? "http://localhost:4020";
 const RABBIT_API = process.env.RABBITMQ_API_URL ?? "http://localhost:15672/api";
 const RABBIT_AUTH = `Basic ${Buffer.from(process.env.RABBITMQ_API_CREDENTIALS ?? "guest:guest").toString("base64")}`;
 const EXCHANGE = "mobility.events";
@@ -111,14 +112,14 @@ after(async () => {
   });
 });
 
-test("/health/ready informa PostgreSQL, Redis, RabbitMQ y el autorizador fiscal disponibles", async () => {
+test("/health/ready informa PostgreSQL, Redis, RabbitMQ, el autorizador fiscal y M7 disponibles", async () => {
   const response = await fetch(`${RECEIPTS}/health/ready`, { headers: { "X-Correlation-Id": run } });
   const body = await response.json();
 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("x-correlation-id"), run);
   assert.equal(body.status, "ok");
-  for (const dependency of ["postgres", "redis", "rabbitmq", "fiscal"]) {
+  for (const dependency of ["postgres", "redis", "rabbitmq", "fiscal", "payments"]) {
     assert.equal(body.dependencies[dependency].status, "available", `${dependency} debe estar disponible`);
   }
 });
@@ -209,6 +210,51 @@ test("el enlace temporal descarga el PDF y deja de funcionar al vencer", async (
   const expired = await fetch(url);
   assert.equal(expired.status, 410);
   assert.equal((await expired.json()).error.code, "DOWNLOAD_LINK_EXPIRED");
+});
+
+/** Registra el pago en la API de M7 simulada con el mismo contrato de M7. */
+async function m7(path, body) {
+  const response = await fetch(`${M7}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  assert.ok(response.ok, `M7 ${path} respondio ${response.status}`);
+}
+
+test("con el pago pendiente en M7 no se emite; al autorizarse, el reintento emite con el medio de pago de M7", async () => {
+  const tripId = `${run}-m7-pendiente`;
+  await m7("/metodo-pago", { clienteId: "cli-e2e", viajeId: tripId, tipo: "transferencia" });
+
+  const event = paymentConfirmed(tripId);
+  await publish("payment.confirmed", event, event.messageId);
+  await pause(1000);
+  assert.equal((await fetch(`${RECEIPTS}/api/v1/receipts/${tripId}`)).status, 404, "pendiente: sin comprobante");
+
+  await m7(`/metodo-pago/${tripId}/autorizar`);
+  const receipt = await waitFor(
+    async () => {
+      const response = await fetch(`${RECEIPTS}/api/v1/receipts/${tripId}`);
+      return response.ok ? (await response.json()).data : null;
+    },
+    { what: "la emision del comprobante en el reintento", timeoutMs: 20000 },
+  );
+  assert.equal(receipt.payment.method, "TRANSFERENCIA");
+});
+
+test("con el pago rechazado en M7 el mensaje termina en la DLQ y no hay comprobante", async () => {
+  const tripId = `${run}-m7-rechazado`;
+  await m7("/metodo-pago", { clienteId: "cli-e2e", viajeId: tripId, tipo: "tarjeta" });
+  await m7(`/metodo-pago/${tripId}/rechazar`);
+
+  const event = paymentConfirmed(tripId);
+  await publish("payment.confirmed", event, event.messageId);
+
+  await waitFor(
+    async () => (await readQueue(DLQ, { requeue: true })).some((message) => message.properties.message_id === event.messageId),
+    { what: "la llegada del pago rechazado a la DLQ" },
+  );
+  assert.equal((await fetch(`${RECEIPTS}/api/v1/receipts/${tripId}`)).status, 404);
 });
 
 test("los PDF ya no se publican como archivos estaticos", async () => {

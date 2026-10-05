@@ -1,6 +1,6 @@
 {
   "name": "m8-documentos",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "M8 - Notificaciones, Documentos y Soporte. Emision y consulta de comprobantes de viaje en PDF.",
   "main": "dist/index.js",
   "private": true,

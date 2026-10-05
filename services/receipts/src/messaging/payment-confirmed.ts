@@ -1,6 +1,7 @@
 import { isDatabaseUnavailable } from '../db/errors';
 import { DependencyUnavailableError } from '../errors/dependency-unavailable.error';
 import { FiscalAuthorizationRejectedError } from '../integrations/fiscal-authorizer';
+import { PaymentNotAuthorizedError } from '../integrations/m7-payments';
 import type { ReceiptRequest } from '../models/receipt';
 import * as inbox from '../repositories/inbox.repository';
 import { issueReceipt } from '../services/receipt.service';
@@ -82,18 +83,22 @@ export function toReceiptRequest(envelope: EventEnvelope): ValidationResult<Rece
  *    encuentra el comprobante ya emitido y no genera otro.
  *
  * Los errores se clasifican para el consumidor:
- * - PermanentMessageError (sobre o contenido invalido, o rechazo del
- *   autorizador fiscal): reintentarlo no cambia el resultado, va directo a la
- *   cola de descarte.
- * - DependencyUnavailableError (PostgreSQL caido, o autorizador fiscal sin
- *   respuesta o con el circuito abierto): el mensaje espera a que la
- *   dependencia se recupere sin descontar intentos.
- * - Cualquier otro: transitorio, se reintenta hasta agotar los intentos.
+ * - PermanentMessageError (sobre o contenido invalido, pago rechazado por M7 o
+ *   rechazo del autorizador fiscal): reintentarlo no cambia el resultado, va
+ *   directo a la cola de descarte.
+ * - DependencyUnavailableError (PostgreSQL caido, M7 sin respuesta, o
+ *   autorizador fiscal sin respuesta o con el circuito abierto): el mensaje
+ *   espera a que la dependencia se recupere sin descontar intentos.
+ * - Cualquier otro, incluido un pago pendiente o sin registrar en M7:
+ *   transitorio, se reintenta hasta agotar los intentos.
  */
 export async function processPaymentConfirmed(content: Buffer): Promise<PaymentConfirmedOutcome> {
   try {
     return await processMessage(content);
   } catch (error) {
+    if (error instanceof PaymentNotAuthorizedError && !error.retryable) {
+      throw new PermanentMessageError('M7 rechazo el pago del viaje', [`${error.code}: ${error.message}`]);
+    }
     if (error instanceof FiscalAuthorizationRejectedError) {
       throw new PermanentMessageError('El autorizador fiscal rechazo el comprobante', [`${error.code}: ${error.message}`]);
     }
