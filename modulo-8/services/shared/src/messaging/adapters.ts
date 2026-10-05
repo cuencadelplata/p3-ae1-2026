@@ -9,6 +9,7 @@ import { ROUTING_KEY_TO_EVENT_TYPE } from './topology';
 const EXTERNAL_EVENT_TYPE_MAP: Record<string, string> = {
   'trip_requested': 'TripRequested',
   'trip.requested': 'TripRequested',
+  'ride.requested': 'TripRequested',
   'trip_assigned': 'DriverAssigned',
   'trip.assigned': 'DriverAssigned',
   'driver_assigned': 'DriverAssigned',

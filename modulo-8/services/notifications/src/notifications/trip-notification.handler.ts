@@ -17,8 +17,10 @@ export function handleTripNotificationEvent(
     return validation;
   }
 
-  const { messageId, eventType, tripId, recipientId, correlationId, occurredAt } = validation.data;
+  const { messageId, eventType, recipientId, correlationId, occurredAt } = validation.data;
   const { title, message } = getTripNotificationContent(eventType);
+  const tripId = eventType === "TripRequested" ? null : validation.data.tripId;
+  const rideRequestId = eventType === "TripRequested" ? validation.data.rideRequestId : null;
 
   return {
     valid: true,
@@ -26,6 +28,7 @@ export function handleTripNotificationEvent(
       notificationId: randomUUID(),
       sourceMessageId: messageId,
       tripId,
+      rideRequestId,
       recipientId,
       eventType,
       title,
