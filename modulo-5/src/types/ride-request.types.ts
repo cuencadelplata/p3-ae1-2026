@@ -51,6 +51,16 @@ export interface CreateRideRequestDTO {
   vehicleType: VehicleType;
 }
 
+export interface M4DriverLocation {
+  driverId: string;
+  latitude: number;
+  longitude: number;
+  vehicleType: VehicleType;
+  available: boolean;
+  updatedAt?: string;
+  expiresAt?: string;
+}
+
 export interface NearbyDriverStub {
   driverId: string;
   distanceKm: number;

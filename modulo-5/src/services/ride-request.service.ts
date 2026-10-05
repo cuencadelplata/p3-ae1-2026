@@ -18,6 +18,8 @@ import {
 } from '../types/ride-request.types';
 import { RideRequestValidator } from '../schemas/ride-request.schema';
 import { randomUUID } from 'node:crypto';
+import { RedisService } from './redis.service';
+import { RabbitMQService, DriverCancellationEvent } from './rabbitmq.service';
 
 export class ConflictError extends Error {
   public code: string;
@@ -57,6 +59,26 @@ export class RideRequestService {
   private idempotencyStore: Map<string, RideRequest> = new Map();
   private offers: Map<string, RideOffer> = new Map();
 
+  // Servicios de soporte para AE2 (RNF-06 y RNF-07)
+  private redisService: RedisService;
+  private rabbitMQService: RabbitMQService;
+
+  constructor(redisService?: RedisService, rabbitMQService?: RabbitMQService) {
+    this.redisService = redisService || new RedisService();
+    this.rabbitMQService = rabbitMQService || new RabbitMQService();
+
+    // Suscribirse a la cola despacho.reabrir para atender cancelaciones de conductor (integración con módulo de cancelaciones)
+    this.rabbitMQService.subscribeToReopenDispatch((event) => this.handleDriverCancellation(event));
+  }
+
+  public getRedisService(): RedisService {
+    return this.redisService;
+  }
+
+  public getRabbitMQService(): RabbitMQService {
+    return this.rabbitMQService;
+  }
+
 
   /**
    * Stub de integración con M7: Estimación de Tarifa (RF-7.1)
@@ -80,18 +102,16 @@ export class RideRequestService {
   }
 
   /**
-   * Stub de integración con M4: Conductores Cercanos (RF-4.2)
+   * Integración con M4: Conductores Cercanos (RF-4.2 / RF-5.2)
+   * Consulta las ubicaciones y disponibilidad de conductores desde Redis (driver:{driverId}:location)
    */
-  private async fetchNearbyDriversFromM4(
-    _lat: number,
-    _lng: number,
-    vehicleType: VehicleType
+  public async fetchNearbyDriversFromM4(
+    lat: number,
+    lng: number,
+    vehicleType: VehicleType,
+    radiusKm: number = 5.0
   ): Promise<NearbyDriverStub[]> {
-    // Simula respuesta de M4 en AE1
-    return [
-      { driverId: 'drv_101', distanceKm: 1.2, vehicleType },
-      { driverId: 'drv_102', distanceKm: 2.1, vehicleType }
-    ];
+    return this.redisService.findNearbyDriversFromM4(lat, lng, vehicleType, radiusKm);
   }
 
   /**
@@ -230,11 +250,12 @@ export class RideRequestService {
       );
     }
 
-    // 3. Consumir conductores cercanos desde M4 (RF-4.2)
+    // 3. Consumir conductores cercanos desde M4 (RF-4.2 / RF-5.2)
     const nearby = await this.fetchNearbyDriversFromM4(
       request.origin.latitude,
       request.origin.longitude,
-      request.vehicleType
+      request.vehicleType,
+      radiusKm
     );
 
     // 4. Algoritmo de filtrado y ordenamiento:
@@ -354,6 +375,24 @@ export class RideRequestService {
 
       this.offers.set(offer.id, offer);
       createdOffers.push(offer);
+
+      // RF-5.3 / RNF-06: Persistir oferta en Redis con expiración automática (TTL)
+      await this.redisService.saveOfferWithTtl(offer, ttlSeconds);
+
+      // RF-5.3 / RNF-07: Publicar mensaje asíncrono a RabbitMQ para avisar al conductor
+      await this.rabbitMQService.publishOfferCreated({
+        eventType: 'OFFER_CREATED',
+        offerId: offer.id,
+        requestId: request.id,
+        driverId,
+        ttlSeconds,
+        expiresAt: offer.expiresAt,
+        origin: offer.origin,
+        destination: offer.destination,
+        vehicleType: offer.vehicleType,
+        estimatedFare: offer.estimatedFare,
+        timestamp: now.toISOString()
+      });
     }
 
     // 5. Transicionar estado de la solicitud a OFFERED
@@ -362,14 +401,14 @@ export class RideRequestService {
     this.requests.set(requestId, request);
 
     console.log(
-      `[RF-5.3] Ofertas despachadas: Solicitud=${request.id} | Cantidad=${createdOffers.length} | TTL=${ttlSeconds}s (Expira: ${expiresAt.toISOString()}) | Conductores=[${createdOffers.map((o) => `${o.driverId} (Oferta: ${o.id})`).join(', ')}]`
+      `[RF-5.3] Ofertas despachadas con Redis TTL (${ttlSeconds}s) y RabbitMQ: Solicitud=${request.id} | Cantidad=${createdOffers.length} | Conductores=[${createdOffers.map((o) => `${o.driverId} (Oferta: ${o.id})`).join(', ')}]`
     );
 
     return {
       requestId: request.id,
       offersSentCount: createdOffers.length,
       offers: createdOffers,
-      message: `Oferta enviada exitosamente a ${createdOffers.length} conductor(es) con TTL de ${ttlSeconds}s.`
+      message: `Oferta enviada exitosamente a ${createdOffers.length} conductor(es) con TTL de ${ttlSeconds}s (Redis + RabbitMQ).`
     };
   }
 
@@ -425,14 +464,16 @@ export class RideRequestService {
       );
     }
 
-    // 4. Verificar vigencia por tiempo (TTL)
+    // 4. Verificar vigencia por tiempo (TTL con Redis)
+    const remainingTtl = await this.redisService.getRemainingTtl(offerId);
     const now = new Date();
     const nowTime = now.getTime();
     const expiresAtTime = new Date(offer.expiresAt).getTime();
 
-    if (nowTime > expiresAtTime || offer.status === 'EXPIRED') {
+    if (remainingTtl === -2 || nowTime > expiresAtTime || offer.status === 'EXPIRED') {
       offer.status = 'EXPIRED';
       this.offers.set(offerId, offer);
+      await this.redisService.deleteOffer(offerId);
       throw new ConflictError(
         'La oferta ha expirado y ya no está vigente',
         'OFFER_EXPIRED'
@@ -456,6 +497,8 @@ export class RideRequestService {
     if (action === 'REJECT') {
       offer.status = 'REJECTED';
       this.offers.set(offerId, offer);
+      // Eliminar de Redis ya que no está disponible
+      await this.redisService.deleteOffer(offerId);
 
       // Si todas las ofertas para esta solicitud fueron rechazadas o expiraron
       const relatedOffers = Array.from(this.offers.values()).filter(
@@ -488,6 +531,7 @@ export class RideRequestService {
     if (request.status === 'ASSIGNED') {
       offer.status = 'EXPIRED'; // La oferta queda revocada porque ya se asignó a otro
       this.offers.set(offerId, offer);
+      await this.redisService.deleteOffer(offerId);
       throw new ConflictError(
         'La solicitud de viaje ya fue asignada a otro conductor',
         'REQUEST_ALREADY_ASSIGNED'
@@ -497,6 +541,7 @@ export class RideRequestService {
     if (request.status === 'CANCELLED') {
       offer.status = 'EXPIRED';
       this.offers.set(offerId, offer);
+      await this.redisService.deleteOffer(offerId);
       throw new ConflictError(
         'La solicitud de viaje fue cancelada por el cliente y ya no se encuentra disponible',
         'REQUEST_CANCELLED'
@@ -506,6 +551,7 @@ export class RideRequestService {
     if (request.status === 'EXPIRED') {
       offer.status = 'EXPIRED';
       this.offers.set(offerId, offer);
+      await this.redisService.deleteOffer(offerId);
       throw new ConflictError(
         `La solicitud de viaje no está disponible para ser aceptada (estado: ${request.status})`,
         'REQUEST_NOT_AVAILABLE'
@@ -515,6 +561,7 @@ export class RideRequestService {
     // 8. Asignar la solicitud y marcar la oferta como ACCEPTED
     offer.status = 'ACCEPTED';
     this.offers.set(offerId, offer);
+    await this.redisService.deleteOffer(offerId);
 
     request.status = 'ASSIGNED';
     request.assignedDriverId = offer.driverId;
@@ -522,15 +569,16 @@ export class RideRequestService {
     this.requests.set(request.id, request);
 
     // 9. Cancelar / expirar automáticamente las demás ofertas pendientes para esta misma solicitud
-    Array.from(this.offers.values())
-      .filter((o) => o.requestId === request.id && o.id !== offer.id && o.status === 'PENDING')
-      .forEach((otherOffer) => {
-        otherOffer.status = 'EXPIRED';
-        this.offers.set(otherOffer.id, otherOffer);
-      });
+    for (const otherOffer of Array.from(this.offers.values()).filter(
+      (o) => o.requestId === request.id && o.id !== offer.id && o.status === 'PENDING'
+    )) {
+      otherOffer.status = 'EXPIRED';
+      this.offers.set(otherOffer.id, otherOffer);
+      await this.redisService.deleteOffer(otherOffer.id);
+    }
 
     console.log(
-      `[RF-5.4 / RF-5.5] Oferta ${offer.id} ACEPTADA por conductor ${offer.driverId}. Solicitud ${request.id} ASIGNADA exclusivamente a ${offer.driverId}.`
+      `[RF-5.4 / RF-5.5] Oferta ${offer.id} ACEPTADA por conductor ${offer.driverId}. Solicitud ${request.id} ASIGNADA exclusivamente a ${offer.driverId}. Ofertas restantes limpiadas de Redis.`
     );
 
     return {
@@ -597,15 +645,16 @@ export class RideRequestService {
     this.requests.set(request.id, request);
 
     // 5. Invalidar/expirar inmediatamente todas las ofertas asociadas que sigan pendientes
-    Array.from(this.offers.values())
-      .filter((o) => o.requestId === request.id && o.status === 'PENDING')
-      .forEach((pendingOffer) => {
-        pendingOffer.status = 'EXPIRED';
-        this.offers.set(pendingOffer.id, pendingOffer);
-      });
+    for (const pendingOffer of Array.from(this.offers.values()).filter(
+      (o) => o.requestId === request.id && o.status === 'PENDING'
+    )) {
+      pendingOffer.status = 'EXPIRED';
+      this.offers.set(pendingOffer.id, pendingOffer);
+      await this.redisService.deleteOffer(pendingOffer.id);
+    }
 
     console.log(
-      `[RF-5.6] Solicitud de viaje ${request.id} CANCELADA por cliente ${clientId}. Motivo="${request.cancellationReason || 'Sin motivo especificado'}"`
+      `[RF-5.6] Solicitud de viaje ${request.id} CANCELADA por cliente ${clientId}. Motivo="${request.cancellationReason || 'Sin motivo especificado'}". Ofertas en Redis eliminadas.`
     );
 
     return {
@@ -619,17 +668,19 @@ export class RideRequestService {
   }
 
   /**
-   * Obtiene una oferta por su ID
+   * Obtiene una oferta por su ID (consultando Redis para TTL dinámico)
    */
   public async getOfferById(offerId: string): Promise<RideOffer> {
     const offer = this.offers.get(offerId);
     if (!offer) {
       throw new NotFoundError('Oferta no encontrada', 'OFFER_NOT_FOUND');
     }
+    const remainingTtl = await this.redisService.getRemainingTtl(offerId);
     const now = new Date().getTime();
-    if (offer.status === 'PENDING' && new Date(offer.expiresAt).getTime() < now) {
+    if (offer.status === 'PENDING' && (remainingTtl === -2 || new Date(offer.expiresAt).getTime() < now)) {
       offer.status = 'EXPIRED';
       this.offers.set(offerId, offer);
+      await this.redisService.deleteOffer(offerId);
     }
     return offer;
   }
@@ -675,6 +726,73 @@ export class RideRequestService {
         return offer;
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  /**
+   * Manejador de eventos de RabbitMQ en la cola 'despacho.reabrir'
+   * Procesa la cancelación de un conductor y reabre automáticamente el despacho para nuevos candidatos.
+   */
+  public async handleDriverCancellation(event: DriverCancellationEvent): Promise<void> {
+    const requestId = event.viajeId;
+    const clientId = event.clienteId;
+    const cancelledDriverId = event.conductorId;
+
+    console.log(
+      `[RabbitMQ] Recibido evento '${event.evento}' en 'despacho.reabrir' para Viaje=${requestId} | Cliente=${clientId} | ConductorCanceló=${cancelledDriverId}`
+    );
+
+    const request = this.requests.get(requestId);
+    if (!request) {
+      console.warn(`[RabbitMQ] Solicitud de viaje ${requestId} no encontrada para reapertura de despacho.`);
+      return;
+    }
+
+    // 1. Reabrir estado de la solicitud: quitar asignación y regresar a SEARCHING
+    request.assignedDriverId = null;
+    request.status = 'SEARCHING';
+    request.updatedAt = new Date().toISOString();
+    this.requests.set(requestId, request);
+
+    // 2. Marcar como expiradas las ofertas pendientes asociadas
+    for (const offer of this.offers.values()) {
+      if (offer.requestId === requestId && (offer.status === 'PENDING' || offer.driverId === cancelledDriverId)) {
+        offer.status = 'EXPIRED';
+        this.offers.set(offer.id, offer);
+        await this.redisService.deleteOffer(offer.id);
+      }
+    }
+
+    // 3. Buscar nuevos candidatos excluyendo al conductor que canceló
+    try {
+      const candidatesResult = await this.searchCandidatesForRequest(requestId, clientId, {
+        radiusKm: 5.0,
+        maxCandidates: 5
+      });
+
+      const filteredCandidates = candidatesResult.candidates.filter(
+        (c) => c.driverId !== cancelledDriverId
+      );
+
+      if (filteredCandidates.length > 0) {
+        // 4. Emitir nuevas ofertas con vencimiento (TTL) en Redis y publicar en RabbitMQ
+        await this.sendOffersForRequest(requestId, clientId, {
+          driverIds: filteredCandidates.map((c) => c.driverId),
+          ttlSeconds: 30
+        });
+
+        console.log(
+          `[RabbitMQ] Despacho reabierto exitosamente para viaje ${requestId}. Nuevas ofertas enviadas a: ${filteredCandidates
+            .map((c) => c.driverId)
+            .join(', ')}`
+        );
+      } else {
+        console.warn(
+          `[RabbitMQ] No se encontraron otros conductores disponibles para el viaje ${requestId} (distintos a ${cancelledDriverId}).`
+        );
+      }
+    } catch (err) {
+      console.warn(`[RabbitMQ] No fue posible reasignar candidatos automáticamente: ${(err as Error).message}`);
+    }
   }
 }
 
