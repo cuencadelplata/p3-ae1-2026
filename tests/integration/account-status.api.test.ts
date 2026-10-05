@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../../src/app.js';
 import { customerService } from '../../src/services/customer.service.js';
+import { accountStatusRepository } from '../../src/repositories/account-status.repository.js';
 import { customerRepository } from '../../src/repositories/customer.repository.js';
 import { soporteClient } from '../../src/clients/soporte.client.js';
 import { m6Client } from '../../src/clients/m6.client.js';
@@ -87,7 +88,7 @@ describe('GET /v1/customers/:id/status (RF-2.5)', () => {
 
   it('otro usuario sobre un perfil ajeno → 403 y no consulta el estado', async () => {
     mockAuthAs(99);
-    const find = vi.spyOn(customerRepository, 'findAccountStatus');
+    const find = vi.spyOn(accountStatusRepository, 'findAccountStatus');
 
     const res = await request(app)
       .get('/v1/customers/cust_823a7b9c/status')
@@ -109,7 +110,7 @@ describe('GET /v1/customers/:id/status (RF-2.5)', () => {
 
   it('con X-Secret-Key válida → 200 (acceso de módulo interno)', async () => {
     process.env.STATUS_SECRET_KEY = 'secret-status';
-    vi.spyOn(customerRepository, 'findAccountStatus').mockResolvedValueOnce(savedStatus());
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockResolvedValueOnce(savedStatus());
     vi.spyOn(soporteClient, 'getPenalizaciones').mockResolvedValueOnce({ userId: 12, total: 0, penalizaciones: [] });
 
     const res = await request(app)
@@ -129,7 +130,7 @@ describe('GET /v1/customers/:id/status (RF-2.5)', () => {
   });
 
   it('0 penalizaciones → devuelve estado ACTIVO sin cambios', async () => {
-    vi.spyOn(customerRepository, 'findAccountStatus').mockResolvedValueOnce(savedStatus());
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockResolvedValueOnce(savedStatus());
     vi.spyOn(soporteClient, 'getPenalizaciones').mockResolvedValueOnce({ userId: 12, total: 0, penalizaciones: [] });
 
     const res = await request(app)
@@ -140,9 +141,9 @@ describe('GET /v1/customers/:id/status (RF-2.5)', () => {
   });
 
   it('2 penalizaciones → estado recalculado a BLOQUEADO_TEMPORAL', async () => {
-    vi.spyOn(customerRepository, 'findAccountStatus').mockResolvedValueOnce(savedStatus({ status: 'ACTIVO' }));
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockResolvedValueOnce(savedStatus({ status: 'ACTIVO' }));
     vi.spyOn(soporteClient, 'getPenalizaciones').mockResolvedValueOnce({ userId: 12, total: 2, penalizaciones: [] });
-    vi.spyOn(customerRepository, 'updateAccountStatus').mockResolvedValueOnce(
+    vi.spyOn(accountStatusRepository, 'updateAccountStatus').mockResolvedValueOnce(
       savedStatus({ status: 'BLOQUEADO_TEMPORAL', blockOrigin: 'AUTOMATICO', reason: 'Bloqueado automáticamente por 2 penalización(es) vigente(s)' })
     );
 
@@ -155,9 +156,9 @@ describe('GET /v1/customers/:id/status (RF-2.5)', () => {
   });
 
   it('3+ penalizaciones → estado recalculado a BLOQUEADO_PERMANENTE', async () => {
-    vi.spyOn(customerRepository, 'findAccountStatus').mockResolvedValueOnce(savedStatus({ status: 'ACTIVO' }));
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockResolvedValueOnce(savedStatus({ status: 'ACTIVO' }));
     vi.spyOn(soporteClient, 'getPenalizaciones').mockResolvedValueOnce({ userId: 12, total: 3, penalizaciones: [] });
-    vi.spyOn(customerRepository, 'updateAccountStatus').mockResolvedValueOnce(
+    vi.spyOn(accountStatusRepository, 'updateAccountStatus').mockResolvedValueOnce(
       savedStatus({ status: 'BLOQUEADO_PERMANENTE', blockOrigin: 'AUTOMATICO' })
     );
 
@@ -169,7 +170,7 @@ describe('GET /v1/customers/:id/status (RF-2.5)', () => {
   });
 
   it('Soporte caído → devuelve último estado guardado (no 503)', async () => {
-    vi.spyOn(customerRepository, 'findAccountStatus').mockResolvedValueOnce(
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockResolvedValueOnce(
       savedStatus({ status: 'BLOQUEADO_TEMPORAL', blockOrigin: 'AUTOMATICO' })
     );
     vi.spyOn(soporteClient, 'getPenalizaciones').mockRejectedValueOnce(
@@ -184,7 +185,7 @@ describe('GET /v1/customers/:id/status (RF-2.5)', () => {
   });
 
   it('DB caída → 503 con Retry-After', async () => {
-    vi.spyOn(customerRepository, 'findAccountStatus').mockRejectedValueOnce(
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockRejectedValueOnce(
       Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
     );
     vi.spyOn(soporteClient, 'getPenalizaciones').mockResolvedValueOnce({ userId: 12, total: 0, penalizaciones: [] });
@@ -227,7 +228,7 @@ describe('PUT /v1/customers/:id/status (RF-2.5)', () => {
 
   it('otro usuario sobre un perfil ajeno → 403 y no cambia el estado', async () => {
     mockAuthAs(99);
-    const update = vi.spyOn(customerRepository, 'updateAccountStatus');
+    const update = vi.spyOn(accountStatusRepository, 'updateAccountStatus');
 
     const res = await request(app)
       .put('/v1/customers/cust_823a7b9c/status')
@@ -238,7 +239,7 @@ describe('PUT /v1/customers/:id/status (RF-2.5)', () => {
   });
 
   it('dar de baja → 200, status INACTIVO, sin blockOrigin', async () => {
-    vi.spyOn(customerRepository, 'updateAccountStatus').mockResolvedValueOnce(
+    vi.spyOn(accountStatusRepository, 'updateAccountStatus').mockResolvedValueOnce(
       savedStatus({ status: 'INACTIVO', reason: 'Baja solicitada por el cliente' })
     );
 
@@ -252,7 +253,7 @@ describe('PUT /v1/customers/:id/status (RF-2.5)', () => {
   });
 
   it('bloqueo manual → 200, blockOrigin MANUAL', async () => {
-    vi.spyOn(customerRepository, 'updateAccountStatus').mockResolvedValueOnce(
+    vi.spyOn(accountStatusRepository, 'updateAccountStatus').mockResolvedValueOnce(
       savedStatus({ status: 'BLOQUEADO_TEMPORAL', blockOrigin: 'MANUAL', reason: 'Solicitud del admin' })
     );
 
@@ -276,7 +277,7 @@ describe('PUT /v1/customers/:id/status (RF-2.5)', () => {
   });
 
   it('DB caída → 503', async () => {
-    vi.spyOn(customerRepository, 'updateAccountStatus').mockRejectedValueOnce(
+    vi.spyOn(accountStatusRepository, 'updateAccountStatus').mockRejectedValueOnce(
       Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
     );
 

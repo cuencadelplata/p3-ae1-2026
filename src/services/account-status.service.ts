@@ -1,3 +1,4 @@
+import { accountStatusRepository, AccountStatusRepository } from '../repositories/account-status.repository.js';
 import { customerRepository, CustomerRepository } from '../repositories/customer.repository.js';
 import { customerCache } from '../cache/customer.cache.js';
 import { soporteClient, SoporteClient } from '../clients/soporte.client.js';
@@ -49,7 +50,9 @@ export function calcularEstadoAutomatico(
  */
 export class AccountStatusService {
   constructor(
-    private readonly repository: CustomerRepository = customerRepository,
+    private readonly repository: AccountStatusRepository = accountStatusRepository,
+    // Solo lectura: para obtener el userId del perfil
+    private readonly profiles: CustomerRepository = customerRepository,
     private readonly soporte: SoporteClient = soporteClient
   ) {}
 
@@ -70,7 +73,7 @@ export class AccountStatusService {
     if (!saved) return null;
 
     // El userId para consultar Soporte sale del perfil, no del request
-    const profile = await this.repository.findById(customerId);
+    const profile = await this.profiles.findById(customerId);
     if (!profile) return null;
     const userId = profile.userId;
 

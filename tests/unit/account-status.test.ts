@@ -84,14 +84,14 @@ describe('AccountStatusService.getAccountStatus', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('cliente inexistente → null', async () => {
-    const svc = new AccountStatusService(makeRepo(null), makeSoporte(0));
+    const svc = new AccountStatusService(makeRepo(null), makeRepo(null), makeSoporte(0));
     const result = await svc.getAccountStatus('cust_xyz', 99);
     expect(result).toBeNull();
   });
 
   it('0 penalizaciones, estado ACTIVO → devuelve el estado guardado sin persistir', async () => {
     const repo = makeRepo(savedStatus({ status: 'ACTIVO' }));
-    const svc = new AccountStatusService(repo, makeSoporte(0));
+    const svc = new AccountStatusService(repo, repo, makeSoporte(0));
     const result = await svc.getAccountStatus('cust_abc', 12);
     expect(result?.status).toBe('ACTIVO');
     expect(repo.updateAccountStatus).not.toHaveBeenCalled();
@@ -99,7 +99,7 @@ describe('AccountStatusService.getAccountStatus', () => {
 
   it('2 penalizaciones → aplica BLOQUEADO_TEMPORAL y persiste', async () => {
     const repo = makeRepo(savedStatus({ status: 'ACTIVO' }));
-    const svc = new AccountStatusService(repo, makeSoporte(2));
+    const svc = new AccountStatusService(repo, repo, makeSoporte(2));
     const result = await svc.getAccountStatus('cust_abc', 12);
     expect(result?.status).toBe('BLOQUEADO_TEMPORAL');
     expect(result?.blockOrigin).toBe('AUTOMATICO');
@@ -111,7 +111,7 @@ describe('AccountStatusService.getAccountStatus', () => {
 
   it('3 penalizaciones → aplica BLOQUEADO_PERMANENTE', async () => {
     const repo = makeRepo(savedStatus({ status: 'ACTIVO' }));
-    const svc = new AccountStatusService(repo, makeSoporte(3));
+    const svc = new AccountStatusService(repo, repo, makeSoporte(3));
     const result = await svc.getAccountStatus('cust_abc', 12);
     expect(result?.status).toBe('BLOQUEADO_PERMANENTE');
     expect(repo.updateAccountStatus).toHaveBeenCalledOnce();
@@ -119,7 +119,7 @@ describe('AccountStatusService.getAccountStatus', () => {
 
   it('ya estaba BLOQUEADO_TEMPORAL con 2 penalizaciones → no persiste de nuevo', async () => {
     const repo = makeRepo(savedStatus({ status: 'BLOQUEADO_TEMPORAL', blockOrigin: 'AUTOMATICO' }));
-    const svc = new AccountStatusService(repo, makeSoporte(2));
+    const svc = new AccountStatusService(repo, repo, makeSoporte(2));
     const result = await svc.getAccountStatus('cust_abc', 12);
     expect(result?.status).toBe('BLOQUEADO_TEMPORAL');
     expect(repo.updateAccountStatus).not.toHaveBeenCalled();
@@ -127,7 +127,7 @@ describe('AccountStatusService.getAccountStatus', () => {
 
   it('penalizaciones bajan de 2 a 0: bloqueo AUTOMATICO → desbloquea a ACTIVO', async () => {
     const repo = makeRepo(savedStatus({ status: 'BLOQUEADO_TEMPORAL', blockOrigin: 'AUTOMATICO' }));
-    const svc = new AccountStatusService(repo, makeSoporte(0));
+    const svc = new AccountStatusService(repo, repo, makeSoporte(0));
     const result = await svc.getAccountStatus('cust_abc', 12);
     expect(result?.status).toBe('ACTIVO');
     expect(repo.updateAccountStatus).toHaveBeenCalledOnce();
@@ -135,7 +135,7 @@ describe('AccountStatusService.getAccountStatus', () => {
 
   it('bloqueo MANUAL no se revierte automáticamente aunque no haya penalizaciones', async () => {
     const repo = makeRepo(savedStatus({ status: 'BLOQUEADO_TEMPORAL', blockOrigin: 'MANUAL' }));
-    const svc = new AccountStatusService(repo, makeSoporte(0));
+    const svc = new AccountStatusService(repo, repo, makeSoporte(0));
     const result = await svc.getAccountStatus('cust_abc', 12);
     expect(result?.status).toBe('BLOQUEADO_TEMPORAL');
     expect(repo.updateAccountStatus).not.toHaveBeenCalled();
@@ -144,7 +144,7 @@ describe('AccountStatusService.getAccountStatus', () => {
   it('bloqueo MANUAL con penalizaciones suficientes → sube al nivel que corresponde', async () => {
     // 3 penalizaciones exigen BLOQUEADO_PERMANENTE aunque el manual era solo TEMPORAL
     const repo = makeRepo(savedStatus({ status: 'BLOQUEADO_TEMPORAL', blockOrigin: 'MANUAL' }));
-    const svc = new AccountStatusService(repo, makeSoporte(3));
+    const svc = new AccountStatusService(repo, repo, makeSoporte(3));
     const result = await svc.getAccountStatus('cust_abc', 12);
     expect(result?.status).toBe('BLOQUEADO_PERMANENTE');
     expect(result?.blockOrigin).toBe('AUTOMATICO');
@@ -157,14 +157,14 @@ describe('AccountStatusService.getAccountStatus — Soporte caído', () => {
   it('devuelve el último estado guardado sin lanzar error', async () => {
     const saved = savedStatus({ status: 'BLOQUEADO_TEMPORAL', blockOrigin: 'AUTOMATICO' });
     const repo = makeRepo(saved);
-    const svc = new AccountStatusService(repo, makeSoporteCaido());
+    const svc = new AccountStatusService(repo, repo, makeSoporteCaido());
     const result = await svc.getAccountStatus('cust_abc', 12);
     expect(result?.status).toBe('BLOQUEADO_TEMPORAL');
     expect(repo.updateAccountStatus).not.toHaveBeenCalled();
   });
 
   it('no propaga ServiceUnavailableError cuando Soporte está caído', async () => {
-    const svc = new AccountStatusService(makeRepo(), makeSoporteCaido());
+    const svc = new AccountStatusService(makeRepo(), makeRepo(), makeSoporteCaido());
     await expect(svc.getAccountStatus('cust_abc', 12)).resolves.not.toThrow();
   });
 });
@@ -174,7 +174,7 @@ describe('AccountStatusService.getAccountStatus — Soporte caído', () => {
 describe('AccountStatusService.updateAccountStatus — baja y bloqueo manual', () => {
   it('dar de baja → blockOrigin undefined (no es bloqueo)', async () => {
     const repo = makeRepo();
-    const svc = new AccountStatusService(repo, makeSoporte(0));
+    const svc = new AccountStatusService(repo, repo, makeSoporte(0));
     await svc.updateAccountStatus('cust_abc', { status: 'INACTIVO', reason: 'Baja solicitada' });
     const [[, dto]] = repo.updateAccountStatus.mock.calls;
     expect(dto.status).toBe('INACTIVO');
@@ -183,7 +183,7 @@ describe('AccountStatusService.updateAccountStatus — baja y bloqueo manual', (
 
   it('bloqueo manual → blockOrigin MANUAL', async () => {
     const repo = makeRepo();
-    const svc = new AccountStatusService(repo, makeSoporte(0));
+    const svc = new AccountStatusService(repo, repo, makeSoporte(0));
     await svc.updateAccountStatus('cust_abc', { status: 'BLOQUEADO_TEMPORAL', reason: 'Conducta inapropiada' });
     const [[, dto]] = repo.updateAccountStatus.mock.calls;
     expect(dto.blockOrigin).toBe('MANUAL');
@@ -193,7 +193,7 @@ describe('AccountStatusService.updateAccountStatus — baja y bloqueo manual', (
     const repo = makeRepo(null);
     // updateAccountStatus del repo también devuelve null
     repo.updateAccountStatus = vi.fn().mockResolvedValue(null);
-    const svc = new AccountStatusService(repo, makeSoporte(0));
+    const svc = new AccountStatusService(repo, repo, makeSoporte(0));
     const result = await svc.updateAccountStatus('cust_xyz', { status: 'INACTIVO', reason: 'Baja' });
     expect(result).toBeNull();
   });

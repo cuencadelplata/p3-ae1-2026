@@ -5,9 +5,7 @@ import {
   CustomerProfileSchema,
   type CustomerProfile,
   type Preferences,
-  type UserId,
-  type AccountStatusResponse,
-  type UpdateAccountStatusInternalDTO
+  type UserId
 } from '../types/customer.js';
 
 type CustomerProfileRow = {
@@ -141,78 +139,6 @@ export class CustomerRepository {
       const row = rows[0];
       return row === undefined ? null : customerFromRow(row);
     }, { idempotent: true });
-  }
-
-  /**
-   * Consulta el estado de cuenta y motivo de bloqueo
-   */
-  async findAccountStatus(customerId: string): Promise<AccountStatusResponse | null> {
-    const query = `
-      SELECT customer_id, status, reason, block_origin, updated_at
-      FROM customers.AccountStatus
-      WHERE customer_id = $1;
-    `;
-    const { rows } = await pool.query(query, [customerId]);
-    if (rows.length === 0) return null;
-
-    const row = rows[0];
-    return {
-      customerId: row.customer_id,
-      status: row.status,
-      reason: row.reason,
-      blockOrigin: row.block_origin ?? undefined,
-      updatedAt: row.updated_at
-    };
-  }
-
-  /**
-   * Actualiza el estado de cuenta (Soft Delete: la baja es status = INACTIVO).
-   * Mantiene sincronizados CustomerProfile y AccountStatus en una única transacción.
-   * Acepta blockOrigin para registrar si el bloqueo fue automático o manual.
-   */
-  async updateAccountStatus(customerId: string, dto: UpdateAccountStatusInternalDTO): Promise<AccountStatusResponse | null> {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const profileResult = await client.query(
-        `UPDATE customers.CustomerProfile
-         SET status = $1, updated_at = CURRENT_TIMESTAMP
-         WHERE customer_id = $2;`,
-        [dto.status, customerId]
-      );
-      if (profileResult.rowCount === 0) {
-        await client.query('ROLLBACK');
-        return null;
-      }
-
-      const { rows } = await client.query(
-        `INSERT INTO customers.AccountStatus (customer_id, status, reason, block_origin, updated_at)
-         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-         ON CONFLICT (customer_id) DO UPDATE
-           SET status       = EXCLUDED.status,
-               reason       = EXCLUDED.reason,
-               block_origin = EXCLUDED.block_origin,
-               updated_at   = EXCLUDED.updated_at
-         RETURNING customer_id, status, reason, block_origin, updated_at;`,
-        [customerId, dto.status, dto.reason, dto.blockOrigin ?? null]
-      );
-
-      await client.query('COMMIT');
-      const row = rows[0];
-      return {
-        customerId: row.customer_id,
-        status: row.status,
-        reason: row.reason,
-        blockOrigin: row.block_origin ?? undefined,
-        updatedAt: row.updated_at
-      };
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
   }
 
   /**
