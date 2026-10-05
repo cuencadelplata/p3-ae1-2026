@@ -12,8 +12,7 @@ function fallbackResponse(customerId: string): CustomerTripsResponse {
     customerId,
     tripsCount: 0,
     trips: [],
-    // Campo extra para que el front sepa que es un fallback
-    // (compatible con la interfaz existente porque TS no lo va a quitar en JSON)
+    degraded: true
   };
 }
 
@@ -54,7 +53,7 @@ export class TripsService {
     try {
       const response = await this.m6.getTrips(userId, token);
       // Normalizar el customerId al interno de M2
-      return { ...response, customerId };
+      return { ...response, customerId, degraded: false };
     } catch (err) {
       if (err instanceof ServiceUnavailableError) {
         console.warn(

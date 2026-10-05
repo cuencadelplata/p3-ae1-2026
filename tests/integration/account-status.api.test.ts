@@ -277,6 +277,7 @@ describe('GET /v1/customers/:id/trips (RF-2.3)', () => {
     expect(res.status).toBe(200);
     expect(res.body.tripsCount).toBe(0);
     expect(res.body.trips).toHaveLength(0);
+    expect(res.body.degraded).toBe(true);
   });
 
   it('DB caída → 503', async () => {

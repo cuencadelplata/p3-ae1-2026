@@ -172,6 +172,25 @@ test.describe('M2 Customers E2E', () => {
     });
   });
 
+  // El modo caos del stub de M6 es global: estos tests van en serie y lo restauran siempre
+  test.describe('RF-2.3 - M6 caído (serial)', () => {
+    test.describe.configure({ mode: 'serial' });
+
+    test.afterEach(async ({ request }) => {
+      await request.post('/api/__stubs/m6/__chaos', { data: {} });
+    });
+
+    test('shows a degraded message instead of "no trips" when M6 is down', async ({ page, request }) => {
+      await openFreshProfile(page, request);
+      await request.post('/api/__stubs/m6/__chaos', { data: { mode: 'down' } });
+
+      await page.getByRole('button', { name: 'Viajes' }).click();
+
+      await expect(page.getByText('No se pudo cargar el historial.')).toBeVisible();
+      await expect(page.getByText('No se encontraron viajes.')).toHaveCount(0);
+    });
+  });
+
   // ── Navegación y errores ───────────────────────────────────────────────────
   test.describe('Navigation', () => {
 

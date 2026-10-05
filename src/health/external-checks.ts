@@ -1,11 +1,8 @@
 /**
  * Chequeos de salud de las dependencias externas de Leandro (RF-2.3 y RF-2.5).
  *
- * Para registrarlos, llamar a registerExternalHealthChecks(registry) desde app.ts
- * una vez que Erwin haya creado src/health/registry.ts (paso E9).
- *
  * Cada check hace una llamada liviana al /health del stub (o del módulo real)
- * y devuelve { ok, latencyMs, detail? }.
+ * y devuelve true si responde bien, como espera registerHealthCheck.
  */
 
 const TIMEOUT_MS = 3_000;
@@ -37,29 +34,12 @@ async function pingService(url: string): Promise<HealthCheckResult> {
   }
 }
 
-export async function checkSoporte(): Promise<HealthCheckResult> {
+export async function checkSoporte(): Promise<boolean> {
   const base = process.env.SOPORTE_SERVICE_URL ?? 'http://localhost:3000/__stubs/soporte';
-  return pingService(`${base}/health`);
+  return (await pingService(`${base}/health`)).ok;
 }
 
-export async function checkM6(): Promise<HealthCheckResult> {
+export async function checkM6(): Promise<boolean> {
   const base = process.env.M6_SERVICE_URL ?? 'http://localhost:3000/__stubs/m6';
-  return pingService(`${base}/health`);
-}
-
-/**
- * Registra los chequeos de soporte y M6 en el registry de salud de Erwin.
- * Llamar desde app.ts después de que registry.ts esté disponible:
- *
- *   import { registerHealthCheck } from './health/registry.js';
- *   import { registerExternalHealthChecks } from './health/external-checks.js';
- *   registerExternalHealthChecks(registerHealthCheck);
- *
- * @param registerHealthCheck  Función del registry de Erwin: (name, checkFn) => void
- */
-export function registerExternalHealthChecks(
-  registerHealthCheck: (name: string, check: () => Promise<HealthCheckResult>) => void
-): void {
-  registerHealthCheck('soporte', checkSoporte);
-  registerHealthCheck('m6', checkM6);
+  return (await pingService(`${base}/health`)).ok;
 }

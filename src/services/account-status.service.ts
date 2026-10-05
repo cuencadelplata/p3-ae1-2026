@@ -1,4 +1,5 @@
 import { customerRepository, CustomerRepository } from '../repositories/customer.repository.js';
+import { customerCache } from '../cache/customer.cache.js';
 import { soporteClient, SoporteClient } from '../clients/soporte.client.js';
 import { ServiceUnavailableError } from '../errors/service-unavailable.error.js';
 import type {
@@ -44,7 +45,7 @@ export function calcularEstadoAutomatico(
  *  4. Si Soporte está caído (ServiceUnavailableError) → se devuelve el último estado guardado
  *     sin modificarlo (degradación elegante).
  *  5. Si el estado cambia tras el recálculo → se persiste y se invalida la caché del perfil
- *     (cuando customerCache esté disponible — E1 de Erwin).
+ *     (el perfil cacheado incluye el status).
  */
 export class AccountStatusService {
   constructor(
@@ -102,7 +103,7 @@ export class AccountStatusService {
           reason,
           blockOrigin: 'AUTOMATICO'
         });
-        // TODO (E1): customerCache.invalidate(customerId)
+        await customerCache.invalidate(customerId);
         return updated!;
       }
       // Ya estaba bloqueado con el nivel correcto → sin cambios
@@ -121,7 +122,7 @@ export class AccountStatusService {
         reason: 'Bloqueo automático levantado: sin penalizaciones vigentes',
         blockOrigin: undefined
       });
-      // TODO (E1): customerCache.invalidate(customerId)
+      await customerCache.invalidate(customerId);
       return updated!;
     }
 
@@ -150,7 +151,7 @@ export class AccountStatusService {
     };
 
     const updated = await this.repository.updateAccountStatus(customerId, internal);
-    // TODO (E1): if (updated) customerCache.invalidate(customerId)
+    if (updated) await customerCache.invalidate(customerId);
     return updated;
   }
 }

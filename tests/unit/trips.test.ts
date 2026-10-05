@@ -56,6 +56,7 @@ describe('TripsService.getTrips', () => {
     expect(result?.customerId).toBe('cust_abc');  // customerId interno, no el userId de M1
     expect(result?.tripsCount).toBe(1);
     expect(result?.trips[0].tripId).toBe('trip_1');
+    expect(result?.degraded).toBe(false);
   });
 
   it('el customerId en la respuesta es siempre el interno de M2, no el userId de M1', async () => {
@@ -71,6 +72,7 @@ describe('TripsService.getTrips', () => {
     expect(result).not.toBeNull();
     expect(result?.tripsCount).toBe(0);
     expect(result?.trips).toHaveLength(0);
+    expect(result?.degraded).toBe(true);
   });
 
   it('M6 caído no propaga ServiceUnavailableError', async () => {

@@ -97,4 +97,6 @@ export interface CustomerTripsResponse {
   customerId: string;
   tripsCount: number;
   trips: TripSummary[];
+  /** true cuando M6 no respondió y la lista vacía es una respuesta degradada, no "sin viajes". */
+  degraded: boolean;
 }

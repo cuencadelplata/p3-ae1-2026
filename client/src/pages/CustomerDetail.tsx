@@ -136,6 +136,7 @@ function StatusTab({ data }: { data: AccountStatusResponse | null }) {
 /* ── Trips tab ── */
 function TripsTab({ data }: { data: CustomerTripsResponse | null }) {
   if (!data) return <p className="loading">Cargando viajes…</p>;
+  if (data.degraded) return <p className="error-msg">No se pudo cargar el historial.</p>;
   if (data.trips.length === 0) return <p className="loading">No se encontraron viajes.</p>;
   return (
     <div>

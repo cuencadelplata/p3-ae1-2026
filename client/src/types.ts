@@ -44,6 +44,7 @@ export interface CustomerTripsResponse {
   customerId: string;
   tripsCount: number;
   trips: TripSummary[];
+  degraded: boolean;
 }
 
 export interface CreateCustomerDTO {
