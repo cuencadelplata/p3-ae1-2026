@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+
+process.env.NODE_ENV = 'test';
+
 import { createApp } from '../../src/http/app.js';
 import { SandboxPushProvider } from '../../src/infrastructure/provider/sandbox-push-provider.js';
 import { InMemoryMessagingInboxRepository } from '../../src/infrastructure/database/inbox.repository.js';

@@ -88,6 +88,7 @@ export function createApp(deps: AppDependencies = {}): http.RequestListener {
           inbox: 'ok',
           tokens: 'ok',
           provider: 'ok',
+          m2_preferences: 'degraded_mode_supported',
         },
       });
       return;
@@ -201,8 +202,18 @@ export function createApp(deps: AppDependencies = {}): http.RequestListener {
       return;
     }
 
-    // 4. POST /internal/deliveries/simulate (Simulación y testing E2E)
+    // 4. POST /internal/deliveries/simulate (Simulación y testing E2E - restringido fuera de producción)
     if (method === 'POST' && pathname === '/internal/deliveries/simulate') {
+      if (process.env.NODE_ENV === 'production') {
+        sendJson(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Endpoint de simulación deshabilitado en entorno de producción.',
+          },
+        });
+        return;
+      }
+
       let bodyRaw = '';
       req.on('data', (chunk) => {
         bodyRaw += chunk;

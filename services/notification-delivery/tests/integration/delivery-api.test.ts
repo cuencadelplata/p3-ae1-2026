@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+
+process.env.NODE_ENV = 'test';
+
 import { createApp } from '../../src/http/app.js';
 import { SandboxPushProvider } from '../../src/infrastructure/provider/sandbox-push-provider.js';
 import { NotificationDeliveryService } from '../../src/services/notification-delivery.service.js';
@@ -138,5 +141,22 @@ test('API HTTP de Entrega de Notificaciones', async (t) => {
   await t.test('GET /internal/deliveries/:notificationId inexistente debe retornar 404', async () => {
     const res = await fetch(`${baseUrl}/internal/deliveries/notif-inexistente`);
     assert.equal(res.status, 404);
+  });
+
+  await t.test('POST /internal/deliveries/simulate en PRODUCCION debe responder 403 Forbidden', async () => {
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const res = await fetch(`${baseUrl}/internal/deliveries/simulate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      assert.equal(res.status, 403);
+      const body = (await res.json()) as { error: { code: string } };
+      assert.equal(body.error.code, 'FORBIDDEN');
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+    }
   });
 });

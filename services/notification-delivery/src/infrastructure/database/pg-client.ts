@@ -7,13 +7,20 @@ export function buildDatabaseUrl(): string {
   if (process.env.POSTGRES_URL) return process.env.POSTGRES_URL;
   if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
 
-  const user = process.env.DELIVERY_DB_USER || process.env.POSTGRES_USER || 'm8_notification_delivery';
-  const password = process.env.DELIVERY_DB_PASSWORD || 'm8_delivery_local';
+  const user = process.env.DELIVERY_DB_USER || process.env.POSTGRES_USER;
+  const password = process.env.DELIVERY_DB_PASSWORD || process.env.POSTGRES_PASSWORD;
   const host = process.env.POSTGRES_HOST || 'localhost';
   const port = process.env.POSTGRES_PORT || process.env.POSTGRES_HOST_PORT || '5432';
   const db = process.env.POSTGRES_DB || 'm8';
 
-  return `postgres://${user}:${password}@${host}:${port}/${db}`;
+  if (!password && process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '[RF8.7] Credenciales de base de datos no configuradas: DELIVERY_DATABASE_URL o DELIVERY_DB_PASSWORD es obligatoria en producción.'
+    );
+  }
+
+  const auth = user ? (password ? `${user}:${password}@` : `${user}@`) : '';
+  return `postgres://${auth}${host}:${port}/${db}`;
 }
 
 export function getPgPool(customConfig?: PoolConfig): Pool {

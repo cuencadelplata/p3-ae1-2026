@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+
+process.env.NODE_ENV = 'test';
+
 import { createApp } from '../../src/http/app.js';
 import { InMemoryDeviceTokenRepository } from '../../src/infrastructure/database/device-token.repository.js';
 
@@ -80,5 +83,18 @@ test('API HTTP de Device Tokens (Protegida con JWT de M1)', async (t) => {
     });
     const listBody = (await listRes.json()) as { data: Array<{ token: string }> };
     assert.equal(listBody.data.length, 0);
+  });
+
+  await t.test('En PRODUCCION: test-token-* es rechazado con 401', async () => {
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const res = await fetch(`${baseUrl}/devices/tokens`, {
+        headers: { 'Authorization': validTokenHeader },
+      });
+      assert.equal(res.status, 401);
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+    }
   });
 });

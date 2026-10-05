@@ -44,6 +44,16 @@ export class DeliveryController {
   };
 
   simulateDelivery = async (req: Request, res: Response): Promise<void> => {
+    if (process.env.NODE_ENV === 'production') {
+      res.status(403).json({
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Endpoint de simulación deshabilitado en entorno de producción.',
+        },
+      });
+      return;
+    }
+
     try {
       const validatedEnvelope = validateNotificationRequestedEnvelope(req.body);
       const result = await this.deliveryService.processNotificationRequest(validatedEnvelope);
@@ -115,6 +125,7 @@ export class DeliveryController {
       checks: {
         inbox: 'ok',
         provider: 'ok',
+        m2_preferences: 'degraded_mode_supported',
       },
     });
   };
