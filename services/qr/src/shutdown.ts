@@ -1,10 +1,6 @@
 import type { Server } from "node:http";
 
-export type ShutdownLog = (
-  level: "info" | "warn" | "error",
-  message: string,
-  fields?: Record<string, unknown>,
-) => void;
+import type { Logger } from "./observability/logger";
 
 export interface GracefulShutdownDeps {
   readonly server: Pick<Server, "close" | "closeAllConnections">;
@@ -12,7 +8,7 @@ export interface GracefulShutdownDeps {
   readonly closeResources: () => Promise<void>;
   // Tope de espera para las solicitudes en curso; al vencer se cortan las conexiones.
   readonly timeoutMs: number;
-  readonly log: ShutdownLog;
+  readonly log: Logger;
   readonly exit: (code: number) => void;
 }
 

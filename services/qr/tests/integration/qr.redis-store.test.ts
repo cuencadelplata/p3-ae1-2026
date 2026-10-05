@@ -178,6 +178,7 @@ describe("createRedisQrStore — contenido de Redis", () => {
       generateQrToken,
       generateQrDataUrl,
       now: () => new Date(),
+      log: () => {},
     });
 
     const { token } = await service.generateQr(TRIP_ID);

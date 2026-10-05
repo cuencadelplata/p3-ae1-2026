@@ -6,16 +6,16 @@
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { createInMemoryQrStore } from "../../src/qr.store";
 import { createQrRedisClient, isRedisReady, type QrRedisClient } from "../../src/redis-client";
 import { buildApp } from "../helpers/build-app";
+import { captureLogs } from "../helpers/capture-logs";
 import { connectTestRedisClient } from "../helpers/redis";
 
 const READY_BODY = { status: "ok", service: "qr", dependencies: { redis: { status: "available" } } };
 const NOT_READY_BODY = { status: "unavailable", service: "qr", dependencies: { redis: { status: "unavailable" } } };
 
 function appWithRedisCheck(checkRedis: () => Promise<boolean>) {
-  return buildApp(createInMemoryQrStore(), checkRedis);
+  return buildApp({ checkRedis });
 }
 
 describe("GET /health/live", () => {
@@ -55,6 +55,28 @@ describe.each(["/health/ready", "/health"])("GET %s", (path) => {
     expect(response.status).toBe(503);
     expect(response.body).toEqual(NOT_READY_BODY);
     expect(JSON.stringify(response.body)).not.toContain("ECONNREFUSED");
+  });
+});
+
+describe("logs del health", () => {
+  it("sólo registra los cambios de disponibilidad, no cada consulta", async () => {
+    const logs = captureLogs();
+    const sequence = [true, false, false, false, true, true, false];
+    const app = appWithRedisCheck(async () => sequence.shift() ?? true);
+
+    try {
+      for (let i = 0; i < 7; i++) {
+        await request(app).get("/health/ready");
+      }
+    } finally {
+      logs.restore();
+    }
+
+    expect(logs.entries().map(({ level, component, message }) => ({ level, component, message }))).toEqual([
+      { level: "warn", component: "health", message: "servicio no disponible: Redis no responde" },
+      { level: "info", component: "health", message: "servicio disponible: Redis responde de nuevo" },
+      { level: "warn", component: "health", message: "servicio no disponible: Redis no responde" },
+    ]);
   });
 });
 

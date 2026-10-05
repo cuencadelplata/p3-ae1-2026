@@ -40,9 +40,14 @@ paths:
         Redis ni otras dependencias, para que una caída de Redis no provoque
         reinicios innecesarios del contenedor.
       operationId: getHealthLive
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
       responses:
         '200':
           description: Proceso disponible.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -63,6 +68,8 @@ paths:
         dependencia crítica: sin Redis responde 503 con estado `unavailable`.
         Una verificación que no responde en 2 segundos cuenta como no disponible.
       operationId: getHealthReady
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
       responses:
         '200':
           $ref: '#/components/responses/HealthReady'
@@ -76,6 +83,8 @@ paths:
       summary: Consultar la disponibilidad del servicio (alias)
       description: Alias de `GET /health/ready`, conservado por compatibilidad con AE1.
       operationId: getHealth
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
       responses:
         '200':
           $ref: '#/components/responses/HealthReady'
@@ -92,6 +101,8 @@ paths:
         codifica únicamente un token opaco; M8 no modifica el estado del viaje.
         El QR vence según `QR_TTL_SECONDS`.
       operationId: generateQr
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
       requestBody:
         required: true
         content:
@@ -105,6 +116,9 @@ paths:
       responses:
         '201':
           description: QR generado correctamente.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -117,6 +131,9 @@ paths:
                     expiresAt: '2026-09-01T12:05:00.000Z'
         '400':
           description: Solicitud inválida.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -136,6 +153,9 @@ paths:
           $ref: '#/components/responses/UnsupportedMediaType'
         '500':
           description: Error interno al generar el QR.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -173,6 +193,8 @@ paths:
         M8 no inicia ni modifica el viaje: con el resultado, M6 decide si inicia
         el viaje.
       operationId: validateQr
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
       requestBody:
         required: true
         content:
@@ -187,6 +209,9 @@ paths:
       responses:
         '200':
           description: QR válido y consumido correctamente.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -197,6 +222,9 @@ paths:
                     valid: true
         '400':
           description: Solicitud inválida.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -220,6 +248,9 @@ paths:
             existe para otro viaje. En ningún caso se consume el QR. También se
             responde 404 cuando el QR venció y ya terminó el margen durante el
             cual se informa 410.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -234,6 +265,9 @@ paths:
           description: |
             El QR ya fue utilizado. Es la respuesta de las validaciones
             concurrentes que no obtuvieron el consumo del QR.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -249,6 +283,9 @@ paths:
             El QR venció. Se informa durante un margen posterior al vencimiento
             (`QR_EXPIRED_GRACE_SECONDS`); terminado ese margen el QR deja de
             existir y la validación responde 404. Un QR vencido nunca se consume.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -263,6 +300,9 @@ paths:
           $ref: '#/components/responses/UnsupportedMediaType'
         '500':
           description: Error interno inesperado al validar el QR.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -274,7 +314,29 @@ paths:
           $ref: '#/components/responses/StoreUnavailable'
 
 components:
+  parameters:
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: |
+        Identificador de correlación opcional para seguir la solicitud en los logs. Se
+        acepta si tiene entre 1 y 128 caracteres de `A-Z`, `a-z`, `0-9`, punto, guion
+        bajo o guion; si falta o no cumple, el servicio genera uno nuevo.
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9._-]{1,128}$'
+        example: corr-trip-demo-001
+
   headers:
+    CorrelationId:
+      description: |
+        Identificador de correlación de la solicitud: el recibido en X-Correlation-Id si es
+        válido, o uno generado por el servicio. Nunca se incluye en el cuerpo.
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9._-]{1,128}$'
+        example: 3f1c2b9e-7d4a-4c1e-9b8f-2a6d5e4c3b1a
     RetryAfter:
       description: Segundos que el cliente debería esperar antes de reintentar.
       schema:
@@ -300,6 +362,9 @@ components:
   responses:
     UnsupportedMediaType:
       description: El tipo de contenido no es application/json.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
       content:
         application/json:
           schema:
@@ -320,6 +385,8 @@ components:
       headers:
         Retry-After:
           $ref: '#/components/headers/RetryAfter'
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
       content:
         application/json:
           schema:
@@ -333,6 +400,9 @@ components:
 
     HealthReady:
       description: Servicio disponible; Redis responde.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
       content:
         application/json:
           schema:
@@ -348,6 +418,9 @@ components:
 
     HealthNotReady:
       description: Servicio no disponible; Redis no responde.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
       content:
         application/json:
           schema:
