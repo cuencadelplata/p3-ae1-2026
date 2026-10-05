@@ -25,7 +25,8 @@ export function authenticateToken(
     if (!authorization) {
         res.status(401).json({
             valid: false,
-            error: "Token requerido"
+            error: "Token requerido",
+            code: "missing_token"
         });
         return;
     }
@@ -39,7 +40,8 @@ export function authenticateToken(
     ) {
         res.status(401).json({
             valid: false,
-            error: "Formato de token incorrecto"
+            error: "Formato de token incorrecto",
+            code: "invalid_token"
         });
         return;
     }
@@ -61,7 +63,8 @@ export function authenticateToken(
         ) {
             res.status(401).json({
                 valid: false,
-                error: "Contenido del token inválido"
+                error: "Contenido del token inválido",
+                code: "invalid_token"
             });
             return;
         }
@@ -76,14 +79,16 @@ export function authenticateToken(
         if (error instanceof jwt.TokenExpiredError) {
             res.status(401).json({
                 valid: false,
-                error: "Token expirado"
+                error: "Token expirado",
+                code: "invalid_token"
             });
             return;
         }
 
         res.status(401).json({
             valid: false,
-            error: "Token inválido"
+            error: "Token inválido",
+            code: "invalid_token"
         });
     }
 }
