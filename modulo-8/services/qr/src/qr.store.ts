@@ -2,6 +2,34 @@ import type { QrRecord } from "./qr.types";
 
 export type ConsumeOutcome = "OK" | "NOT_FOUND" | "TRIP_MISMATCH" | "ALREADY_USED" | "EXPIRED";
 
+export type QrStoreOperation = "save" | "consume";
+
+// El almacenamiento no pudo completar la operación por una falla de infraestructura (sin
+// conexión, demora, error informado por el almacenamiento). La causa original queda en
+// `cause` sólo para diagnóstico: no se serializa en respuestas ni se registra completa.
+//
+// outcomeUnknown indica que la operación pudo haberse aplicado igual (por ejemplo, el comando
+// se envió y la respuesta no llegó a tiempo): un reintento puede encontrar el QR ya consumido.
+export class QrStoreUnavailableError extends Error {
+  constructor(
+    readonly operation: QrStoreOperation,
+    readonly outcomeUnknown: boolean,
+    options: { cause: unknown },
+  ) {
+    super(`El almacenamiento de QR no está disponible (${operation}).`, options);
+    this.name = "QrStoreUnavailableError";
+  }
+
+  // Tipo del error original, para registrar la falla sin su mensaje. Algunos errores del
+  // cliente Redis no definen name: en ese caso se usa el nombre de su clase.
+  get causeName(): string {
+    if (!(this.cause instanceof Error)) {
+      return typeof this.cause;
+    }
+    return this.cause.name !== "Error" ? this.cause.name : this.cause.constructor.name;
+  }
+}
+
 // Contrato de almacenamiento de QR. Es asíncrono para admitir un almacenamiento externo
 // compartido entre instancias; cada implementación debe garantizar que consumeIfValid
 // compruebe y marque el uso como una única operación atómica.

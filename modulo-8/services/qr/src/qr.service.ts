@@ -4,7 +4,7 @@ import { ApiError } from "./http/api-error";
 import type { Logger } from "./observability/logger";
 import type { GeneratedQrToken } from "./qr-generator";
 import type { QrConfig } from "./qr.config";
-import type { ConsumeOutcome, QrStore } from "./qr.store";
+import { QrStoreUnavailableError, type ConsumeOutcome, type QrStore } from "./qr.store";
 import type { QrGenerationResponse, QrRecord, QrValidationResponse } from "./qr.types";
 
 export interface QrServiceDeps {
@@ -39,6 +39,13 @@ export function loggableTripId(tripId: string): string {
 
 type RejectionReason = Exclude<ConsumeOutcome, "OK">;
 
+// Segundos que se sugieren al cliente en Retry-After cuando el almacenamiento no está
+// disponible. Coincide con la espera máxima entre intentos de reconexión del cliente Redis
+// (5 s): antes de ese plazo la conexión ya debería haberse reintentado al menos una vez.
+export const STORE_RETRY_AFTER_SECONDS = 5;
+
+const STORE_UNAVAILABLE_MESSAGE = "El servicio de QR no está disponible en este momento. Intente nuevamente más tarde.";
+
 export function createQrService(deps: QrServiceDeps): QrService {
   const hashPrefix = (tokenHash: string): string => tokenHash.slice(0, LOGGED_TOKEN_HASH_LENGTH);
 
@@ -52,6 +59,28 @@ export function createQrService(deps: QrServiceDeps): QrService {
       tokenHashPrefix: hashPrefix(tokenHash),
       reason,
     });
+  }
+
+  // Fail-closed: sin el almacenamiento no se emite ni se aprueba ningún QR. Se registra una
+  // línea por solicitud afectada, sin la causa completa (puede incluir direcciones internas).
+  async function withStore<T>(tripId: string, call: () => Promise<T>): Promise<T> {
+    try {
+      return await call();
+    } catch (error) {
+      if (!(error instanceof QrStoreUnavailableError)) {
+        throw error;
+      }
+      deps.log("warn", "almacenamiento de QR no disponible", {
+        event: "qr.store_unavailable",
+        operation: error.operation,
+        tripId: loggableTripId(tripId),
+        errorName: error.causeName,
+        ...(error.outcomeUnknown ? { outcomeUnknown: true } : {}),
+      });
+      throw new ApiError(503, "QR_STORE_UNAVAILABLE", STORE_UNAVAILABLE_MESSAGE, undefined, {
+        "Retry-After": String(STORE_RETRY_AFTER_SECONDS),
+      });
+    }
   }
 
   async function generateQr(tripId: string): Promise<QrGenerationResponse> {
@@ -81,7 +110,7 @@ export function createQrService(deps: QrServiceDeps): QrService {
       usedAt: null,
     };
 
-    await deps.store.save(record);
+    await withStore(tripId, () => deps.store.save(record));
     deps.log("info", "QR emitido", {
       event: "qr.issued",
       tripId: loggableTripId(tripId),
@@ -94,7 +123,7 @@ export function createQrService(deps: QrServiceDeps): QrService {
 
   async function validateQr(tripId: string, token: string): Promise<QrValidationResponse> {
     const tokenHash = createHash("sha256").update(token).digest("hex");
-    const outcome = await deps.store.consumeIfValid(tokenHash, tripId, deps.now());
+    const outcome = await withStore(tripId, () => deps.store.consumeIfValid(tokenHash, tripId, deps.now()));
 
     if (outcome === "OK") {
       deps.log("info", "QR validado y consumido", {
