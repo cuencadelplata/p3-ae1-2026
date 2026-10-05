@@ -19,20 +19,25 @@ export class DbService {
     this.initPrisma();
   }
 
-  private async initPrisma(): Promise<void> {
+  private initPrisma(): void {
     try {
       this.prisma = new PrismaClient({
         log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error']
       });
 
-      await this.prisma.$connect();
-      this.isConnected = true;
-      console.log('[DbService] Conectado exitosamente a PostgreSQL (DispatchDB).');
+      this.prisma
+        .$connect()
+        .then(() => {
+          this.isConnected = true;
+          console.log('[DbService] Conectado exitosamente a PostgreSQL (DispatchDB).');
+        })
+        .catch(() => {
+          this.isConnected = false;
+          this.prisma = null;
+        });
     } catch {
       this.isConnected = false;
-      if (process.env.NODE_ENV !== 'test') {
-        console.warn('[DbService] PostgreSQL no disponible. Utilizando almacenamiento en memoria de respaldo.');
-      }
+      this.prisma = null;
     }
   }
 
@@ -220,8 +225,15 @@ export class DbService {
    * Cierra limpiamente la conexión a Prisma
    */
   public async disconnect(): Promise<void> {
-    if (this.prisma) {
-      await this.prisma.$disconnect();
+    if (this.isConnected && this.prisma) {
+      try {
+        await this.prisma.$disconnect();
+      } catch {
+        // Ignore
+      } finally {
+        this.isConnected = false;
+        this.prisma = null;
+      }
     }
   }
 }
