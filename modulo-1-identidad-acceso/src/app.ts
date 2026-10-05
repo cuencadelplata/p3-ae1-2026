@@ -6,6 +6,7 @@ import cors from "cors";
 import swaggerUi from "swagger-ui-express";
 import YAML from "yaml";
 import authRoutes from "./routes/auth.routes";
+import revocationRoutes from "./routes/revocation.routes";
 
 const app = express();
 
@@ -46,6 +47,7 @@ app.use(
     })
 );
 
+app.use("/auth", revocationRoutes);
 app.use("/auth", authRoutes);
 
 export default app;
