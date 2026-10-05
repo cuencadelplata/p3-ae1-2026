@@ -116,6 +116,46 @@ const migrations = [
        WHERE published_at IS NULL`,
     ],
   },
+  {
+    version: 5,
+    name: "support_ride_requested_without_trip_id",
+    statements: [
+      `ALTER TABLE notifications.notifications
+         ADD COLUMN IF NOT EXISTS ride_request_id text NULL`,
+      `ALTER TABLE notifications.notifications
+         ALTER COLUMN trip_id DROP NOT NULL`,
+      `UPDATE notifications.notifications
+          SET ride_request_id = trip_id,
+              trip_id = NULL
+        WHERE event_type = 'TripRequested'
+          AND ride_request_id IS NULL
+          AND trip_id IS NOT NULL`,
+      `UPDATE notifications.outbox_deliveries o
+          SET payload = (o.payload - 'tripId') || jsonb_build_object('rideRequestId', n.ride_request_id)
+         FROM notifications.notifications n
+        WHERE n.notification_id = o.notification_id
+          AND n.event_type = 'TripRequested'
+          AND n.ride_request_id IS NOT NULL
+          AND o.payload ? 'tripId'`,
+      `DO $$
+       BEGIN
+         IF NOT EXISTS (
+           SELECT 1
+             FROM pg_constraint
+            WHERE conname = 'notifications_context_reference_check'
+              AND conrelid = 'notifications.notifications'::regclass
+         ) THEN
+           ALTER TABLE notifications.notifications
+             ADD CONSTRAINT notifications_context_reference_check
+             CHECK (
+               (event_type = 'TripRequested' AND ride_request_id IS NOT NULL AND trip_id IS NULL)
+               OR
+               (event_type <> 'TripRequested' AND trip_id IS NOT NULL)
+             );
+         END IF;
+       END $$`,
+    ],
+  },
 ] as const;
 
 export async function runMigrations(pool: Pool): Promise<void> {

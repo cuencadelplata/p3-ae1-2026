@@ -21,15 +21,23 @@ export function toPublicNotificationEventType(
 export function createNotificationRequestedData(
   notification: LogicalNotification,
 ): NotificationRequestedData {
-  return {
+  const data: NotificationRequestedData = {
     notificationId: notification.notificationId,
-    tripId: notification.tripId,
     recipientId: notification.recipientId,
     eventType: toPublicNotificationEventType(notification.eventType),
     channel: "PUSH",
     message: notification.message,
     createdAt: notification.createdAt,
   };
+
+  if (notification.tripId !== null) {
+    data.tripId = notification.tripId;
+  }
+  if (notification.rideRequestId !== null) {
+    data.rideRequestId = notification.rideRequestId;
+  }
+
+  return data;
 }
 
 export function createNotificationRequestedEnvelope(

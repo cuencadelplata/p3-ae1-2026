@@ -76,20 +76,34 @@ export interface Notification {//tipos de la notificacion que devuelve el servid
   createdAt: string;
 }
 
-export interface NormalizedTripNotificationEvent {
+export interface NormalizedRideRequestedNotificationEvent {
   messageId: string;
-  eventType: TripNotificationEventType;
+  eventType: "TripRequested";
+  rideRequestId: string;
+  recipientId: number;
+  correlationId: string;
+  occurredAt: string;
+}
+
+export interface NormalizedTripLifecycleNotificationEvent {
+  messageId: string;
+  eventType: Exclude<TripNotificationEventType, "TripRequested">;
   tripId: string;
   recipientId: string;
   correlationId: string;
   occurredAt: string;
 }
 
+export type NormalizedTripNotificationEvent =
+  | NormalizedRideRequestedNotificationEvent
+  | NormalizedTripLifecycleNotificationEvent;
+
 export interface LogicalNotification {
   notificationId: string;
   sourceMessageId: string;
-  tripId: string;
-  recipientId: string;
+  tripId: string | null;
+  rideRequestId: string | null;
+  recipientId: string | number;
   eventType: TripNotificationEventType;
   title: string;
   message: string;
@@ -125,8 +139,10 @@ export const TRIP_EVENT_TYPE_MAP = {
 export type AmqpTripEventType = keyof typeof TRIP_EVENT_TYPE_MAP;
 
 export interface TripEventData {
-  tripId: string;
-  recipientId: string;
+  tripId?: string;
+  recipientId?: string;
+  rideRequestId?: string;
+  clientUserId?: number;
   details?: Record<string, unknown>;
 }
 
@@ -144,8 +160,9 @@ export interface TripEventEnvelope {
 
 export interface NotificationRequestedData {
   notificationId: string;
-  tripId: string;
-  recipientId: string;
+  tripId?: string;
+  rideRequestId?: string;
+  recipientId: string | number;
   eventType: EventType;
   channel: NotificationChannel;
   message: string;

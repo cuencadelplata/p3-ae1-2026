@@ -22,6 +22,19 @@ const validEvent = {
   occurredAt: "2026-10-03T15:30:00.000Z",
 };
 
+const validRideRequestedEvent = {
+  messageId: "message-ride-requested",
+  eventType: "TripRequested",
+  rideRequestId: "req_2026_000123",
+  recipientId: 91,
+  correlationId: "req_2026_000123",
+  occurredAt: "2026-10-03T15:30:00.000Z",
+};
+
+function eventFor(eventType: TripNotificationEventType) {
+  return eventType === "TripRequested" ? validRideRequestedEvent : { ...validEvent, eventType };
+}
+
 const expectedContent: Array<[TripNotificationEventType, string, string]> = [
   ["TripRequested", "Solicitud de viaje recibida", "Tu solicitud de viaje fue recibida."],
   ["TripAssigned", "Conductor asignado", "Se asignó un conductor a tu viaje."],
@@ -71,7 +84,7 @@ describe("RF8.1 AE2 - evento normalizado de notificacion", () => {
   });
 
   it.each(expectedContent)("acepta el evento semantico %s", (eventType) => {
-    expect(validateNormalizedTripNotificationEvent({ ...validEvent, eventType })).toMatchObject({
+    expect(validateNormalizedTripNotificationEvent(eventFor(eventType))).toMatchObject({
       valid: true,
     });
   });
@@ -92,6 +105,18 @@ describe("RF8.1 AE2 - evento normalizado de notificacion", () => {
     expect(result).toMatchObject({ valid: false });
     if (!result.valid) {
       expect(result.details).toContainEqual(expect.objectContaining({ field }));
+    }
+  });
+
+  it("rechaza TripRequested con tripId porque todavia no existe viaje", () => {
+    const result = validateNormalizedTripNotificationEvent({
+      ...validRideRequestedEvent,
+      tripId: "trip-fake",
+    });
+
+    expect(result).toMatchObject({ valid: false });
+    if (!result.valid) {
+      expect(result.details).toContainEqual(expect.objectContaining({ field: "tripId" }));
     }
   });
 
@@ -127,7 +152,25 @@ describe("RF8.1 AE2 - TripEventEnvelope RF8.6 a RF8.1", () => {
     },
   };
 
-  it.each(amqpEvents)("mapea %s al evento interno %s", (eventType, expectedInternalEvent) => {
+  const rideRequestedEnvelope = {
+    messageId: "9f1c7b2e-4d3a-4c8f-9b21-6e0a5c7d4813",
+    eventType: "TripRequested",
+    version: 1,
+    occurredAt: "2026-10-05T18:42:11.000Z",
+    correlationId: "req_2026_000123",
+    producer: "m5",
+    data: {
+      rideRequestId: "req_2026_000123",
+      clientUserId: 91,
+      origin: { latitude: -34.6037, longitude: -58.3816, address: "Origen" },
+      destination: { latitude: -34.6083, longitude: -58.3712, address: "Destino" },
+      vehicleType: "AUTO",
+      estimatedFare: { amount: 1250, currency: "ARS" },
+      createdAt: "2026-10-05T18:42:10.000Z",
+    },
+  };
+
+  it.each(amqpEvents.filter(([eventType]) => eventType !== "TripRequested"))("mapea %s al evento interno %s", (eventType, expectedInternalEvent) => {
     expect(mapTripEventEnvelope({ ...envelope, eventType })).toEqual({
       valid: true,
       data: {
@@ -139,6 +182,42 @@ describe("RF8.1 AE2 - TripEventEnvelope RF8.6 a RF8.1", () => {
         occurredAt: envelope.occurredAt,
       },
     });
+  });
+
+  it("mapea ride.requested real de M5 sin fabricar tripId", () => {
+    expect(mapTripEventEnvelope(rideRequestedEnvelope)).toEqual({
+      valid: true,
+      data: {
+        messageId: rideRequestedEnvelope.messageId,
+        eventType: "TripRequested",
+        rideRequestId: "req_2026_000123",
+        recipientId: 91,
+        correlationId: "req_2026_000123",
+        occurredAt: rideRequestedEnvelope.occurredAt,
+      },
+    });
+  });
+
+  it("rechaza ride.requested con clientUserId string", () => {
+    const result = mapTripEventEnvelope({
+      ...rideRequestedEnvelope,
+      data: { ...rideRequestedEnvelope.data, clientUserId: "91" },
+    });
+
+    expect(result).toMatchObject({ valid: false });
+    if (!result.valid) {
+      expect(result.details).toContainEqual(expect.objectContaining({ field: "data.clientUserId" }));
+    }
+  });
+
+  it("rechaza ride.requested sin rideRequestId", () => {
+    const { rideRequestId: _rideRequestId, ...data } = rideRequestedEnvelope.data;
+    const result = mapTripEventEnvelope({ ...rideRequestedEnvelope, data });
+
+    expect(result).toMatchObject({ valid: false });
+    if (!result.valid) {
+      expect(result.details).toContainEqual(expect.objectContaining({ field: "data.rideRequestId" }));
+    }
   });
 
   it.each([
@@ -165,18 +244,19 @@ describe("RF8.1 AE2 - TripEventEnvelope RF8.6 a RF8.1", () => {
 
 describe("RF8.1 AE2 - handleTripNotificationEvent", () => {
   it.each(expectedContent)("genera title y message para %s", (eventType, title, message) => {
-    const result = handleTripNotificationEvent({ ...validEvent, eventType });
+    const result = handleTripNotificationEvent(eventFor(eventType));
 
     expect(result).toMatchObject({
       valid: true,
       data: {
-        sourceMessageId: validEvent.messageId,
-        tripId: validEvent.tripId,
-        recipientId: validEvent.recipientId,
+        sourceMessageId: eventType === "TripRequested" ? validRideRequestedEvent.messageId : validEvent.messageId,
+        tripId: eventType === "TripRequested" ? null : validEvent.tripId,
+        rideRequestId: eventType === "TripRequested" ? validRideRequestedEvent.rideRequestId : null,
+        recipientId: eventType === "TripRequested" ? validRideRequestedEvent.recipientId : validEvent.recipientId,
         eventType,
         title,
         message,
-        correlationId: validEvent.correlationId,
+        correlationId: eventType === "TripRequested" ? validRideRequestedEvent.correlationId : validEvent.correlationId,
       },
     });
     if (result.valid) {
@@ -212,22 +292,25 @@ describe("RF8.1 AE2 - handleTripNotificationEvent", () => {
 
 describe("RF8.1 AE2 - NotificationRequested", () => {
   it.each(expectedContent)("genera payload contractual para %s", (eventType, _title, message) => {
-    const notification = handleTripNotificationEvent({ ...validEvent, eventType });
+    const notification = handleTripNotificationEvent(eventFor(eventType));
 
     expect(notification).toMatchObject({ valid: true });
     if (!notification.valid) {
       throw new Error("No se genero la notificacion de prueba.");
     }
 
-    expect(createNotificationRequestedData(notification.data)).toEqual({
+    const expectedPayload = {
       notificationId: notification.data.notificationId,
-      tripId: notification.data.tripId,
       recipientId: notification.data.recipientId,
       eventType: TRIP_NOTIFICATION_EVENT_TYPE_TO_EVENT_TYPE[eventType],
       channel: "PUSH",
       message,
       createdAt: notification.data.createdAt,
-    });
+      ...(notification.data.tripId !== null ? { tripId: notification.data.tripId } : {}),
+      ...(notification.data.rideRequestId !== null ? { rideRequestId: notification.data.rideRequestId } : {}),
+    };
+
+    expect(createNotificationRequestedData(notification.data)).toEqual(expectedPayload);
   });
 
   it("genera envelope contractual sin campos extra", () => {

@@ -7,7 +7,8 @@ import type { LogicalNotification, TripNotificationEventType } from "../notifica
 interface NotificationRow {
   notification_id: string;
   source_message_id: string;
-  trip_id: string;
+  trip_id: string | null;
+  ride_request_id: string | null;
   recipient_id: string;
   event_type: TripNotificationEventType;
   title: string;
@@ -18,7 +19,7 @@ interface NotificationRow {
 }
 
 export const notificationColumns = `
-  notification_id, source_message_id, trip_id, recipient_id, event_type,
+  notification_id, source_message_id, trip_id, ride_request_id, recipient_id, event_type,
   title, message, correlation_id, occurred_at, created_at
 `;
 
@@ -27,6 +28,7 @@ export function mapNotificationRow(row: NotificationRow): LogicalNotification {
     notificationId: row.notification_id,
     sourceMessageId: row.source_message_id,
     tripId: row.trip_id,
+    rideRequestId: row.ride_request_id,
     recipientId: row.recipient_id,
     eventType: row.event_type,
     title: row.title,
@@ -46,14 +48,15 @@ export async function saveNotificationIdempotent(
   try {
         const inserted = await executor.query<NotificationRow>(
           `INSERT INTO notifications.notifications (${notificationColumns})
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            ON CONFLICT (source_message_id, recipient_id) DO NOTHING
            RETURNING ${notificationColumns}`,
           [
             notification.notificationId,
             notification.sourceMessageId,
             notification.tripId,
-            notification.recipientId,
+            notification.rideRequestId,
+            String(notification.recipientId),
             notification.eventType,
             notification.title,
             notification.message,
@@ -71,7 +74,7 @@ export async function saveNotificationIdempotent(
           `SELECT ${notificationColumns}
            FROM notifications.notifications
            WHERE source_message_id = $1 AND recipient_id = $2`,
-          [notification.sourceMessageId, notification.recipientId],
+          [notification.sourceMessageId, String(notification.recipientId)],
         );
 
         if (existing.rowCount !== 1) {

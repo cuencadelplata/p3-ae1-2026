@@ -8,7 +8,7 @@ export const DLX_EXCHANGE = 'mobility.events.dlx';
  * Seccion 4 del Informe Base de Arquitectura AE2 M8.
  */
 export const EVENT_TYPE_TO_ROUTING_KEY: Record<string, string> = {
-  TripRequested: 'trip.requested',
+  TripRequested: 'ride.requested',
   DriverAssigned: 'driver.assigned',
   DriverArrived: 'driver.arrived',
   TripStarted: 'trip.started',
@@ -26,6 +26,7 @@ export const ROUTING_KEY_TO_EVENT_TYPE: Record<string, string> = {
     return acc;
   }, {} as Record<string, string>),
   'driver.offer.accepted': 'DriverAssigned',
+  'trip.requested': 'TripRequested',
   'trip.assigned': 'DriverAssigned',
   'trip.driver-arrived': 'DriverArrived',
 };

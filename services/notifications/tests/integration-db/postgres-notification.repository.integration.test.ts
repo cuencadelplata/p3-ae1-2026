@@ -19,6 +19,7 @@ function createNotification(overrides: Partial<LogicalNotification> = {}): Logic
     notificationId: randomUUID(),
     sourceMessageId: `source-${randomUUID()}`,
     tripId: "trip-123",
+    rideRequestId: null,
     recipientId: "user-456",
     eventType: "TripAssigned",
     title: "Conductor asignado",
@@ -30,21 +31,21 @@ function createNotification(overrides: Partial<LogicalNotification> = {}): Logic
   };
 }
 
-async function countRows(sourceMessageId: string, recipientId: string): Promise<number> {
+async function countRows(sourceMessageId: string, recipientId: string | number): Promise<number> {
   const result = await pool.query<{ count: string }>(
     `SELECT count(*) FROM notifications.notifications
      WHERE source_message_id = $1 AND recipient_id = $2`,
-    [sourceMessageId, recipientId],
+    [sourceMessageId, String(recipientId)],
   );
   return Number(result.rows[0].count);
 }
 
-async function countOutboxRows(sourceMessageId: string, recipientId: string): Promise<number> {
+async function countOutboxRows(sourceMessageId: string, recipientId: string | number): Promise<number> {
   const result = await pool.query<{ count: string }>(
     `SELECT count(*) FROM notifications.outbox_deliveries o
      JOIN notifications.notifications n ON n.notification_id = o.notification_id
      WHERE n.source_message_id = $1 AND n.recipient_id = $2`,
-    [sourceMessageId, recipientId],
+    [sourceMessageId, String(recipientId)],
   );
   return Number(result.rows[0].count);
 }
@@ -71,6 +72,7 @@ describe("PostgreSQL NotificationRepository", () => {
       { version: 2, name: "create_notification_outbox_table" },
       { version: 3, name: "create_notification_outbox_pending_index" },
       { version: 4, name: "align_notification_outbox_delivery_contract" },
+      { version: 5, name: "support_ride_requested_without_trip_id" },
     ]);
   });
 
@@ -377,6 +379,7 @@ describe("PostgreSQL NotificationRepository", () => {
       notificationId: notification.notificationId,
       recipientId: notification.recipientId,
       tripId: notification.tripId,
+      rideRequestId: null,
       sourceMessageId: notification.sourceMessageId,
       notificationEventType: notification.eventType,
       title: notification.title,

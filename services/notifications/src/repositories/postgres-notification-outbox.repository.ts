@@ -34,7 +34,8 @@ interface NotificationDeliveryIntentRow {
   outbox_message_id: string;
   notification_id: string;
   recipient_id: string;
-  trip_id: string;
+  trip_id: string | null;
+  ride_request_id: string | null;
   source_message_id: string;
   notification_event_type: LogicalNotification["eventType"];
   title: string;
@@ -65,6 +66,7 @@ function mapDeliveryIntentRow(row: NotificationDeliveryIntentRow): NotificationD
     notificationId: row.notification_id,
     recipientId: row.recipient_id,
     tripId: row.trip_id,
+    rideRequestId: row.ride_request_id,
     sourceMessageId: row.source_message_id,
     notificationEventType: row.notification_event_type,
     title: row.title,
@@ -178,6 +180,7 @@ export function createPostgresNotificationWithOutboxRepository(
                   n.notification_id,
                   n.recipient_id,
                   n.trip_id,
+                  n.ride_request_id,
                   n.source_message_id,
                   n.event_type AS notification_event_type,
                   n.title,

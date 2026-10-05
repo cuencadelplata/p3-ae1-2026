@@ -21,6 +21,21 @@ const event = {
   occurredAt: "2026-10-03T15:30:00.000Z",
 };
 
+function createEventFor(eventType: (typeof TRIP_NOTIFICATION_EVENT_TYPES)[number]) {
+  if (eventType === "TripRequested") {
+    return {
+      messageId: "message-TripRequested",
+      eventType,
+      rideRequestId: "req_2026_000123",
+      recipientId: 91,
+      correlationId: "req_2026_000123",
+      occurredAt: event.occurredAt,
+    };
+  }
+
+  return { ...event, messageId: `message-${eventType}`, eventType };
+}
+
 function createRepository(
   saveIdempotent: NotificationRepository["saveIdempotent"],
 ): NotificationRepository {
@@ -65,6 +80,7 @@ describe("RF8.1 AE2 — persistencia de evento normalizado", () => {
       notificationId: "b5f552b3-17e2-42dd-b4f7-a15100000001",
       sourceMessageId: event.messageId,
       tripId: event.tripId,
+      rideRequestId: null,
       recipientId: event.recipientId,
       eventType: "TripAssigned",
       title: "Conductor asignado",
@@ -145,6 +161,7 @@ describe("RF8.1 AE2 — persistencia de evento normalizado", () => {
       notificationId: "b5f552b3-17e2-42dd-b4f7-a15100000002",
       sourceMessageId: event.messageId,
       tripId: event.tripId,
+      rideRequestId: null,
       recipientId: event.recipientId,
       eventType: "TripAssigned",
       title: "Conductor asignado",
@@ -183,6 +200,50 @@ describe("RF8.1 AE2 — persistencia de evento normalizado", () => {
     }
   });
 
+  it("genera una notificacion TRIP_REQUESTED desde ride.requested sin tripId falso", async () => {
+    const rideRequestedEvent = createEventFor("TripRequested");
+    const saveWithOutbox: NotificationWithOutboxRepository["saveWithOutbox"] = vi.fn(async (notification: LogicalNotification) => ({
+      notification,
+      created: true,
+      outbox: {
+        messageId: "47b9d9d8-7ca4-4dd1-b4e8-904100000003",
+        notificationId: notification.notificationId,
+        eventType: NOTIFICATION_REQUESTED_EVENT_TYPE as typeof NOTIFICATION_REQUESTED_EVENT_TYPE,
+        routingKey: NOTIFICATION_REQUESTED_ROUTING_KEY as typeof NOTIFICATION_REQUESTED_ROUTING_KEY,
+        correlationId: notification.correlationId,
+        version: 1 as const,
+        producer: M8_PRODUCER as typeof M8_PRODUCER,
+        payload: createNotificationRequestedData(notification),
+        createdAt: notification.createdAt,
+        publishedAt: null,
+      },
+    }));
+
+    const result = await processNormalizedTripNotificationEvent(rideRequestedEvent, createOutboxRepository(saveWithOutbox));
+
+    expect(result).toMatchObject({ status: "SUCCESS_CREATED", valid: true, created: true });
+    expect(saveWithOutbox).toHaveBeenCalledOnce();
+    if (result.valid) {
+      expect(result.data).toMatchObject({
+        eventType: "TripRequested",
+        tripId: null,
+        rideRequestId: "req_2026_000123",
+        recipientId: 91,
+        correlationId: "req_2026_000123",
+      });
+      expect(result.outbox?.payload).toEqual({
+        notificationId: result.data.notificationId,
+        rideRequestId: "req_2026_000123",
+        recipientId: 91,
+        eventType: "TRIP_REQUESTED",
+        channel: "PUSH",
+        message: "Tu solicitud de viaje fue recibida.",
+        createdAt: result.data.createdAt,
+      });
+      expect(result.outbox?.payload).not.toHaveProperty("tripId");
+    }
+  });
+
   it("acepta los seis eventos semÃ¡nticos de viaje en el puerto de aplicaciÃ³n", async () => {
     const saveWithOutbox: NotificationWithOutboxRepository["saveWithOutbox"] = vi.fn(async (notification: LogicalNotification) => ({
       notification,
@@ -204,7 +265,7 @@ describe("RF8.1 AE2 — persistencia de evento normalizado", () => {
     const results = await Promise.all(
       TRIP_NOTIFICATION_EVENT_TYPES.map((eventType) =>
         processNormalizedTripNotificationEvent(
-          { ...event, messageId: `message-${eventType}`, eventType },
+          createEventFor(eventType),
           createOutboxRepository(saveWithOutbox),
         ),
       ),
