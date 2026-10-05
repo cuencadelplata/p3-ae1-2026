@@ -179,6 +179,9 @@ importers:
       express:
         specifier: 5.0.0
         version: 5.0.0
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
       qrcode:
         specifier: ^1.5.3
         version: 1.5.4
@@ -195,6 +198,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.19.0
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       '@types/qrcode':
         specifier: ^1.5.5
         version: 1.5.6

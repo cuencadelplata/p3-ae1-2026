@@ -1,19 +1,18 @@
-import express from 'express';
+import type { Express } from 'express';
 import request from 'supertest';
-import { describe, it, expect } from 'vitest';
-import { SupportController } from './support.controller.js';
+import { beforeEach, describe, it, expect } from 'vitest';
+import { createSupportApp } from '../app.js';
+import { NoopSupportEventPublisher } from '../events/support-event-publisher.js';
+import { InMemoryTicketRepository } from '../models/ticket.model.js';
+import { TicketService } from '../services/ticket.service.js';
 
-const app = express();
-app.use(express.json());
+// Cada test usa la aplicación real con un repositorio en memoria propio.
+let app: Express;
 
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'OK', service: 'm8-soporte' });
+beforeEach(() => {
+  const ticketService = new TicketService(new InMemoryTicketRepository(), new NoopSupportEventPublisher());
+  app = createSupportApp({ ticketService, legacyEvents: true });
 });
-app.post('/tickets', SupportController.crearTicket);
-app.get('/tickets/:id', SupportController.obtenerTicket);
-app.patch('/tickets/:id/estado', SupportController.actualizarEstado);
-app.get('/tickets', SupportController.listarTodos);
-app.post('/events/publish', SupportController.publicarEvento);
 
 describe('SupportController', () => {
 
@@ -114,6 +113,12 @@ describe('SupportController', () => {
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
     });
+
+    it('cada test parte de un repositorio vacío', async () => {
+      const res = await request(app).get('/tickets');
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual([]);
+    });
   });
 
   describe('POST /events/publish', () => {
@@ -139,5 +144,18 @@ describe('SupportController', () => {
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty('error');
     });
+  });
+});
+
+describe('createSupportApp', () => {
+  it('GET /health conserva exactamente la forma de respuesta actual', async () => {
+    const res = await request(app).get('/health');
+
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body).sort()).toEqual(['service', 'status', 'timestamp', 'uptime']);
+    expect(res.body.status).toBe('OK');
+    expect(res.body.service).toBe('m8-soporte');
+    expect(new Date(res.body.timestamp).toISOString()).toBe(res.body.timestamp);
+    expect(typeof res.body.uptime).toBe('number');
   });
 });

@@ -58,7 +58,7 @@ services:
   # perfil: docker compose --profile replicas up -d --build
   receipts-replica:
     extends: receipts
-    profiles: ["replicas"]
+    profiles: [ "replicas" ]
     ports: !override
       - "3018:3008"
 
@@ -96,7 +96,7 @@ services:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -111,11 +111,12 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-m8_admin_local}"
       RECEIPTS_DB_PASSWORD: "${RECEIPTS_DB_PASSWORD:-m8_receipts_local}"
       NOTIFICATIONS_DB_PASSWORD: "${NOTIFICATIONS_DB_PASSWORD:-m8_notifications_local}"
+      SUPPORT_DB_PASSWORD: "${SUPPORT_DB_PASSWORD:-m8_support_local}"
     volumes:
       - m8-postgres:/var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      test: [ "CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\"" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -125,7 +126,7 @@ services:
     ports:
       - "${REDIS_HOST_PORT:-6379}:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -140,7 +141,11 @@ services:
       NODE_ENV: production
       PORT: "3000"
       RABBITMQ_URL: amqp://rabbitmq:5672
+      SUPPORT_DATABASE_URL: "postgres://m8_support:${SUPPORT_DB_PASSWORD:-m8_support_local}@postgres:5432/${POSTGRES_DB:-m8}"
+    restart: unless-stopped
     depends_on:
+      postgres:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
 
