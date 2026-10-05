@@ -53,6 +53,12 @@ const actualizarReservaSchema = z
   .superRefine(validarOrigenDestino);
 
 const idSchema = z.string().uuid();
+const paginacionSchema = z
+  .object({
+    page: z.coerce.number().int().positive().max(1_000_000).default(1),
+    pageSize: z.coerce.number().int().positive().max(100).default(20),
+  })
+  .strict();
 
 const toValidationError = (error: z.ZodError): AppError => {
   const fechaInvalida = error.issues.some((issue) => issue.path[0] === 'fechaHoraProgramada');
@@ -87,6 +93,16 @@ export const parseReservaId = (value: unknown): string => {
   const result = idSchema.safeParse(value);
   if (!result.success) {
     throw new AppError(400, 'DATOS_INVALIDOS', 'El identificador de reserva no es válido.');
+  }
+  return result.data;
+};
+
+export const parsePaginacion = (value: unknown): { page: number; pageSize: number } => {
+  const result = paginacionSchema.safeParse(value);
+  if (!result.success) {
+    throw new AppError(400, 'DATOS_INVALIDOS', 'Los parámetros de paginación no son válidos.', {
+      cause: result.error,
+    });
   }
   return result.data;
 };

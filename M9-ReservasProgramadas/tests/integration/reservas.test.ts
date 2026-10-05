@@ -94,6 +94,43 @@ describe('API /reservas', () => {
     expect(cancelada.body.estado).toBe('CANCELADA');
   });
 
+  it('lista reservas con paginación validada', async () => {
+    await request(app).post('/reservas').send(bodyValido());
+    await request(app).post('/reservas').send(bodyValido());
+
+    const response = await request(app).get('/reservas?page=2&pageSize=1');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ page: 2, pageSize: 1 });
+    expect(response.body.reservas).toHaveLength(1);
+  });
+
+  it('rechaza parámetros de paginación fuera de rango', async () => {
+    const response = await request(app).get('/reservas?page=0&pageSize=101');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.codigo).toBe('DATOS_INVALIDOS');
+  });
+
+  it('responde 503 controlado si PostgreSQL no está disponible', async () => {
+    const unavailableRepository = new InMemoryReservaRepository();
+    unavailableRepository.listarPaginado = async () => {
+      throw Object.assign(new Error('PostgreSQL no disponible'), { code: 'P1001' });
+    };
+    const serviceUnavailableApp = createApp({
+      reservaService: new ReservaService(
+        unavailableRepository,
+        { estimar: estimarTarifa },
+        asignacionClientDemo(),
+      ),
+    });
+
+    const response = await request(serviceUnavailableApp).get('/reservas');
+
+    expect(response.status).toBe(503);
+    expect(response.body.error.codigo).toBe('BASE_DATOS_NO_DISPONIBLE');
+  });
+
   it('rechaza fechas pasadas con FECHA_INVALIDA', async () => {
     const response = await request(app)
       .post('/reservas')

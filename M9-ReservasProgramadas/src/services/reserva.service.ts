@@ -47,6 +47,10 @@ export class ReservaService {
     return this.repository.listar();
   }
 
+  public async listarPaginado(page: number, pageSize: number): Promise<Reserva[]> {
+    return this.repository.listarPaginado(page, pageSize);
+  }
+
   public async obtenerPorId(id: string): Promise<Reserva> {
     const reserva = await this.repository.obtenerPorId(id);
     if (reserva === null) {

@@ -3,6 +3,7 @@ import type { RequestHandler } from 'express';
 import {
   parseActualizarReserva,
   parseCrearReserva,
+  parsePaginacion,
   parseReservaId,
 } from '../schemas/reserva.schema.js';
 import type { ReservaService } from '../services/reserva.service.js';
@@ -20,8 +21,13 @@ export const createReservaController = (service: ReservaService): ReservaControl
     const reserva = await service.crear(parseCrearReserva(request.body));
     response.status(201).json(reserva);
   },
-  listar: async (_request, response) => {
-    response.status(200).json({ reservas: await service.listar() });
+  listar: async (request, response) => {
+    const { page, pageSize } = parsePaginacion(request.query);
+    response.status(200).json({
+      reservas: await service.listarPaginado(page, pageSize),
+      page,
+      pageSize,
+    });
   },
   obtenerPorId: async (request, response) => {
     response.status(200).json(await service.obtenerPorId(parseReservaId(request.params.id)));
