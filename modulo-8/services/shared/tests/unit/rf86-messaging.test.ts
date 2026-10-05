@@ -120,7 +120,6 @@ describe('RF8.6 - Adaptadores de Eventos Externos y Contratos (M5/M6/M7)', () =>
   it('define ride.requested como routing key canonica de TripRequested', () => {
     expect(EVENT_TYPE_TO_ROUTING_KEY['TripRequested']).toBe('ride.requested');
   });
-
   it('debe generar messageId deterministico y estable cuando el evento no trae UUID', () => {
     const rawPayload = JSON.stringify({ trip_id: 888, status: 'started' });
     const envelopeA = adaptExternalEvent(rawPayload, 'trip.started');
@@ -373,7 +372,6 @@ describe('RF8.6 - EventConsumer AMQP (ACK, Concurrencia, Retry, DLQ, Publisher C
     expect(channel.ack).toHaveBeenCalledWith(msg);
     expect(await inbox.hasBeenProcessed('m8.notifications', payload.messageId)).toBe(false);
   });
-
   it('debe incrementar retryCount y programar reintento si falla la consulta al Inbox', async () => {
     const failingInbox = {
       claim: vi.fn().mockRejectedValue(new Error('DB Connection Timeout')),

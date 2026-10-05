@@ -1,0 +1,127 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:m8:events:NotificationRequested:v1",
+  "title": "NotificationRequestedEnvelope",
+  "description": "Evento de solicitud de entrega emitido por RF8.1 (Notificaciones) hacia RF8.7 (Entrega de Notificaciones)",
+  "type": "object",
+  "required": [
+    "messageId",
+    "eventType",
+    "version",
+    "occurredAt",
+    "correlationId",
+    "producer",
+    "data"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "messageId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identificador único y universal del mensaje (UUID v4), utilizado por RF8.7 para deduplicación e idempotencia durable (Inbox)."
+    },
+    "eventType": {
+      "type": "string",
+      "const": "NotificationRequested",
+      "description": "Nombre de tipo de evento congelado."
+    },
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Versión del esquema del contrato (v1)."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp ISO 8601 UTC en que se emitió el evento desde el Outbox de RF8.1."
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identificador de correlación que vincula el flujo de negocio (típicamente tripId)."
+    },
+    "producer": {
+      "type": "string",
+      "const": "m8-notifications",
+      "description": "Servicio emisor responsable (RF8.1)."
+    },
+    "data": {
+      "type": "object",
+      "description": "Payload con los datos de la notificación a ser entregada por RF8.7.",
+      "required": [
+        "notificationId",
+        "tripId",
+        "recipientId",
+        "eventType",
+        "channel",
+        "message",
+        "createdAt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "notificationId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Identificador único de la notificación lógica persistida en RF8.1."
+        },
+        "tripId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Identificador del viaje de M6 asociado a la notificación."
+        },
+        "recipientId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Identificador numérico canónico de M1 del destinatario (cliente o conductor)."
+        },
+        "eventType": {
+          "type": "string",
+          "enum": [
+            "TRIP_REQUESTED",
+            "DRIVER_ASSIGNED",
+            "DRIVER_ARRIVED",
+            "TRIP_STARTED",
+            "TRIP_CANCELLED",
+            "TRIP_COMPLETED"
+          ],
+          "description": "Tipo de acontecimiento de viaje que motivó la notificación."
+        },
+        "channel": {
+          "type": "string",
+          "enum": [
+            "PUSH"
+          ],
+          "description": "Canal de entrega solicitado para AE2 (PUSH)."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Título opcional del PUSH para dispositivos móviles. Si no se provee, RF8.7 deriva un título por defecto según eventType."
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Cuerpo formateado del mensaje a entregar al usuario."
+        },
+        "targetDestination": {
+          "type": "string",
+          "description": "Token de dispositivo (FCM / APNs) para delivery real. Si no se suministra, RF8.7 resuelve el token mediante su registro o sandbox."
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "HIGH",
+            "NORMAL"
+          ],
+          "default": "NORMAL",
+          "description": "Prioridad de despacho del proveedor PUSH."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp ISO 8601 de creación de la notificación lógica en RF8.1."
+        }
+      }
+    }
+  }
+}

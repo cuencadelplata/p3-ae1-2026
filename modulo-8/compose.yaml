@@ -118,6 +118,7 @@ services:
       RECEIPTS_DB_PASSWORD: "${RECEIPTS_DB_PASSWORD:-m8_receipts_local}"
       NOTIFICATIONS_DB_PASSWORD: "${NOTIFICATIONS_DB_PASSWORD:-m8_notifications_local}"
       SUPPORT_DB_PASSWORD: "${SUPPORT_DB_PASSWORD:-m8_support_local}"
+      DELIVERY_DB_PASSWORD: "${DELIVERY_DB_PASSWORD:-m8_delivery_local}"
     volumes:
       - m8-postgres:/var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -148,6 +149,28 @@ services:
       PORT: "3000"
       RABBITMQ_URL: amqp://rabbitmq:5672
       SUPPORT_DATABASE_URL: "postgres://m8_support:${SUPPORT_DB_PASSWORD:-m8_support_local}@postgres:5432/${POSTGRES_DB:-m8}"
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  notification-delivery:
+    build:
+      context: .
+      dockerfile: services/notification-delivery/Dockerfile
+    ports:
+      - "${DELIVERY_HOST_PORT:-3107}:3107"
+    environment:
+      NODE_ENV: production
+      PORT: "3107"
+      DELIVERY_DATABASE_URL: "postgres://m8_notification_delivery:${DELIVERY_DB_PASSWORD:-m8_delivery_local}@postgres:5432/${POSTGRES_DB:-m8}"
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      M2_API_URL: "${M2_API_URL:-http://m2-service:3002}"
+      M2_TIMEOUT_MS: "${M2_TIMEOUT_MS:-3000}"
+      M2_INTERNAL_API_KEY: "${M2_INTERNAL_API_KEY:?M2_INTERNAL_API_KEY must be configured}"
+      M1_JWT_SECRET: "${M1_JWT_SECRET:?M1_JWT_SECRET must be configured}"
     restart: unless-stopped
     depends_on:
       postgres:
