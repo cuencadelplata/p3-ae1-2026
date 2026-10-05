@@ -24,6 +24,7 @@
   "homepage": "https://github.com/cuencadelplata/p3-ae1-2026#readme",
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
+    "amqplib": "^2.2.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
@@ -37,6 +38,7 @@
     "@playwright/test": "^1.62.1",
     "@swc/core": "^1.16.1",
     "@swc/jest": "^0.2.39",
+    "@types/amqplib": "^0.10.8",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",

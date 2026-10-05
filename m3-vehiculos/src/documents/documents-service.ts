@@ -11,6 +11,7 @@ import {
 } from "./documents-repository.js";
 import { buscarVehiculoDeConductor } from "../vehiculos/vehiculo-repository.js";
 import { AppError } from "../errors/AppError.js";
+import { publicarDocumentoSubido } from "../events/publishers.js";
 
 export async function registrarDocumento(
   driverId: string,
@@ -57,7 +58,9 @@ export async function registrarDocumento(
     archivoUrl: datos.archivoUrl.trim(),
   };
 
-  return insertarDocumento(payload);
+  const documento = await insertarDocumento(payload);
+  publicarDocumentoSubido(documento);
+  return documento;
 }
 
 export async function listarDocumentos(driverId: string) {

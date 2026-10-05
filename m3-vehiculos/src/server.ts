@@ -8,6 +8,8 @@ import { errorHandler } from "./middlewares/errorHandler.js";
 import { vehiculoRoutes } from "./vehiculos/vehiculo-routes.js";
 import { documentoRoutes } from "./documents/documents-routes.js";
 import { redis } from "./config/redisClient.js";
+import { connectRabbit } from "./config/rabbitClient.js";
+import { iniciarConsumidores } from "./events/consumers.js";
 
 dotenv.config();
 
@@ -37,6 +39,9 @@ app.use(errorHandler);
 
 await redis.connect();
 console.log(" Conectado a Redis");
+await connectRabbit();
+console.log(" Conectado a RabbitMQ");
+await iniciarConsumidores();
 
 app.listen(PORT, () => {
   console.log(`🚀 m3-drivers corriendo en http://localhost:${PORT}`);

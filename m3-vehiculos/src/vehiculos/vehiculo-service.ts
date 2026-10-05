@@ -10,6 +10,7 @@ import {
   activarVehiculoEnBD,
 } from "./vehiculo-repository.js";
 import { AppError } from "../errors/AppError.js";
+import { publicarVehiculoCreado } from "../events/publishers.js";
 
 const PATENTE_REGEX = /^([A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/;
 
@@ -44,7 +45,9 @@ export async function registrarVehiculo(
     activo: false,
   };
 
-  return insertarVehiculo(payload); // si la patente ya existe, errorrrr 409 directo
+  const vehiculo = await insertarVehiculo(payload);
+  publicarVehiculoCreado(vehiculo);
+  return vehiculo;
 }
 
 export async function listarVehiculos(driverId: string) {
