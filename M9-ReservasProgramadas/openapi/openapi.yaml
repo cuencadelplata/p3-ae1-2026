@@ -23,7 +23,7 @@ paths:
   /health:
     get:
       tags: [Salud]
-      summary: Consultar el estado básico del servicio
+      summary: Consultar el estado de M9 y sus dependencias
       operationId: getHealth
       responses:
         '200':
@@ -33,6 +33,13 @@ paths:
               schema: { $ref: '#/components/schemas/HealthResponse' }
               examples:
                 disponible: { $ref: '#/components/examples/HealthOk' }
+        '503':
+          description: M9 está activo, pero una o más dependencias no están disponibles.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+              examples:
+                degradado: { $ref: '#/components/examples/HealthDegraded' }
   /openapi.json:
     get:
       tags: [Documentación]
@@ -69,11 +76,21 @@ paths:
                 creada: { $ref: '#/components/examples/ReservaProgramada' }
                 pendiente: { $ref: '#/components/examples/ReservaPendiente' }
         '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '503': { $ref: '#/components/responses/BaseDatosNoDisponible' }
         '500': { $ref: '#/components/responses/ErrorPersistencia' }
     get:
       tags: [Reservas]
       summary: Listar reservas
       operationId: listarReservas
+      parameters:
+        - name: page
+          in: query
+          description: Página de resultados (predeterminado 1).
+          schema: { type: integer, minimum: 1, maximum: 1000000, default: 1 }
+        - name: pageSize
+          in: query
+          description: Cantidad por página (predeterminado 20, máximo 100).
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
       responses:
         '200':
           description: Listado ordenado por fecha programada.
@@ -81,13 +98,17 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [reservas]
+                required: [reservas, page, pageSize]
                 properties:
                   reservas:
                     type: array
                     items: { $ref: '#/components/schemas/Reserva' }
+                  page: { type: integer, minimum: 1 }
+                  pageSize: { type: integer, minimum: 1, maximum: 100 }
               examples:
                 listado: { $ref: '#/components/examples/ListadoReservas' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '503': { $ref: '#/components/responses/BaseDatosNoDisponible' }
         '500': { $ref: '#/components/responses/ErrorPersistencia' }
   /reservas/{id}:
     parameters:
@@ -110,6 +131,7 @@ paths:
                 encontrada: { $ref: '#/components/examples/ReservaProgramada' }
         '400': { $ref: '#/components/responses/SolicitudInvalida' }
         '404': { $ref: '#/components/responses/ReservaNoEncontrada' }
+        '503': { $ref: '#/components/responses/BaseDatosNoDisponible' }
         '500': { $ref: '#/components/responses/ErrorPersistencia' }
     patch:
       tags: [Reservas]
@@ -156,13 +178,21 @@ paths:
         '500': { $ref: '#/components/responses/ErrorPersistencia' }
 components:
   responses:
+    BaseDatosNoDisponible:
+      description: PostgreSQL no está disponible; se puede reintentar la operación.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            fallo: { $ref: '#/components/examples/ErrorBaseDatos' }
     ErrorAsignacion:
-      description: No se pudo confirmar la liberación en M5.
+      description: M5 o PostgreSQL no están disponibles.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
           examples:
             fallo: { $ref: '#/components/examples/ErrorAsignacion' }
+            baseDatos: { $ref: '#/components/examples/ErrorBaseDatos' }
     SolicitudInvalida:
       description: Datos, fecha o identificador inválidos.
       content:
@@ -224,7 +254,22 @@ components:
         actualizadoEn: '2099-01-01T14:00:00.000Z'
     HealthOk:
       summary: Servicio disponible
-      value: { service: m9-reservas-programadas, status: ok }
+      value:
+        service: m9-reservas-programadas
+        status: ok
+        dependencies: { database: ok, m5: ok, m7: ok }
+    HealthDegraded:
+      summary: Una o más dependencias no están disponibles
+      value:
+        service: m9-reservas-programadas
+        status: degraded
+        dependencies: { database: down, m5: ok, m7: ok }
+    ErrorBaseDatos:
+      summary: PostgreSQL no está disponible
+      value:
+        error:
+          codigo: BASE_DATOS_NO_DISPONIBLE
+          mensaje: La base de datos no está disponible. Reintente la operación.
     CrearReservaValida:
       summary: Solicitud válida de reserva futura
       value:
@@ -317,6 +362,8 @@ components:
             idSolicitud: null
             creadoEn: '2099-01-01T14:00:00.000Z'
             actualizadoEn: '2099-01-01T14:00:00.000Z'
+        page: 1
+        pageSize: 20
     ErrorValidacion:
       summary: Fecha inválida
       value:
@@ -357,10 +404,17 @@ components:
     HealthResponse:
       type: object
       additionalProperties: false
-      required: [service, status]
+      required: [service, status, dependencies]
       properties:
         service: { type: string, example: m9-reservas-programadas }
-        status: { type: string, enum: [ok] }
+        status: { type: string, enum: [ok, degraded] }
+        dependencies:
+          type: object
+          required: [database, m5, m7]
+          properties:
+            database: { type: string, enum: [ok, down] }
+            m5: { type: string, enum: [ok, down] }
+            m7: { type: string, enum: [ok, down] }
     CrearReservaRequest:
       type: object
       additionalProperties: false

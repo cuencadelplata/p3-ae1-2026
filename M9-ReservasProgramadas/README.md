@@ -5,14 +5,17 @@
 - Codermatz, Valentino
 - Parra Ingaramo, Ignacio
 
-Microservicio de AE1 para crear, consultar, modificar, cancelar y activar reservas de viajes futuros. El trabajo se realiza exclusivamente en la rama `M9-ReservasProgramadas` y se ejecuta de forma local, sin despliegue cloud.
+Microservicio M9 para crear, consultar, modificar, cancelar y activar reservas de viajes futuros. Se ejecuta localmente con Docker Compose y persiste sus datos en PostgreSQL mediante Prisma.
 
 ## Alcance implementado
 
 - CRUD REST con cancelación lógica.
 - UI responsive para operar reservas.
 - Validación estricta con Zod y errores de dominio estables.
-- Persistencia temporal en memoria durante la ejecución del proceso.
+- Persistencia PostgreSQL con Prisma, historial de versiones y eventos Outbox.
+- Migraciones automáticas antes de iniciar M9.
+- Recuperación tras reinicio de reservas pendientes y activaciones interrumpidas.
+- Paginación estable en el listado de reservas.
 - Estimación de tarifa mediante M7 con degradación controlada.
 - Asignación de chofer al crear y reevaluación al editar mediante M5.
 - Estado `PENDIENTE_ASIGNACION` cuando no hay chofer confirmado; reintentos antes del horario.
@@ -55,7 +58,7 @@ npm ci
 npm run local:up
 ```
 
-`npm ci` instala exactamente las versiones registradas en `package-lock.json`. El segundo comando construye la imagen local e inicia coordinadamente M9, M5 stub y M7 stub mediante Docker Compose.
+`npm ci` instala exactamente las versiones registradas en `package-lock.json`. El segundo comando construye las imágenes, inicia PostgreSQL, aplica las migraciones e inicia M9 y los stubs M5/M7. PostgreSQL conserva los datos en un volumen nombrado.
 
 Si se necesita personalizar un valor, copiar `.env.example` como `.env` antes de iniciar. Para la evaluación estándar no es necesario modificarlo porque Compose incluye valores predeterminados.
 
@@ -68,7 +71,7 @@ Si se necesita personalizar un valor, copiar `.env.example` como `.env` antes de
 | Swagger UI      | `http://localhost:3000/docs/`    |
 | Salud de M9     | `http://localhost:3000/health`   |
 
-M5 y M7 son dependencias internas de `reservas-network` y no publican puertos al host. La solución no define volúmenes porque la persistencia actual es en memoria.
+M5 y M7 son dependencias internas de `reservas-network` y no publican puertos al host. PostgreSQL publica `5432` para desarrollo y conserva los datos en el volumen `postgres-data`. `npm run local:clean` elimina ese volumen y todos sus datos.
 
 ## Verificación de salud
 
@@ -79,7 +82,9 @@ docker compose ps
 curl -i http://localhost:3000/health
 ```
 
-El estado de M9 debe ser `healthy` y `GET /health` debe devolver `HTTP 200` con `{"service":"m9-reservas-programadas","status":"ok"}`. M5 y M7 se validan mediante sus health checks internos; también pueden comprobarse desde M9:
+Con todas las dependencias disponibles, M9 debe ser `healthy` y `GET /health` debe devolver `HTTP 200`, `status: ok` y `database`, `m5` y `m7` en `ok`. Si una dependencia cae, M9 permanece ejecutándose y responde `HTTP 503` con `status: degraded` e identifica cuál está caída. Las operaciones que necesitan PostgreSQL responden `503` mientras la DB no está disponible; al restaurarla, M9 vuelve a atenderlas sin reiniciar el proceso.
+
+M5 y M7 se validan mediante sus health checks internos; también pueden comprobarse desde M9:
 
 ```bash
 docker compose exec -T m9-reservas wget -qO- http://m5-stub:3001/health
@@ -90,22 +95,23 @@ docker compose exec -T m9-reservas wget -qO- http://m7-stub:3002/health
 
 Los valores de Compose ya están preparados para la ejecución coordinada. `.env.example` sirve como referencia para ejecutar M9 directamente con npm.
 
-| Variable                   | Default                 | Descripción                   |
-| -------------------------- | ----------------------- | ----------------------------- |
-| `PORT`                     | `3000`                  | Puerto HTTP de M9.            |
-| `NODE_ENV`                 | `development`           | Entorno de Node.js.           |
-| `M5_URL`                   | `http://localhost:3001` | URL del servicio de despacho. |
-| `M7_URL`                   | `http://localhost:3002` | URL del servicio de tarifas.  |
-| `RESERVATION_JOB_INTERVAL` | `*/30 * * * * *`        | Expresión cron del scheduler. |
+| Variable                   | Default                 | Descripción                                            |
+| -------------------------- | ----------------------- | ------------------------------------------------------ |
+| `PORT`                     | `3000`                  | Puerto HTTP de M9.                                     |
+| `NODE_ENV`                 | `development`           | Entorno de Node.js.                                    |
+| `DATABASE_URL`             | PostgreSQL local        | Conexión a PostgreSQL. Compose usa el host `postgres`. |
+| `M5_URL`                   | `http://localhost:3001` | URL del servicio de despacho.                          |
+| `M7_URL`                   | `http://localhost:3002` | URL del servicio de tarifas.                           |
+| `RESERVATION_JOB_INTERVAL` | `*/30 * * * * *`        | Expresión cron del scheduler.                          |
 
 ## API
 
 | Método | Ruta            | Propósito                                                           |
 | ------ | --------------- | ------------------------------------------------------------------- |
-| GET    | `/health`       | Consultar salud básica.                                             |
+| GET    | `/health`       | Consultar salud de M9 y sus backing services.                       |
 | GET    | `/openapi.json` | Descargar la especificación OpenAPI utilizada por Swagger UI.       |
 | POST   | `/reservas`     | Consultar tarifa e intentar asignar chofer; puede quedar pendiente. |
-| GET    | `/reservas`     | Listar reservas por fecha ascendente.                               |
+| GET    | `/reservas`     | Listar por fecha ascendente; admite `page` y `pageSize`.            |
 | GET    | `/reservas/:id` | Obtener una reserva por UUID.                                       |
 | PATCH  | `/reservas/:id` | Modificar una reserva programada o pendiente y reevaluar chofer.    |
 | DELETE | `/reservas/:id` | Liberar chofer y cancelar una reserva programada o pendiente.       |
@@ -219,37 +225,32 @@ obtienen chofer y la tercera queda pendiente. Cancelar una y esperar el siguient
 permite observar la reevaluación. Usar `npm run local:up` para reconstruir este código:
 la imagen publicada `v1.0.0` corresponde a la entrega anterior y no incluye este cambio.
 
-## Persistencia en memoria
+## PostgreSQL, Prisma y recuperación
 
-Las reservas se guardan en un `Map` privado del proceso M9. La implementación conserva el contrato `ReservaRepository`, por lo que una base de datos podrá incorporarse después sin cambiar controladores, servicios ni rutas.
+`Reserva` contiene datos propios de M9 y el identificador `clienteId`; no replica
+datos maestros de clientes, conductores ni tarifas. Cada alta, modificación, cambio de
+estado o cancelación guarda la reserva, su snapshot en `reserva_versiones` y el evento
+correspondiente en `outbox_eventos` dentro de una transacción PostgreSQL.
 
-Consecuencias actuales:
+Compose espera a que PostgreSQL esté saludable, ejecuta `prisma migrate deploy` en el
+servicio de una sola ejecución `migrate` y luego inicia M9. M5 y M7 no bloquean el inicio:
+la API queda disponible en estado degradado si alguno no responde. Las reservas pendientes
+de asignación se reintentan antes de su horario; las que quedaron en `ACTIVANDO` se
+recuperan en el siguiente ciclo del scheduler tras reiniciar M9.
 
-- los datos se conservan mientras M9 esté ejecutándose;
-- reiniciar o recrear el contenedor elimina todas las reservas;
-- no se comparten datos entre varias réplicas de M9;
-- el reclamo de una reserva sigue siendo atómico dentro de una única instancia.
-
-## Base AE2: PostgreSQL y Prisma
-
-La infraestructura inicial de AE2 agrega PostgreSQL 17 con volumen persistente y el
-modelo Prisma en `prisma/schema.prisma`. El servicio todavía utiliza el repositorio en
-memoria; esta preparación no cambia el comportamiento de AE1 mientras se implementa y
-prueba el adaptador PostgreSQL.
-
-Desde la raíz, preparar las variables locales y levantar la base:
+Desde esta carpeta, los comandos de base de datos son:
 
 ```bash
-Copy-Item M9-ReservasProgramadas/.env.example M9-ReservasProgramadas/.env
-docker compose --env-file M9-ReservasProgramadas/.env -f M9-ReservasProgramadas/docker-compose.yml up -d postgres
 npm run db:validate
 npm run db:generate
-npm run db:migrate -- --name init
+npm run db:deploy
+npm run db:seed
 ```
 
-Los mismos scripts `db:validate`, `db:generate`, `db:migrate` y `db:studio` están
-disponibles dentro de `M9-ReservasProgramadas/`. La conexión por defecto es local y
-solo para desarrollo. `npm run local:clean` también elimina el volumen de PostgreSQL.
+En Docker, `docker compose up --build -d` aplica las migraciones automáticamente.
+El seed usa UUID estables, no borra datos existentes y se puede ejecutar repetidamente.
+Para una DB vacía fuera de Compose, definir `DATABASE_URL` antes de correr `db:deploy`
+y `db:seed`.
 
 ## Pruebas
 

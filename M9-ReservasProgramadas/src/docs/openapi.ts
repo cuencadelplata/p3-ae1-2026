@@ -8,7 +8,19 @@ const asignacionEjemplo = {
 const examplesBase = {
   HealthOk: {
     summary: 'Servicio disponible',
-    value: { service: 'm9-reservas-programadas', status: 'ok' },
+    value: {
+      service: 'm9-reservas-programadas',
+      status: 'ok',
+      dependencies: { database: 'ok', m5: 'ok', m7: 'ok' },
+    },
+  },
+  HealthDegraded: {
+    summary: 'Una o más dependencias no están disponibles',
+    value: {
+      service: 'm9-reservas-programadas',
+      status: 'degraded',
+      dependencies: { database: 'down', m5: 'ok', m7: 'ok' },
+    },
   },
   CrearReservaValida: {
     summary: 'Solicitud válida de reserva futura',
@@ -102,6 +114,8 @@ const examplesBase = {
           actualizadoEn: '2099-01-01T14:00:00.000Z',
         },
       ],
+      page: 1,
+      pageSize: 20,
     },
   },
   ErrorValidacion: {
@@ -138,6 +152,15 @@ const examplesBase = {
   ErrorInterno: {
     summary: 'Error no controlado',
     value: { error: { codigo: 'ERROR_INTERNO', mensaje: 'Ocurrió un error interno.' } },
+  },
+  ErrorBaseDatos: {
+    summary: 'PostgreSQL no está disponible',
+    value: {
+      error: {
+        codigo: 'BASE_DATOS_NO_DISPONIBLE',
+        mensaje: 'La base de datos no está disponible. Reintente la operación.',
+      },
+    },
   },
 } as const;
 
@@ -212,12 +235,16 @@ export const openApiDocument = {
     '/health': {
       get: {
         tags: ['Salud'],
-        summary: 'Consultar el estado básico del servicio',
+        summary: 'Consultar el estado de M9 y sus dependencias',
         operationId: 'getHealth',
         responses: {
           '200': {
             description: 'El servicio está disponible.',
             ...jsonSchema('#/components/schemas/HealthResponse', 'HealthOk'),
+          },
+          '503': {
+            description: 'M9 está activo, pero una o más dependencias no están disponibles.',
+            ...jsonSchema('#/components/schemas/HealthResponse', 'HealthDegraded'),
           },
         },
       },
@@ -267,6 +294,7 @@ export const openApiDocument = {
             },
           },
           '400': errorResponse('Datos o fecha inválidos.', 'ErrorValidacion'),
+          '503': errorResponse('PostgreSQL no está disponible.', 'ErrorBaseDatos'),
           '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
         },
       },
@@ -274,6 +302,20 @@ export const openApiDocument = {
         tags: ['Reservas'],
         summary: 'Listar reservas',
         operationId: 'listarReservas',
+        parameters: [
+          {
+            name: 'page',
+            in: 'query',
+            description: 'Página de resultados (predeterminado 1).',
+            schema: { type: 'integer', minimum: 1, maximum: 1_000_000, default: 1 },
+          },
+          {
+            name: 'pageSize',
+            in: 'query',
+            description: 'Cantidad por página (predeterminado 20, máximo 100).',
+            schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+          },
+        ],
         responses: {
           '200': {
             description: 'Listado ordenado por fecha programada.',
@@ -281,18 +323,22 @@ export const openApiDocument = {
               'application/json': {
                 schema: {
                   type: 'object',
-                  required: ['reservas'],
+                  required: ['reservas', 'page', 'pageSize'],
                   properties: {
                     reservas: {
                       type: 'array',
                       items: { $ref: '#/components/schemas/Reserva' },
                     },
+                    page: { type: 'integer', minimum: 1 },
+                    pageSize: { type: 'integer', minimum: 1, maximum: 100 },
                   },
                 },
                 examples: { principal: { $ref: '#/components/examples/ListadoReservas' } },
               },
             },
           },
+          '400': errorResponse('Parámetros de paginación inválidos.', 'ErrorValidacion'),
+          '503': errorResponse('PostgreSQL no está disponible.', 'ErrorBaseDatos'),
           '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
         },
       },
@@ -315,6 +361,7 @@ export const openApiDocument = {
           '200': reservaResponse('Reserva encontrada.', 'ReservaProgramada'),
           '400': errorResponse('Identificador inválido.', 'ErrorValidacion'),
           '404': errorResponse('Reserva no encontrada.', 'ErrorNoEncontrada'),
+          '503': errorResponse('PostgreSQL no está disponible.', 'ErrorBaseDatos'),
           '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
         },
       },
@@ -333,7 +380,7 @@ export const openApiDocument = {
           '400': errorResponse('Datos, fecha o identificador inválidos.', 'ErrorValidacion'),
           '404': errorResponse('Reserva no encontrada.', 'ErrorNoEncontrada'),
           '409': errorResponse('Reserva no modificable.', 'ErrorNoModificable'),
-          '503': errorResponse('No se pudo confirmar la liberación en M5.', 'ErrorAsignacion'),
+          '503': errorResponse('M5 o PostgreSQL no están disponibles.', 'ErrorBaseDatos'),
           '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
         },
       },
@@ -348,7 +395,7 @@ export const openApiDocument = {
           '400': errorResponse('Identificador inválido.', 'ErrorValidacion'),
           '404': errorResponse('Reserva no encontrada.', 'ErrorNoEncontrada'),
           '409': errorResponse('Reserva no cancelable.', 'ErrorNoCancelable'),
-          '503': errorResponse('No se pudo confirmar la liberación en M5.', 'ErrorAsignacion'),
+          '503': errorResponse('M5 o PostgreSQL no están disponibles.', 'ErrorBaseDatos'),
           '500': errorResponse('Error de persistencia.', 'ErrorInterno'),
         },
       },
@@ -359,11 +406,20 @@ export const openApiDocument = {
     schemas: {
       HealthResponse: {
         type: 'object',
-        required: ['service', 'status'],
+        required: ['service', 'status', 'dependencies'],
         additionalProperties: false,
         properties: {
           service: { type: 'string', example: 'm9-reservas-programadas' },
-          status: { type: 'string', enum: ['ok'] },
+          status: { type: 'string', enum: ['ok', 'degraded'] },
+          dependencies: {
+            type: 'object',
+            required: ['database', 'm5', 'm7'],
+            properties: {
+              database: { type: 'string', enum: ['ok', 'down'] },
+              m5: { type: 'string', enum: ['ok', 'down'] },
+              m7: { type: 'string', enum: ['ok', 'down'] },
+            },
+          },
         },
       },
       CrearReservaRequest: {
