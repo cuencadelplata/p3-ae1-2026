@@ -42,12 +42,19 @@ export async function escucharEvento(routingKey: string): Promise<{
 }> {
   const connection = await amqp.connect(rabbitMqUrl);
   const channel = await connection.createChannel();
-  await channel.assertExchange('viajes', 'topic', { durable: true });
-  const queue = await channel.assertQueue('', { exclusive: true, autoDelete: true });
-  await channel.bindQueue(queue.queue, 'viajes', routingKey);
+  let queueName: string;
+  if (routingKey === 'despacho.reabrir') {
+    const queue = await channel.assertQueue(routingKey, { durable: true });
+    queueName = queue.queue;
+  } else {
+    await channel.assertExchange('viajes', 'topic', { durable: true });
+    const queue = await channel.assertQueue('', { exclusive: true, autoDelete: true });
+    await channel.bindQueue(queue.queue, 'viajes', routingKey);
+    queueName = queue.queue;
+  }
 
   return {
-    esperar: () => esperarMensaje(channel, queue.queue),
+    esperar: () => esperarMensaje(channel, queueName),
     close: async () => {
       await channel.close();
       await connection.close();

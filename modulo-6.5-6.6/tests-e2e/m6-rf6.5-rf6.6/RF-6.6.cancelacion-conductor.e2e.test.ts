@@ -23,6 +23,6 @@ describe('RF-6.6 - Cancelación por conductor en e2e', () => {
 
     expect(response.status).toBe(200);
     expect(body.viaje).toMatchObject({ id: viajeId, estado: 'CANCELADO' });
-    expect(event).toMatchObject({ viajeId, evento: 'despacho.reabrir', motivo: 'Se me averio el vehiculo' });
+    expect(event).toMatchObject({ viajeId, evento: 'cancelacion_conductor', motivo: 'Se me averio el vehiculo' });
   });
 });
