@@ -4,7 +4,23 @@ import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
 
 import { createApp } from '../../src/app';
+import { closeRedis, connectRedis } from '../../src/cache/redis';
 import { runMigrations } from '../../src/db/migrations';
+import { AppError } from '../../src/errors/app-error';
+import type { IdentityValidator } from '../../src/middlewares/auth.middleware';
+
+const identityValidator: IdentityValidator = async (authorization) => {
+  switch (authorization) {
+    case 'Bearer customer-101':
+      return { userId: 101, role: 'CLIENTE' };
+    case 'Bearer other-customer':
+      return { userId: 999, role: 'CLIENTE' };
+    case 'Bearer operator':
+      return { userId: 1, role: 'OPERADOR' };
+    default:
+      throw AppError.unauthorized('INVALID_AUTH_TOKEN', 'El token de autenticacion no es valido');
+  }
+};
 
 describe('Receipt API (Integration HTTP)', () => {
   let server: Server;
@@ -13,7 +29,8 @@ describe('Receipt API (Integration HTTP)', () => {
 
   before(async () => {
     await runMigrations();
-    const app = createApp();
+    await connectRedis();
+    const app = createApp({ identityValidator });
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => {
         const port = (server.address() as AddressInfo).port;
@@ -27,6 +44,7 @@ describe('Receipt API (Integration HTTP)', () => {
     await new Promise<void>((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()));
     });
+      await closeRedis();
   });
 
   it('GET /health debe responder 200 e informar la base de datos disponible', async () => {
@@ -47,6 +65,8 @@ describe('Receipt API (Integration HTTP)', () => {
   it('POST /api/v1/receipts debe crear un comprobante (201 Created)', async () => {
     const payload = {
       tripId,
+      customerUserId: 101,
+      driverUserId: 202,
       customer: {
         id: 'cli-101',
         fullName: 'Juan Gualtieri',
@@ -85,6 +105,8 @@ describe('Receipt API (Integration HTTP)', () => {
   it('POST /api/v1/receipts debe ser idempotente (200 OK con el mismo comprobante)', async () => {
     const payload = {
       tripId,
+      customerUserId: 101,
+      driverUserId: 202,
       customer: { id: 'cli-101', fullName: 'Juan Gualtieri' },
       driver: { id: 'cnd-202', fullName: 'Conductor Prueba', vehicle: { type: 'AUTO', plate: 'UTN123' } },
       trip: { origin: 'Punto A', destination: 'Punto B', startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), distanceKm: 10, durationMin: 20 },
@@ -103,15 +125,24 @@ describe('Receipt API (Integration HTTP)', () => {
     assert.equal(body.data.tripId, tripId);
   });
 
-  it('GET /api/v1/receipts/:tripId debe obtener los datos del comprobante (200 OK)', async () => {
+  it('GET /api/v1/receipts/:tripId sin Bearer debe responder 401', async () => {
     const res = await fetch(`${baseUrl}/api/v1/receipts/${tripId}`);
+    assert.equal(res.status, 401);
+  });
+
+  it('GET /api/v1/receipts/:tripId debe obtener los datos del comprobante para el cliente autorizado', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/receipts/${tripId}`, {
+      headers: { Authorization: 'Bearer customer-101' },
+    });
     assert.equal(res.status, 200);
     const body = (await res.json()) as { data: { customer: { fullName: string } } };
     assert.equal(body.data.customer.fullName, 'Juan Gualtieri');
   });
 
   it('GET /api/v1/receipts/:tripId/pdf debe descargar el archivo PDF (200 OK)', async () => {
-    const res = await fetch(`${baseUrl}/api/v1/receipts/${tripId}/pdf`);
+    const res = await fetch(`${baseUrl}/api/v1/receipts/${tripId}/pdf`, {
+      headers: { Authorization: 'Bearer customer-101' },
+    });
     assert.equal(res.status, 200);
     assert.ok(res.headers.get('content-type')?.includes('application/pdf'));
     const arrayBuffer = await res.arrayBuffer();
@@ -126,7 +157,7 @@ describe('Receipt API (Integration HTTP)', () => {
   it('POST /api/v1/receipts/:tripId/resend debe solicitar reenvio (202 Accepted)', async () => {
     const res = await fetch(`${baseUrl}/api/v1/receipts/${tripId}/resend`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer customer-101' },
       body: JSON.stringify({ channel: 'EMAIL', destination: 'juan.gualtieri@example.com' }),
     });
 
@@ -134,6 +165,16 @@ describe('Receipt API (Integration HTTP)', () => {
     const body = (await res.json()) as { data: { lastDelivery: { channel: string; destination: string; sentAt: string } } };
     assert.equal(body.data.lastDelivery.channel, 'EMAIL');
     assert.ok(body.data.lastDelivery.sentAt);
+  });
+
+  it('POST /api/v1/receipts/:tripId/resend debe rechazar un usuario ajeno (403)', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/receipts/${tripId}/resend`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer other-customer' },
+      body: JSON.stringify({ channel: 'EMAIL', destination: 'juan.gualtieri@example.com' }),
+    });
+
+    assert.equal(res.status, 403);
   });
 
   it('POST /api/v1/receipts con datos invalidos debe responder 422 Unprocessable', async () => {
@@ -146,12 +187,16 @@ describe('Receipt API (Integration HTTP)', () => {
   });
 
   it('GET /api/v1/receipts con tripId inexistente debe responder 404', async () => {
-    const res = await fetch(`${baseUrl}/api/v1/receipts/trip-inexistente-12345`);
+    const res = await fetch(`${baseUrl}/api/v1/receipts/trip-inexistente-12345`, {
+      headers: { Authorization: 'Bearer operator' },
+    });
     assert.equal(res.status, 404);
   });
 
   it('GET /api/v1/receipts con formato tripId invalido debe responder 400', async () => {
-    const res = await fetch(`${baseUrl}/api/v1/receipts/id_invalido$$$`);
+    const res = await fetch(`${baseUrl}/api/v1/receipts/id_invalido$$$`, {
+      headers: { Authorization: 'Bearer operator' },
+    });
     assert.equal(res.status, 400);
   });
 });

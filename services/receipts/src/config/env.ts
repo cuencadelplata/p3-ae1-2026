@@ -120,4 +120,23 @@ export const env = {
   issuerTeam: readText('RECEIPT_ISSUER_TEAM', 'Grupo 14 - Modulo 8'),
   timezone: readText('RECEIPT_TIMEZONE', 'America/Argentina/Buenos_Aires'),
   locale: readText('RECEIPT_LOCALE', 'es-AR'),
+
+  /** RF-8.4 (Lucas Cremaschi): TTL para la cache de metadatos en Redis (segundos). */
+  receiptCacheTtlSeconds: readPositiveInt('RECEIPT_CACHE_TTL_SECONDS', 300),
+
+  /** RF-8.4: TTL del lock distribuido de reenvio en Redis (milisegundos). */
+  resendLockTtlMs: readPositiveInt('RESEND_LOCK_TTL_MS', 5000),
+
+  /** RF-8.4: Maximo de solicitudes de reenvio permitidas por ventana (rate limiting). */
+  resendRateLimitMax: readPositiveInt('RESEND_RATE_LIMIT_MAX', 3),
+
+  /** RF-8.4: Ventana de tiempo para el rate limiting de reenvios, en segundos. */
+  resendRateLimitWindowSeconds: readPositiveInt('RESEND_RATE_LIMIT_WINDOW_SECONDS', 60),
+
+  /**
+   * RF-8.4 / M1: endpoint canónico que valida el Bearer recibido del usuario.
+   * No se configura una clave compartida ni un mecanismo M2M no acordado.
+   */
+  m1IdentityUrl: readText('M1_IDENTITY_URL', '').replace(/\/+$/, ''),
+  m1TimeoutMs: readPositiveInt('M1_TIMEOUT_MS', 2000),
 } as const;

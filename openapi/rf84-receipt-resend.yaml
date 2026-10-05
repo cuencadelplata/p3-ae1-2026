@@ -1,0 +1,327 @@
+﻿openapi: 3.0.3
+info:
+  title: M8 - Reenvio de Comprobante de Viaje (RF-8.4)
+  description: |
+    Microservicio de la **Plataforma Distribuida de Movilidad Urbana (ISI - Paradigmas 3)**.
+    Responsable: **Lucas Cremaschi (RF-8.4 - AE2)**.
+
+    **Capacidades nucleares de RF-8.4:**
+    - **Reenvio de Comprobante:** Permite volver a solicitar la entrega o enlace de acceso a un comprobante emitido sin regenerar el PDF.
+    - **Integracion con M1 (Autenticacion):** Valida token Bearer JWT y verifica permisos del usuario autenticado (cliente dueno, conductor que realizo el viaje u operador administrativo).
+    - **Cache de Metadatos en Redis con TTL:** Lecturas cacheadas para `GET /api/v1/receipts/{tripId}` con fallback a CommunicationsDB (PostgreSQL).
+    - **Bloqueo Distribuido (Lock en Redis):** Control de concurrencia mediante `SET NX PX` para evitar que multiples clics simultaneos en "Reenviar" disparen procesos paralelos.
+    - **Rate Limiting en Redis:** Limita la cantidad de solicitudes de reenvio por ventana de tiempo para prevenir abusos.
+    - **Persistencia e Idempotencia:** Registro auditable de cada intento en `receipts.receipt_deliveries` de CommunicationsDB.
+  version: 2.1.0
+  contact:
+    name: Lucas Cremaschi - M8 RF-8.4
+servers:
+  - url: http://localhost:3008/api/v1
+    description: Servidor Local Receipts (M8)
+  - url: /api/v1
+    description: Servidor relativo
+
+security:
+  - BearerAuth: []
+
+paths:
+  /receipts/{tripId}/resend:
+    post:
+      tags:
+        - Reenvio de Comprobante (RF-8.4)
+      summary: Reenvio de comprobante por tripId (RF-8.4)
+      description: |
+        Solicita el reenvio del comprobante ya emitido a traves del canal indicado (EMAIL, SMS o PUSH).
+        Aplica validacion de permisos M1, rate limiting y bloqueo distribuido en Redis.
+      operationId: resendReceiptByTripId
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          description: Identificador unico del viaje
+          schema:
+            type: string
+            example: "trip-2026-000123"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendRequest'
+      responses:
+        '202':
+          description: Solicitud de reenvio aceptada y registrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResendEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ConcurrentConflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+
+  /receipts/resend:
+    post:
+      tags:
+        - Reenvio de Comprobante (RF-8.4)
+      summary: Reenvio de comprobante con identificador en el cuerpo (RF-8.4)
+      description: |
+        Variante del endpoint de reenvio que recibe el `tripId` dentro del payload JSON.
+      operationId: resendReceiptWithBody
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendRequestBody'
+      responses:
+        '202':
+          description: Solicitud de reenvio aceptada y registrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResendEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ConcurrentConflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+
+  /receipts/{tripId}:
+    get:
+      tags:
+        - Reenvio de Comprobante (RF-8.4)
+      summary: Consulta de metadatos cacheada en Redis (RF-8.4)
+      description: |
+        Obtiene los metadatos del comprobante. Lee prioritariamente desde la cache de Redis con TTL.
+        Si hay cache miss, recupera desde CommunicationsDB y repuebla la cache.
+      operationId: getReceiptMetadata
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          description: Identificador unico del viaje
+          schema:
+            type: string
+            example: "trip-2026-000123"
+      responses:
+        '200':
+          description: Metadatos del comprobante recuperados exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token emitido por el Modulo 1 (Identidad y Acceso) con claims userId y role.
+
+  schemas:
+    ResendRequest:
+      type: object
+      properties:
+        channel:
+          type: string
+          enum: [EMAIL, SMS, PUSH]
+          default: EMAIL
+          example: "EMAIL"
+        destination:
+          type: string
+          example: "lucas.cremaschi@example.com"
+
+    ResendRequestBody:
+      type: object
+      required:
+        - tripId
+      properties:
+        tripId:
+          type: string
+          example: "trip-2026-000123"
+        channel:
+          type: string
+          enum: [EMAIL, SMS, PUSH]
+          default: EMAIL
+          example: "EMAIL"
+        destination:
+          type: string
+          example: "lucas.cremaschi@example.com"
+
+    DeliveryRecord:
+      type: object
+      required:
+        - channel
+        - destination
+        - sentAt
+      properties:
+        channel:
+          type: string
+          enum: [EMAIL, SMS, PUSH]
+          example: "EMAIL"
+        destination:
+          type: string
+          example: "lucas.cremaschi@example.com"
+        sentAt:
+          type: string
+          format: date-time
+          example: "2026-10-03T18:00:00.000Z"
+
+    ReceiptEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Receipt'
+
+    ResendEnvelope:
+      type: object
+      properties:
+        data:
+          allOf:
+            - $ref: '#/components/schemas/Receipt'
+            - type: object
+              properties:
+                lastDelivery:
+                  $ref: '#/components/schemas/DeliveryRecord'
+
+    Receipt:
+      type: object
+      properties:
+        receiptId:
+          type: string
+          format: uuid
+        receiptNumber:
+          type: string
+          example: "CMP-2026-A1B2C3D4E5"
+        tripId:
+          type: string
+          example: "trip-2026-000123"
+        issuedAt:
+          type: string
+          format: date-time
+        customer:
+          type: object
+          properties:
+            id: { type: string }
+            fullName: { type: string }
+            email: { type: string }
+        driver:
+          type: object
+          properties:
+            id: { type: string }
+            fullName: { type: string }
+        deliveries:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryRecord'
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required: [code, message, path, timestamp]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            path: { type: string }
+            timestamp: { type: string, format: date-time }
+            details: { type: object }
+
+  responses:
+    BadRequest:
+      description: Parametro o identificador invalido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Token Bearer faltante o invalido (M1)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: El usuario autenticado no posee permisos sobre el comprobante
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: No existe un comprobante emitido para el viaje especificado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ConcurrentConflict:
+      description: Bloqueo distribuido activo ante reenvios concurrentes
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "CONCURRENT_RESEND_IN_PROGRESS"
+              message: "Ya existe un reenvio en curso para el viaje trip-2026-000123. Evite clics simultaneos."
+              path: "/api/v1/receipts/trip-2026-000123/resend"
+              timestamp: "2026-10-03T18:00:00.000Z"
+    ValidationError:
+      description: Error de validacion en los datos de la solicitud
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimitExceeded:
+      description: Limite de solicitudes de reenvio superado (Redis Rate Limiting)
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Segundos restantes para volver a intentar
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    DependencyUnavailable:
+      description: Dependencia no disponible (PostgreSQL o Redis en fallo critico)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

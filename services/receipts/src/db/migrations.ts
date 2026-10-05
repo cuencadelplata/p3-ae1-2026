@@ -38,6 +38,10 @@ const statements = [
   // para que los volumenes creados antes la incorporen sin recrearse; queda
   // nula en los comprobantes emitidos antes de este cambio.
   `ALTER TABLE receipts.receipts ADD COLUMN IF NOT EXISTS fiscal jsonb`,
+  // Referencias canónicas a M1 para autorizar operaciones RF8.4. Son
+  // opcionales para mantener la emisión compatible con snapshots históricos.
+  `ALTER TABLE receipts.receipts ADD COLUMN IF NOT EXISTS customer_user_id bigint`,
+  `ALTER TABLE receipts.receipts ADD COLUMN IF NOT EXISTS driver_user_id bigint`,
   `CREATE TABLE IF NOT EXISTS receipts.receipt_documents (
      pdf_key      uuid        PRIMARY KEY,
      receipt_id   uuid        NOT NULL UNIQUE REFERENCES receipts.receipts (receipt_id),

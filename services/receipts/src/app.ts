@@ -7,9 +7,10 @@ import { isDatabaseReady } from './db/pool';
 import { fiscalClient } from './integrations/fiscal-authorizer';
 import { paymentsClient } from './integrations/m7-payments';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
+import type { IdentityValidator } from './middlewares/auth.middleware';
 import { requestContext } from './middlewares/request-context.middleware';
 import type { DependencyChecks } from './observability/health';
-import { apiRouter } from './routes';
+import { createApiRouter } from './routes';
 import { createHealthRouter } from './routes/health.routes';
 import { internalRouter } from './routes/internal.routes';
 
@@ -19,6 +20,7 @@ export interface AppOptions {
    * consumidor y el relay; sin ella se informa como no disponible.
    */
   checks?: Partial<DependencyChecks>;
+  identityValidator?: IdentityValidator;
 }
 
 export function createApp(options: AppOptions = {}): Express {
@@ -49,7 +51,7 @@ export function createApp(options: AppOptions = {}): Express {
 
   // Los PDF ya no se publican como archivos estaticos: la unica forma de
   // obtenerlos es a traves de la API.
-  app.use(env.apiPrefix, apiRouter);
+  app.use(env.apiPrefix, createApiRouter(options.identityValidator));
   app.use('/internal', internalRouter);
 
   app.use(notFoundHandler);
