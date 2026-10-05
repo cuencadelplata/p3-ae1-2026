@@ -18,6 +18,12 @@ jobs:
   validate:
     name: Validate M8 workspace
     runs-on: ubuntu-latest
+    # Valores no productivos necesarios para que Docker Compose pueda
+    # interpolar el servicio notification-delivery durante la validación.
+    # Las credenciales reales continúan siendo obligatorias y externas.
+    env:
+      M1_JWT_SECRET: ci-placeholder-not-for-production
+      M2_INTERNAL_API_KEY: ci-placeholder-not-for-production
     defaults:
       run:
         working-directory: modulo-8
