@@ -6,14 +6,21 @@ import {
   ValidationError
 } from '../services/ride-request.service';
 import { CreateRideRequestDTO, CancelRideRequestDTO } from '../types/ride-request.types';
+import '../middleware/auth.middleware'; // Asegura la extensión del tipo Request
 
 export class RideRequestController {
   constructor(private readonly rideRequestService: RideRequestService) {}
 
   /**
-   * Extrae el ID del cliente del contexto de seguridad (JWT / M1)
+   * Extrae el ID del cliente del contexto de seguridad.
+   * En producción: userId canónico de M1 resuelto por el middleware JWT.
+   * En tests/demo: fallback a headers x-user-id o x-client-id.
    */
   private extractClientId(req: Request): string {
+    if (req.authenticatedUser?.userId !== undefined) {
+      return req.authenticatedUser.userId.toString();
+    }
+    // Fallback para compatibilidad con tests y entorno demo
     const customHeader = req.headers['x-user-id'] || req.headers['x-client-id'];
     if (customHeader) {
       return customHeader.toString();
@@ -150,9 +157,16 @@ export class RideRequestController {
   };
 
   /**
-   * Extrae el ID del conductor del contexto de seguridad (JWT / M1)
+   * Extrae el ID del conductor del contexto de seguridad.
+   * En producción: userId canónico de M1 resuelto por el middleware JWT.
+   * Un conductor es un usuario con role === "CONDUCTOR" en M1;
+   * su identificador es el mismo userId.
    */
   private extractDriverId(req: Request): string {
+    if (req.authenticatedUser?.userId !== undefined && req.authenticatedUser.role === 'CONDUCTOR') {
+      return req.authenticatedUser.userId.toString();
+    }
+    // Fallback para compatibilidad con tests y entorno demo
     const customHeader = req.headers['x-driver-id'] || req.headers['x-user-id'];
     if (customHeader) {
       return customHeader.toString();
