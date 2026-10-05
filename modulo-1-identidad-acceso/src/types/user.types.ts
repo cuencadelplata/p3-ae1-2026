@@ -1,4 +1,4 @@
-export type UserRole =
+﻿export type UserRole =
     | "CLIENTE"
     | "CONDUCTOR"
     | "OPERADOR";
@@ -9,6 +9,8 @@ export type UserStatus =
 
 export type OAuth2Provider =
     | "GOOGLE"
+    | "AUTH0"
+    | "MOCK"
     | "GITHUB"
     | "MICROSOFT"
     | "CUSTOM";
@@ -48,4 +50,5 @@ export interface OAuth2ProviderRow {
     provider_email: string | null;
     estado: OAuth2Status;
     created_at: string;
+    last_login_at?: string | null;
 }
