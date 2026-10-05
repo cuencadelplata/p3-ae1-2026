@@ -2,19 +2,35 @@ openapi: 4.0.0
 info:
   title: M7 - Tarifas, Pagos y Liquidaciones
   description: >
-    API del módulo M7, correspondiente a los requerimientos RF-7.1
-    (Estimación de tarifa), RF-7.2 (Método de pago), RF-7.3 (Autorización/captura),
-    RF-7.4 (Cargo de cancelación), RF-7.5 (Reintegro por bus), RF-7.6 (Idempotencia)
-    y RF-7.7 (Historial financiero).
+    API del módulo M7 de movilidad urbana. Cubre los requerimientos:
+    - RF-7.1: Estimación de tarifa
+    - RF-7.2: Registro de método de pago
+    - RF-7.3: Autorización y captura de pagos
+    - RF-7.4: Cargo de cancelación
+    - RF-7.5: Reintegro por evento de bus
+    - RF-7.6: Idempotencia interna
+    - RF-7.7: Historial financiero
   version: 2.0.0
+
+servers:
+  - url: http://localhost:3000
+    description: Desarrollo local
+  - url: https://api-staging.example.com
+    description: Staging
+  - url: https://api.example.com
+    description: Producción
 
 paths:
 
+  # ============ RF-7.1: Estimación de tarifa ============
   /tarifa/estimacion:
     post:
       summary: Calcula la estimación de tarifa de un viaje
       description: >
         RF-7.1. Devuelve el precio estimado del viaje antes de confirmarlo.
+        Se usa para que el cliente vea cuánto costará.
+      tags:
+        - RF-7.1 Estimación de Tarifa
       requestBody:
         required: true
         content:
@@ -25,65 +41,245 @@ paths:
               properties:
                 origen:
                   type: object
+                  required: [lat, lng]
                   properties:
-                    lat: { type: number, example: -27.46 }
-                    lng: { type: number, example: -58.98 }
-                    direccion: { type: string, example: "Av. Costanera 1234" }
+                    lat:
+                      type: number
+                      example: -27.46
+                    lng:
+                      type: number
+                      example: -58.98
+                    direccion:
+                      type: string
+                      example: "Av. Costanera 1234"
                 destino:
                   type: object
+                  required: [lat, lng]
                   properties:
-                    lat: { type: number, example: -27.47 }
-                    lng: { type: number, example: -58.99 }
-                    direccion: { type: string, example: "San Juan 500" }
-                distanciaKm: { type: number, example: 3.5 }
-                tiempoEstimadoMin: { type: number, example: 12 }
+                    lat:
+                      type: number
+                      example: -27.47
+                    lng:
+                      type: number
+                      example: -58.99
+                    direccion:
+                      type: string
+                      example: "San Juan 500"
+                distanciaKm:
+                  type: number
+                  example: 3.5
+                tiempoEstimadoMin:
+                  type: number
+                  example: 12
                 vehicleType:
                   type: string
                   enum: [auto, moto]
                   example: auto
+            examples:
+              example1:
+                summary: Estimación de viaje en auto
+                value:
+                  origen:
+                    lat: -27.46
+                    lng: -58.98
+                    direccion: Av. Costanera 1234
+                  destino:
+                    lat: -27.47
+                    lng: -58.99
+                    direccion: San Juan 500
+                  distanciaKm: 3.5
+                  tiempoEstimadoMin: 12
+                  vehicleType: auto
       responses:
         '200':
           description: Estimación calculada correctamente
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  estimacionId: { type: string, example: "est_1234567890" }
-                  distanciaKm: { type: number, example: 3.5 }
-                  tiempoEstimadoMin: { type: number, example: 12 }
-                  vehicleType: { type: string, example: "auto" }
-                  estimatedFare: { type: number, example: 2225 }
-                  currency: { type: string, example: "ARS" }
-                  desglose:
-                    type: object
-                    properties:
-                      tarifaBase: { type: number, example: 500 }
-                      costoDistancia: { type: number, example: 875 }
-                      costoTiempo: { type: number, example: 600 }
-                      multiplicadorVehiculo: { type: number, example: 1.0 }
-                  calculadoEn: { type: string, format: date-time }
+                $ref: '#/components/schemas/EstimacionTarifa'
         '400':
           description: Datos inválidos
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error"
+                $ref: '#/components/schemas/Error'
 
-  /cancelacion/cargo:
+  # ============ RF-7.2: Método de pago ============
+  /metodo-pago:
     post:
-      summary: Calcula el cargo de cancelación de un viaje
-      description: >
-        RF-7.4. Calcula cuánto debe pagar el cliente por cancelar.
+      summary: Registra un método de pago asociado a un viaje
+      description: RF-7.2. Registra un método de pago en estado "pendiente".
+      tags:
+        - RF-7.2 Método de Pago
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [tripId, requestedBy, vehicleType, tripStatus, estimatedFare]
+              required: [clienteId, viajeId, tipo]
               properties:
-                tripId: { type: string, example: "v1" }
+                clienteId:
+                  type: string
+                  example: cliente1
+                viajeId:
+                  type: string
+                  example: v1
+                tipo:
+                  type: string
+                  enum: [efectivo, tarjeta, transferencia]
+                  example: efectivo
+            examples:
+              efectivo:
+                summary: Pago en efectivo
+                value:
+                  clienteId: cliente1
+                  viajeId: v1
+                  tipo: efectivo
+      responses:
+        '201':
+          description: Método de pago registrado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetodoPago'
+        '400':
+          description: Datos inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Mensaje'
+
+  /metodo-pago/{viajeId}:
+    get:
+      summary: Consulta el método de pago asociado a un viaje
+      description: RF-7.2. Busca el método de pago registrado para un viaje.
+      tags:
+        - RF-7.2 Método de Pago
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: v1
+      responses:
+        '200':
+          description: Método de pago encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetodoPago'
+        '404':
+          description: No se encontró un pago para ese viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Mensaje'
+
+  # ============ RF-7.3: Autorización y rechazo ============
+  /metodo-pago/{viajeId}/autorizar:
+    post:
+      summary: Autoriza el cobro de un método de pago pendiente
+      description: RF-7.3. Cambia el estado de "pendiente" a "autorizado" y captura el pago.
+      tags:
+        - RF-7.3 Autorización
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: v1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idOrden, total]
+              properties:
+                idOrden:
+                  type: string
+                  example: orden-123
+                  description: ID de la orden de pago
+                total:
+                  type: number
+                  example: 1500
+                  description: Monto total a cobrar en ARS
+            examples:
+              example1:
+                summary: Autorizar pago de 1500 ARS
+                value:
+                  idOrden: orden-123
+                  total: 1500
+      responses:
+        '200':
+          description: Pago autorizado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetodoPago'
+        '400':
+          description: No se pudo autorizar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Mensaje'
+        '409':
+          description: El pago ya fue autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Mensaje'
+
+  /metodo-pago/{viajeId}/rechazar:
+    post:
+      summary: Rechaza un método de pago pendiente
+      description: RF-7.3. Cambia el estado de "pendiente" a "rechazado".
+      tags:
+        - RF-7.3 Autorización
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: v1
+      responses:
+        '200':
+          description: Pago rechazado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetodoPago'
+        '400':
+          description: No se pudo rechazar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Mensaje'
+
+  # ============ RF-7.4: Cargo de cancelación ============
+  /cargo-cancelacion:
+    post:
+      summary: Calcula el cargo de cancelación de un viaje
+      description: >
+        RF-7.4. Calcula cuánto debe pagar el cliente/conductor por cancelar.
+        Endpoint usado por RF-7.5 (reintegro) para obtener el monto a devolver.
+      tags:
+        - RF-7.4 Cargo de Cancelación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tripId, requestedBy]
+              properties:
+                tripId:
+                  type: string
+                  example: v1
                 requestedBy:
                   type: string
                   enum: [cliente, conductor]
@@ -96,9 +292,30 @@ paths:
                   type: string
                   enum: [solicitado, asignado, conductor_en_camino, arribado, en_curso, completado, cancelado]
                   example: asignado
-                estimatedFare: { type: number, example: 2000 }
-                assignedAt: { type: string, format: date-time }
-                cancelledAt: { type: string, format: date-time }
+                estimatedFare:
+                  type: number
+                  example: 2000
+                assignedAt:
+                  type: string
+                  format: date-time
+                cancelledAt:
+                  type: string
+                  format: date-time
+            examples:
+              clienteCancela:
+                summary: Cliente cancela, hay cargo
+                value:
+                  tripId: v1
+                  requestedBy: cliente
+                  vehicleType: auto
+                  tripStatus: asignado
+                  estimatedFare: 2000
+              conductorCancela:
+                summary: Conductor cancela, sin cargo
+                value:
+                  tripId: v2
+                  requestedBy: conductor
+                  vehicleType: auto
       responses:
         '200':
           description: Cargo calculado correctamente
@@ -107,38 +324,52 @@ paths:
               schema:
                 type: object
                 properties:
-                  tripId: { type: string, example: "v1" }
-                  requestedBy: { type: string, example: "cliente" }
-                  charge: { type: number, example: 400 }
-                  currency: { type: string, example: "ARS" }
-                  message: { type: string, example: "Se calculó un cargo de $400 ARS." }
+                  tripId:
+                    type: string
+                    example: v1
+                  requestedBy:
+                    type: string
+                    example: cliente
+                  charge:
+                    type: number
+                    example: 400
+                    description: Monto del cargo en ARS
+                  currency:
+                    type: string
+                    example: ARS
+                  message:
+                    type: string
+                    example: Se calculó un cargo de $400 ARS.
         '400':
-          description: Datos inválidos
+          description: Datos inválidos o malformados
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error"
+                $ref: '#/components/schemas/Error'
         '409':
           description: Estado de viaje no cancelable
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error"
+                $ref: '#/components/schemas/Error'
 
+  # ============ RF-7.6: Idempotencia ============
   /pagos/{idOrden}/duplicado:
     get:
       summary: Verifica si una orden ya fue procesada (idempotencia)
       description: >
-        RF-7.6. Consulta interna que M7 usa antes de procesar un reintegro.
-        Devuelve true si la orden ya se procesó (está en Redis o en la base),
-        false si es nueva. No tiene consumer externo: es solo para consulta.
+        RF-7.6. Consulta si un reintegro ya se procesó.
+        Devuelve true si la orden está en Redis o en la BD,
+        false si es nueva. Consulta de apoyo para RF-7.5.
+      tags:
+        - RF-7.6 Idempotencia
       parameters:
         - name: idOrden
           in: path
           required: true
           schema:
             type: string
-          example: "viaje-123"
+          example: viaje-123
       responses:
         '200':
           description: Resultado de la verificación
@@ -147,120 +378,26 @@ paths:
               schema:
                 type: object
                 properties:
-                  idOrden: { type: string, example: "viaje-123" }
-                  esDuplicado: { type: boolean, example: false }
-
-  /metodo-pago:
-    post:
-      summary: Registra un método de pago asociado a un viaje
-      description: RF-7.2. Registra un método de pago en estado "pendiente".
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [clienteId, viajeId, tipo]
-              properties:
-                clienteId: { type: string, example: "cliente1" }
-                viajeId: { type: string, example: "v1" }
-                tipo:
-                  type: string
-                  enum: [efectivo, tarjeta, transferencia]
-                  example: efectivo
-      responses:
-        '201':
-          description: Método de pago registrado correctamente
+                  idOrden:
+                    type: string
+                    example: viaje-123
+                  esDuplicado:
+                    type: boolean
+                    example: false
+        '503':
+          description: Base de datos no disponible
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/MetodoPago"
-        '400':
-          description: Datos inválidos
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Mensaje"
+                $ref: '#/components/schemas/Error'
 
-  /metodo-pago/{viajeId}:
+  # ============ RF-7.7: Historial financiero ============
+  /historial:
     get:
-      summary: Consulta el método de pago asociado a un viaje
-      description: RF-7.2. Busca el método de pago registrado para un viaje.
-      parameters:
-        - name: viajeId
-          in: path
-          required: true
-          schema:
-            type: string
-          example: "v1"
-      responses:
-        '200':
-          description: Método de pago encontrado
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MetodoPago"
-        '404':
-          description: No se encontró un pago para ese viaje
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Mensaje"
-
-  /metodo-pago/{viajeId}/autorizar:
-    post:
-      summary: Autoriza el cobro de un método de pago pendiente
-      description: RF-7.3. Cambia el estado de "pendiente" a "autorizado".
-      parameters:
-        - name: viajeId
-          in: path
-          required: true
-          schema:
-            type: string
-          example: "v1"
-      responses:
-        '200':
-          description: Pago autorizado correctamente
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MetodoPago"
-        '400':
-          description: No se pudo autorizar
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Mensaje"
-
-  /metodo-pago/{viajeId}/rechazar:
-    post:
-      summary: Rechaza un método de pago pendiente
-      description: RF-7.3. Cambia el estado de "pendiente" a "rechazado".
-      parameters:
-        - name: viajeId
-          in: path
-          required: true
-          schema:
-            type: string
-          example: "v1"
-      responses:
-        '200':
-          description: Pago rechazado correctamente
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MetodoPago"
-        '400':
-          description: No se pudo rechazar
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Mensaje"
-
-  /operations:
-    get:
-      summary: Consultar el historial de operaciones
-      description: RF-7.7. Lista todas las operaciones financieras registradas.
+      summary: Lista todas las operaciones financieras registradas
+      description: RF-7.7. Devuelve el historial de todas las operaciones (pagos, reintegros, etc).
+      tags:
+        - RF-7.7 Historial Financiero
       responses:
         '200':
           description: Lista de operaciones
@@ -269,10 +406,12 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/FinancialOperation"
+                  $ref: '#/components/schemas/FinancialOperation'
     post:
-      summary: Registrar una nueva operación
+      summary: Registra una nueva operación financiera
       description: RF-7.7. Registra una operación financiera en estado "pending".
+      tags:
+        - RF-7.7 Historial Financiero
       requestBody:
         required: true
         content:
@@ -285,7 +424,12 @@ paths:
                   type: string
                   enum: [payment, refund, transfer, payout]
                   example: payment
-                amount: { type: number, example: 1500 }
+                amount:
+                  type: number
+                  example: 1500
+                viajeId:
+                  type: string
+                  example: v1
       responses:
         '201':
           description: Operación creada
@@ -294,25 +438,29 @@ paths:
               schema:
                 type: object
                 properties:
-                  mensaje: { type: string, example: "Operación creada" }
+                  mensaje:
+                    type: string
+                    example: Operación creada
         '400':
           description: Datos inválidos
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error"
+                $ref: '#/components/schemas/Error'
 
   /operations/{id}/status:
     patch:
       summary: Actualizar el estado de una operación
       description: RF-7.7. Cambia el estado de una operación existente.
+      tags:
+        - RF-7.7 Historial Financiero
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
-          example: "op_1234567890"
+          example: op_1234567890
       requestBody:
         required: true
         content:
@@ -331,92 +479,98 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/FinancialOperation"
+                $ref: '#/components/schemas/FinancialOperation'
         '400':
           description: Estado inválido
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error"
+                $ref: '#/components/schemas/Error'
         '404':
           description: Operación no encontrada
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error"
+                $ref: '#/components/schemas/Error'
 
 webhooks:
+
+  # ============ RF-7.5: Evento de cancelación desde M6 ============
   reintegroDesdeM6:
     post:
-      summary: M6 publica evento de cancelación de viaje
+      summary: M6 publica evento de cancelación de viaje (RF-7.5)
       description: >
-        RF-7.5. M7 escucha este evento en el bus (RabbitMQ, exchange "viajes").
-        Cuando llega, calcula el reintegro verificando idempotencia (RF-7.6) y publica
-        el evento reintegro.procesado.
+        RF-7.5. M7 escucha en RabbitMQ (exchange "viajes", routing keys: "cancelacion_cliente", "despacho.reabrir").
+        Cuando llega un evento, M7 procesa el reintegro con idempotencia (RF-7.6).
+      tags:
+        - RF-7.5 Reintegro
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [viajeId, clienteId, conductorId, evento, timestamp]
+              required: [viajeId, evento, timestamp]
               properties:
                 viajeId:
                   type: string
-                  example: "viaje-123"
-                  description: ID del viaje que se cancela (se usa como idOrden para idempotencia)
+                  example: viaje-123
+                  description: ID del viaje que se cancela (idOrden para idempotencia)
                 clienteId:
                   type: string
-                  example: "cliente-45"
+                  example: cliente-45
                 conductorId:
                   type: string
-                  example: "conductor-67"
+                  example: conductor-67
                 motivo:
                   type: string
-                  example: "tardó demasiado en llegar"
+                  example: tardó demasiado en llegar
                 evento:
                   type: string
                   enum: [cancelacion_cliente, despacho.reabrir]
                   description: >
-                    cancelacion_cliente = cliente cancela, hay cargo.
-                    despacho.reabrir = conductor cancela, sin cargo.
-                  example: "cancelacion_cliente"
+                    cancelacion_cliente = cliente cancela, RF-7.4 calcula cargo.
+                    despacho.reabrir = conductor reabre, sin cargo.
+                  example: cancelacion_cliente
                 timestamp:
                   type: string
                   format: date-time
-                  example: "2026-10-05T20:30:00Z"
+                  example: '2026-10-05T20:30:00Z'
             examples:
               clienteCancela:
                 summary: Cliente cancela el viaje
                 value:
-                  viajeId: "viaje-123"
-                  clienteId: "cliente-45"
-                  conductorId: "conductor-67"
-                  motivo: "tardó demasiado en llegar"
-                  evento: "cancelacion_cliente"
-                  timestamp: "2026-10-05T20:30:00Z"
+                  viajeId: viaje-123
+                  clienteId: cliente-45
+                  conductorId: conductor-67
+                  motivo: tardó demasiado en llegar
+                  evento: cancelacion_cliente
+                  timestamp: '2026-10-05T20:30:00Z'
               conductorCancela:
-                summary: Conductor cancela (reabre la solicitud)
+                summary: Conductor reabre la solicitud
                 value:
-                  viajeId: "viaje-124"
-                  clienteId: "cliente-46"
-                  conductorId: "conductor-68"
-                  motivo: "cliente no llegó al punto de retiro"
-                  evento: "despacho.reabrir"
-                  timestamp: "2026-10-05T20:35:00Z"
+                  viajeId: viaje-124
+                  clienteId: cliente-46
+                  conductorId: conductor-68
+                  motivo: cliente no llegó al punto de retiro
+                  evento: despacho.reabrir
+                  timestamp: '2026-10-05T20:35:00Z'
       responses:
-        "202":
+        '202':
           description: >
-            Evento recibido y en cola para procesar.
-            M7 devuelve 202 (Aceptado) al consumer de RabbitMQ.
+            Evento recibido y encolado para procesar.
+            El consumer responde 202 (Accepted) a RabbitMQ.
 
+  # ============ RF-7.5: Evento de reintegro procesado ============
   reintegroProcessado:
     post:
-      summary: M7 publica resultado del cálculo de reintegro
+      summary: M7 publica resultado del reintegro (RF-7.5)
       description: >
-        RF-7.5. M7 publica este evento en el bus (RabbitMQ, exchange "m7.eventos")
-        después de procesar el reintegro. M8 u otros servicios lo pueden consumir
-        para dar aviso, guardar historial, etc.
+        RF-7.5. Después de procesar el reintegro (calcular, verificar idempotencia, guardar),
+        M7 publica este evento en RabbitMQ (exchange "m7.eventos", routing key "reintegro.procesado").
+        M8 u otros servicios pueden consumirlo para notificaciones, historial, etc.
+      tags:
+        - RF-7.5 Reintegro
       requestBody:
         required: true
         content:
@@ -427,65 +581,141 @@ webhooks:
               properties:
                 idOrden:
                   type: string
-                  example: "viaje-123"
-                  description: Same as viajeId from cancelacion_cliente event
+                  example: viaje-123
+                  description: Same as viajeId (idempotencia key)
                 viajeId:
                   type: string
-                  example: "viaje-123"
+                  example: viaje-123
                 montoReintegro:
                   type: number
                   example: 950
-                  description: "95% del cargo de cancelación"
+                  description: 95% del cargo de cancelación
                 timestamp:
                   type: string
                   format: date-time
-                  example: "2026-10-05T20:30:15Z"
+                  example: '2026-10-05T20:30:15Z'
             example:
-              idOrden: "viaje-123"
-              viajeId: "viaje-123"
+              idOrden: viaje-123
+              viajeId: viaje-123
               montoReintegro: 950
-              timestamp: "2026-10-05T20:30:15Z"
+              timestamp: '2026-10-05T20:30:15Z'
       responses:
-        "202":
+        '202':
           description: Evento publicado en el bus (RabbitMQ)
 
 components:
   schemas:
+
+    EstimacionTarifa:
+      type: object
+      properties:
+        estimacionId:
+          type: string
+          example: est_1234567890
+        distanciaKm:
+          type: number
+          example: 3.5
+        tiempoEstimadoMin:
+          type: number
+          example: 12
+        vehicleType:
+          type: string
+          example: auto
+        estimatedFare:
+          type: number
+          example: 2225
+        currency:
+          type: string
+          example: ARS
+        desglose:
+          type: object
+          properties:
+            tarifaBase:
+              type: number
+              example: 500
+            costoDistancia:
+              type: number
+              example: 875
+            costoTiempo:
+              type: number
+              example: 600
+            multiplicadorVehiculo:
+              type: number
+              example: 1.0
+        calculadoEn:
+          type: string
+          format: date-time
+
     MetodoPago:
       type: object
       properties:
-        pagoId: { type: string, example: "0.123456789" }
-        clienteId: { type: string, example: "cliente1" }
-        viajeId: { type: string, example: "v1" }
+        pagoId:
+          type: string
+          example: '0.123456789'
+        clienteId:
+          type: string
+          example: cliente1
+        viajeId:
+          type: string
+          example: v1
         tipo:
           type: string
           enum: [efectivo, tarjeta, transferencia]
           example: efectivo
-        detalle: { type: string, example: "" }
-        fecha: { type: string, example: "2/9/2026" }
+        detalle:
+          type: string
+          example: ''
+        fecha:
+          type: string
+          example: '2/9/2026'
         estado:
           type: string
           enum: [pendiente, autorizado, rechazado]
           example: pendiente
+        paymentId:
+          type: string
+          example: mp_12345
+        total:
+          type: number
+          example: 1500
+
     FinancialOperation:
       type: object
       properties:
-        id: { type: string, example: "op_1234567890" }
+        id:
+          type: string
+          example: op_1234567890
         type:
           type: string
           enum: [payment, refund, transfer, payout]
           example: payment
-        amount: { type: number, example: 1500 }
+        amount:
+          type: number
+          example: 1500
         status:
           type: string
           enum: [pending, completed, failed, cancelled]
           example: pending
-        createdAt: { type: string, format: date-time }
+        viajeId:
+          type: string
+          example: v1
+        createdAt:
+          type: string
+          format: date-time
+
     Mensaje:
       type: object
       properties:
-        mensaje: { type: string, example: "No se pudo procesar la operación" }
+        mensaje:
+          type: string
+          example: No se pudo procesar la operación
+
     Error:
       type: object
       properties:
-        error: { type: string, example: "Datos inválidos" }
+        error:
+          type: string
+          example: Datos inválidos
+        details:
+          type: string
+          example: El campo 'total' es requerido
