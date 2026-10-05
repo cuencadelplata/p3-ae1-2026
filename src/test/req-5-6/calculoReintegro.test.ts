@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculoReintegro } from "../reintegro/calculoReintegro";
+import { calculoReintegro } from "../../reintegro/calculoReintegro";
 
 describe("calculoReintegro", () => {
   it("calcula el 95% de un monto típico", () => {
