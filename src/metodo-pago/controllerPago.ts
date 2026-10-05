@@ -38,7 +38,7 @@ export function obtenerMetodoPago(req: Request, res: Response) {
 export async function autorizarMetodoPago(req: Request, res: Response) {
   try {
     const viajeId = String(req.params.viajeId);
-    const { idOrden, total } = req.body;
+    const { idOrden, total, moneda } = req.body;
 
     if (!idOrden) {
       res.status(400).json({ mensaje: "idOrden es requerido" });
@@ -58,6 +58,8 @@ export async function autorizarMetodoPago(req: Request, res: Response) {
 
     const metodoPago = autorizarPago(viajeId, idOrden);
     metodoPago.paymentId = resultadoPago.paymentId;
+    metodoPago.total = total;
+    metodoPago.moneda = moneda ?? "ARS";
 
     res.status(200).json(metodoPago);
   } catch (error) {

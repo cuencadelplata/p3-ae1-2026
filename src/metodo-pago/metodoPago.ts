@@ -10,4 +10,6 @@ export interface MetodoPago {
   fecha: string;
   estado: estadoPago;
   paymentId?: string;
+  total?: number;   
+  moneda?: string;  // default en  "ARS"
 }
