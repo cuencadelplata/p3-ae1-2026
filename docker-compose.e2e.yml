@@ -1,0 +1,8 @@
+# Override para E2E: construye las imágenes con el código local en lugar de
+# usar las publicadas en Docker Hub.
+#   docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
+services:
+  api:
+    build: .
+  client:
+    build: ./client

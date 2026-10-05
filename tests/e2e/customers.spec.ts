@@ -1,111 +1,129 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/** Genera un email único para no chocar con registros anteriores */
-function uniqueEmail() {
-  return `e2e.${Date.now()}@test.com`;
+const API = '/api/v1/customers';
+const M1_TOKEN = '/api/__stubs/m1/auth/token-de-prueba';
+
+/** userId único por test para no chocar con perfiles de corridas anteriores */
+let nextUserId = 100_000 + (Date.now() % 800_000);
+function uniqueUserId() {
+  return nextUserId++;
 }
 
-/** Crea un cliente desde la UI y devuelve su ID extraído de la URL */
-async function createCustomer(page: Page, email: string): Promise<string> {
-  await page.goto('/new');
-  await page.getByLabel('Name').fill('E2E Test User');
-  await page.getByRole('textbox', { name: 'Email' }).fill(email);
-  await page.getByLabel('Phone').fill('+5493510000000');
-  await page.getByRole('combobox', { name: 'Preferred vehicle' }).selectOption('moto');
-  await page.getByRole('combobox', { name: 'Notification channel' }).selectOption('push');
-  await page.getByRole('button', { name: 'Create Customer' }).click();
+/** Pide un token de prueba al stub de M1 */
+async function getToken(request: APIRequestContext, userId: number): Promise<string> {
+  const res = await request.post(M1_TOKEN, { data: { userId, role: 'CLIENTE' } });
+  expect(res.ok()).toBeTruthy();
+  return ((await res.json()) as { token: string }).token;
+}
 
-  // Redirige a /customers/:id tras crear
-  await page.waitForURL(/\/customers\/.+/);
-  const url = page.url();
-  return url.split('/customers/')[1];
+/** Deja el token como sesión activa del front (equivale a venir redirigido por M1) */
+async function useSession(page: Page, token: string) {
+  await page.addInitScript((t) => sessionStorage.setItem('m2_token', t), token);
+}
+
+/** Crea un perfil vía API y abre su detalle con la sesión activa */
+async function openFreshProfile(page: Page, request: APIRequestContext): Promise<string> {
+  const token = await getToken(request, uniqueUserId());
+  const res = await request.post(API, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { preferences: { preferredVehicleType: 'moto', notificationChannel: 'push' } },
+  });
+  expect(res.status()).toBe(201);
+  const { customerId } = (await res.json()) as { customerId: string };
+
+  await useSession(page, token);
+  await page.goto(`/customers/${customerId}`);
+  return customerId;
+}
+
+/** Abre un escenario demo desde el index y espera el detalle del perfil */
+async function openDemo(page: Page, name: 'Perfil habilitado' | 'Perfil inhabilitado') {
+  await page.goto('/');
+  await page.getByRole('button', { name: new RegExp(name) }).click();
+  await page.waitForURL(/\/customers\/cust_[0-9a-f]+/);
 }
 
 // ─── Suite ──────────────────────────────────────────────────────────────────
 
 test.describe('M2 Customers E2E', () => {
 
-  // ── RF-2.1: Crear cliente ──────────────────────────────────────────────────
+  // ── RF-2.1: Perfil de cliente ──────────────────────────────────────────────
   test.describe('RF-2.1 - Customer profile', () => {
 
-    test('creates a new customer and lands on detail page', async ({ page }) => {
-      const email = uniqueEmail();
-      const id = await createCustomer(page, email);
-
-      // Debe mostrar el nombre en el header
-      await expect(page.getByRole('heading', { name: 'E2E Test User' })).toBeVisible();
-
-      // El ID en la URL debe ser un customerId válido
-      expect(id).toMatch(/^cust_[0-9a-f]+$/);
+    test('index shows the two demo scenarios', async ({ page }) => {
+      await page.goto('/');
+      await expect(page.getByRole('heading', { name: /Perfil de Cliente/ })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Perfil habilitado/ })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Perfil inhabilitado/ })).toBeVisible();
     });
 
-    test('shows validation error for invalid email', async ({ page }) => {
-      await page.goto('/new');
-      await page.getByLabel('Name').fill('Test User');
-      await page.getByRole('textbox', { name: 'Email' }).fill('not-an-email');
-      await page.getByLabel('Phone').fill('+5493510000000');
-      await page.getByRole('button', { name: 'Create Customer' }).click();
+    test('demo scenario lands on the profile detail page', async ({ page }) => {
+      await openDemo(page, 'Perfil habilitado');
 
-      // El browser bloquea el submit por el input[type=email] — el campo queda inválido
-      await expect(page).toHaveURL('/new');
+      await expect(page.getByRole('heading', { name: 'Usuario #12' })).toBeVisible();
+      await expect(page.getByText(/^cust_[0-9a-f]+$/)).toBeVisible();
     });
 
-    test('shows 409 error when email is already registered', async ({ page }) => {
-      const email = uniqueEmail();
-      // Primer registro
-      await createCustomer(page, email);
-
-      // Segundo registro con el mismo email
-      await page.goto('/new');
-      await page.getByLabel('Name').fill('Duplicate User');
-      await page.getByRole('textbox', { name: 'Email' }).fill(email);
-      await page.getByLabel('Phone').fill('+5493510000001');
-      await page.getByRole('button', { name: 'Create Customer' }).click();
-
-      await expect(page.getByText(/EmailAlreadyExists|ya existe/i)).toBeVisible();
-    });
-
-    test('lists customers including the newly created one', async ({ page }) => {
-      const email = uniqueEmail();
-      await createCustomer(page, email);
+    test('user without profile is sent to onboarding and creates it', async ({ page, request }) => {
+      const token = await getToken(request, uniqueUserId());
+      await useSession(page, token);
 
       await page.goto('/');
-      await expect(page.getByText(email)).toBeVisible();
+      await page.waitForURL('/onboarding');
+
+      await page.getByLabel('Vehículo preferido').selectOption('moto');
+      await page.getByLabel('Canal de notificaciones').selectOption('push');
+      await page.getByRole('button', { name: 'Crear perfil' }).click();
+
+      await page.waitForURL(/\/customers\/cust_[0-9a-f]+/);
+      await expect(page.getByLabel('Preferred vehicle')).toHaveValue('moto');
+      await expect(page.getByLabel('Notification channel')).toHaveValue('push');
     });
 
-    test('navigates to customer detail from list', async ({ page }) => {
-      const email = uniqueEmail();
-      await createCustomer(page, email);
+    test('onboarding without a token redirects to index', async ({ page }) => {
+      await page.goto('/onboarding');
+      await page.waitForURL('/');
+    });
+
+    test('user with profile is sent straight to the detail from index', async ({ page, request }) => {
+      const customerId = await openFreshProfile(page, request);
 
       await page.goto('/');
-      const row = page.getByRole('row').filter({ hasText: email });
-      await row.getByRole('link', { name: /View/i }).click();
-
-      await expect(page.getByRole('heading', { name: 'E2E Test User' })).toBeVisible();
+      await page.waitForURL(`/customers/${customerId}`);
     });
 
-    test('updates customer preferences', async ({ page }) => {
-      const email = uniqueEmail();
-      const id = await createCustomer(page, email);
-      await page.goto(`/customers/${id}`);
+    test('creating a second profile for the same user returns 409', async ({ request }) => {
+      const token = await getToken(request, uniqueUserId());
+      const headers = { Authorization: `Bearer ${token}` };
 
-      // Cambiar preferencias
-      await page.getByRole('combobox', { name: 'Preferred vehicle' }).selectOption('auto');
-      await page.getByRole('combobox', { name: 'Notification channel' }).selectOption('email');
+      expect((await request.post(API, { headers, data: {} })).status()).toBe(201);
+      const second = await request.post(API, { headers, data: {} });
+
+      expect(second.status()).toBe(409);
+      expect(((await second.json()) as { error: string }).error).toBe('ProfileAlreadyExists');
+    });
+
+    test('updates customer preferences', async ({ page, request }) => {
+      await openFreshProfile(page, request);
+
+      await page.getByLabel('Preferred vehicle').selectOption('auto');
+      await page.getByLabel('Notification channel').selectOption('email');
       await page.getByRole('button', { name: 'Save preferences' }).click();
 
-      // Feedback de guardado
       await expect(page.getByText('✓ Saved')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Save preferences' })).toBeDisabled();
+
+      // Persistió: tras recargar siguen los valores nuevos
+      await page.reload();
+      await expect(page.getByLabel('Preferred vehicle')).toHaveValue('auto');
+      await expect(page.getByLabel('Notification channel')).toHaveValue('email');
     });
 
-    test('save preferences button is disabled when nothing changed', async ({ page }) => {
-      const email = uniqueEmail();
-      const id = await createCustomer(page, email);
-      await page.goto(`/customers/${id}`);
+    test('save preferences button is disabled when nothing changed', async ({ page, request }) => {
+      await openFreshProfile(page, request);
 
-      // Sin tocar nada, el botón debe estar deshabilitado
       await expect(page.getByRole('button', { name: 'Save preferences' })).toBeDisabled();
     });
   });
@@ -113,69 +131,62 @@ test.describe('M2 Customers E2E', () => {
   // ── RF-2.5: Estado de cuenta ───────────────────────────────────────────────
   test.describe('RF-2.5 - Account status', () => {
 
-    test('shows account status for an existing customer', async ({ page }) => {
-      const email = uniqueEmail();
-      const id = await createCustomer(page, email);
-      await page.goto(`/customers/${id}`);
+    test('enabled profile shows ACTIVO status', async ({ page }) => {
+      await openDemo(page, 'Perfil habilitado');
 
-      await page.getByRole('button', { name: 'Status' }).click();
+      await page.getByRole('button', { name: 'Estado de cuenta' }).click();
 
-      await expect(page.getByText('Account Status')).toBeVisible();
-      // Un cliente recién creado debe estar ACTIVO
-      await expect(page.getByText('ACTIVO').first()).toBeVisible();
-      await expect(page.getByText(/Perfil verificado/i)).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Estado de cuenta' })).toBeVisible();
+      await expect(page.locator('.card .badge', { hasText: 'ACTIVO' })).toBeVisible();
+    });
+
+    test('profile with penalties is blocked automatically', async ({ page }) => {
+      await openDemo(page, 'Perfil inhabilitado');
+
+      await page.getByRole('button', { name: 'Estado de cuenta' }).click();
+
+      await expect(page.locator('.card .badge', { hasText: 'BLOQUEADO_PERMANENTE' })).toBeVisible();
+      await expect(page.getByText('Automático (penalizaciones)')).toBeVisible();
     });
   });
 
   // ── RF-2.3: Historial de viajes ────────────────────────────────────────────
   test.describe('RF-2.3 - Trip history', () => {
 
-    test('shows trip history for an existing customer', async ({ page }) => {
-      const email = uniqueEmail();
-      const id = await createCustomer(page, email);
-      await page.goto(`/customers/${id}`);
+    test('shows trip history with origin, destination and fare', async ({ page }) => {
+      await openDemo(page, 'Perfil habilitado');
 
-      await page.getByRole('button', { name: 'Trips' }).click();
+      await page.getByRole('button', { name: 'Viajes' }).click();
 
-      // El servicio retorna datos reales de M6 o el fallback de demo
-      await expect(page.getByText(/trip found|trips found/i)).toBeVisible();
+      await expect(page.getByText(/2 viajes/)).toBeVisible();
+      await expect(page.getByText('Av. Colón 1200, Córdoba → Av. General Paz 250, Córdoba')).toBeVisible();
+      await expect(page.getByText('$1,850').or(page.getByText('$1.850'))).toBeVisible();
     });
 
-    test('displays trip details with origin, destination and fare', async ({ page }) => {
-      const email = uniqueEmail();
-      const id = await createCustomer(page, email);
-      await page.goto(`/customers/${id}`);
+    test('user without trips sees the empty state', async ({ page, request }) => {
+      await openFreshProfile(page, request);
 
-      await page.getByRole('button', { name: 'Trips' }).click();
+      await page.getByRole('button', { name: 'Viajes' }).click();
 
-      // Al menos un viaje con flecha entre origen y destino
-      await expect(page.getByText(/→/).first()).toBeVisible();
-      // Al menos un precio visible
-      await expect(page.getByText(/\$[\d,.]+/).first()).toBeVisible();
+      await expect(page.getByText('No se encontraron viajes.')).toBeVisible();
     });
   });
 
-  // ── Navegación y 404 ──────────────────────────────────────────────────────
+  // ── Navegación y errores ───────────────────────────────────────────────────
   test.describe('Navigation', () => {
 
-    test('shows not found state for unknown customer id', async ({ page }) => {
+    test('shows an error for an unknown customer id', async ({ page, request }) => {
+      await useSession(page, await getToken(request, uniqueUserId()));
+
       await page.goto('/customers/cust_nonexistent000');
-      await expect(page.getByText(/Error|not found/i)).toBeVisible();
+
+      await expect(page.getByText(/^Error:/)).toBeVisible();
     });
 
-    test('cancel button on create form returns to list', async ({ page }) => {
-      await page.goto('/new');
-      await page.getByRole('button', { name: 'Cancel' }).click();
-      await expect(page).toHaveURL('/');
-    });
+    test('detail page links back to the index', async ({ page, request }) => {
+      await openFreshProfile(page, request);
 
-    test('back link on detail page returns to list', async ({ page }) => {
-      const email = uniqueEmail();
-      const id = await createCustomer(page, email);
-      await page.goto(`/customers/${id}`);
-
-      await page.getByRole('link', { name: /← Customers/i }).click();
-      await expect(page).toHaveURL('/');
+      await expect(page.getByRole('link', { name: /← Inicio/ })).toHaveAttribute('href', '/');
     });
   });
 });

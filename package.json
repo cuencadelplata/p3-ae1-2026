@@ -9,7 +9,8 @@
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "export:openapi": "tsx scripts/export-openapi.ts"
   },
   "keywords": [
     "microservices",

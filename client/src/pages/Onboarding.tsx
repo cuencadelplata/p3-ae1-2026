@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { api, getToken } from '../api';
 import type { VehicleType, NotificationChannel } from '../types';
 
@@ -17,10 +17,7 @@ export default function Onboarding() {
   const [submitting, setSubmitting] = useState(false);
 
   // Sin token activo no se puede crear el perfil → volver al index.
-  if (!getToken()) {
-    navigate('/', { replace: true });
-    return null;
-  }
+  if (!getToken()) return <Navigate to="/" replace />;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
