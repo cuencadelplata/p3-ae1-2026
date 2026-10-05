@@ -1,7 +1,7 @@
+version: '3.9'
+
 services:
-  # ----------------------------------------------------
-  # 1. Backing Service: PostgreSQL (DispatchDB de M5)
-  # ----------------------------------------------------
+  # 1. PostgreSQL (DispatchDB)
   postgres-db:
     image: postgres:16-alpine
     container_name: m5-postgres-db
@@ -20,9 +20,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # ----------------------------------------------------
-  # 2. Backing Service: Redis (Caché, TTL y Locks)
-  # ----------------------------------------------------
+  # 2. Redis (TTL y Locks Atómicos)
   redis:
     image: redis:7-alpine
     container_name: m5-redis
@@ -30,7 +28,6 @@ services:
       - '6379:6379'
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
     restart: unless-stopped
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
@@ -38,20 +35,15 @@ services:
       timeout: 5s
       retries: 5
 
-  # ----------------------------------------------------
-  # 3. Backing Service: RabbitMQ (Broker de Mensajería)
-  # ----------------------------------------------------
+  # 3. RabbitMQ (Exchange mobility.events)
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: m5-rabbitmq
     ports:
-      - '5672:5672'    # Protocolo AMQP
-      - '15672:15672'  # Panel Web de Administración
+      - '5672:5672'    # AMQP
+      - '15672:15672'  # Panel Web (user: guest / pass: guest)
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-    environment:
-      - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
     restart: unless-stopped
     healthcheck:
       test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
@@ -59,14 +51,12 @@ services:
       timeout: 10s
       retries: 5
 
-  # ----------------------------------------------------
-  # 4. Microservicio M5: Solicitud y Despacho
-  # ----------------------------------------------------
+  # 4. Microservicio M5 (Solicitud y Despacho)
   dispatch-service:
     build:
       context: .
       dockerfile: Dockerfile
-    image: p3-ae1/m5-dispatch-service:latest
+    image: p3-ae2/m5-dispatch-service:latest
     container_name: m5-dispatch-service
     ports:
       - '3005:3005'
@@ -76,10 +66,6 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@postgres-db:5432/dispatch_db?schema=public
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-      - M1_AUTH_URL=http://m1-auth:3001
-      - M4_SERVICE_URL=http://m4-service:3004
-      - M6_SERVICE_URL=http://m6-service:3000
-      - M7_SERVICE_URL=http://m7-service:3007
     depends_on:
       postgres-db:
         condition: service_healthy
@@ -98,14 +84,12 @@ services:
       retries: 3
       start_period: 10s
 
-  # ----------------------------------------------------
-  # 5. Documentación Interactiva Scalar (Nginx)
-  # ----------------------------------------------------
+  # 5. Documentación Interactiva Scalar
   scalar-docs:
     build:
       context: .
       dockerfile: scalar/Dockerfile
-    image: p3-ae1/m5-scalar-docs:latest
+    image: p3-ae2/m5-scalar-docs:latest
     container_name: m5-scalar-docs
     ports:
       - '3006:80'

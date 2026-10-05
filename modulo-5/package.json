@@ -1,7 +1,7 @@
 {
-  "name": "p3-ae1-m5-dispatch-service",
-  "version": "1.0.0",
-  "description": "Módulo 5: Solicitud y Despacho - Plataforma de Movilidad Urbana",
+  "name": "p3-ae2-m5-dispatch-service",
+  "version": "2.0.0",
+  "description": "Módulo 5: Solicitud y Despacho - Plataforma de Movilidad Urbana (AE2)",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

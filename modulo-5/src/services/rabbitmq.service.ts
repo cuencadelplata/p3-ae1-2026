@@ -1,6 +1,14 @@
 import amqp, { Channel, ChannelModel } from 'amqplib';
 import { randomUUID } from 'node:crypto';
-import { GeoLocation, EstimatedFare, VehicleType, RideRequest } from '../types/ride-request.types';
+import {
+  DriverCancellationEvent,
+  EstimatedFare,
+  GeoLocation,
+  OfferCreatedEvent,
+  RideRequest,
+  RideRequestCancelledEvent,
+  VehicleType
+} from '../types/ride-request.types';
 
 export interface TripAssignedEventPayload {
   requestId: string;
@@ -12,29 +20,6 @@ export interface TripAssignedEventPayload {
   vehicleType: VehicleType;
   estimatedFare: EstimatedFare;
   assignedAt: string;
-}
-
-export interface OfferCreatedEvent {
-  eventType: 'OFFER_CREATED';
-  offerId: string;
-  requestId: string;
-  driverId: string;
-  ttlSeconds: number;
-  expiresAt: string;
-  origin: GeoLocation;
-  destination: GeoLocation;
-  vehicleType: VehicleType;
-  estimatedFare: EstimatedFare;
-  timestamp: string;
-}
-
-export interface DriverCancellationEvent {
-  viajeId: string;
-  clienteId: string;
-  conductorId: string;
-  motivo?: string;
-  evento: string;
-  timestamp: string;
 }
 
 /**
@@ -71,9 +56,10 @@ export type RideRequestCreatedEvent = DomainEventEnvelope<RideRequestCreatedPayl
  * Servicio unificado de Mensajería Asíncrona con RabbitMQ (RNF-07 / AE2)
  * Maneja:
  * 1. Publicación de eventos de dominio `driver.offer.accepted` y `ride.requested` en exchange `mobility.events`
- * 2. Publicación de ofertas `dispatch.offers` con TTL a conductores
- * 3. Consumo de cancelaciones en `despacho.reabrir` para reapertura automática de despacho
- * 4. Modo resiliente / buffer en memoria cuando RabbitMQ no está disponible o en tests
+ * 2. Publicación de ofertas `dispatch.offers` con TTL a conductores (RF-5.3)
+ * 3. Publicación y suscripción de cancelaciones previas de viaje en `dispatch.cancelled` (RF-5.6)
+ * 4. Consumo de cancelaciones en `despacho.reabrir` para reapertura automática de despacho
+ * 5. Modo resiliente / buffer en memoria cuando RabbitMQ no está disponible o en tests
  */
 export class RabbitMQService {
   private connection: ChannelModel | null = null;
@@ -82,12 +68,14 @@ export class RabbitMQService {
   private connectionAttempted = false;
 
   public static readonly QUEUE_OFFERS = 'dispatch.offers';
+  public static readonly QUEUE_CANCELLED_REQUESTS = 'dispatch.cancelled';
   public static readonly QUEUE_REOPEN_DISPATCH = 'despacho.reabrir';
   public readonly exchangeName = 'mobility.events';
   public readonly exchangeType = 'topic';
 
   // Suscriptor para reapertura de despacho ante cancelación de conductor
   private reopenDispatchSubscriber: ((event: DriverCancellationEvent) => Promise<void>) | null = null;
+  private cancelledRequestsSubscriber: ((event: RideRequestCancelledEvent) => Promise<void>) | null = null;
 
   // Buffer de eventos emitidos en memoria para auditoría, tests y modo degradado
   private publishedEventsBuffer: any[] = [];
@@ -143,8 +131,7 @@ export class RabbitMQService {
 
       // Asegurar cola de ofertas para conductores
       await this.channel.assertQueue(RabbitMQService.QUEUE_OFFERS, { durable: true });
-
-      // Asegurar cola de eventos de reapertura de despacho
+      await this.channel.assertQueue(RabbitMQService.QUEUE_CANCELLED_REQUESTS, { durable: true });
       await this.channel.assertQueue(RabbitMQService.QUEUE_REOPEN_DISPATCH, { durable: true });
 
       // Declarar Exchange durable de eventos de movilidad
@@ -157,6 +144,9 @@ export class RabbitMQService {
 
       if (this.reopenDispatchSubscriber) {
         await this.attachReopenDispatchConsumer();
+      }
+      if (this.cancelledRequestsSubscriber) {
+        await this.attachCancelledRequestsConsumer();
       }
 
       this.connection.on('error', (err: any) => {
@@ -233,6 +223,76 @@ export class RabbitMQService {
       await this.reopenDispatchSubscriber(event);
     }
     return true;
+  }
+
+  /**
+   * Publica el evento de cancelación previa de viaje (RF-5.6 / RNF-07)
+   */
+  public async publishRideRequestCancelled(event: RideRequestCancelledEvent): Promise<boolean> {
+    const content = Buffer.from(JSON.stringify(event));
+
+    if (this.isConnected && this.channel) {
+      try {
+        const sent = this.channel.sendToQueue(RabbitMQService.QUEUE_CANCELLED_REQUESTS, content, {
+          persistent: true,
+          contentType: 'application/json',
+          timestamp: Date.now()
+        });
+
+        if (process.env.NODE_ENV !== 'test') {
+          console.log(
+            `[RabbitMQ] Evento de cancelación previa publicado: Solicitud=${event.requestId} | Cliente=${event.clientId} | Afectados=${event.affectedDriverIds.length} conductores`
+          );
+        }
+        return sent;
+      } catch (err) {
+        console.warn(`[RabbitMQService] Error publicando en ${RabbitMQService.QUEUE_CANCELLED_REQUESTS}: ${(err as Error).message}`);
+      }
+    }
+
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(
+        `[RabbitMQ-Simulado] Evento ${event.eventType} despachado en memoria para solicitud ${event.requestId} (Cliente: ${event.clientId})`
+      );
+    }
+    if (this.cancelledRequestsSubscriber) {
+      await this.cancelledRequestsSubscriber(event);
+    }
+    return true;
+  }
+
+  /**
+   * Suscribe a la cola de cancelaciones (RF-5.6)
+   */
+  public async subscribeToCancelledRequests(
+    callback: (event: RideRequestCancelledEvent) => Promise<void>
+  ): Promise<void> {
+    this.cancelledRequestsSubscriber = callback;
+    if (this.isConnected && this.channel) {
+      await this.attachCancelledRequestsConsumer();
+    }
+  }
+
+  private async attachCancelledRequestsConsumer(): Promise<void> {
+    if (!this.channel || !this.cancelledRequestsSubscriber) return;
+
+    try {
+      await this.channel.consume(RabbitMQService.QUEUE_CANCELLED_REQUESTS, async (msg) => {
+        if (!msg) return;
+        try {
+          const content = JSON.parse(msg.content.toString()) as RideRequestCancelledEvent;
+          if (this.cancelledRequestsSubscriber) {
+            await this.cancelledRequestsSubscriber(content);
+          }
+          this.channel?.ack(msg);
+        } catch (err) {
+          console.warn(`[RabbitMQService] Error procesando mensaje de ${RabbitMQService.QUEUE_CANCELLED_REQUESTS}:`, err);
+          this.channel?.nack(msg, false, false);
+        }
+      });
+    } catch (err) {
+      console.warn(`[RabbitMQService] Error registrando consumidor de cancelaciones: ${(err as Error).message}`);
+    }
   }
 
   public async publishToExchange(routingKey: string, message: any): Promise<boolean> {
@@ -372,7 +432,11 @@ export class RabbitMQService {
     this.publishedMessages = [];
   }
 
-  public async isHealthy(): Promise<boolean> {
+  public isHealthy(): boolean {
+    return this.isConnected;
+  }
+
+  public isReady(): boolean {
     return this.isConnected;
   }
 

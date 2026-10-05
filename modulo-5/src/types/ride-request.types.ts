@@ -59,6 +59,7 @@ export interface M4DriverLocation {
   available: boolean;
   updatedAt?: string;
   expiresAt?: string;
+  rating?: number;
 }
 
 export interface NearbyDriverStub {
@@ -168,6 +169,53 @@ export interface CancelRideRequestResponseDTO {
   message: string;
 }
 
+/**
+ * Eventos Asíncronos para RabbitMQ (RNF-07)
+ */
+export interface RideRequestCancelledEvent {
+  eventType: 'RIDE_REQUEST_CANCELLED';
+  requestId: string;
+  clientId: string;
+  reason?: string;
+  affectedDriverIds: string[];
+  cancelledAt: string;
+  correlationId?: string;
+  timestamp: string;
+}
+
+export interface OfferCreatedEvent {
+  eventType: 'OFFER_CREATED';
+  offerId: string;
+  requestId: string;
+  driverId: string;
+  ttlSeconds: number;
+  expiresAt: string;
+  origin: GeoLocation;
+  destination: GeoLocation;
+  vehicleType: VehicleType;
+  estimatedFare: EstimatedFare;
+  timestamp: string;
+}
+
+export interface DriverCancellationEvent {
+  viajeId: string;
+  clienteId: string;
+  conductorId: string;
+  motivo?: string;
+  evento: string;
+  timestamp: string;
+}
 
 
-
+/**
+ * Registro auditable de eventos de despacho (Persistencia inmutable - RNF-04)
+ */
+export interface DispatchAuditEvent {
+  eventId: string;
+  requestId: string;
+  eventType: 'CREATED' | 'OFFERED' | 'ASSIGNED' | 'CANCELLED_BY_CLIENT' | 'REJECTED' | 'EXPIRED';
+  actorId: string;
+  actorType: 'CLIENT' | 'DRIVER' | 'SYSTEM';
+  payload: Record<string, unknown>;
+  timestamp: string;
+}

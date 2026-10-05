@@ -2,9 +2,6 @@ import express from 'express';
 import path from 'path';
 import { RideRequestService } from './services/ride-request.service';
 import { RideRequestController } from './controllers/ride-request.controller';
-import { RedisService } from './services/redis.service';
-import { RabbitMQService } from './services/rabbitmq.service';
-import { requireAuth, requireConductor } from './middleware/auth.middleware';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -15,7 +12,7 @@ app.use(express.json());
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Idempotency-Key');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Idempotency-Key, x-user-id, x-driver-id, x-client-id');
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
     return;
@@ -27,30 +24,22 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.use('/openapi', express.static(path.join(__dirname, '../openapi')));
 
 // Inyección de dependencias
-const redisService = new RedisService();
-const rabbitmqService = new RabbitMQService();
-const rideRequestService = new RideRequestService(redisService, rabbitmqService);
+const rideRequestService = new RideRequestService();
 const rideRequestController = new RideRequestController(rideRequestService);
 
-if (process.env.NODE_ENV !== 'test') {
-  redisService.init().catch(() => {});
-  rabbitmqService.init().catch(() => {});
-}
-
-// Health check con diagnóstico de dependencias (RNF-16)
-app.get('/health', async (_req, res) => {
-  const [redisOk, rabbitOk] = await Promise.all([
-    redisService.isHealthy(),
-    rabbitmqService.isHealthy()
-  ]);
+// Health check con diagnóstico de backing services (RNF-16 / AE2)
+app.get('/health', (_req, res) => {
+  const redisReady = rideRequestService.getRedisService().isReady();
+  const rabbitmqReady = rideRequestService.getRabbitMQService().isReady();
   res.status(200).json({
     status: 'UP',
     service: 'm5-dispatch-service',
-    timestamp: new Date().toISOString(),
-    dependencies: {
-      redis: redisOk ? 'CONNECTED' : 'DEGRADED_FALLBACK',
-      rabbitmq: rabbitOk ? 'CONNECTED' : 'DEGRADED_FALLBACK'
-    }
+    version: '2.0.0',
+    backingServices: {
+      redis: redisReady ? 'CONNECTED' : 'FALLBACK_MEMORY',
+      rabbitmq: rabbitmqReady ? 'CONNECTED' : 'FALLBACK_MEMORY'
+    },
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -84,25 +73,26 @@ app.get(['/docs', '/reference'], (_req, res) => {
 </html>`);
 });
 
-// Rutas API v1 - Solicitudes de Viaje (requieren usuario autenticado con M1)
-app.post('/api/v1/ride-requests', requireAuth, rideRequestController.create);
-app.get('/api/v1/ride-requests/:requestId', requireAuth, rideRequestController.getById);
-app.post('/api/v1/ride-requests/:requestId/cancel', requireAuth, rideRequestController.cancel);
-app.post('/api/v1/ride-requests/:requestId/candidates', requireAuth, rideRequestController.searchCandidates);
-app.post('/api/v1/ride-requests/:requestId/offers', requireAuth, rideRequestController.sendOffers);
-app.get('/api/v1/ride-requests/:requestId/offers', requireAuth, rideRequestController.getOffers);
 
-// Alias de compatibilidad e interoperabilidad para clientes que consultan viajes por ID
-app.get('/viajes/:requestId', rideRequestController.getById);
-app.get('/api/v1/viajes/:requestId', rideRequestController.getById);
+// Rutas API v1 - Solicitudes de Viaje
+app.post('/api/v1/ride-requests', rideRequestController.create);
+app.get('/api/v1/ride-requests/:requestId', rideRequestController.getById);
+app.post('/api/v1/ride-requests/:requestId/cancel', rideRequestController.cancel);
+app.delete('/api/v1/ride-requests/:requestId', rideRequestController.cancel);
+app.get('/api/v1/ride-requests/:requestId/audit', rideRequestController.getAuditLogs);
+app.post('/api/v1/ride-requests/:requestId/candidates', rideRequestController.searchCandidates);
+app.post('/api/v1/ride-requests/:requestId/offers', rideRequestController.sendOffers);
+app.get('/api/v1/ride-requests/:requestId/offers', rideRequestController.getOffers);
 
-// Rutas API v1 - Gestión de Ofertas de Conductor (requieren role=CONDUCTOR validado por M1)
-app.post('/api/v1/offers/:offerId/respond', requireConductor, rideRequestController.respondOffer);
-app.post('/api/v1/offers/:offerId/accept', requireConductor, rideRequestController.acceptOffer);
-app.post('/api/v1/offers/:offerId/reject', requireConductor, rideRequestController.rejectOffer);
-app.get('/api/v1/offers/:offerId', requireAuth, rideRequestController.getOfferById);
-app.get('/api/v1/offers', requireAuth, rideRequestController.getAllOffers);
-app.get('/api/v1/drivers/:driverId/offers', requireConductor, rideRequestController.getOffersForDriver);
+// Rutas API v1 - Gestión de Ofertas de Conductor (RF-5.4)
+app.post('/api/v1/offers/:offerId/respond', rideRequestController.respondOffer);
+app.post('/api/v1/offers/:offerId/accept', rideRequestController.acceptOffer);
+app.post('/api/v1/offers/:offerId/reject', rideRequestController.rejectOffer);
+app.get('/api/v1/offers/:offerId', rideRequestController.getOfferById);
+app.get('/api/v1/offers', rideRequestController.getAllOffers);
+app.get('/api/v1/drivers/:driverId/offers', rideRequestController.getOffersForDriver);
+
+
 
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
@@ -111,5 +101,6 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`[M5] OpenAPI spec disponible en /openapi/openapi-m5.yaml`);
   });
 }
+
 
 export { app, rideRequestService };
