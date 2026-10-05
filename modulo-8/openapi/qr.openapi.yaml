@@ -1,47 +1,108 @@
-﻿openapi: 3.0.3
+openapi: 3.0.3
 
 info:
-  title: M8 - Notificaciones, Documentos y Soporte API
-  version: 0.2.0
+  title: M8 - QR de verificación (RF-8.2)
+  version: 2.0.0
   description: |
-    Contrato HTTP del servicio M8. Esta versiÃ³n documenta RF-8.1,
-    Notificaciones de viaje, y RF-8.2, QR de verificaciÃ³n.
+    Contrato HTTP del servicio QR del Módulo 8. Documenta RF-8.2, QR de
+    verificación: generación de un QR temporal y de un solo uso asociado a un
+    viaje, y su validación para que M6 decida el inicio del viaje.
+
+    - El QR codifica únicamente un token opaco y aleatorio. No contiene el
+      `tripId` ni datos personales, de pago o del recorrido.
+    - M8 sólo genera, valida y consume el QR. M8 no inicia ni modifica el viaje:
+      la transición de estado la decide y ejecuta M6.
+    - M8 conserva el hash SHA-256 del token, nunca el token en claro. El token
+      se devuelve una única vez, en la respuesta de generación.
+    - El estado de los QR vive en Redis, compartido por todas las instancias del
+      servicio. Si Redis no está disponible, las operaciones responden
+      `503 QR_STORE_UNAVAILABLE` y ningún QR se aprueba sin haberse consumido de
+      forma atómica.
+
+servers:
+  - url: http://localhost:3103
+    description: Servicio QR publicado por Compose.
 
 tags:
   - name: Health
-    description: Disponibilidad técnica básica del servicio QR.
+    description: Vitalidad y disponibilidad técnica del servicio QR.
   - name: QR Verification
     description: Generación y validación de QR temporales asociados a viajes.
+
 paths:
+  /health/live:
+    get:
+      tags:
+        - Health
+      summary: Consultar la vitalidad del proceso
+      description: |
+        Indica que el proceso HTTP está vivo y atiende solicitudes. No consulta
+        Redis ni otras dependencias, para que una caída de Redis no provoque
+        reinicios innecesarios del contenedor.
+      operationId: getHealthLive
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Proceso disponible.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthLiveResponse'
+              examples:
+                alive:
+                  value:
+                    status: ok
+                    service: qr
+
+  /health/ready:
+    get:
+      tags:
+        - Health
+      summary: Consultar la disponibilidad del servicio
+      description: |
+        Indica si el servicio puede generar y validar QR. Redis es una
+        dependencia crítica: sin Redis responde 503 con estado `unavailable`.
+        Una verificación que no responde en 2 segundos cuenta como no disponible.
+      operationId: getHealthReady
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          $ref: '#/components/responses/HealthReady'
+        '503':
+          $ref: '#/components/responses/HealthNotReady'
+
   /health:
     get:
       tags:
         - Health
-      summary: Consultar disponibilidad del servicio
-      description: ComprobaciÃ³n tÃ©cnica sin efectos secundarios ni acceso a reglas de negocio.
+      summary: Consultar la disponibilidad del servicio (alias)
+      description: Alias de `GET /health/ready`, conservado por compatibilidad con AE1.
       operationId: getHealth
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
       responses:
         '200':
-          description: Servicio M8 disponible.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HealthResponse'
-              examples:
-                serviceAvailable:
-                  value:
-                    status: ok
-                    service: m8
+          $ref: '#/components/responses/HealthReady'
+        '503':
+          $ref: '#/components/responses/HealthNotReady'
 
   /qr:
     post:
       tags:
         - QR Verification
-      summary: Generar un QR de verificaciÃ³n
+      summary: Generar un QR de verificación
       description: |
         Genera un QR temporal y de un solo uso asociado al viaje indicado. El QR
-        codifica Ãºnicamente un token opaco; M8 no modifica el estado del viaje.
+        codifica únicamente un token opaco; M8 no modifica el estado del viaje.
+        El QR vence según `QR_TTL_SECONDS`.
       operationId: generateQr
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
       requestBody:
         required: true
         content:
@@ -55,6 +116,9 @@ paths:
       responses:
         '201':
           description: QR generado correctamente.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -66,7 +130,10 @@ paths:
                     qrDataUrl: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...
                     expiresAt: '2026-09-01T12:05:00.000Z'
         '400':
-          description: Solicitud invÃ¡lida.
+          description: Solicitud inválida.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -76,24 +143,19 @@ paths:
                   value:
                     error:
                       code: VALIDATION_ERROR
-                      message: La solicitud contiene datos invÃ¡lidos.
+                      message: La solicitud contiene datos inválidos.
                       details:
                         - field: tripId
-                          reason: Debe ser un string con longitud mÃ­nima de 1.
+                          reason: Debe ser un string con longitud mínima de 1.
+                malformedJson:
+                  $ref: '#/components/examples/MalformedJson'
         '415':
-          description: El tipo de contenido no es application/json.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                unsupportedMediaType:
-                  value:
-                    error:
-                      code: UNSUPPORTED_MEDIA_TYPE
-                      message: El tipo de contenido debe ser application/json.
+          $ref: '#/components/responses/UnsupportedMediaType'
         '500':
           description: Error interno al generar el QR.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -104,17 +166,35 @@ paths:
                     error:
                       code: QR_PROCESSING_ERROR
                       message: No fue posible generar el QR.
+                internalServerError:
+                  $ref: '#/components/examples/InternalServerError'
+        '503':
+          $ref: '#/components/responses/StoreUnavailable'
 
   /qr/validate:
     post:
       tags:
         - QR Verification
-      summary: Validar y consumir un QR de verificaciÃ³n
+      summary: Validar y consumir un QR de verificación
       description: |
-        Valida que el token exista, corresponda al viaje indicado, continÃºe
-        vigente y no haya sido utilizado. Una validaciÃ³n exitosa consume el QR.
-        M8 no inicia ni modifica el viaje.
+        Valida que el token exista, corresponda al viaje indicado, continúe
+        vigente y no haya sido utilizado. Una validación exitosa consume el QR:
+        el QR es de un solo uso.
+
+        La comprobación y el consumo son una única operación atómica, también
+        entre varias instancias del servicio. Ante validaciones concurrentes del
+        mismo QR, exactamente una responde 200 y las demás responden 409.
+
+        Un 503 indica que no fue posible confirmar el resultado. Si la conexión
+        con el almacenamiento se interrumpe después de aplicar el consumo, un
+        reintento posterior puede responder 409 aunque el cliente no haya
+        recibido el 200: un 409 posterior a un 503 es ambiguo.
+
+        M8 no inicia ni modifica el viaje: con el resultado, M6 decide si inicia
+        el viaje.
       operationId: validateQr
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
       requestBody:
         required: true
         content:
@@ -128,7 +208,10 @@ paths:
                   token: valor-opaco-generado-por-m8
       responses:
         '200':
-          description: QR vÃ¡lido y consumido correctamente.
+          description: QR válido y consumido correctamente.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -138,7 +221,10 @@ paths:
                   value:
                     valid: true
         '400':
-          description: Solicitud invÃ¡lida.
+          description: Solicitud inválida.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -148,12 +234,23 @@ paths:
                   value:
                     error:
                       code: VALIDATION_ERROR
-                      message: La solicitud contiene datos invÃ¡lidos.
+                      message: La solicitud contiene datos inválidos.
                       details:
                         - field: token
-                          reason: Debe ser un string con longitud mÃ­nima de 1.
+                          reason: Debe ser un string con longitud mínima de 1.
+                malformedJson:
+                  $ref: '#/components/examples/MalformedJson'
         '404':
-          description: No se encontrÃ³ un QR correspondiente al token y viaje indicados.
+          description: |
+            No se encontró un QR correspondiente al token y viaje indicados.
+            Cubre tanto un token inexistente como un QR que no corresponde al
+            viaje indicado: la respuesta es idéntica, para no revelar si el token
+            existe para otro viaje. En ningún caso se consume el QR. También se
+            responde 404 cuando el QR venció y ya terminó el margen durante el
+            cual se informa 410.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -163,9 +260,14 @@ paths:
                   value:
                     error:
                       code: QR_NOT_FOUND
-                      message: No se encontrÃ³ un QR correspondiente al token y viaje indicados.
+                      message: No se encontró un QR correspondiente al token y viaje indicados.
         '409':
-          description: El QR ya fue utilizado.
+          description: |
+            El QR ya fue utilizado. Es la respuesta de las validaciones
+            concurrentes que no obtuvieron el consumo del QR.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -177,7 +279,13 @@ paths:
                       code: QR_ALREADY_USED
                       message: El QR ya fue utilizado.
         '410':
-          description: El QR venciÃ³.
+          description: |
+            El QR venció. Se informa durante un margen posterior al vencimiento
+            (`QR_EXPIRED_GRACE_SECONDS`); terminado ese margen el QR deja de
+            existir y la validación responde 404. Un QR vencido nunca se consume.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
@@ -189,33 +297,145 @@ paths:
                       code: QR_EXPIRED
                       message: El QR ha vencido.
         '415':
-          description: El tipo de contenido no es application/json.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                unsupportedMediaType:
-                  value:
-                    error:
-                      code: UNSUPPORTED_MEDIA_TYPE
-                      message: El tipo de contenido debe ser application/json.
+          $ref: '#/components/responses/UnsupportedMediaType'
         '500':
           description: Error interno inesperado al validar el QR.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               examples:
                 internalServerError:
-                  value:
-                    error:
-                      code: INTERNAL_SERVER_ERROR
-                      message: No fue posible procesar la solicitud.
+                  $ref: '#/components/examples/InternalServerError'
+        '503':
+          $ref: '#/components/responses/StoreUnavailable'
 
 components:
+  parameters:
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: |
+        Identificador de correlación opcional para seguir la solicitud en los logs. Se
+        acepta si tiene entre 1 y 128 caracteres de `A-Z`, `a-z`, `0-9`, punto, guion
+        bajo o guion; si falta o no cumple, el servicio genera uno nuevo.
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9._-]{1,128}$'
+        example: corr-trip-demo-001
+
+  headers:
+    CorrelationId:
+      description: |
+        Identificador de correlación de la solicitud: el recibido en X-Correlation-Id si es
+        válido, o uno generado por el servicio. Nunca se incluye en el cuerpo.
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9._-]{1,128}$'
+        example: 3f1c2b9e-7d4a-4c1e-9b8f-2a6d5e4c3b1a
+    RetryAfter:
+      description: Segundos que el cliente debería esperar antes de reintentar.
+      schema:
+        type: integer
+        minimum: 1
+        example: 5
+
+  examples:
+    MalformedJson:
+      value:
+        error:
+          code: VALIDATION_ERROR
+          message: La solicitud contiene datos inválidos.
+          details:
+            - field: body
+              reason: El JSON no es válido.
+    InternalServerError:
+      value:
+        error:
+          code: INTERNAL_SERVER_ERROR
+          message: No fue posible procesar la solicitud.
+
+  responses:
+    UnsupportedMediaType:
+      description: El tipo de contenido no es application/json.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            unsupportedMediaType:
+              value:
+                error:
+                  code: UNSUPPORTED_MEDIA_TYPE
+                  message: El tipo de contenido debe ser application/json.
+
+    StoreUnavailable:
+      description: |
+        El almacenamiento de QR (Redis) no está disponible o no respondió a
+        tiempo. La operación no se aprueba (fail-closed): ningún QR se valida sin
+        haberse consumido de forma atómica. La respuesta no incluye detalles
+        internos. El cliente puede reintentar después de `Retry-After`.
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            storeUnavailable:
+              value:
+                error:
+                  code: QR_STORE_UNAVAILABLE
+                  message: El servicio de QR no está disponible en este momento. Intente nuevamente más tarde.
+
+    HealthReady:
+      description: Servicio disponible; Redis responde.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HealthReadyResponse'
+          examples:
+            ready:
+              value:
+                status: ok
+                service: qr
+                dependencies:
+                  redis:
+                    status: available
+
+    HealthNotReady:
+      description: Servicio no disponible; Redis no responde.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HealthReadyResponse'
+          examples:
+            notReady:
+              value:
+                status: unavailable
+                service: qr
+                dependencies:
+                  redis:
+                    status: unavailable
+
   schemas:
-    HealthResponse:
+    HealthLiveResponse:
       type: object
       additionalProperties: false
       required:
@@ -226,12 +446,55 @@ components:
           type: string
           enum:
             - ok
-          description: Indica que el proceso HTTP de M8 estÃ¡ disponible.
+          description: Indica que el proceso HTTP del servicio QR está vivo.
         service:
+          $ref: '#/components/schemas/ServiceName'
+
+    HealthReadyResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - service
+        - dependencies
+      properties:
+        status:
           type: string
           enum:
-            - m8
-          description: Identificador estable del servicio.
+            - ok
+            - unavailable
+          description: |
+            `ok` si todas las dependencias críticas están disponibles;
+            `unavailable` si falta alguna.
+        service:
+          $ref: '#/components/schemas/ServiceName'
+        dependencies:
+          type: object
+          additionalProperties: false
+          required:
+            - redis
+          properties:
+            redis:
+              $ref: '#/components/schemas/DependencyStatus'
+
+    DependencyStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - available
+            - unavailable
+          description: Resultado de la última verificación de la dependencia.
+
+    ServiceName:
+      type: string
+      enum:
+        - qr
+      description: Identificador estable del servicio.
 
     QrGenerationRequest:
       type: object
@@ -256,14 +519,14 @@ components:
         token:
           type: string
           minLength: 1
-          description: Token opaco codificado por el QR, sin informaciÃ³n sensible.
+          description: Token opaco codificado por el QR, sin información sensible.
           example: valor-opaco-generado-por-m8
         qrDataUrl:
           $ref: '#/components/schemas/QrDataUrl'
         expiresAt:
           type: string
           format: date-time
-          description: Fecha y hora a partir de la cual el QR deja de ser vÃ¡lido.
+          description: Fecha y hora a partir de la cual el QR deja de ser válido.
           example: '2026-09-01T12:05:00.000Z'
 
     QrValidationRequest:
@@ -294,12 +557,12 @@ components:
           type: boolean
           enum:
             - true
-          description: Indica que M8 validÃ³ y consumiÃ³ correctamente el QR.
+          description: Indica que M8 validó y consumió correctamente el QR.
 
     QrDataUrl:
       type: string
       pattern: '^data:image/png;base64,'
-      description: Data URL PNG de un QR que codifica Ãºnicamente el token opaco.
+      description: Data URL PNG de un QR que codifica únicamente el token opaco.
       example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...
 
     ErrorResponse:
@@ -322,25 +585,25 @@ components:
           $ref: '#/components/schemas/ErrorCode'
         message:
           type: string
-          description: DescripciÃ³n segura y legible del error.
-          example: La solicitud contiene datos invÃ¡lidos.
+          description: Descripción segura y legible del error.
+          example: La solicitud contiene datos inválidos.
         details:
           type: array
-          description: Detalle opcional de los campos invÃ¡lidos. Se omite en errores internos.
+          description: Detalle opcional de los campos inválidos. Se omite en errores internos.
           items:
             $ref: '#/components/schemas/ErrorDetail'
 
     ErrorCode:
       type: string
-      description: CÃ³digo que identifica el tipo de error.
+      description: Código que identifica el tipo de error.
       enum:
         - VALIDATION_ERROR
         - UNSUPPORTED_MEDIA_TYPE
-        - NOTIFICATION_PROCESSING_ERROR
         - QR_NOT_FOUND
         - QR_EXPIRED
         - QR_ALREADY_USED
         - QR_PROCESSING_ERROR
+        - QR_STORE_UNAVAILABLE
         - INTERNAL_SERVER_ERROR
       example: VALIDATION_ERROR
 
@@ -353,9 +616,9 @@ components:
       properties:
         field:
           type: string
-          description: Campo de la solicitud que originÃ³ el error.
-          example: channels
+          description: Campo de la solicitud que originó el error.
+          example: tripId
         reason:
           type: string
-          description: Motivo de invalidaciÃ³n del campo.
-          example: Solo se admite PUSH en AE1.
+          description: Motivo de invalidación del campo.
+          example: Es un campo requerido.

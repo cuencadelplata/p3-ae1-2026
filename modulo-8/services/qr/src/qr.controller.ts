@@ -1,10 +1,7 @@
 import { Router, type Express, type NextFunction, type Request, type Response } from "express";
 
 import { ApiError } from "./http/api-error";
-import { generateQrDataUrl, generateQrToken } from "./qr-generator";
-import { loadQrConfig } from "./qr.config";
-import { createQrService, type QrService } from "./qr.service";
-import { createQrStore } from "./qr.store";
+import type { QrService } from "./qr.service";
 import { validateQrGenerationRequest, validateQrValidationRequest } from "./qr.validator";
 
 const VALIDATION_ERROR_MESSAGE = "La solicitud contiene datos inválidos.";
@@ -18,7 +15,7 @@ function requireJsonContentType(req: Request): void {
 
 export interface QrHandlers {
   generateQr(req: Request, res: Response, next: NextFunction): Promise<void>;
-  validateQr(req: Request, res: Response, next: NextFunction): void;
+  validateQr(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export function createQrHandlers(service: QrService): QrHandlers {
@@ -38,7 +35,7 @@ export function createQrHandlers(service: QrService): QrHandlers {
     }
   }
 
-  function validateQr(req: Request, res: Response, next: NextFunction): void {
+  async function validateQr(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       requireJsonContentType(req);
 
@@ -47,7 +44,7 @@ export function createQrHandlers(service: QrService): QrHandlers {
         throw new ApiError(400, "VALIDATION_ERROR", VALIDATION_ERROR_MESSAGE, validation.errors);
       }
 
-      const result = service.validateQr(validation.value.tripId, validation.value.token);
+      const result = await service.validateQr(validation.value.tripId, validation.value.token);
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -67,18 +64,7 @@ export function createQrRouter(service: QrService): Router {
   return router;
 }
 
-// Compatible con la firma RegisterRoutes de app.ts: quien arme la aplicación decide si
-// se la pasa a createApp(registerQrRoutes). El wireado real (store, config, generador)
-// ocurre acá adentro, al invocarse, no al importar este módulo — así un QR_TTL_SECONDS
-// inválido falla al armar el servicio, no al hacer import.
-export function registerQrRoutes(app: Express): void {
-  const service = createQrService({
-    store: createQrStore(),
-    config: loadQrConfig(),
-    generateQrToken,
-    generateQrDataUrl,
-    now: () => new Date(),
-  });
-
+// Recibe el servicio ya armado: este módulo no crea store, config ni generador.
+export function registerQrRoutes(app: Express, service: QrService): void {
   app.use(createQrRouter(service));
 }

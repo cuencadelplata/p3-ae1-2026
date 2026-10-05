@@ -18,6 +18,10 @@ evidencia del estado heredado de AE1.
 | 2026-09-29 | Comprobantes consume `payment.confirmed` desde su propia cola | Damián Caminos (RF-8.6) | Acordado |
 | 2026-09-29 | Referencia de descarga temporal para reenvíos | Lucas Cremaschi (RF-8.4) | Acordado |
 | 2026-09-30 | Contenido de `payment.confirmed` | Grupo M7 | Respondido sin cubrir los datos del comprobante; se mantiene la alternativa 1 de forma provisoria (ver 5.1) |
+| 2026-10-04 | Congelar contrato de entrada RF8.6 → RF8.1 (6 eventos de viaje, sobre, deduplicación, queue/bindings) y Outbox RF8.1 → RF8.7 | Damián Caminos (RF-8.6) / Invaldi (M8) | **CONGELADO Y CONFIRMADO** |
+| 2026-10-04 | Forma de integración de M7 con Comprobantes | M7 (RF-7.3) / Invaldi (M8) | M7 se integra solo por REST y no publicará `payment.confirmed`. Comprobantes consulta `GET /metodo-pago/{viajeId}` de M7 y emite solo con el pago autorizado (ver 5.1). Importe y moneda: consulta pendiente a M7 |
+| 2026-10-04 | El reenvío devuelve el enlace temporal de la sección 6 | Lucas Cremaschi (RF-8.4) | Acordado sin cambios en el contrato |
+
 
 ## 2. Topología
 
@@ -131,7 +135,7 @@ como estado heredado que se integrará sin degradar sus decisiones funcionales.
 | Versión | 1 |
 | Productor | M7 — Tarifas, Pagos y Liquidaciones |
 | Consumidores | M8 — Comprobantes (`m8.receipts.payment-confirmed`) |
-| Estado | **Provisorio**: M7 respondió el 2026-09-30 sin cubrir estos datos (ver "Respuesta de M7") |
+| Estado | **Provisorio, sin productor real**: M7 informó el 2026-10-04 que se integra por API (ver "Actualización de M7") |
 
 Efecto en M8: emite el comprobante del viaje y genera su PDF (RF-8.3).
 
@@ -222,6 +226,42 @@ importes y sobre al evento, o la alternativa 2 (consumir además `trip.completed
 de M6). En ambos casos solo cambia la traducción del evento
 (`src/messaging/payment-confirmed.ts`), no la emisión.
 
+**Actualización de M7 (2026-10-04).** M7 (RF-7.3) informó que no publicará este
+evento: se integra solo por REST, porque en AE4 debe usar la API de Mercado Pago
+(en AE2 la simula) y no quiere cambiar la forma de integración dos veces. M7 no
+llama a M8: expone el estado del pago para que lo consulte quien lo necesite.
+
+Contrato REST de M7 que consume Comprobantes (openapi.yaml de M7, RF-7.2 y RF-7.3):
+
+```
+GET /metodo-pago/{viajeId}
+200 { pagoId, clienteId, viajeId, tipo, detalle, fecha, estado }
+404 { mensaje }   (el viaje no tiene un pago registrado)
+```
+
+| M7 | Modelo de Comprobantes | Efecto en la emisión |
+| --- | --- | --- |
+| `estado: autorizado` | `APROBADO` | Se emite. |
+| `estado: pendiente` o `404` | `PENDIENTE` / sin pago | No se emite. Reintentable: `409 PAYMENT_PENDING` o `PAYMENT_NOT_FOUND` por REST; reintento con descuento de intentos en el consumidor. |
+| `estado: rechazado` | `RECHAZADO` | No se emite. Terminal: `422 PAYMENT_REJECTED` por REST; DLQ sin reintentos en el consumidor. |
+| Sin respuesta, `5xx` o fuera de contrato | — | Dependencia no disponible: `503 PAYMENTS_SERVICE_UNAVAILABLE`; el mensaje espera sin descontar intentos. |
+| `tipo: efectivo` / `tarjeta` / `transferencia` | `EFECTIVO` / `TARJETA` / `TRANSFERENCIA` | El medio de pago del comprobante se toma de M7. |
+
+En consecuencia:
+
+- Comprobantes consulta a M7 antes de emitir, tanto en `POST /api/v1/receipts`
+  como al consumir este evento. El cliente REST no depende de un evento
+  disparador: el disparador definitivo (por ejemplo `trip.completed` de M6 vía
+  RF-8.6) se define al cerrar el contrato con M6.
+- La respuesta de M7 no incluye importe ni moneda. Se consultó a M7; mientras
+  tanto `fare` se conserva desde la entrada actual, sin inventar valores.
+- Cliente, conductor y recorrido se mantienen como están hasta cerrar los
+  contratos con M1, M2, M3 y M6.
+- Este evento se conserva como entrada asíncrona, con productor simulado en AE2
+  (`scripts/publicar-pago-confirmado.mjs`).
+- Para pruebas reproducibles, M7 se simula en `infra/m7-payments-sandbox` con su
+  mismo contrato.
+
 ### 5.2 `receipt.issued`
 
 | Atributo | Valor |
@@ -263,19 +303,132 @@ recepción. En consecuencia:
 `data` no incluye datos personales ni enlaces de descarga: quien necesite el
 documento lo solicita por contrato (sección 6).
 
-### 5.3 `notification.requested` (contrato interno objetivo AE2)
+### 5.3 `notification.requested` (Outbox RF8.1 → RF8.7)
 
 | Atributo | Valor |
 | --- | --- |
 | `eventType` | `NotificationRequested` |
 | Routing key | `notification.requested` |
-| Productor | RF8.1 — Notificaciones |
-| Consumidor | RF8.7 — Entrega de notificaciones |
-| Estado | **CONTRATO INTERNO OBJETIVO AE2**; pendiente de implementación y de acuerdo de campos |
+| Productor | RF8.1 — Notificaciones (`m8-notifications`) |
+| Consumidor | RF8.7 — Entrega de notificaciones (`m8.delivery.notification-requested`) |
+| Estado | **CONTRATO INTERNO CONGELADO Y CONFIRMADO** |
 
-Su finalidad es solicitar la entrega de una notificación lógica ya creada por
-RF8.1. El catálogo no fija aún un `data` definitivo para este flujo: deberá
-cerrarse entre RF8.1 y RF8.7 antes de implementarlo.
+Su finalidad es solicitar la entrega de una notificación lógica ya creada por RF8.1. Se emite vía el patrón Transactional Outbox (`notifications.outbox_deliveries`) y es publicado por RF8.6 en RabbitMQ (`mobility.events`).
+
+**Estructura del mensaje:**
+
+```json
+{
+  "messageId": "7c9e1d2a-8b3f-4e5c-9d0a-1f2e3d4c5b6a",
+  "eventType": "NotificationRequested",
+  "version": 1,
+  "occurredAt": "2026-10-05T18:42:12.500Z",
+  "correlationId": "trip-2026-000123",
+  "producer": "m8-notifications",
+  "data": {
+    "notificationId": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+    "tripId": "trip-2026-000123",
+    "recipientId": "usr-0091",
+    "eventType": "TRIP_STARTED",
+    "channel": "PUSH",
+    "message": "Tu viaje ha comenzado.",
+    "createdAt": "2026-10-05T18:42:12.000Z"
+  }
+}
+```
+
+| Campo | Tipo | Obligatorio | Regla |
+| --- | --- | --- | --- |
+| `notificationId` | string (UUID v4) | Sí | ID de la notificación lógica creada en RF8.1. |
+| `tripId` | string | Sí | ID del viaje asociado. |
+| `recipientId` | string | Sí | Destinatario del mensaje (cliente o conductor). |
+| `eventType` | enum | Sí | Evento de viaje en notificaciones (`TRIP_REQUESTED`, `DRIVER_ASSIGNED`, etc.). |
+| `channel` | enum | Sí | Canal de entrega (`PUSH`). |
+| `message` | string | Sí | Mensaje formateado listo para ser enviado por el proveedor de entrega. |
+| `createdAt` | string (ISO 8601) | Sí | Timestamp de creación de la notificación lógica. |
+
+**Publicación y marcado de `published_at`:**
+1. El registro se guarda en la tabla `outbox_deliveries` en la misma transacción DB que crea la notificación.
+2. El worker de Outbox Relay (RF8.6) consulta registros con `published_at IS NULL ORDER BY created_at ASC` aplicando bloqueo `FOR UPDATE SKIP LOCKED`.
+3. RF8.6 publica el mensaje en `mobility.events` con routing key `notification.requested`.
+4. Únicamente **después** de recibir la confirmación (Publisher Confirm ACK) de RabbitMQ, el worker marca `published_at = NOW()` en la base de datos.
+5. Si RabbitMQ o la DB caen, el mensaje se reintenta conservando el mismo `messageId`, delegando la deduplicación al Inbox de RF8.7 (`UNIQUE(consumer_id, message_id)`).
+
+---
+
+### 5.4 Contrato de Entrada RF8.6 → RF8.1 (Eventos de Viaje)
+
+| Atributo | Valor |
+| --- | --- |
+| Routing keys | `trip.requested`, `driver.assigned`, `driver.arrived`, `trip.started`, `trip.cancelled`, `trip.completed` |
+| Productor | M6 (Viajes) / M5 (Despacho) |
+| Consumidor | RF8.6 (Consumer de RF8.1: `m8.notifications.trip-events`) |
+| Estado | **CONTRATO INTERNO CONGELADO Y CONFIRMADO** |
+
+#### 1. Sobre del mensaje (`mobility.events`)
+
+```json
+{
+  "messageId": "9f1c7b2e-4d3a-4c8f-9b21-6e0a5c7d4812",
+  "eventType": "TripStarted",
+  "version": 1,
+  "occurredAt": "2026-10-05T18:42:11.000Z",
+  "correlationId": "trip-2026-000123",
+  "producer": "m6-viajes",
+  "data": {
+    "tripId": "trip-2026-000123",
+    "recipientId": "usr-0091",
+    "details": {}
+  }
+}
+```
+
+* `messageId`: UUID v4 obligatorio, clave de deduplicación.
+* `eventType`: Nombre del evento en PascalCase.
+* `correlationId`: Debe coincidir con `data.tripId`.
+* `occurredAt`: ISO 8601 UTC.
+* `data.tripId`: ID único del viaje.
+* `data.recipientId`: ID del destinatario de la notificación (cliente o conductor).
+
+#### 2. Mapeo de los 6 eventos de viaje
+
+| `eventType` AMQP | Routing Key AMQP | `eventType` RF8.1 | Mensaje Generado por Defecto | Destinatario |
+| --- | --- | --- | --- | --- |
+| `TripRequested` | `trip.requested` | `TRIP_REQUESTED` | "Tu solicitud de viaje fue recibida." | Cliente |
+| `DriverAssigned` | `driver.assigned` | `DRIVER_ASSIGNED` | "Se asignó un conductor a tu viaje." | Cliente |
+| `DriverArrived` | `driver.arrived` | `DRIVER_ARRIVED` | "Tu conductor ha llegado al punto de encuentro." | Cliente |
+| `TripStarted` | `trip.started` | `TRIP_STARTED` | "Tu viaje ha comenzado." | Cliente |
+| `TripCancelled` | `trip.cancelled` | `TRIP_CANCELLED` | "Tu viaje fue cancelado." | Cliente / Conductor |
+| `TripCompleted` | `trip.completed` | `TRIP_COMPLETED` | "Tu viaje ha finalizado." | Cliente |
+
+#### 3. Topología de Queue, Bindings y DLX
+
+* **Exchange Principal**: `mobility.events` (topic, durable).
+* **Exchange DLX**: `mobility.events.dlx` (topic, durable).
+* **Cola Principal Consumer**: `m8.notifications.trip-events` (durable).
+  * Argumentos: `x-dead-letter-exchange: mobility.events.dlx`, `x-dead-letter-routing-key: m8.notifications.trip-events`.
+* **Cola de Reintentos**: `m8.notifications.trip-events.retry` (durable, sin consumidor).
+  * Argumentos: `x-message-ttl: 5000` (5s), `x-dead-letter-exchange: mobility.events`.
+* **Cola DLQ**: `m8.notifications.trip-events.dlq` (durable).
+  * Binding en `mobility.events.dlx` con routing key `m8.notifications.trip-events`.
+* **Bindings en `mobility.events`**:
+  * `trip.requested`
+  * `driver.assigned` (y `trip.driver-assigned`)
+  * `driver.arrived` (y `trip.driver-arrived`)
+  * `trip.started`
+  * `trip.cancelled`
+  * `trip.completed`
+
+#### 4. Tratamiento de Resultados de Procesamiento en RF8.1
+
+| Resultado | Criterio / Causa | Acción en DB / Consumer | Respuesta AMQP |
+| --- | --- | --- | --- |
+| **Nuevo (Éxito)** | Registro inédito de `(consumer_id, message_id)` | Inserta en Inbox, crea la notificación lógica y la entrada en Outbox en 1 transacción DB. | `ACK` manual |
+| **Duplicado Idempotente** | Violación de `UNIQUE(consumer_id, message_id)` en Inbox | Se ignora la regeneración de la notificación. | `ACK` manual inmediato |
+| **Inválido / Esquema Erróneo** | Falta `messageId`, `tripId`, `recipientId` o `eventType` desconocido | No ingresa a la DB ni al Outbox. Se descarta. | `NACK` (`requeue=false`) → DLQ |
+| **Fallo DB / Transitorio** | Pérdida temporal de conexión a PostgreSQL / Timeout | Reencola a `m8.notifications.trip-events.retry` incrementando `x-retry-count`. Si es >= 3 reintentos, va a la DLQ. | `NACK` con reencolado / Retry queue |
+
+
 
 ## 6. Contrato REST interno con Receipts Delivery
 
@@ -312,6 +465,10 @@ El enlace usa un token opaco (32 bytes aleatorios en base64url) que no
 contiene ni deriva del `tripId`. Vence según `RECEIPT_LINK_TTL_SECONDS` (por
 defecto 900 s). Cada llamada genera un enlace nuevo; los anteriores siguen
 vigentes hasta su vencimiento.
+
+Receipts Delivery devuelve `url` y `expiresAt` sin modificarlos en la respuesta
+del reenvío (acordado el 2026-10-04). No arma la URL por su cuenta: su base sale
+de `PUBLIC_BASE_URL` y cambia según el despliegue.
 
 Al descargar, `GET /api/v1/receipts/downloads/{token}` responde el PDF o
 `410 DOWNLOAD_LINK_EXPIRED` si el enlace no existe o ya venció. Redis no

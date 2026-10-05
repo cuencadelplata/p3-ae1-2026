@@ -34,6 +34,26 @@ El servicio consume `payment.confirmed` desde su propia cola
 `POST /receipts` se conserva: sirve para pruebas, reemisiones manuales y
 compatibilidad con AE1. Ambos caminos usan la misma lógica de emisión.
 
+**Actualización 2026-10-04.** M7 (RF-7.3) informó que se integra solo por REST y no
+publicará `payment.confirmed`: en AE4 debe usar la API de Mercado Pago (hoy la
+simula) y prefirió no cambiar la forma de integración dos veces. M7 no llama a M8;
+expone `GET /metodo-pago/{viajeId}` con el estado del pago. Ninguna alternativa de la
+tabla describe ese caso, así que se resolvió así, acordado con Invaldi:
+
+* M7 es la fuente de verdad del estado del pago. Antes de emitir, por cualquiera de
+  las dos entradas, el servicio consulta a M7 y solo emite con el pago `autorizado`.
+  El medio de pago del comprobante se toma de M7.
+* `pendiente` (o sin pago registrado) no es igual a `rechazado`: el primero puede
+  autorizarse después y se reintenta; el segundo es terminal y no genera comprobante.
+* M7 sin respuesta se trata como el autorizador fiscal: `503` con `Retry-After` en la
+  API y espera sin descontar intentos en el consumidor.
+* El cliente REST no se acopla a ningún evento disparador. El disparador definitivo
+  se define al cerrar el contrato con M6 (candidato: `trip.completed` vía RF-8.6).
+
+La entrada por evento se mantiene, con productor simulado en AE2, porque cumple la
+comunicación asíncrona exigida y sirve a cualquier productor futuro. Ver catálogo,
+sección 5.1.
+
 ## Decisión 2: fallos del consumidor con cola de reintentos y DLQ
 
 | Tipo de fallo | Tratamiento |
@@ -118,11 +138,19 @@ en `/health/ready`.
 * **Pendiente:** M7 respondió el 2026-09-30 con un modelo de pago sin importes ni datos
   del viaje, que no alcanza para emitir el comprobante. Se mantiene la alternativa 1 del
   catálogo de forma provisoria y el cierre queda para la integración de AE4 (catálogo,
-  sección 5.1).
+  sección 5.1). El 2026-10-04 M7 informó que se integra por REST (ver la
+  actualización de la decisión 1); su respuesta no incluye importe ni moneda, que se
+  consultaron a M7 y mientras tanto se conservan desde la entrada actual. Los datos
+  del cliente, el conductor y el recorrido no son de M7 y siguen como están hasta
+  cerrar los contratos con M1, M2, M3 y M6.
+* **Nueva dependencia:** la API de pagos de M7, no crítica en `/health/ready` (sin ella
+  no se emiten comprobantes nuevos, pero se consultan y descargan los emitidos).
 
 ## Evidencia
 
 * `tests/integration/payment-confirmed.consumer.test.ts`: reentrega, DLQ, reintentos agotados y recuperación.
 * `tests/integration/receipt-issued.outbox.test.ts`: publicación única, RabbitMQ caído y dos relays.
 * `tests/integration/download-link.test.ts`: TTL, token opaco y vencimiento (410).
+* `tests/unit/m7-payments.mapper.test.ts` y `tests/integration/m7-payments.test.ts`: traducción de
+  estados y medios de M7, pendiente que se emite al autorizarse, rechazo terminal y M7 caído.
 * `tests/e2e/receipts-ae2.e2e.test.mjs` (en `modulo-8`): los mismos flujos contra los contenedores.

@@ -48,9 +48,12 @@ jobs:
       - name: Typecheck receipts tests
         run: pnpm --filter m8-documentos run typecheck:test
 
+      - name: Typecheck QR tests
+        run: pnpm --filter @m8/qr run typecheck:test
+
       - name: Start test backing services
         run: |
-          docker compose up -d --wait postgres rabbitmq redis fiscal-sandbox
+          docker compose up -d --wait postgres rabbitmq redis fiscal-sandbox m7-payments-sandbox
 
       - name: Run workspace tests
         run: pnpm run test
