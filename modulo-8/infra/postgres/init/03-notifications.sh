@@ -11,7 +11,7 @@ set -eu
 
 psql -v ON_ERROR_STOP=1 \
   -v db="$POSTGRES_DB" \
-  -v pwd="$NOTIFICATIONS_DB_PASSWORD" \
+  -v pwd="${NOTIFICATIONS_DB_PASSWORD:-m8_notifications_local}" \
   --username "$POSTGRES_USER" \
   --dbname "$POSTGRES_DB" <<'EOSQL'
 REVOKE ALL ON DATABASE :"db" FROM PUBLIC;

@@ -84,7 +84,24 @@ CREATE TABLE IF NOT EXISTS notification_delivery.delivery_attempts (
     attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Permisos al rol sobre sus tablas
+-- Transferir ownership explícito de tablas al rol propio y revocar acceso público (RNF-04)
+DO $$
+DECLARE
+  item record;
+BEGIN
+  FOR item IN
+    SELECT schemaname, tablename
+    FROM pg_tables
+    WHERE schemaname = 'notification_delivery'
+  LOOP
+    EXECUTE format('ALTER TABLE %I.%I OWNER TO m8_notification_delivery', item.schemaname, item.tablename);
+  END LOOP;
+END
+$$;
+
+REVOKE ALL ON SCHEMA notification_delivery FROM PUBLIC;
+REVOKE ALL ON ALL TABLES IN SCHEMA notification_delivery FROM PUBLIC;
+
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA notification_delivery TO m8_notification_delivery;
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA notification_delivery TO m8_notification_delivery;
 ALTER DEFAULT PRIVILEGES FOR ROLE m8_notification_delivery IN SCHEMA notification_delivery
