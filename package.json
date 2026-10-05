@@ -5,7 +5,7 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "build": "pnpm -r --if-present run build",
-    "test": "pnpm -r --if-present run test",
+    "test": "pnpm -r --workspace-concurrency=1 --if-present run test",
     "test:notifications": "pnpm --filter @m8/notifications-processing run test",
     "test:qr": "pnpm --filter @m8/qr run test",
     "test:receipts": "pnpm --filter m8-documentos run test",
