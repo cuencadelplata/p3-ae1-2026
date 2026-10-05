@@ -77,20 +77,11 @@ export async function issueReceipt(request: ReceiptRequest): Promise<IssueResult
 }
 
 export async function getReceipt(tripId: string): Promise<Receipt> {
-  // RF-8.4: 1. Lectura cacheada en Redis
-  const cached = await getCachedReceipt(tripId);
-  if (cached) {
-    return cached;
-  }
-
-  // 2. Consulta en CommunicationsDB si hubo cache miss
   const receipt = await repository.findByTripId(tripId);
   if (!receipt) {
     throw AppError.notFound('RECEIPT_NOT_FOUND', `No existe un comprobante emitido para el viaje ${tripId}`);
   }
 
-  // 3. Poblar cache en Redis con TTL
-  await setCachedReceipt(receipt);
   return receipt;
 }
 
@@ -153,7 +144,7 @@ export async function resendReceipt(
   tripId: string,
   channel: DeliveryChannel,
   destination?: string,
-): Promise<{ receipt: Receipt; delivery: DeliveryRecord }> {
+): Promise<{ receipt: Receipt; delivery: DeliveryRecord; url: string; expiresAt: string }> {
   // 1. Rate limiting en Redis (RF-8.4)
   const rateLimit = await checkResendRateLimit(tripId);
   if (!rateLimit.allowed) {
@@ -174,7 +165,17 @@ export async function resendReceipt(
   }
 
   try {
-    const receipt = await getReceipt(tripId);
+    // 3. Obtener el comprobante (cacheando los metadatos)
+    let receipt = await getCachedReceipt(tripId);
+    if (!receipt) {
+      const dbReceipt = await repository.findByTripId(tripId);
+      if (!dbReceipt) {
+        throw AppError.notFound('RECEIPT_NOT_FOUND', `No existe un comprobante emitido para el viaje ${tripId}`);
+      }
+      receipt = dbReceipt;
+      await setCachedReceipt(receipt);
+    }
+
     const target = destination ?? receipt.customer.email;
 
     if (!target) {
@@ -183,6 +184,13 @@ export async function resendReceipt(
         'El comprobante no tiene un destino registrado. Indique "destination" en el cuerpo de la solicitud.',
       );
     }
+
+    // 4. Obtener referencia de descarga llamando a getDeliveryReference
+    // Aca es donde decidimos el manejo de errores (404, 409, 503). getDeliveryReference arroja errores si no encuentra o no hay pdf.
+    // getDeliveryReference llama a getReceipt, pero como tenemos cache, no hay problema, o si falla, lo dejamos propagar.
+    // Sin embargo, para evitar doble consulta y fallar rapido, lo llamamos directamente.
+    // getDeliveryReference lanza AppError.notFound (404) y AppError.conflict (409).
+    const reference = await getDeliveryReference(tripId);
 
     const delivery: DeliveryRecord = {
       channel,
@@ -194,15 +202,22 @@ export async function resendReceipt(
     await repository.addDelivery(receipt.receiptId, delivery);
     receipt.deliveries.push(delivery);
 
-    // 3. Invalida la cache para que la proxima lectura refleje el nuevo reenvio
+    // 5. Invalida la cache para que la proxima lectura refleje el nuevo reenvio
     await invalidateReceiptCache(tripId);
 
     // El destino (email, telefono o dispositivo) es un dato personal: no se registra en logs.
     log('info', 'reenvio registrado', { tripId: receipt.tripId, receiptNumber: receipt.receiptNumber, channel });
 
-    return { receipt, delivery };
+    return { receipt, delivery, url: reference.url, expiresAt: reference.expiresAt };
+  } catch (error: any) {
+    // Manejo de errores: 503 (Redis caido) u otros que provengan de getDeliveryReference
+    // Redis down tira un error con message o name. La creacion de token usa redis y tira DOWNLOAD_LINKS_UNAVAILABLE
+    // que es 503 Service Unavailable.
+    // getDeliveryReference arroja 404 RECEIPT_NOT_FOUND, 409 RECEIPT_PDF_UNAVAILABLE y 503 DOWNLOAD_LINKS_UNAVAILABLE
+    // Propagamos los errores como estan (ya son AppError de los tipos adecuados)
+    throw error;
   } finally {
-    // 4. Liberacion segura del lock distribuido
+    // 6. Liberacion segura del lock distribuido
     await lock.release();
   }
 }
