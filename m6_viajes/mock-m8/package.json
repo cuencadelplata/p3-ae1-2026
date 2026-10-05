@@ -1,0 +1,14 @@
+{
+  "name": "mock-m8",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+ "dependencies": {
+    "express": "^5.2.1",
+    "qrcode": "^1.5.4",
+    "axios": "^1.20.0",
+    "pg": "^8.13.0"
+}
+}
