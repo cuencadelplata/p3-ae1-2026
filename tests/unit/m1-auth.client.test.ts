@@ -174,6 +174,43 @@ describe('E7 - Cliente de autenticación M1', () => {
     await expect(Promise.reject(new M1HttpError(503))).rejects.toBeInstanceOf(M1HttpError);
   });
 
+  it('acepta la respuesta real de M1 con authMethod y datos del usuario', async () => {
+    const fetchImplementation = vi.fn(async () => new Response(JSON.stringify({
+      valid: true,
+      ...identity,
+      authMethod: 'password',
+      usuario: { id: 12, rol: 'CLIENTE', email: 'ana@example.com', nombre: 'Ana', apellido: 'Pérez', estado: 'ACTIVO' }
+    }), { status: 200 }));
+    const client = createM1AuthClient({
+      cache: memoryCache(),
+      fetch: fetchImplementation,
+      nowSeconds: () => NOW_SECONDS,
+      policy: immediatePolicy(),
+      serviceUrl: () => 'http://m1.test'
+    });
+
+    await expect(client.validateToken(tokenWithExpiration(NOW_SECONDS + 3600))).resolves.toEqual(identity);
+  });
+
+  it('trata valid: false (usuario inexistente o no ACTIVO) como token rechazado y no lo guarda', async () => {
+    for (const body of [
+      { valid: false, userId: 12, role: 'CLIENTE', authMethod: 'password', usuario: { id: 12, estado: 'BLOQUEADO' } },
+      { valid: false, userId: 99, role: 'CLIENTE', authMethod: 'password', error: 'Usuario no encontrado' }
+    ]) {
+      const cache = memoryCache();
+      const client = createM1AuthClient({
+        cache,
+        fetch: vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })),
+        nowSeconds: () => NOW_SECONDS,
+        policy: immediatePolicy(),
+        serviceUrl: () => 'http://m1.test'
+      });
+
+      await expect(client.validateToken(tokenWithExpiration(NOW_SECONDS + 3600))).resolves.toBeNull();
+      expect(cache.set).not.toHaveBeenCalled();
+    }
+  });
+
   it('propaga una caída de M1 como ServiceUnavailableError, nunca como token inválido', async () => {
     const unavailablePolicy: M1Policy = {
       execute: async () => {

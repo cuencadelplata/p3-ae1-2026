@@ -21,16 +21,16 @@ function fallbackResponse(customerId: string): CustomerTripsResponse {
  *
  * Reglas:
  *  1. Recibe el perfil ya verificado por el controller (existe y es del usuario que pide).
- *  2. Se consulta M6 por el userId del PERFIL (no el de quien hace el request), reenviando el token.
+ *  2. Se consulta M6 por el userId del PERFIL (no el de quien hace el request).
  *  3. Si M6 está caído → respuesta degradada vacía (degraded: true), no 503, para no bloquear al usuario.
  *  4. El customerId que se devuelve es el interno de M2 (cust_xxx), no el userId de M1.
  */
 export class TripsService {
   constructor(private readonly m6: M6Client = m6Client) {}
 
-  async getTrips(customer: CustomerProfile, token: string): Promise<CustomerTripsResponse> {
+  async getTrips(customer: CustomerProfile): Promise<CustomerTripsResponse> {
     try {
-      const response = await this.m6.getTrips(customer.userId, token);
+      const response = await this.m6.getTrips(customer.userId);
       return { ...response, customerId: customer.customerId, degraded: false };
     } catch (err) {
       if (err instanceof ServiceUnavailableError) {

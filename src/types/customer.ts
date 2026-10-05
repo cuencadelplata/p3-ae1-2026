@@ -88,7 +88,8 @@ export interface TripSummary {
   tripId: string;
   origin: string;
   destination: string;
-  fare: number;
+  /** Total cobrado; null mientras el viaje no está finalizado (M6: finalizacion.total). */
+  fare: number | null;
   status: string;
   createdAt: string;
 }

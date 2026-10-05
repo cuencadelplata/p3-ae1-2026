@@ -155,7 +155,7 @@ function TripsTab({ data }: { data: CustomerTripsResponse | null }) {
               </p>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <p style={{ fontWeight: 600, color: '#111827' }}>${t.fare.toLocaleString()}</p>
+              <p style={{ fontWeight: 600, color: '#111827' }}>{t.fare === null ? '—' : `$${t.fare.toLocaleString()}`}</p>
               <span style={{
                 fontSize: '0.75rem',
                 color: t.status === 'COMPLETADO' ? '#166534' : '#854d0e',

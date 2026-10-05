@@ -235,7 +235,7 @@ export const openApiSpec = {
       get: {
         summary: 'Consultar historial de viajes consumiendo síncronamente M6 (RF-2.3)',
         description:
-          'Requiere JWT de usuario y solo lo permite el dueño del perfil. Consulta M6 con el userId del perfil reenviando el token. ' +
+          'Requiere JWT de usuario y solo lo permite el dueño del perfil. Consulta M6 (GET /api/clientes/{clienteId}/viajes) con el userId del perfil como clienteId. ' +
           'Si M6 está caído devuelve una lista vacía con degraded: true (respuesta degradada, no 503).',
         operationId: 'getCustomerTrips',
         security: [{ bearerAuth: [] }],
@@ -380,8 +380,12 @@ export const openApiSpec = {
           tripId: { type: 'string', example: 'trip_99217c2f' },
           origin: { type: 'string', example: 'Av. Colón 1200, Córdoba' },
           destination: { type: 'string', example: 'Av. General Paz 250, Córdoba' },
-          fare: { type: 'number', example: 1850.0 },
-          status: { type: 'string', example: 'COMPLETADO' },
+          fare: { type: 'number', nullable: true, example: 1850.0, description: 'Total cobrado (finalización de M6); null si el viaje todavía no terminó.' },
+          status: {
+            type: 'string',
+            example: 'COMPLETADO',
+            description: 'Estado del viaje en M6: SOLICITADO, ASIGNADO, CONDUCTOR_EN_CAMINO, ARRIBADO, EN_CURSO, COMPLETADO o CANCELADO.'
+          },
           createdAt: { type: 'string', format: 'date-time' }
         }
       },

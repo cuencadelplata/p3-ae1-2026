@@ -8,11 +8,13 @@ import { UserIdSchema } from '../types/customer.js';
 const MAX_CACHE_TTL_SECONDS = 5 * 60;
 const DEFAULT_M1_SERVICE_URL = 'http://localhost:3000/__stubs/m1';
 
-const M1ValidationResponseSchema = z.object({
-  valid: z.literal(true),
-  userId: UserIdSchema,
-  role: z.string().min(1)
-}).strict();
+// M1 responde además authMethod y los datos del usuario (usuario: {...}): se ignoran,
+// M2 solo necesita userId y role. Con valid: false (usuario inexistente o no ACTIVO)
+// el token se trata como rechazado.
+const M1ValidationResponseSchema = z.discriminatedUnion('valid', [
+  z.object({ valid: z.literal(true), userId: UserIdSchema, role: z.string().min(1) }),
+  z.object({ valid: z.literal(false) })
+]);
 
 const CachedIdentitySchema = z.object({
   userId: UserIdSchema,
@@ -107,7 +109,7 @@ async function writeCachedIdentity(
   }
 }
 
-async function parseM1Response(response: Response): Promise<AuthIdentity> {
+async function parseM1Response(response: Response): Promise<AuthIdentity | null> {
   let body: unknown;
   try {
     body = await response.json();
@@ -120,6 +122,7 @@ async function parseM1Response(response: Response): Promise<AuthIdentity> {
   if (!parsed.success) {
     throw new M1HttpError(502, { cause: parsed.error });
   }
+  if (!parsed.data.valid) return null;
   return { userId: parsed.data.userId, role: parsed.data.role };
 }
 

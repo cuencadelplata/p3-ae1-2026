@@ -340,7 +340,7 @@ describe('GET /v1/customers/:id/trips (RF-2.3)', () => {
     expect(res.status).toBe(200);
     expect(res.body.customerId).toBe('cust_823a7b9c');
     expect(res.body.trips).toHaveLength(1);
-    expect(getTrips).toHaveBeenCalledWith(12, 'tok-test');
+    expect(getTrips).toHaveBeenCalledWith(12);
   });
 
   it('M6 caído → 200 con lista vacía (respuesta degradada, no 503)', async () => {

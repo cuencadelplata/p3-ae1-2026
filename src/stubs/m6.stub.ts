@@ -3,10 +3,9 @@ import { Router, Request, Response } from 'express';
 /**
  * Stub del módulo M6 (Viajes).
  * Reemplaza la carpeta stub-m6/ que usaba un servidor HTTP independiente.
- * Contrato:
- *   GET /v1/trips?userId=<id>
- *   Authorization: Bearer <token>  → obligatorio, sin token → 401
- *   200 { userId, tripsCount, trips: [...] }
+ * Contrato (igual que M6 real):
+ *   GET /api/clientes/<clienteId>/viajes   (sin autenticación)
+ *   200 { clienteId, viajes: [{ id, estado, origen, destino, fechaCreacion, finalizacion, historialTransiciones }] }
  *
  * Datos fijos (sin aleatoriedad para que los tests sean determinísticos):
  *   userId 12 → 2 viajes completados (escenario "perfil habilitado")
@@ -87,40 +86,40 @@ router.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'UP', service: 'm6-stub-viajes' });
 });
 
-router.get('/v1/trips', (req: Request, res: Response) => {
-  // El token es obligatorio
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({
-      error: 'Unauthorized',
-      message: 'Token requerido'
-    });
-    return;
-  }
-
-  const { userId } = req.query;
-  if (!userId) {
-    res.status(400).json({
-      error: 'BadRequest',
-      message: 'El parámetro userId es obligatorio'
-    });
-    return;
-  }
-
-  const userIdNum = parseInt(String(userId), 10);
-  if (isNaN(userIdNum)) {
-    res.status(400).json({
-      error: 'BadRequest',
-      message: 'userId debe ser un número entero'
-    });
-    return;
-  }
-
-  const trips = DB[userIdNum] ?? [];
+/**
+ * Mismo contrato que M6 real (m6_viajes/openapi.yaml, obtenerViajesDeCliente):
+ * GET /api/clientes/{clienteId}/viajes → { clienteId, viajes: [...] }.
+ * Sin autenticación (M6 lo expone a consumidores de confianza). Cliente sin viajes → lista vacía.
+ */
+router.get('/api/clientes/:clienteId/viajes', (req: Request, res: Response) => {
+  const { clienteId } = req.params;
+  const trips = DB[Number.parseInt(clienteId, 10)] ?? [];
   res.json({
-    userId: userIdNum,
-    tripsCount: trips.length,
-    trips
+    clienteId,
+    viajes: trips.map((trip) => ({
+      id: trip.tripId,
+      clienteId,
+      conductorId: 'conductor-001',
+      estado: trip.status,
+      origen: trip.origin,
+      destino: trip.destination,
+      fechaCreacion: trip.createdAt,
+      // M6 solo informa la finalización (y el total cobrado) de los viajes completados
+      finalizacion: trip.status === 'COMPLETADO'
+        ? {
+            tiempoMinutos: 18,
+            distanciaKm: 6.4,
+            horaFin: trip.createdAt,
+            metodoPago: 'efectivo',
+            total: trip.fare,
+            tipoVehiculo: 'auto',
+            fuenteMetrica: 'M4',
+            metricasEstimadas: true,
+            paymentId: `pay_${trip.tripId}`
+          }
+        : null,
+      historialTransiciones: []
+    }))
   });
 });
 

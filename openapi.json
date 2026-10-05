@@ -423,7 +423,7 @@
     "/v1/customers/{id}/trips": {
       "get": {
         "summary": "Consultar historial de viajes consumiendo síncronamente M6 (RF-2.3)",
-        "description": "Requiere JWT de usuario y solo lo permite el dueño del perfil. Consulta M6 con el userId del perfil reenviando el token. Si M6 está caído devuelve una lista vacía con degraded: true (respuesta degradada, no 503).",
+        "description": "Requiere JWT de usuario y solo lo permite el dueño del perfil. Consulta M6 (GET /api/clientes/{clienteId}/viajes) con el userId del perfil como clienteId. Si M6 está caído devuelve una lista vacía con degraded: true (respuesta degradada, no 503).",
         "operationId": "getCustomerTrips",
         "security": [
           {
@@ -2114,11 +2114,14 @@
           },
           "fare": {
             "type": "number",
-            "example": 1850
+            "nullable": true,
+            "example": 1850,
+            "description": "Total cobrado (finalización de M6); null si el viaje todavía no terminó."
           },
           "status": {
             "type": "string",
-            "example": "COMPLETADO"
+            "example": "COMPLETADO",
+            "description": "Estado del viaje en M6: SOLICITADO, ASIGNADO, CONDUCTOR_EN_CAMINO, ARRIBADO, EN_CURSO, COMPLETADO o CANCELADO."
           },
           "createdAt": {
             "type": "string",

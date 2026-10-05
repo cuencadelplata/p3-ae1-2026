@@ -18,7 +18,7 @@ export class TripsController {
     const customer = await findOwnedCustomer(req, res, req.params.id);
     if (!customer) return;
 
-    res.status(200).json(await this.service.getTrips(customer, req.auth!.token));
+    res.status(200).json(await this.service.getTrips(customer));
   };
 }
 

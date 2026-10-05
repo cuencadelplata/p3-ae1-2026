@@ -35,7 +35,7 @@ export interface TripSummary {
   tripId: string;
   origin: string;
   destination: string;
-  fare: number;
+  fare: number | null;
   status: string;
   createdAt: string;
 }

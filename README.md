@@ -6,7 +6,7 @@ Paradigmas 3 AE1 2026 - Grupo 5 - M2
 Implementación del módulo M2 para los requisitos RF-2.1 a RF-2.5:
 
 - **RF-2.1 Perfil de cliente:** alta (asociada al `userId` de M1 vía token JWT), consulta y actualización de preferencias. El nombre, teléfono y correo pertenecen a M1 y no se duplican en M2.
-- **RF-2.3 Historial de viajes:** consulta del listado de viajes consumiendo la API de M6 por `userId`, reenviando el token del usuario, sin acceso directo a su base de datos. Respuesta degradada vacía si M6 no está disponible.
+- **RF-2.3 Historial de viajes:** consulta del listado de viajes consumiendo la API de M6 (`GET /api/clientes/{clienteId}/viajes`) con el `userId` del perfil, sin acceso directo a su base de datos. Respuesta degradada vacía si M6 no está disponible.
 - **RF-2.2 Direcciones frecuentes:** orígenes y destinos favoritos o recientes del cliente, con sugerencias de regreso (B → A). Ver [RF-2.2 y RF-2.4](#direcciones-frecuentes-rf-22-y-calificación-del-conductor-rf-24).
 - **RF-2.4 Calificación del conductor:** el cliente califica al conductor de un viaje completado.
 - **RF-2.5 Estado de cuenta:** consulta con recálculo automático de bloqueos según penalizaciones vigentes de Soporte; cambio manual por el dueño del perfil. Los clientes nunca se eliminan: la baja se registra con el estado `INACTIVO`.
@@ -185,7 +185,7 @@ El estado de cuenta vive solo en la tabla `AccountStatus`; el perfil lo lee con 
 
 ## Historial de viajes (RF-2.3)
 
-`GET /v1/customers/:id/trips` exige token de usuario y solo lo ve el dueño del perfil (`403` si no lo es). M2 consulta M6 con el `userId` **del perfil** (no el de quien pide), reenviando el token del usuario.
+`GET /v1/customers/:id/trips` exige token de usuario y solo lo ve el dueño del perfil (`403` si no lo es). M2 consulta M6 (`GET /api/clientes/{clienteId}/viajes`) con el `userId` **del perfil** (no el de quien pide). La tarifa (`fare`) es el total de la finalización de M6 y vale `null` mientras el viaje no terminó.
 
 Si M6 no responde (timeout, error o circuito abierto) la respuesta es `200` con `trips: []` y `degraded: true`. Con `degraded: false` la lista viene de M6, y una lista vacía significa que el usuario no tiene viajes. El front muestra "No se pudo cargar el historial." cuando `degraded` es `true`.
 
@@ -291,8 +291,9 @@ M1:      GET /auth/validar-identidad-y-rol   Authorization: Bearer <jwt>
 Soporte: GET /usuarios/{userId}/penalizaciones   X-Secret-Key: <SOPORTE_SECRET_KEY>
          → 200 { userId, total, penalizaciones: [...] }
 
-M6:      GET /v1/trips?userId={id}   Authorization: Bearer <jwt>
-         → 200 { userId, tripsCount, trips: [...] }
+M6:      GET /api/clientes/{clienteId}/viajes   (sin autenticación; clienteId = userId de M1)
+         → 200 { clienteId, viajes: [{ id, estado, origen, destino, fechaCreacion, finalizacion, historialTransiciones }] }
+         → 503 si la base de M6 no está disponible
 
 M6:      GET /api/viajes/{viajeId}   (RF-2.2 importación de recientes y RF-2.4)
          → 200 { id, clienteId, estado, origen, destino, ... }
