@@ -7,14 +7,14 @@ vi.mock('../../src/services/qr.service.js', () => {
   const codigos = new Map<string, string>();
   return {
     generarQR: vi.fn(async (tripId: string) => {
-      const codigo = `TEST-${tripId}`;
-      codigos.set(tripId, codigo);
-      return { codigo };
+      const token = `TEST-${tripId}`;
+      codigos.set(tripId, token);
+      return { token, qrDataUrl: 'data:image/png;base64,test', expiresAt: new Date(Date.now() + 300_000).toISOString() };
     }),
     validarQR: vi.fn(async (tripId: string, codigo: string) => {
       return codigos.get(tripId) === codigo
-        ? { valido: true }
-        : { valido: false, motivo: 'QR inválido' };
+        ? { valid: true }
+        : { valid: false };
     }),
   };
 });
@@ -42,7 +42,7 @@ describe('RF-6.1: Solicitar Viaje - Estados del viaje', () => {
     expect(res.data.destino).toBe('Calle 2');
   });
 
-  it('debe generar un codigo de verificación único', async () => {
+  it('debe dejar la generación del QR para el arribo', async () => {
     const req1 = mockRequest({
       clienteId: 'cliente-1',
       origen: 'Calle 1',
@@ -59,9 +59,10 @@ describe('RF-6.1: Solicitar Viaje - Estados del viaje', () => {
     const res2 = mockResponse();
     await solicitarViaje(req2 as any, res2 as any);
 
-    expect(res1.data.codigoVerificacion).toBeDefined();
-    expect(res2.data.codigoVerificacion).toBeDefined();
-    expect(res1.data.codigoVerificacion).not.toBe(res2.data.codigoVerificacion);
+    expect(res1.data.codigoVerificacion).toBeNull();
+    expect(res2.data.codigoVerificacion).toBeNull();
+    const qrService = await import('../../src/services/qr.service.js');
+    expect(qrService.generarQR).not.toHaveBeenCalled();
   });
 
   it('debe generar un ID unico para cada viaje', async () => {

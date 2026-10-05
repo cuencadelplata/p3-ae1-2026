@@ -24,7 +24,7 @@ paths:
       tags:
         - Viajes
       summary: "RF-6.1: Solicitar un nuevo viaje"
-      description: Crea el viaje en estado SOLICITADO. Pide a M8 el código de verificación (QR de un solo uso) y persiste el viaje en TripDB.
+      description: Crea el viaje en estado SOLICITADO. M6 solicita el QR a M8 al registrar el arribo.
       operationId: solicitarViaje
       requestBody:
         required: true
@@ -55,17 +55,17 @@ paths:
                     estado: SOLICITADO
                     origen: Calle Principal 100
                     destino: Centro Comercial
-                    codigoVerificacion: "AB3K8F"
-                    qrCode: "data:image/png;base64/iVBORw0KGgo..."
+                    codigoVerificacion: null
+                    qrCode: null
+                    qrExpiresAt: null
                     fechaCreacion: "2026-09-01T15:30:00Z"
         '503':
-          description: M8 (QR) o TripDB no disponibles.
+          description: TripDB no disponible.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               examples:
-                m8: { value: { error: "Servicio de QR no disponible, intente más tarde" } }
                 db: { value: { error: "Base de datos no disponible, intente más tarde" } }
 
   /api/viajes/{id}/asignar:
@@ -114,13 +114,14 @@ paths:
       description: |
         Requiere estado CONDUCTOR_EN_CAMINO y conductor asignado. Consulta a M3 si el conductor está habilitado
         (GET {M3_URL}/conductores/{id}/estado). La respuesta de M3 se cachea en Redis 60 s (clave conductor:{id}:estado).
-        Si M3 está caído o excede el timeout responde 503. Al éxito pasa a ARRIBADO y publica el evento viaje.arribado.
+        Si M3 está caído o excede el timeout responde 503. Al éxito pasa a ARRIBADO, publica viaje.arribado,
+        y solicita a M8 el QR de vigencia limitada o reutiliza el vigente. La respuesta incluye token, imagen y vencimiento.
       operationId: registrarArribo
       parameters:
         - $ref: '#/components/parameters/ViajeId'
       responses:
         '200':
-          description: Arribo registrado exitosamente
+          description: Arribo registrado; QR generado o reutilizado mientras siga vigente.
           content:
             application/json:
               schema:
@@ -141,12 +142,12 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '503':
-          description: M3 (conductores) o TripDB no disponibles.
+          description: TripDB o M8 no disponibles.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-              example: { error: "Servicio de conductores (M3) no disponible, intente más tarde" }
+              example: { error: "No se pudo preparar el QR del viaje" }
 
   /api/viajes/{id}/iniciar:
     post:
@@ -156,8 +157,8 @@ paths:
       description: |
         Requiere estado ARRIBADO. M6 envía {tripId, token} a M8 (POST /qr/validate).
         Solo ante 200 {valid:true} cambia a EN_CURSO y publica viaje.iniciado. Los rechazos de M8
-        conservan el estado ARRIBADO; los errores 503/timeout también conservan el estado e incluyen
-        Retry-After cuando M8 lo informa.
+        conservan ARRIBADO; ante 409/410 M6 solicita un QR nuevo si el viaje sigue ARRIBADO.
+        Los errores 503/timeout también conservan el estado e incluyen Retry-After cuando M8 lo informa.
       operationId: iniciarViaje
       parameters:
         - $ref: '#/components/parameters/ViajeId'
@@ -206,19 +207,19 @@ paths:
                   - $ref: '#/components/schemas/M8ErrorResponse'
               example: { error: { code: QR_NOT_FOUND } }
         '409':
-          description: M8 informa que el QR ya fue utilizado.
+          description: QR usado; si el viaje sigue ARRIBADO, se devuelve un QR nuevo.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/M8ErrorResponse'
-              example: { error: { code: QR_ALREADY_USED } }
+              example: { error: { code: QR_ALREADY_USED }, qr: { token: nuevoToken, qrDataUrl: dataUrl, expiresAt: "2026-10-05T12:05:00Z" } }
         '410':
-          description: M8 informa que el QR expiró.
+          description: QR expirado; si el viaje sigue ARRIBADO, se devuelve un QR nuevo.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/M8ErrorResponse'
-              example: { error: { code: QR_EXPIRED } }
+              example: { error: { code: QR_EXPIRED }, qr: { token: nuevoToken, qrDataUrl: dataUrl, expiresAt: "2026-10-05T12:05:00Z" } }
         '500':
           description: Error inesperado de M8 al validar.
           content:
@@ -297,14 +298,20 @@ components:
         destino:
           type: string
           example: Centro Comercial
-        codigoVerificacion:
-          type: string
-          description: Código alfanumérico de 6 caracteres para verificación
-          example: "AB3K8F"
+          codigoVerificacion:
+            type: string
+            nullable: true
+            description: Token asociado al QR vigente, nulo hasta registrar ARRIBADO.
+            example: "AB3K8F"
         qrCode:
           type: string
           nullable: true
-          description: "Reservado. Actualmente no se devuelve (la imagen QR la resuelve M8/el cliente a partir de codigoVerificacion)."
+            description: Data URL del QR vigente; nulo hasta registrar ARRIBADO.
+          qrExpiresAt:
+            type: string
+            format: date-time
+            nullable: true
+            description: Expiración del QR; nula hasta registrar ARRIBADO.
         fechaCreacion:
           type: string
           format: date-time
@@ -338,6 +345,16 @@ components:
           example: "El conductor ha arribado"
         viaje:
           $ref: '#/components/schemas/ViajeResponse'
+        qr:
+          $ref: '#/components/schemas/QRResponse'
+
+    QRResponse:
+      type: object
+      required: [token, qrDataUrl, expiresAt]
+      properties:
+        token: { type: string }
+        qrDataUrl: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
 
     IniciarViajeRequest:
       type: object
@@ -377,6 +394,8 @@ components:
             code:
               type: string
               example: QR_EXPIRED
+        qr:
+          $ref: '#/components/schemas/QRResponse'
 
   parameters:
     ViajeId:

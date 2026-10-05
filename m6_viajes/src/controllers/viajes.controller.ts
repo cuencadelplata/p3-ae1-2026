@@ -1,27 +1,46 @@
 import type { Request, Response } from 'express';
 import type { Viaje } from '../models/viaje.model.js';
 import { EstadoViaje } from '../models/viaje.model.js';
-import { generarQR, M8ApiError, validarQR } from '../services/qr.service.js';
+import { generarQR, M8ApiError, validarQR, type GenerarQRResponse } from '../services/qr.service.js';
 import * as viajeRepo from '../repositories/viaje.repository.js';
 import { randomUUID } from 'node:crypto';
 import { consultarEstadoConductor } from '../services/conductor.service.js';
 import { publicarEvento } from '../services/rabbitmq.service.js';
+
+function qrVigente(viaje: Viaje): boolean {
+    return Boolean(
+        viaje.codigoVerificacion &&
+        viaje.qrCode &&
+        viaje.qrExpiresAt &&
+        viaje.qrExpiresAt.getTime() > Date.now()
+    );
+}
+
+async function emitirYGuardarQR(viaje: Viaje): Promise<GenerarQRResponse> {
+    const qr = await generarQR(viaje.id);
+    const expiresAt = new Date(qr.expiresAt);
+    if (Number.isNaN(expiresAt.getTime())) {
+        throw new Error('M8 devolvió una fecha de expiración inválida');
+    }
+
+    await viajeRepo.actualizarQR(viaje.id, {
+        token: qr.token,
+        qrDataUrl: qr.qrDataUrl,
+        expiresAt,
+    });
+    viaje.codigoVerificacion = qr.token;
+    viaje.qrCode = qr.qrDataUrl;
+    viaje.qrExpiresAt = expiresAt;
+    return qr;
+}
+
+function respuestaQR(qr: GenerarQRResponse) {
+    return { token: qr.token, qrDataUrl: qr.qrDataUrl, expiresAt: qr.expiresAt };
+}
 //en este archivo definimos los controladores del modulo de viajes, que implementan la lógica de negocio para cada endpoint definido en las rutas. Cada controlador recibe la solicitud HTTP, valida los datos, interactúa con los servicios y repositorios necesarios, y devuelve la respuesta HTTP correspondiente.
 export const solicitarViaje = async (req: Request, res: Response): Promise<any> => {
     const { clienteId, origen, destino } = req.body;
     const id = randomUUID();
-
-    let codigoVerificacion: string;
-    try {
-        const respuesta = await generarQR(id);
-        codigoVerificacion = respuesta.token;
-    } catch (error) {
-        console.error('ERROR EN generarQR:', error);
-        if (error instanceof M8ApiError && error.retryAfter) {
-            res.setHeader('Retry-After', error.retryAfter);
-        }
-        return res.status(503).json({ error: 'Servicio de QR no disponible, intente más tarde' });
-    }
 
     const nuevoViaje: Viaje = {
         id,
@@ -29,7 +48,9 @@ export const solicitarViaje = async (req: Request, res: Response): Promise<any> 
         estado: EstadoViaje.SOLICITADO,
         origen,
         destino,
-        codigoVerificacion,
+        codigoVerificacion: null,
+        qrCode: null,
+        qrExpiresAt: null,
         fechaCreacion: new Date()
     };
 
@@ -111,7 +132,6 @@ export const registrarArribo = async (req: Request, res: Response): Promise<any>
         });
     }
 
-    // Consultamos al servicio externo M3 de forma segura con un timeout de 2 segundos para evitar bloqueos
     try {
         const estadoConductor = await Promise.race([
             consultarEstadoConductor(viaje.conductorId),
@@ -119,9 +139,7 @@ export const registrarArribo = async (req: Request, res: Response): Promise<any>
         ]) as any;
 
         if (estadoConductor && estadoConductor.habilitado === false) {
-            return res.status(403).json({
-                error: 'El conductor no está habilitado'
-            });
+            return res.status(403).json({ error: 'El conductor no está habilitado' });
         }
     } catch (error) {
         console.warn('Advertencia: Servicio M3 no disponible o lento, permitiendo arribo en E2E por resiliencia:', error);
@@ -131,9 +149,7 @@ export const registrarArribo = async (req: Request, res: Response): Promise<any>
         await viajeRepo.actualizarEstado(id, EstadoViaje.ARRIBADO);
     } catch (error) {
         console.error('ERROR EN viajeRepo.actualizarEstado:', error);
-        return res.status(503).json({
-            error: 'Base de datos no disponible, intente más tarde'
-        });
+        return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
     }
 
     viaje.estado = EstadoViaje.ARRIBADO;
@@ -148,9 +164,27 @@ export const registrarArribo = async (req: Request, res: Response): Promise<any>
         console.error('Advertencia: No se pudo publicar evento de arribo', err);
     }
 
+    let qr: GenerarQRResponse;
+    try {
+        qr = qrVigente(viaje) ? {
+            token: viaje.codigoVerificacion!,
+            qrDataUrl: viaje.qrCode!,
+            expiresAt: viaje.qrExpiresAt!.toISOString(),
+        } : await emitirYGuardarQR(viaje);
+    } catch (error) {
+        if (error instanceof M8ApiError) {
+            if (error.retryAfter) res.setHeader('Retry-After', error.retryAfter);
+            return res.status(error.status >= 500 ? 503 : error.status)
+                .json({ error: { code: error.code } });
+        }
+        console.error('ERROR EN generar/guardar QR:', error);
+        return res.status(503).json({ error: 'No se pudo preparar el QR del viaje' });
+    }
+
     return res.json({
         mensaje: 'El conductor ha arribado',
-        viaje
+        viaje,
+        qr: respuestaQR(qr),
     });
 };
 
@@ -176,7 +210,11 @@ export const iniciarViaje = async (req: Request, res: Response): Promise<any> =>
         return res.status(400).json({ error: `No puedes iniciar el viaje en este momento. Estado actual: ${viaje.estado}` });
     }
 
-    if (!codigoVerificacion || codigoVerificacion !== viaje.codigoVerificacion) {
+    if (
+        typeof codigoVerificacion !== 'string' ||
+        codigoVerificacion.length === 0 ||
+        (qrVigente(viaje) && codigoVerificacion !== viaje.codigoVerificacion)
+    ) {
         return res.status(401).json({ error: { code: 'QR_INVALID' } });
     }
 
@@ -187,6 +225,29 @@ export const iniciarViaje = async (req: Request, res: Response): Promise<any> =>
         }
     } catch (error) {
         if (error instanceof M8ApiError) {
+            if (error.status === 409 || error.status === 410) {
+                let viajeActual: Viaje | null;
+                try {
+                    viajeActual = await viajeRepo.buscarPorId(id);
+                } catch {
+                    return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
+                }
+
+                if (viajeActual?.estado === EstadoViaje.ARRIBADO) {
+                    try {
+                        const qrNuevo = await emitirYGuardarQR(viajeActual);
+                        return res.status(error.status).json({
+                            error: { code: error.code },
+                            qr: respuestaQR(qrNuevo),
+                        });
+                    } catch (refreshError) {
+                        if (refreshError instanceof M8ApiError && refreshError.retryAfter) {
+                            res.setHeader('Retry-After', refreshError.retryAfter);
+                        }
+                        return res.status(503).json({ error: { code: 'M8_UNAVAILABLE' } });
+                    }
+                }
+            }
             if (error.retryAfter) res.setHeader('Retry-After', error.retryAfter);
             const status = error.status >= 500 ? 503 : error.status;
             return res.status(status).json({ error: { code: error.code } });

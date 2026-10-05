@@ -13,14 +13,14 @@ vi.mock('../../src/services/qr.service.js', () => {
   const codigos = new Map<string, string>();
   return {
     generarQR: vi.fn(async (tripId: string) => {
-      const codigo = `TEST-${tripId}`;
-      codigos.set(tripId, codigo);
-      return { codigo };
+      const token = `TEST-${tripId}`;
+      codigos.set(tripId, token);
+      return { token, qrDataUrl: 'data:image/png;base64,test', expiresAt: new Date(Date.now() + 300_000).toISOString() };
     }),
     validarQR: vi.fn(async (tripId: string, codigo: string) => {
       return codigos.get(tripId) === codigo
-        ? { valido: true }
-        : { valido: false, motivo: 'QR inválido' };
+        ? { valid: true }
+        : { valid: false };
     }),
   };
 });
@@ -44,8 +44,6 @@ describe('Ciclo Completo del Viaje', () => {
     expect(res1.data.estado).toBe('SOLICITADO');
 
     const viajeId = res1.data.id;
-    const codigoValido = res1.data.codigoVerificacion;
-
     const req2 = mockRequest({ conductorId: 'conductor-1' }, { id: viajeId });
     const res2 = mockResponse();
     await asignarConductor(req2 as any, res2 as any);
@@ -59,6 +57,7 @@ describe('Ciclo Completo del Viaje', () => {
 
     expect(res3.statusCode).toBe(200);
     expect(res3.data.viaje.estado).toBe('ARRIBADO');
+    const codigoValido = res3.data.qr.token;
 
     const req4 = mockRequest({ codigoVerificacion: codigoValido }, { id: viajeId });
     const res4 = mockResponse();
@@ -77,8 +76,6 @@ describe('Ciclo Completo del Viaje', () => {
     const res1 = mockResponse();
     await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
-    const codigoValido = res1.data.codigoVerificacion;
-
     const req2 = mockRequest({ conductorId: 'conductor-1' }, { id: viajeId });
     const res2 = mockResponse();
     await asignarConductor(req2 as any, res2 as any);
@@ -92,6 +89,7 @@ describe('Ciclo Completo del Viaje', () => {
     await registrarArribo(req3 as any, res3 as any);
 
     expect(res3.data.viaje.clienteId).toBe(clienteId);
+    const codigoValido = res3.data.qr.token;
     expect(res3.data.viaje.codigoVerificacion).toBe(codigoValido);
 
     const req4 = mockRequest({ codigoVerificacion: codigoValido }, { id: viajeId });
@@ -111,9 +109,8 @@ describe('Ciclo Completo del Viaje', () => {
     const res1 = mockResponse();
     await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
-    const codigoValido = res1.data.codigoVerificacion;
 
-    const req2 = mockRequest({ codigoVerificacion: codigoValido }, { id: viajeId });
+    const req2 = mockRequest({}, { id: viajeId });
     const res2 = mockResponse();
     await iniciarViaje(req2 as any, res2 as any);
 

@@ -17,7 +17,8 @@ export interface Viaje {
     estado: EstadoViaje;
     origen: string;
     destino: string;
-    codigoVerificacion: string;
-    qrCode?: string; // QR code como data URL
+    codigoVerificacion: string | null;
+    qrCode: string | null;
+    qrExpiresAt: Date | null;
     fechaCreacion: Date;
 }

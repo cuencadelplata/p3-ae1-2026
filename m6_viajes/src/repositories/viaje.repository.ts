@@ -10,6 +10,18 @@ export async function crear(viaje: Viaje): Promise<void> {
     );
 }
 
+export async function actualizarQR(
+    id: string,
+    qr: { token: string; qrDataUrl: string; expiresAt: Date }
+): Promise<void> {
+    await pool.query(
+        `UPDATE viajes
+         SET codigo_verificacion = $1, qr_data_url = $2, qr_expires_at = $3
+         WHERE id = $4`,
+        [qr.token, qr.qrDataUrl, qr.expiresAt, id]
+    );
+}
+
 export async function buscarPorId(id: string): Promise<Viaje | null> {
     const { rows } = await pool.query('SELECT * FROM viajes WHERE id = $1', [id]);
     if (rows.length === 0) return null;
@@ -32,6 +44,8 @@ function mapRow(row: any): Viaje {
         origen: row.origen,
         destino: row.destino,
         codigoVerificacion: row.codigo_verificacion,
+        qrCode: row.qr_data_url,
+        qrExpiresAt: row.qr_expires_at,
         fechaCreacion: row.fecha_creacion,
     };
 }

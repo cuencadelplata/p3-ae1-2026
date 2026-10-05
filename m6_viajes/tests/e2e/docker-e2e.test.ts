@@ -79,7 +79,7 @@ describe('E2E Tests - Docker Container', () => {
     expect(response.data).toHaveProperty('id');
     expect(response.data).toHaveProperty('clienteId', 'cliente-123');
     expect(response.data).toHaveProperty('estado', 'SOLICITADO');
-    expect(response.data).toHaveProperty('codigoVerificacion');
+    expect(response.data.codigoVerificacion).toBeNull();
   });
 
   it('RF-6.1: POST /viajes - Múltiples viajes tienen códigos e IDs únicos', async () => {
@@ -96,7 +96,8 @@ describe('E2E Tests - Docker Container', () => {
     });
 
     expect(viaje1.data.id).not.toBe(viaje2.data.id);
-    expect(viaje1.data.codigoVerificacion).not.toBe(viaje2.data.codigoVerificacion);
+    expect(viaje1.data.codigoVerificacion).toBeNull();
+    expect(viaje2.data.codigoVerificacion).toBeNull();
   });
 
   it('RF-6.2: POST /viajes/:id/asignar - Asignar Conductor', async () => {
@@ -146,8 +147,6 @@ describe('E2E Tests - Docker Container', () => {
       destino: 'P2',
     });
 
-    const codigoVerificacion = viaje.data.codigoVerificacion;
-
     // Asignar conductor
     await axios.post(`${API_URL}/viajes/${viaje.data.id}/asignar`, {
       conductorId: 'conductor-start',
@@ -156,6 +155,7 @@ describe('E2E Tests - Docker Container', () => {
     // Registrar arribo
     const arribo = await axios.put(`${API_URL}/viajes/${viaje.data.id}/arribo`, {});
     expect(arribo.data.viaje.estado).toBe('ARRIBADO');
+    const codigoVerificacion = arribo.data.qr.token;
 
     // Iniciar con código válido
     const response = await axios.post(`${API_URL}/viajes/${viaje.data.id}/iniciar`, {
@@ -203,8 +203,6 @@ describe('E2E Tests - Docker Container', () => {
 
     expect(viaje.status).toBe(201);
     expect(viaje.data.estado).toBe('SOLICITADO');
-    const codigoVerificacion = viaje.data.codigoVerificacion;
-
     // Paso 2: Asignar Conductor
     const asignacion = await axios.post(`${API_URL}/viajes/${viaje.data.id}/asignar`, {
       conductorId: 'conductor-flow',
@@ -218,6 +216,7 @@ describe('E2E Tests - Docker Container', () => {
 
     expect(arribo.status).toBe(200);
     expect(arribo.data.viaje.estado).toBe('ARRIBADO');
+    const codigoVerificacion = arribo.data.qr.token;
 
     // Paso 4: Iniciar Viaje
     const inicio = await axios.post(`${API_URL}/viajes/${viaje.data.id}/iniciar`, {

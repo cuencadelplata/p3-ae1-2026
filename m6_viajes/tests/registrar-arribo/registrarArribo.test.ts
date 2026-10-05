@@ -22,16 +22,17 @@ vi.mock('../../src/services/conductor.service', () => ({
 
 vi.mock('../../src/services/qr.service.js', () => {
   const codigos = new Map<string, string>();
+  let generation = 0;
   return {
     generarQR: vi.fn(async (tripId: string) => {
-      const codigo = `TEST-${tripId}`;
-      codigos.set(tripId, codigo);
-      return { codigo };
+      const token = `TEST-${tripId}-${++generation}`;
+      codigos.set(tripId, token);
+      return { token, qrDataUrl: 'data:image/png;base64,test', expiresAt: new Date(Date.now() + 300_000).toISOString() };
     }),
     validarQR: vi.fn(async (tripId: string, codigo: string) => {
       return codigos.get(tripId) === codigo
-        ? { valido: true }
-        : { valido: false, motivo: 'QR inválido' };
+        ? { valid: true }
+        : { valid: false };
     }),
   };
 });
@@ -62,6 +63,10 @@ describe('Registrar Arribo del Conductor', () => {
 
     expect(res3.statusCode).toBe(200);
     expect(res3.data.viaje.estado).toBe('ARRIBADO');
+    expect(res3.data.qr.token).toBeDefined();
+    expect(res3.data.qr.expiresAt).toBeDefined();
+    const qrService = await import('../../src/services/qr.service.js');
+    expect(qrService.generarQR).toHaveBeenCalledTimes(1);
   });
 
   it('debe rechazar si no está en estado CONDUCTOR_EN_CAMINO', async () => {

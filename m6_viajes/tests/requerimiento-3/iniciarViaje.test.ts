@@ -15,6 +15,7 @@ vi.mock('../../src/services/conductor.service', () => ({
 
 vi.mock('../../src/services/qr.service.js', () => {
   const codigos = new Map<string, string>();
+  let generation = 0;
   class M8ApiError extends Error {
     constructor(readonly status: number, readonly code: string, readonly retryAfter?: string) {
       super(code);
@@ -24,9 +25,9 @@ vi.mock('../../src/services/qr.service.js', () => {
   return {
     M8ApiError,
     generarQR: vi.fn(async (tripId: string) => {
-      const token = `TEST-${tripId}`;
+      const token = `TEST-${tripId}-${++generation}`;
       codigos.set(tripId, token);
-      return { token, qrDataUrl: 'data:image/png;base64,test', expiresAt: new Date().toISOString() };
+      return { token, qrDataUrl: 'data:image/png;base64,test', expiresAt: new Date(Date.now() + 300_000).toISOString() };
     }),
     validarQR: vi.fn(async (tripId: string, token: string) => {
       return codigos.get(tripId) === token
@@ -50,8 +51,6 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
     const res1 = mockResponse();
     await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
-    const codigoValido = res1.data.codigoVerificacion;
-
     const req2 = mockRequest({ conductorId: 'conductor-1' }, { id: viajeId });
     const res2 = mockResponse();
     await asignarConductor(req2 as any, res2 as any);
@@ -59,6 +58,7 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
     const req3 = mockRequest({}, { id: viajeId });
     const res3 = mockResponse();
     await registrarArribo(req3 as any, res3 as any);
+    const codigoValido = res3.data.qr.token;
 
     const req4 = mockRequest({ codigoVerificacion: codigoValido }, { id: viajeId });
     const res4 = mockResponse();
@@ -102,9 +102,7 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
     const res1 = mockResponse();
     await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
-    const codigoValido = res1.data.codigoVerificacion;
-
-    const req2 = mockRequest({ codigoVerificacion: codigoValido }, { id: viajeId });
+    const req2 = mockRequest({}, { id: viajeId });
     const res2 = mockResponse();
     await iniciarViaje(req2 as any, res2 as any);
 
@@ -133,8 +131,6 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
     const res1 = mockResponse();
     await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
-    const codigoValido = res1.data.codigoVerificacion;
-
     const req2 = mockRequest({ conductorId: 'conductor-1' }, { id: viajeId });
     const res2 = mockResponse();
     await asignarConductor(req2 as any, res2 as any);
@@ -142,6 +138,7 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
     const req3 = mockRequest({}, { id: viajeId });
     const res3 = mockResponse();
     await registrarArribo(req3 as any, res3 as any);
+    const codigoValido = res3.data.qr.token;
 
     const codigoIncorrecto = codigoValido.toLowerCase();
     const req4 = mockRequest({ codigoVerificacion: codigoIncorrecto }, { id: viajeId });
@@ -160,10 +157,11 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
     const res1 = mockResponse();
     await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
-    const codigoValido = res1.data.codigoVerificacion;
 
     await asignarConductor(mockRequest({ conductorId: 'conductor-1' }, { id: viajeId }) as any, mockResponse() as any);
-    await registrarArribo(mockRequest({}, { id: viajeId }) as any, mockResponse() as any);
+    const arrival = mockResponse();
+    await registrarArribo(mockRequest({}, { id: viajeId }) as any, arrival as any);
+    const codigoValido = arrival.data.qr.token;
 
     // 2. Importamos el servicio mockeado y forzamos el error de caída SOLO para este test
     const qrService = await import('../../src/services/qr.service.js');
@@ -189,9 +187,10 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
     const res1 = mockResponse();
     await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
-    const token = res1.data.codigoVerificacion;
     await asignarConductor(mockRequest({ conductorId: 'conductor-1' }, { id: viajeId }) as any, mockResponse() as any);
-    await registrarArribo(mockRequest({}, { id: viajeId }) as any, mockResponse() as any);
+    const arrival = mockResponse();
+    await registrarArribo(mockRequest({}, { id: viajeId }) as any, arrival as any);
+    const token = arrival.data.qr.token;
 
     const qrService = await import('../../src/services/qr.service.js');
     vi.mocked(qrService.validarQR).mockResolvedValueOnce({ valid: false });
@@ -203,24 +202,29 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
     expect(rows[0].estado).toBe('ARRIBADO');
   });
 
-  it('propaga los rechazos de M8 sin cambiar el estado del viaje', async () => {
+  it.each([
+    { status: 409, code: 'QR_ALREADY_USED' },
+    { status: 410, code: 'QR_EXPIRED' },
+  ])('renueva el QR ante $status sin iniciar el viaje', async ({ status, code }) => {
     const req1 = mockRequest({ clienteId: 'cliente-1', origen: 'A', destino: 'B' });
     const res1 = mockResponse();
     await solicitarViaje(req1 as any, res1 as any);
     const viajeId = res1.data.id;
-    const token = res1.data.codigoVerificacion;
     await asignarConductor(mockRequest({ conductorId: 'conductor-1' }, { id: viajeId }) as any, mockResponse() as any);
-    await registrarArribo(mockRequest({}, { id: viajeId }) as any, mockResponse() as any);
+    const arrival = mockResponse();
+    await registrarArribo(mockRequest({}, { id: viajeId }) as any, arrival as any);
+    const token = arrival.data.qr.token;
 
     const qrService = await import('../../src/services/qr.service.js');
     vi.mocked(qrService.validarQR).mockRejectedValueOnce(
-      new qrService.M8ApiError(410, 'QR_EXPIRED')
+      new qrService.M8ApiError(status, code)
     );
     const response = mockResponse();
     await iniciarViaje(mockRequest({ token }, { id: viajeId }) as any, response as any);
 
-    expect(response.statusCode).toBe(410);
-    expect(response.data.error.code).toBe('QR_EXPIRED');
+    expect(response.statusCode).toBe(status);
+    expect(response.data.error.code).toBe(code);
+    expect(response.data.qr.token).not.toBe(token);
     const { rows } = await pool.query('SELECT estado FROM viajes WHERE id = $1', [viajeId]);
     expect(rows[0].estado).toBe('ARRIBADO');
   });

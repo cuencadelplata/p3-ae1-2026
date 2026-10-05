@@ -54,15 +54,20 @@ curl.exe -X POST "http://localhost:3000/api/viajes/id/asignar" -H "Content-Type:
 
 tercer endpoint: registrar arribo 
 
-curl -X PUT http://localhost:3000/api/viajes/id/arribo
+```powershell
+$arribo = Invoke-RestMethod -Method Put -Uri "http://localhost:3000/api/viajes/$id/arribo"
+$tokenQR = $arribo.qr.token
+```
+
+El QR se genera al registrar el arribo. La respuesta incluye `qr.token`, `qr.qrDataUrl` y `qr.expiresAt`.
 
 cuarto endpoint: iniciar viaje
 
-curl.exe -X POST "http://localhost:3000/api/viajes/id/iniciar" -H "Content-Type: application/json" -d "{\"codigoVerificacion\":\"AB3K8F\"}"
-
-
-
-codigodeverificacion está en el primer endpoint (texto largo por el qr)
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/viajes/$id/iniciar" `
+    -ContentType "application/json" `
+    -Body (@{ codigoVerificacion = $tokenQR } | ConvertTo-Json)
+```
 
 
 paso 8 (para apagar y limpiar):
