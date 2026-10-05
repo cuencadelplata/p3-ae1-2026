@@ -1,63 +1,40 @@
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
-import nodemailer from "nodemailer";
 import {
     findUserByEmail,
     findUserById,
-    createPasswordRecoveryToken,
-    findRecoveryTokenByToken,
-    markRecoveryTokenAsUsed,
     updateUserPassword
 } from "../repositories/user.repository";
+import {
+    TTL_TOKEN_SEGUNDOS,
+    consumirTokenDeRecuperacion,
+    guardarTokenDeRecuperacion,
+    verificarConexion
+} from "../repositories/recovery-token.repository";
+import { publicarRecuperacionSolicitada } from "../messaging/recovery.publisher";
+import { revocarCredenciales } from "./credential-revocation.service";
 import { AuthError } from "./auth.service";
 
-const TOKEN_EXPIRATION_MINUTES = 30;
+const TOKEN_EXPIRATION_MINUTES = Math.round(
+    TTL_TOKEN_SEGUNDOS / 60
+);
 const TOKEN_LENGTH = 32;
+const FORMATO_TOKEN = /^[0-9a-f]{64}$/;
 
-async function sendRecoveryEmail(
-    email: string,
-    token: string
-): Promise<void> {
-    if (process.env.NODE_ENV === "test") {
-        console.log(
-            `Test recovery email for ${email}: ${token}`
-        );
-        return;
-    }
+const MENSAJE_SOLICITUD =
+    "Si el email existe en el sistema, recibirás un enlace de recuperación";
 
-    const host = process.env.SMTP_HOST;
-    const port = Number(process.env.SMTP_PORT || 587);
-    const user = process.env.SMTP_USER;
-    const password = process.env.SMTP_PASSWORD;
-    const from = process.env.SMTP_FROM || user;
-
-    if (!host || !user || !password || !from) {
-        throw new AuthError(
-            503,
-            "El servicio de correo no está configurado"
-        );
-    }
-
-    const transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure: process.env.SMTP_SECURE === "true",
-        auth: { user, pass: password }
-    });
-
-    await transporter.sendMail({
-        from,
-        to: email,
-        subject: "Recuperación de contraseña",
-        text: `Solicitaste recuperar tu contraseña. Tu token es: ${token}\n\nEste token vence en ${TOKEN_EXPIRATION_MINUTES} minutos y solo puede utilizarse una vez. Si no realizaste esta solicitud, ignora este correo.`,
-        html: `<p>Solicitaste recuperar tu contraseña.</p><p>Tu token de recuperación es:</p><p><strong>${token}</strong></p><p>Este token vence en ${TOKEN_EXPIRATION_MINUTES} minutos y solo puede utilizarse una vez.</p><p>Si no realizaste esta solicitud, ignora este correo.</p>`
-    });
+function servicioNoDisponible(): AuthError {
+    return new AuthError(
+        503,
+        "La recuperación no está disponible en este momento. Intentá de nuevo más tarde"
+    );
 }
 
 /**
- * RF-1.4: Recuperación y Permiso
- * Genera un token de recuperación de contraseña para un usuario
- * El token es válido por 30 minutos
+ * RF-1.4: Recuperación y revocación
+ * Genera un token temporal, lo guarda en Redis con vencimiento y publica un
+ * evento en RabbitMQ para que el servicio de notificaciones envíe el correo.
  */
 export async function requestPasswordRecovery(
     email: string
@@ -77,42 +54,57 @@ export async function requestPasswordRecovery(
         );
     }
 
+    const respuesta = {
+        message: MENSAJE_SOLICITUD,
+        email: emailNormalizado,
+        expiresInMinutes: TOKEN_EXPIRATION_MINUTES
+    };
+
+    // Se revisa Redis antes de buscar al usuario: si está caído, la respuesta es
+    // 503 para cualquier email y no se puede deducir cuáles están registrados.
+    try {
+        await verificarConexion();
+    } catch {
+        throw servicioNoDisponible();
+    }
+
     const usuario =
         findUserByEmail(emailNormalizado);
 
     if (!usuario) {
-        // No revelar si el email existe o no (security best practice)
-        return {
-            message: "Si el email existe en el sistema, recibirás un enlace de recuperación",
-            email: emailNormalizado,
-            expiresInMinutes: TOKEN_EXPIRATION_MINUTES
-        };
+        // No revelar si el email existe o no
+        return respuesta;
     }
 
     const recoveryToken = crypto
         .randomBytes(TOKEN_LENGTH)
         .toString("hex");
 
-    const expiresAtMs =
-        Date.now() +
-        TOKEN_EXPIRATION_MINUTES * 60 * 1000;
+    try {
+        await guardarTokenDeRecuperacion(
+            usuario.id,
+            recoveryToken
+        );
+    } catch {
+        throw servicioNoDisponible();
+    }
 
-    createPasswordRecoveryToken(
+    // Parte asincrónica: se publica el evento y se responde sin esperar a que
+    // el correo se envíe. Si falla, el token queda sin usar y vence solo.
+    publicarRecuperacionSolicitada(
         usuario.id,
+        usuario.email,
+        usuario.nombre,
         recoveryToken,
-        expiresAtMs
-    );
+        TTL_TOKEN_SEGUNDOS
+    ).catch((error) => {
+        console.error(
+            "[RabbitMQ] No se pudo publicar la solicitud de recuperación:",
+            error.message
+        );
+    });
 
-    await sendRecoveryEmail(
-        emailNormalizado,
-        recoveryToken
-    );
-
-    return {
-        message: "Si el email existe en el sistema, recibirás un enlace de recuperación",
-        email: emailNormalizado,
-        expiresInMinutes: TOKEN_EXPIRATION_MINUTES
-    };
+    return respuesta;
 }
 
 interface ResetPasswordInput {
@@ -121,8 +113,9 @@ interface ResetPasswordInput {
 }
 
 /**
- * RF-1.4: Recuperación y Permiso
- * Resetea la contraseña usando un token de recuperación válido
+ * RF-1.4: Recuperación y revocación
+ * Cambia la contraseña con un token válido. El token se consume (no se puede
+ * volver a usar) y se revocan las sesiones que el usuario tenía abiertas.
  */
 export async function resetPassword(
     input: ResetPasswordInput
@@ -146,39 +139,30 @@ export async function resetPassword(
         );
     }
 
-    const recoveryToken =
-        findRecoveryTokenByToken(token);
-
-    if (!recoveryToken) {
+    if (!FORMATO_TOKEN.test(token)) {
         throw new AuthError(
             401,
             "Token de recuperación inválido o expirado"
         );
     }
 
-    // Verificar que el token no ha expirado
-    const expiresAt = new Date(
-        recoveryToken.expires_at
-    );
+    let usuarioId: number | null;
 
-    if (expiresAt < new Date()) {
+    try {
+        usuarioId = await consumirTokenDeRecuperacion(token);
+    } catch {
+        throw servicioNoDisponible();
+    }
+
+    // Si no está en Redis es porque nunca existió, ya se usó o pasaron los 15 minutos.
+    if (usuarioId === null) {
         throw new AuthError(
             401,
-            "Token de recuperación expirado"
+            "Token de recuperación inválido o expirado"
         );
     }
 
-    // Verificar que el token no ha sido usado
-    if (recoveryToken.used) {
-        throw new AuthError(
-            401,
-            "Token de recuperación ya fue utilizado"
-        );
-    }
-
-    const usuario = findUserById(
-        recoveryToken.usuario_id
-    );
+    const usuario = findUserById(usuarioId);
 
     if (!usuario) {
         throw new AuthError(
@@ -187,20 +171,28 @@ export async function resetPassword(
         );
     }
 
-    // Hashear la nueva contraseña
     const newPasswordHash = await bcrypt.hash(
         newPassword,
         10
     );
 
-    // Actualizar contraseña
     updateUserPassword(
         usuario.id,
         newPasswordHash
     );
 
-    // Marcar token como usado
-    markRecoveryTokenAsUsed(recoveryToken.id);
+    // Los JWT emitidos con la contraseña anterior dejan de valer.
+    try {
+        await revocarCredenciales(
+            usuario.id,
+            "CAMBIO_DE_CONTRASENA"
+        );
+    } catch (error) {
+        console.error(
+            "[Revocación] No se pudieron revocar las sesiones anteriores:",
+            (error as Error).message
+        );
+    }
 
     return {
         message: "Contraseña actualizada exitosamente",
