@@ -9,7 +9,8 @@ import { asyncHandler } from './middlewares/async-handler.js';
 import { errorHandler } from './middlewares/error-handler.js';
 import { requireAuth, requireAuthOrServiceKey } from './middlewares/auth.middleware.js';
 import { metricsHandler, httpMetricsMiddleware } from './observability/metrics.js';
-import { healthHandler } from './health/registry.js';
+import { healthHandler, registerHealthCheck } from './health/registry.js';
+import { checkM6, checkSoporte } from './health/external-checks.js';
 import { mountStubs } from './stubs/index.js';
 import { soporteStubRouter } from './stubs/soporte.stub.js';
 import { m6StubRouter } from './stubs/m6.stub.js';
@@ -51,6 +52,9 @@ app.use(
 
 // 2. Healthcheck y Métricas
 app.get('/health', healthHandler);
+// M6 y Soporte caídos degradan el servicio (200 DEGRADED) pero no lo dejan fuera: solo Postgres es crítico
+registerHealthCheck('soporte', checkSoporte, { critical: false });
+registerHealthCheck('m6', checkM6, { critical: false });
 app.get('/metrics', metricsHandler);
 
 // 3. Stubs de módulos externos (solo si STUBS_ENABLED=true).
