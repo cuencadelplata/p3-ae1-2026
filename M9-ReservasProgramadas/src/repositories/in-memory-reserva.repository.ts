@@ -54,6 +54,14 @@ export class InMemoryReservaRepository implements ReservaRepository {
       .map(clone);
   }
 
+  public async listarPaginado(page = 1, pageSize = 20): Promise<Reserva[]> {
+    const start = (page - 1) * pageSize;
+    return [...this.reservas.values()]
+      .sort((a, b) => Date.parse(a.fechaHoraProgramada) - Date.parse(b.fechaHoraProgramada))
+      .slice(start, start + pageSize)
+      .map(clone);
+  }
+
   public async actualizarProgramada(id: string, input: CambiosReserva): Promise<Reserva | null> {
     const reserva = this.reservas.get(id);
     if (reserva === undefined || !editable(reserva)) return null;

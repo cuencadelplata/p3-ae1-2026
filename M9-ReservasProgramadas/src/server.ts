@@ -4,11 +4,11 @@ import { HttpAsignacionClient } from './clients/asignacion.client.js';
 import { HttpTarifaClient } from './clients/tarifa.client.js';
 import { env } from './config/env.js';
 import { ReservasScheduler } from './jobs/reservas.scheduler.js';
-import { InMemoryReservaRepository } from './repositories/in-memory-reserva.repository.js';
+import { PrismaReservaRepository } from './repositories/prisma-reserva.repository.js';
 import { ActivacionReservaService } from './services/activacion-reserva.service.js';
 import { ReservaService } from './services/reserva.service.js';
 
-const repository = new InMemoryReservaRepository();
+const repository = new PrismaReservaRepository();
 const reservaService = new ReservaService(
   repository,
   new HttpTarifaClient(env.M7_URL),
@@ -32,10 +32,15 @@ const server = app.listen(env.PORT, () => {
 });
 scheduler.start();
 
-const shutdown = (): void => {
+const shutdown = async (): Promise<void> => {
   scheduler.stop();
   server.close();
+  await repository.close();
 };
 
-process.once('SIGINT', shutdown);
-process.once('SIGTERM', shutdown);
+process.once('SIGINT', () => {
+  void shutdown();
+});
+process.once('SIGTERM', () => {
+  void shutdown();
+});
