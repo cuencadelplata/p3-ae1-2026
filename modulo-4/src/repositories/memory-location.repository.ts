@@ -7,7 +7,7 @@ interface StoredLocation {
 }
 
 export class MemoryLocationRepository implements LocationRepository {
-  private readonly locations = new Map<string, StoredLocation>();
+  private readonly locations = new Map<number, StoredLocation>();
 
   public constructor(private readonly now: () => number = Date.now) {}
 
@@ -28,7 +28,7 @@ export class MemoryLocationRepository implements LocationRepository {
     return { saved: true, location };
   }
 
-  public async get(driverId: string): Promise<DriverLocation | null> {
+  public async get(driverId: number): Promise<DriverLocation | null> {
     const stored = this.locations.get(driverId);
     if (!stored) return null;
     if (stored.expiresAtMs <= this.now()) {
@@ -47,7 +47,7 @@ export class MemoryLocationRepository implements LocationRepository {
     return active;
   }
 
-  public async delete(driverId: string): Promise<boolean> {
+  public async delete(driverId: number): Promise<boolean> {
     const exists = (await this.get(driverId)) !== null;
     if (exists) this.locations.delete(driverId);
     return exists;

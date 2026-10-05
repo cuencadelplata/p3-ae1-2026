@@ -4,7 +4,7 @@ import type { LocationHistoryRepository } from './location-history.repository.js
 
 interface HistoryRow {
   id: string;
-  driver_id: string;
+  driver_id: number;
   latitude: number;
   longitude: number;
   vehicle_type: VehicleType;
@@ -24,7 +24,7 @@ export class PostgresLocationHistoryRepository implements LocationHistoryReposit
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS driver_location_history (
         id BIGSERIAL PRIMARY KEY,
-        driver_id VARCHAR(100) NOT NULL,
+        driver_id INTEGER NOT NULL,
         latitude DOUBLE PRECISION NOT NULL CHECK (latitude BETWEEN -90 AND 90),
         longitude DOUBLE PRECISION NOT NULL CHECK (longitude BETWEEN -180 AND 180),
         vehicle_type VARCHAR(10) NOT NULL CHECK (vehicle_type IN ('AUTO', 'MOTO')),
@@ -70,7 +70,7 @@ export class PostgresLocationHistoryRepository implements LocationHistoryReposit
     return this.toEntry(result.rows[0]);
   }
 
-  public async findByDriver(driverId: string, limit: number): Promise<LocationHistoryEntry[]> {
+  public async findByDriver(driverId: number, limit: number): Promise<LocationHistoryEntry[]> {
     const result = await this.pool.query<HistoryRow>(
       `SELECT id, driver_id, latitude, longitude, vehicle_type, available, recorded_at, created_at
        FROM driver_location_history

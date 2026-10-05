@@ -6,7 +6,7 @@ export interface Coordinates {
 }
 
 export interface DriverLocation extends Coordinates {
-  driverId: string;
+  driverId: number;
   vehicleType: VehicleType;
   available: boolean;
   updatedAt: string;

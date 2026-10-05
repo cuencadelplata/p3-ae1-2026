@@ -7,8 +7,8 @@ export interface SaveLocationResult {
 
 export interface LocationRepository {
   saveIfNewer(location: DriverLocation, ttlSeconds: number): Promise<SaveLocationResult>;
-  get(driverId: string): Promise<DriverLocation | null>;
+  get(driverId: number): Promise<DriverLocation | null>;
   getAll(): Promise<DriverLocation[]>;
-  delete(driverId: string): Promise<boolean>;
+  delete(driverId: number): Promise<boolean>;
   clear(): Promise<void>;
 }

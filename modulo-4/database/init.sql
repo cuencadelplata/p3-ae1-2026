@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS driver_location_history (
   id BIGSERIAL PRIMARY KEY,
-  driver_id VARCHAR(100) NOT NULL,
+  driver_id INTEGER NOT NULL,
   latitude DOUBLE PRECISION NOT NULL CHECK (latitude BETWEEN -90 AND 90),
   longitude DOUBLE PRECISION NOT NULL CHECK (longitude BETWEEN -180 AND 180),
   vehicle_type VARCHAR(10) NOT NULL CHECK (vehicle_type IN ('AUTO', 'MOTO')),

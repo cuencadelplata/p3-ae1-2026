@@ -5,6 +5,8 @@ export const coordinatesSchema = z.object({
   longitude: z.number().min(-180).max(180)
 });
 
+export const driverIdSchema = z.coerce.number().int().positive();
+
 export const updateLocationSchema = coordinatesSchema.extend({
   vehicleType: z.enum(['AUTO', 'MOTO']),
   available: z.boolean().default(true),

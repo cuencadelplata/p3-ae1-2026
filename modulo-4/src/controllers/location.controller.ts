@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { ZodError } from 'zod';
 import {
   estimateSchema,
+  driverIdSchema,
   geocodeSchema,
   locationHistoryQuerySchema,
   nearbyQuerySchema,
@@ -23,7 +24,7 @@ export class LocationController {
       const body = updateLocationSchema.parse(req.body);
       return res.status(200).json(
         await this.service.updateLocation(
-          String(req.params.driverId),
+          driverIdSchema.parse(req.params.driverId),
           { latitude: body.latitude, longitude: body.longitude },
           body.vehicleType,
           body.available,
@@ -37,28 +38,28 @@ export class LocationController {
     void this.handle(res, async () => {
       const body = updateAvailabilitySchema.parse(req.body);
       return res.status(200).json(
-        await this.service.updateAvailability(String(req.params.driverId), body.available)
+        await this.service.updateAvailability(driverIdSchema.parse(req.params.driverId), body.available)
       );
     });
   };
 
   public getLocation = (req: Request, res: Response): void => {
     void this.handle(res, async () =>
-      res.status(200).json(await this.service.getActiveLocation(String(req.params.driverId)))
+      res.status(200).json(await this.service.getActiveLocation(driverIdSchema.parse(req.params.driverId)))
     );
   };
 
   public getLocationHistory = (req: Request, res: Response): void => {
     void this.handle(res, async () => {
       const query = locationHistoryQuerySchema.parse(req.query);
-      const entries = await this.service.getLocationHistory(String(req.params.driverId), query.limit);
+      const entries = await this.service.getLocationHistory(driverIdSchema.parse(req.params.driverId), query.limit);
       return res.status(200).json({ count: entries.length, entries });
     });
   };
 
   public removeLocation = (req: Request, res: Response): void => {
     void this.handle(res, async () => {
-      await this.service.removeLocation(String(req.params.driverId));
+      await this.service.removeLocation(driverIdSchema.parse(req.params.driverId));
       return res.status(204).send();
     });
   };

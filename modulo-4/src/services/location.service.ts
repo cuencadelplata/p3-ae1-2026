@@ -26,7 +26,7 @@ export class LocationService {
   }
 
   public async updateLocation(
-    driverId: string,
+    driverId: number,
     coordinates: Coordinates,
     vehicleType: VehicleType,
     available: boolean,
@@ -61,7 +61,7 @@ export class LocationService {
     return result.location;
   }
 
-  public async updateAvailability(driverId: string, available: boolean): Promise<DriverLocation> {
+  public async updateAvailability(driverId: number, available: boolean): Promise<DriverLocation> {
     const location = await this.getActiveLocation(driverId);
     const updated: DriverLocation = {
       ...location,
@@ -74,11 +74,11 @@ export class LocationService {
     return updated;
   }
 
-  public async getLocationHistory(driverId: string, limit: number) {
+  public async getLocationHistory(driverId: number, limit: number) {
     return this.historyRepository.findByDriver(driverId, limit);
   }
 
-  public async getActiveLocation(driverId: string): Promise<DriverLocation> {
+  public async getActiveLocation(driverId: number): Promise<DriverLocation> {
     const location = await this.repository.get(driverId);
     if (!location) {
       throw new NotFoundError('Ubicacion activa no encontrada para el conductor');
@@ -86,7 +86,7 @@ export class LocationService {
     return location;
   }
 
-  public async removeLocation(driverId: string): Promise<void> {
+  public async removeLocation(driverId: number): Promise<void> {
     if (!(await this.repository.delete(driverId))) {
       throw new NotFoundError('Ubicacion activa no encontrada para el conductor');
     }

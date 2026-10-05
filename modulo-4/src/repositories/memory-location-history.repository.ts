@@ -32,7 +32,7 @@ export class MemoryLocationHistoryRepository implements LocationHistoryRepositor
     return entry;
   }
 
-  public async findByDriver(driverId: string, limit: number): Promise<LocationHistoryEntry[]> {
+  public async findByDriver(driverId: number, limit: number): Promise<LocationHistoryEntry[]> {
     return this.entries
       .filter((entry) => entry.driverId === driverId)
       .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))

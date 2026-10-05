@@ -59,7 +59,7 @@ export class RedisLocationRepository implements LocationRepository {
     return { saved: false, location: current ?? location };
   }
 
-  public async get(driverId: string): Promise<DriverLocation | null> {
+  public async get(driverId: number): Promise<DriverLocation | null> {
     const value = await this.command(['GET', this.key(driverId)]);
     return typeof value === 'string' ? (JSON.parse(value) as DriverLocation) : null;
   }
@@ -76,7 +76,7 @@ export class RedisLocationRepository implements LocationRepository {
     return locations.filter((location): location is DriverLocation => location !== null);
   }
 
-  public async delete(driverId: string): Promise<boolean> {
+  public async delete(driverId: number): Promise<boolean> {
     return (await this.command(['DEL', this.key(driverId)])) === 1;
   }
 
@@ -87,7 +87,7 @@ export class RedisLocationRepository implements LocationRepository {
     }
   }
 
-  private key(driverId: string): string {
+  private key(driverId: number): string {
     return `${this.keyPrefix}${driverId}:location`;
   }
 
