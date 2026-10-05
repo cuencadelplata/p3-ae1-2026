@@ -2,9 +2,9 @@ name: CI - Grupo 05 (Módulo 2 Clientes)
 
 on:
   push:
-    branches: [ Grupo05 ]
+    branches: [ Grupo05, M2-PerfilHistorialEstado ]
   pull_request:
-    branches: [ Grupo05 ]
+    branches: [ Grupo05, M2-PerfilHistorialEstado ]
 
 jobs:
   test-and-build:
