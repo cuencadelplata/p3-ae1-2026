@@ -10,7 +10,21 @@ vi.mock("../supabaseClient", () => {
   };
 });
 
+vi.mock("../infraestructura/redis", () => {
+  return {
+    redis: {
+      get: vi.fn(),
+      set: vi.fn(),
+      del: vi.fn(),
+    },
+    redisBreaker: {
+      ejecutar: vi.fn(async (fn: any) => await fn()),
+    },
+  };
+});
+
 import { supabase } from "../supabaseClient";
+import { redis } from "../infraestructura/redis";
 import rutaPago from "../metodo-pago/rutaPago";
 
 const app = express();
@@ -19,8 +33,6 @@ app.use(rutaPago);
 
 let builder: any;
 
-// Arma una fila con los nombres
-// de columna reales de la tabla (pago_Id, cliente_Id, viaje_Id, etc.)
 function filaPago(overrides: Record<string, any> = {}) {
   return {
     pago_Id: "uuid-test",
@@ -37,8 +49,6 @@ function filaPago(overrides: Record<string, any> = {}) {
   };
 }
 
-// Antes de cada test, recrea el "builder" encadenable que simula
-// supabase.from("pagos").insert()/.update()/.select()/.eq()/.single()/.maybeSingle()
 beforeEach(() => {
   builder = {
     insert: vi.fn(() => builder),
@@ -49,6 +59,11 @@ beforeEach(() => {
     maybeSingle: vi.fn(),
   };
   (supabase.from as any).mockReturnValue(builder);
+
+  // Por defecto: cache vacía (miss), y escritura/borrado de Redis "exitosos"
+  (redis.get as any).mockResolvedValue(null);
+  (redis.set as any).mockResolvedValue("OK");
+  (redis.del as any).mockResolvedValue(1);
 });
 
 
@@ -87,7 +102,7 @@ describe("POST /metodo-pago ruta", () => {
 
 
 describe("GET /metodo-pago/:viajeId ruta", () => {
-  it("devuelve 200 y el método de pago si existe", async () => {
+  it("devuelve 200 y el método de pago si existe (cache miss, consulta la base)", async () => {
     builder.maybeSingle.mockResolvedValueOnce({
       data: filaPago({ viaje_Id: "viaje-http-2", tipo: "tarjeta" }),
       error: null,
@@ -97,6 +112,30 @@ describe("GET /metodo-pago/:viajeId ruta", () => {
 
     expect(respuesta.status).toBe(200);
     expect(respuesta.body.viajeId).toBe("viaje-http-2");
+    expect(redis.set).toHaveBeenCalledWith(
+      "m7:metodo-pago:viaje-http-2",
+      expect.any(String),
+      { EX: 30 }
+    );
+  });
+
+  it("devuelve 200 desde la caché, sin consultar la base", async () => {
+    const pagoCacheado = {
+      pagoId: "uuid-cacheado",
+      clienteId: "cliente1",
+      viajeId: "viaje-cacheado",
+      tipo: "efectivo",
+      detalle: "",
+      fecha: new Date().toISOString(),
+      estado: "pendiente",
+    };
+    (redis.get as any).mockResolvedValueOnce(JSON.stringify(pagoCacheado));
+
+    const respuesta = await request(app).get("/metodo-pago/viaje-cacheado");
+
+    expect(respuesta.status).toBe(200);
+    expect(respuesta.body.viajeId).toBe("viaje-cacheado");
+    expect(builder.maybeSingle).not.toHaveBeenCalled(); // no debería haber ido a la base
   });
 
   it("devuelve 404 si no existe un pago para ese viaje", async () => {
@@ -118,7 +157,7 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
     vi.unstubAllGlobals();
   });
 
-  it("autoriza un pago pendiente y devuelve 200 con paymentId, total y moneda", async () => {
+  it("autoriza un pago pendiente, devuelve 200 e invalida la caché", async () => {
     (fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ id: "mp-mock-123", status: "approved", transaction_amount: 1500 }),
@@ -148,6 +187,7 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
     expect(respuesta.body.paymentId).toBe("mp-mock-123");
     expect(respuesta.body.total).toBe(1500);
     expect(respuesta.body.moneda).toBe("USD");
+    expect(redis.del).toHaveBeenCalledWith("m7:metodo-pago:viaje-http-3");
   });
 
   it("si no mandan moneda, usa 'ARS' por defecto", async () => {
@@ -226,7 +266,7 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
 
 
 describe("POST /metodo-pago/:viajeId/rechazar", () => {
-  it("rechaza un pago pendiente y devuelve 200", async () => {
+  it("rechaza un pago pendiente, devuelve 200 e invalida la caché", async () => {
     builder.maybeSingle.mockResolvedValueOnce({
       data: filaPago({ viaje_Id: "viaje-http-4" }),
       error: null,
@@ -240,6 +280,7 @@ describe("POST /metodo-pago/:viajeId/rechazar", () => {
 
     expect(respuesta.status).toBe(200);
     expect(respuesta.body.estado).toBe("rechazado");
+    expect(redis.del).toHaveBeenCalledWith("m7:metodo-pago:viaje-http-4");
   });
 
   it("devuelve 400 si no existe método de pago para ese viaje", async () => {
@@ -250,7 +291,6 @@ describe("POST /metodo-pago/:viajeId/rechazar", () => {
     expect(respuesta.status).toBe(400);
   });
 });
-
 //Request: recibe de Express (app) y te devuelve un objeto que simula peticiones HTTP 
 // .post= le dice a la petición que ruta usar
 // .send= manda al server
