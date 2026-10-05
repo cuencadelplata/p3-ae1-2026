@@ -26,8 +26,8 @@ services:
       - '6379:6379'
     volumes:
       - redis_data:/data
-    restart: unless-stopped
     command: redis-server --appendonly yes
+    restart: unless-stopped
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
@@ -43,10 +43,10 @@ services:
       - '15672:15672'  # Panel Web (user: guest / pass: guest)
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-    restart: unless-stopped
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
+    restart: unless-stopped
     healthcheck:
       test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
       interval: 15s
@@ -58,7 +58,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: modulo-5:latest
+    image: p3-ae1/m5-dispatch-service:latest
     container_name: m5-dispatch-service
     ports:
       - '3005:3005'

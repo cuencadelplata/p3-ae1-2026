@@ -2,6 +2,8 @@ import express from 'express';
 import path from 'path';
 import { RideRequestService } from './services/ride-request.service';
 import { RideRequestController } from './controllers/ride-request.controller';
+import { RedisService } from './services/redis.service';
+import { RabbitMQService } from './services/rabbitmq.service';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -24,12 +26,31 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.use('/openapi', express.static(path.join(__dirname, '../openapi')));
 
 // Inyección de dependencias
-const rideRequestService = new RideRequestService();
+const redisService = new RedisService();
+const rabbitmqService = new RabbitMQService();
+const rideRequestService = new RideRequestService(redisService, rabbitmqService);
 const rideRequestController = new RideRequestController(rideRequestService);
 
-// Health check (RNF-16)
-app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'UP', service: 'm5-dispatch-service', timestamp: new Date() });
+if (process.env.NODE_ENV !== 'test') {
+  redisService.init().catch(() => {});
+  rabbitmqService.init().catch(() => {});
+}
+
+// Health check con diagnóstico de dependencias (RNF-16)
+app.get('/health', async (_req, res) => {
+  const [redisOk, rabbitOk] = await Promise.all([
+    redisService.isHealthy(),
+    rabbitmqService.isHealthy()
+  ]);
+  res.status(200).json({
+    status: 'UP',
+    service: 'm5-dispatch-service',
+    timestamp: new Date().toISOString(),
+    dependencies: {
+      redis: redisOk ? 'CONNECTED' : 'DEGRADED_FALLBACK',
+      rabbitmq: rabbitOk ? 'CONNECTED' : 'DEGRADED_FALLBACK'
+    }
+  });
 });
 
 // Documentación de la API interactiva con Scalar
@@ -70,6 +91,10 @@ app.post('/api/v1/ride-requests/:requestId/cancel', rideRequestController.cancel
 app.post('/api/v1/ride-requests/:requestId/candidates', rideRequestController.searchCandidates);
 app.post('/api/v1/ride-requests/:requestId/offers', rideRequestController.sendOffers);
 app.get('/api/v1/ride-requests/:requestId/offers', rideRequestController.getOffers);
+
+// Alias de compatibilidad e interoperabilidad para clientes que consultan viajes por ID
+app.get('/viajes/:requestId', rideRequestController.getById);
+app.get('/api/v1/viajes/:requestId', rideRequestController.getById);
 
 // Rutas API v1 - Gestión de Ofertas de Conductor (RF-5.4)
 app.post('/api/v1/offers/:offerId/respond', rideRequestController.respondOffer);

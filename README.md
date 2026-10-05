@@ -198,4 +198,44 @@ Al iniciar el servicio e ingresar a `http://localhost:3005/`, se cuenta con una 
 
 ---
 
+## Actividad de Evaluación 2 (AE2) — Evolución Individual v2.0
 
+- **Alumno:** Agustín Quetglas
+- **Rama individual:** `ae2/agustin-quetglas`
+- **Módulo:** Módulo 5 (Solicitud y Despacho)
+- **Alcance Funcional Individual:** `RF-5.1: Solicitud de viaje`
+
+### 1. Decisiones Arquitectónicas y Tecnológicas (AE2)
+
+| Componente | Rol en RF-5.1 | Decisión y Justificación |
+| :--- | :--- | :--- |
+| **PostgreSQL (`m5-postgres-db`)** | Persistencia Relacional (`dispatch_db`) | Propiedad estricta de datos (RNF-04). Persistencia transaccional duradera con historial inmutable (append-only). Puerto `5432`. |
+| **Redis (`m5-redis`)** | Estado Efímero y Concurrencia | Candado atómico `SET NX EX 180` para evitar solicitudes concurrentes por cliente (RNF-09), idempotencia distribuida con TTL de 24h (RNF-08), invalidación explícita (`DEL`) al cancelar/asignar y caché efímero de tarifas (60s) (RNF-06). Puerto `6379`. |
+| **RabbitMQ (`m5-rabbitmq`)** | Mensajería Asíncrona Desacoplada | Publicación de evento de dominio `ride.requested` en exchange `mobility.events` (topic durable) con sobre canónico acordado con Módulo 8 (RNF-07). Panel Web en puerto `15672` (guest/guest), AMQP en puerto `5672`. |
+| **Integración Síncrona (M7)** | Estimación de Tarifa | Consumo HTTP POST al endpoint oficial `/tarifa/estimacion` del Módulo 7 con timeout y fallback resiliente local. |
+| **Alias de Compatibilidad** | Interoperabilidad entre Módulos | Exposición de `GET /viajes/:requestId` y `GET /api/v1/viajes/:requestId` como alias hacia `GET /api/v1/ride-requests/:requestId` para compatibilidad hacia atrás. |
+
+### 2. Instrucciones de Ejecución Reproducible (Docker Compose)
+
+Para levantar toda la infraestructura completa de AE2 en un solo paso:
+
+```powershell
+cd modulo-5
+docker compose up --build -d
+```
+
+#### Servicios Activos:
+* **App / Simulador M5:** [http://localhost:3005](http://localhost:3005)
+* **Diagnóstico de Salud (Healthcheck RNF-16):** [http://localhost:3005/health](http://localhost:3005/health) *(monitorea estado de Redis y RabbitMQ)*
+* **Documentación Scalar:** [http://localhost:3005/docs](http://localhost:3005/docs) y [http://localhost:3006](http://localhost:3006)
+* **Panel de Administración RabbitMQ:** [http://localhost:15672](http://localhost:15672) (`guest` / `guest`)
+* **Base de Datos PostgreSQL:** `localhost:5432` (`dispatch_db`, user: `postgres`, pass: `postgres`)
+* **Redis en Memoria:** `localhost:6379`
+
+### 3. Pruebas y Validación
+
+```powershell
+cd modulo-5
+npm test
+```
+* **Cobertura:** 116 tests unitarios y de integración pasando al 100% en 5 suites (incluye pruebas específicas de Redis con TTL/locks y RabbitMQ con sobre canónico).
