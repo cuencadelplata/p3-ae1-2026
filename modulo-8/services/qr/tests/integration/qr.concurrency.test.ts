@@ -1,15 +1,13 @@
 /*
  * RF-8.2 — Concurrencia, consistencia y uso único del QR con Redis real.
  *
- * La carrera: varias validaciones simultáneas del mismo QR (por ejemplo, el conductor reintenta
- * mientras la primera solicitud sigue en curso, o dos instancias del servicio reciben el mismo
- * QR). Si la comprobación de "no usado" y la marca de uso son pasos separados, más de una
- * validación puede aprobarse y M6 podría iniciar el viaje dos veces.
+ * La carrera principal de validación ocurre cuando varias solicitudes intentan consumir el
+ * mismo QR al mismo tiempo. Si la comprobación de "no usado" y la marca de uso son pasos
+ * separados, más de una validación puede aprobarse.
  *
- * Estas pruebas demuestran la carrera con un store ingenuo, verifican que el store real (un
- * script Lua atómico en Redis) la evita, también entre dos instancias, y cubren los casos
- * límite de vencimiento, viaje incorrecto y generación simultánea. Todas las solicitudes pasan
- * por HTTP real (supertest) contra la aplicación completa.
+ * Además, POST /qr es get-or-create para un viaje: mientras exista un QR activo, no consumido
+ * y no vencido, los reintentos devuelven el mismo token y el mismo vencimiento. Esto evita que
+ * una repetición de la solicitud genere varios QR operativos para el mismo viaje.
  */
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
@@ -74,10 +72,6 @@ function statusCounts(responses: readonly request.Response[]): Record<number, nu
 }
 
 describe("1. el problema: consumo no atómico (leer y después escribir)", () => {
-  // Afirma el DEFECTO a propósito: es la contraparte del test 2. Con un store ingenuo que lee
-  // usedAt y lo marca en un segundo comando, la barrera obliga a que las 10 lecturas ocurran
-  // antes de la primera escritura; todas ven el QR sin usar y todas lo aprueban. Es la
-  // duplicación que el store real tiene que impedir.
   it("con N=10 validaciones simultáneas, más de una (todas) devuelve 200", async () => {
     const count = 10;
     const app = buildApp({
@@ -94,8 +88,6 @@ describe("1. el problema: consumo no atómico (leer y después escribir)", () =>
 });
 
 describe("2. la solución: consumo atómico con un script Lua en Redis", () => {
-  // Mismo escenario que el test 1 con el store real: la comprobación y la marca de uso son un
-  // único script que Redis ejecuta sin intercalar otros comandos. Sólo una validación gana.
   it.each([10, 20, 100])("con N=%i validaciones simultáneas, exactamente una 200 y el resto 409", async (count) => {
     const app = buildApp({ store: redisStore(clientA) });
     const token = await generateToken(app);
@@ -110,9 +102,6 @@ describe("2. la solución: consumo atómico con un script Lua en Redis", () => {
 });
 
 describe("3. dos instancias del servicio contra el mismo Redis", () => {
-  // Dos aplicaciones, cada una con su propio cliente Redis y su propio store, como dos
-  // réplicas detrás de un balanceador. El QR se genera en A y las validaciones se reparten
-  // entre A y B: el uso único se mantiene entre instancias.
   it("generar en A y validar 20 veces alternando A y B: exactamente una 200 y el resto 409", async () => {
     const appA = buildApp({ store: redisStore(clientA) });
     const appB = buildApp({ store: redisStore(clientB) });
@@ -125,9 +114,6 @@ describe("3. dos instancias del servicio contra el mismo Redis", () => {
 });
 
 describe("4. contraste con AE1: store en memoria con dos instancias", () => {
-  // Cada instancia tiene su propio Map: un QR generado en A no existe para B. Con réplicas,
-  // el QR sería válido o no según qué instancia atienda la validación. Por eso el estado
-  // pasa a Redis.
   it("generar en A y validar en B responde 404; en A, 200", async () => {
     const appA = buildApp();
     const appB = buildApp();
@@ -142,8 +128,6 @@ describe("4. contraste con AE1: store en memoria con dos instancias", () => {
 });
 
 describe("5. vencimiento concurrente", () => {
-  // Un QR vencido (dentro del margen en que se informa 410) no se aprueba aunque lleguen
-  // muchas validaciones a la vez: todas responden 410 y ninguna lo consume.
   it("10 validaciones simultáneas de un QR vencido: todas 410, ninguna 200", async () => {
     const store = redisStore(clientA);
     const token = randomBytes(32).toString("base64url");
@@ -164,8 +148,6 @@ describe("5. vencimiento concurrente", () => {
 });
 
 describe("6. validaciones simultáneas con viajes mezclados", () => {
-  // Las validaciones con otro tripId responden 404 y no consumen el QR; entre las del viaje
-  // correcto, una sola gana. Un QR presentado para otro viaje no "quema" el QR legítimo.
   it("20 validaciones mezcladas: las del otro viaje 404; las del viaje correcto, una 200 y el resto 409", async () => {
     const app = buildApp({ store: redisStore(clientA) });
     const token = await generateToken(app);
@@ -179,8 +161,6 @@ describe("6. validaciones simultáneas con viajes mezclados", () => {
     expect(statusCounts(rightTrip)).toEqual({ 200: 1, 409: 9 });
   });
 
-  // Complemento secuencial: un intento con otro viaje antes de la validación legítima no la
-  // impide.
   it("un intento con otro viaje no consume: después la validación legítima responde 200", async () => {
     const app = buildApp({ store: redisStore(clientA) });
     const token = await generateToken(app);
@@ -193,25 +173,103 @@ describe("6. validaciones simultáneas con viajes mezclados", () => {
   });
 });
 
-describe("7. caracterización: generación simultánea para el mismo viaje", () => {
-  // Comportamiento ACTUAL, no un requisito: cada POST /qr crea un QR nuevo e independiente,
-  // así que un viaje puede tener varios QR activos a la vez y cualquiera de ellos se puede
-  // usar una vez. Queda documentado para decidir en el ADR si generar un QR nuevo debería
-  // invalidar los anteriores del mismo viaje.
-  it("10 POST /qr simultáneos para el mismo tripId devuelven 10 tokens distintos, todos válidos", async () => {
+describe("7. generación idempotente para el mismo viaje", () => {
+  it("20 POST /qr simultáneos para el mismo tripId devuelven el mismo token y el mismo vencimiento", async () => {
     const app = buildApp({ store: redisStore(clientA) });
 
     const generated = await Promise.all(
-      Array.from({ length: 10 }, () => request(app).post("/qr").send({ tripId: TRIP_ID })),
+      Array.from({ length: 20 }, () => request(app).post("/qr").send({ tripId: TRIP_ID })),
     );
 
-    expect(statusCounts(generated)).toEqual({ 201: 10 });
+    expect(statusCounts(generated)).toEqual({ 201: 20 });
     const tokens = generated.map((response) => response.body.token as string);
-    expect(new Set(tokens).size).toBe(10);
+    const expiresAt = generated.map((response) => response.body.expiresAt as string);
+    const qrDataUrls = generated.map((response) => response.body.qrDataUrl as string);
 
-    const validated = await Promise.all(
-      tokens.map((token) => request(app).post("/qr/validate").send({ tripId: TRIP_ID, token })),
+    expect(new Set(tokens).size).toBe(1);
+    expect(new Set(expiresAt).size).toBe(1);
+    expect(new Set(qrDataUrls).size).toBe(1);
+  });
+
+  it("un reintento posterior no renueva el TTL: conserva expiresAt", async () => {
+    const app = buildApp({ store: redisStore(clientA) });
+
+    const first = await request(app).post("/qr").send({ tripId: `${TRIP_ID}-ttl` });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const retry = await request(app).post("/qr").send({ tripId: `${TRIP_ID}-ttl` });
+
+    expect(first.status).toBe(201);
+    expect(retry.status).toBe(201);
+    expect(retry.body.token).toBe(first.body.token);
+    expect(retry.body.expiresAt).toBe(first.body.expiresAt);
+  });
+
+  it("viajes distintos reciben tokens distintos", async () => {
+    const app = buildApp({ store: redisStore(clientA) });
+
+    const first = await request(app).post("/qr").send({ tripId: `${TRIP_ID}-a` });
+    const second = await request(app).post("/qr").send({ tripId: `${TRIP_ID}-b` });
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.body.token).not.toBe(first.body.token);
+  });
+
+  it("después de consumir el QR, un nuevo POST /qr crea otro token", async () => {
+    const app = buildApp({ store: redisStore(clientA) });
+    const tripId = `${TRIP_ID}-consumed`;
+
+    const first = await request(app).post("/qr").send({ tripId });
+    const validation = await request(app).post("/qr/validate").send({ tripId, token: first.body.token });
+    const second = await request(app).post("/qr").send({ tripId });
+
+    expect(validation.status).toBe(200);
+    expect(second.status).toBe(201);
+    expect(second.body.token).not.toBe(first.body.token);
+  });
+
+  it("crear un nuevo QR después de consumir el anterior no elimina el 409 del token usado", async () => {
+    const app = buildApp({ store: redisStore(clientA) });
+    const tripId = `${TRIP_ID}-used-evidence`;
+
+    const first = await request(app).post("/qr").send({ tripId });
+    const tokenA = first.body.token as string;
+    const validation = await request(app).post("/qr/validate").send({ tripId, token: tokenA });
+    const second = await request(app).post("/qr").send({ tripId });
+    const tokenB = second.body.token as string;
+    const oldTokenRetry = await request(app).post("/qr/validate").send({ tripId, token: tokenA });
+
+    expect(first.status).toBe(201);
+    expect(validation.status).toBe(200);
+    expect(validation.body).toEqual({ valid: true });
+    expect(second.status).toBe(201);
+    expect(tokenB).not.toBe(tokenA);
+    expect(oldTokenRetry.status).toBe(409);
+    expect(oldTokenRetry.body).toEqual(ALREADY_USED_BODY);
+  });
+
+  it("después de vencer, un nuevo POST /qr crea otro token", async () => {
+    const store = redisStore(clientA);
+    const app = buildApp({ store });
+    const tripId = `${TRIP_ID}-expired`;
+    const oldToken = randomBytes(32).toString("base64url");
+    const nowMs = await redisNowMs(clientA);
+    await store.getOrCreateActive(
+      {
+        id: randomUUID(),
+        tripId,
+        tokenHash: createHash("sha256").update(oldToken).digest("hex"),
+        token: oldToken,
+        createdAt: new Date(nowMs - 301_000),
+        expiresAt: new Date(nowMs - 1000),
+        usedAt: null,
+      },
+      new Date(nowMs),
     );
-    expect(statusCounts(validated)).toEqual({ 200: 10 });
+
+    const second = await request(app).post("/qr").send({ tripId });
+
+    expect(second.status).toBe(201);
+    expect(second.body.token).not.toBe(oldToken);
   });
 });

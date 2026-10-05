@@ -139,7 +139,7 @@ describe("resiliencia del QR ante fallas de Redis", () => {
     }
     expect((await request(app).get("/health/ready")).status).toBe(503);
     expect((await request(app).get("/health/live")).status).toBe(200);
-    expect(storeUnavailableEvents().map(({ operation }) => operation)).toEqual(["save", "consume"]);
+    expect(storeUnavailableEvents().map(({ operation }) => operation)).toEqual(["get-or-create", "consume"]);
   });
 
   // Redis colgado: la validación no queda esperando indefinidamente; al vencer el tope

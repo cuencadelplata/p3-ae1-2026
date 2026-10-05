@@ -13,7 +13,7 @@ import { randomBytes } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import type { QrStore } from "../../src/qr.store";
+import type { QrOperationalRecord, QrStore } from "../../src/qr.store";
 import type { QrRecord } from "../../src/qr.types";
 
 const TRIP_ID = "trip-demo-001";
@@ -36,6 +36,18 @@ function createRecord(now: Date, overrides: Partial<QrRecord> = {}): QrRecord {
   };
 }
 
+function createOperationalRecord(now: Date, overrides: Partial<QrOperationalRecord> = {}): QrOperationalRecord {
+  return {
+    ...createRecord(now),
+    token: randomBytes(32).toString("base64url"),
+    ...overrides,
+  };
+}
+
+function uniqueTripId(): string {
+  return `trip-${randomBytes(8).toString("hex")}`;
+}
+
 export function describeQrStoreContract(
   name: string,
   createStore: QrStoreFactory,
@@ -51,6 +63,52 @@ export function describeQrStoreContract(
       const outcome = await store.consumeIfValid(record.tokenHash, TRIP_ID, now);
 
       expect(outcome).toBe("OK");
+    });
+
+    it("getOrCreateActive reutiliza un QR activo del mismo viaje", async () => {
+      const store = await createStore();
+      const now = await clock();
+      const tripId = uniqueTripId();
+      const first = createOperationalRecord(now, { id: "qr-1", tripId });
+      const retry = createOperationalRecord(now, { id: "qr-2", tripId });
+
+      const created = await store.getOrCreateActive(first, now);
+      const repeated = await store.getOrCreateActive(retry, now);
+
+      expect(created).toEqual({ record: first, created: true });
+      expect(repeated).toEqual({ record: first, created: false });
+    });
+
+    it("getOrCreateActive crea un QR nuevo si el anterior ya fue consumido", async () => {
+      const store = await createStore();
+      const now = await clock();
+      const tripId = uniqueTripId();
+      const first = createOperationalRecord(now, { id: "qr-1", tripId });
+      const afterUse = createOperationalRecord(now, { id: "qr-2", tripId });
+
+      await store.getOrCreateActive(first, now);
+      await store.consumeIfValid(first.tokenHash, tripId, now);
+      const result = await store.getOrCreateActive(afterUse, now);
+
+      expect(result).toEqual({ record: afterUse, created: true });
+    });
+
+    it("getOrCreateActive crea un QR nuevo si el anterior venció", async () => {
+      const store = await createStore();
+      const now = await clock();
+      const tripId = uniqueTripId();
+      const expired = createOperationalRecord(now, {
+        id: "qr-1",
+        tripId,
+        createdAt: new Date(now.getTime() - 5 * MINUTE_MS),
+        expiresAt: new Date(now.getTime() - MINUTE_MS),
+      });
+      const replacement = createOperationalRecord(now, { id: "qr-2", tripId });
+
+      await store.getOrCreateActive(expired, now);
+      const result = await store.getOrCreateActive(replacement, now);
+
+      expect(result).toEqual({ record: replacement, created: true });
     });
 
     it("rechaza una segunda validación del mismo QR", async () => {

@@ -31,20 +31,23 @@ describe("eventos de log del QR", () => {
   it("registra cada resultado con su evento y motivo, y nunca el token en claro", async () => {
     let now = new Date("2026-09-01T12:00:00.000Z");
     const app = buildApp({ log: createLogger("qr"), now: () => now });
-    const generate = async () => (await request(app).post("/qr").send({ tripId: TRIP_ID })).body.token as string;
+    const generate = async (tripId: string) => (await request(app).post("/qr").send({ tripId })).body.token as string;
     const validate = (tripId: string, token: string) => request(app).post("/qr/validate").send({ tripId, token });
+    const usedTripId = `${TRIP_ID}-used`;
+    const expiringTripId = `${TRIP_ID}-expires`;
+    const otherTripOwnerId = `${TRIP_ID}-owner`;
 
-    const usedToken = await generate();
-    const expiringToken = await generate();
-    const otherTripToken = await generate();
+    const usedToken = await generate(usedTripId);
+    const expiringToken = await generate(expiringTripId);
+    const otherTripToken = await generate(otherTripOwnerId);
     const unknownToken = "token-que-nunca-se-emitio";
 
-    expect((await validate(TRIP_ID, usedToken)).status).toBe(200);
-    expect((await validate(TRIP_ID, usedToken)).status).toBe(409);
+    expect((await validate(usedTripId, usedToken)).status).toBe(200);
+    expect((await validate(usedTripId, usedToken)).status).toBe(409);
     expect((await validate("otro-viaje", otherTripToken)).status).toBe(404);
     expect((await validate(TRIP_ID, unknownToken)).status).toBe(404);
     now = new Date(now.getTime() + TTL_MS);
-    expect((await validate(TRIP_ID, expiringToken)).status).toBe(410);
+    expect((await validate(expiringTripId, expiringToken)).status).toBe(410);
 
     const tokens = [usedToken, expiringToken, otherTripToken, unknownToken];
     for (const line of logs.lines) {
@@ -60,11 +63,11 @@ describe("eventos de log del QR", () => {
       .map(({ level, event, tripId, tokenHashPrefix, reason }) => ({ level, event, tripId, tokenHashPrefix, reason }));
 
     expect(qrEvents).toEqual([
-      { level: "info", event: "qr.issued", tripId: TRIP_ID, tokenHashPrefix: prefix(usedToken), reason: undefined },
-      { level: "info", event: "qr.issued", tripId: TRIP_ID, tokenHashPrefix: prefix(expiringToken), reason: undefined },
-      { level: "info", event: "qr.issued", tripId: TRIP_ID, tokenHashPrefix: prefix(otherTripToken), reason: undefined },
-      { level: "info", event: "qr.validated", tripId: TRIP_ID, tokenHashPrefix: prefix(usedToken), reason: undefined },
-      { level: "info", event: "qr.rejected", tripId: TRIP_ID, tokenHashPrefix: prefix(usedToken), reason: "ALREADY_USED" },
+      { level: "info", event: "qr.issued", tripId: usedTripId, tokenHashPrefix: prefix(usedToken), reason: undefined },
+      { level: "info", event: "qr.issued", tripId: expiringTripId, tokenHashPrefix: prefix(expiringToken), reason: undefined },
+      { level: "info", event: "qr.issued", tripId: otherTripOwnerId, tokenHashPrefix: prefix(otherTripToken), reason: undefined },
+      { level: "info", event: "qr.validated", tripId: usedTripId, tokenHashPrefix: prefix(usedToken), reason: undefined },
+      { level: "info", event: "qr.rejected", tripId: usedTripId, tokenHashPrefix: prefix(usedToken), reason: "ALREADY_USED" },
       {
         level: "warn",
         event: "qr.rejected",
@@ -73,7 +76,7 @@ describe("eventos de log del QR", () => {
         reason: "TRIP_MISMATCH",
       },
       { level: "info", event: "qr.rejected", tripId: TRIP_ID, tokenHashPrefix: prefix(unknownToken), reason: "NOT_FOUND" },
-      { level: "info", event: "qr.rejected", tripId: TRIP_ID, tokenHashPrefix: prefix(expiringToken), reason: "EXPIRED" },
+      { level: "info", event: "qr.rejected", tripId: expiringTripId, tokenHashPrefix: prefix(expiringToken), reason: "EXPIRED" },
     ]);
     for (const entry of logs.entries().filter((candidate) => candidate.event === "qr.issued")) {
       expect(entry.expiresAt).toEqual(expect.any(String));

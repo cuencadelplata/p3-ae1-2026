@@ -16,14 +16,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import { QrScriptReplyError } from "../../src/qr.redis-scripts";
 import { createRedisQrStore } from "../../src/qr.redis-store";
-import { QrStoreUnavailableError } from "../../src/qr.store";
-import type { QrRecord } from "../../src/qr.types";
+import { QrStoreUnavailableError, type QrOperationalRecord } from "../../src/qr.store";
 import type { QrRedisClient } from "../../src/redis-client";
 
-const RECORD: QrRecord = {
+const RECORD: QrOperationalRecord = {
   id: "qr-1",
   tripId: "trip-demo-001",
   tokenHash: "a".repeat(64),
+  token: "token-opaco",
   createdAt: new Date("2026-09-01T12:00:00.000Z"),
   expiresAt: new Date("2026-09-01T12:05:00.000Z"),
   usedAt: null,
@@ -32,6 +32,9 @@ const RECORD: QrRecord = {
 function storeWithFailingClient(error: unknown) {
   const client = {
     qrSave: vi.fn(async () => {
+      throw error;
+    }),
+    qrGetOrCreate: vi.fn(async () => {
       throw error;
     }),
     qrConsume: vi.fn(async () => {
@@ -65,9 +68,18 @@ const REDIS_FAILURES: ReadonlyArray<readonly [string, () => unknown, boolean, st
 
 describe("createRedisQrStore — traducción de fallas de Redis", () => {
   describe.each([
-    ["save", (store: ReturnType<typeof storeWithFailingClient>) => store.save(RECORD)],
-    ["consume", (store: ReturnType<typeof storeWithFailingClient>) => store.consumeIfValid(RECORD.tokenHash, RECORD.tripId, new Date())],
-  ] as const)("operación %s", (operation, run) => {
+    ["save", (store: ReturnType<typeof storeWithFailingClient>) => store.save(RECORD), "qrSave"],
+    [
+      "get-or-create",
+      (store: ReturnType<typeof storeWithFailingClient>) => store.getOrCreateActive(RECORD, new Date()),
+      "qrGetOrCreate",
+    ],
+    [
+      "consume",
+      (store: ReturnType<typeof storeWithFailingClient>) => store.consumeIfValid(RECORD.tokenHash, RECORD.tripId, new Date()),
+      "qrConsume",
+    ],
+  ] as const)("operación %s", (operation, run, scriptName) => {
     it.each(REDIS_FAILURES)("%s se traduce a QrStoreUnavailableError", async (_label, makeError, outcomeUnknown, loggedName) => {
       const cause = makeError();
 
@@ -87,7 +99,7 @@ describe("createRedisQrStore — traducción de fallas de Redis", () => {
     });
 
     it("una respuesta inesperada de script NO se traduce: sigue siendo un error del servicio", async () => {
-      const scriptError = new QrScriptReplyError(operation === "save" ? "qrSave" : "qrConsume");
+      const scriptError = new QrScriptReplyError(scriptName);
 
       await expect(run(storeWithFailingClient(scriptError))).rejects.toBe(scriptError);
     });
@@ -96,11 +108,13 @@ describe("createRedisQrStore — traducción de fallas de Redis", () => {
   it("sin fallas, devuelve el resultado del script", async () => {
     const client = {
       qrSave: vi.fn(async () => undefined),
+      qrGetOrCreate: vi.fn(async () => ({ record: RECORD, created: true })),
       qrConsume: vi.fn(async () => "ALREADY_USED"),
     } as unknown as QrRedisClient;
     const store = createRedisQrStore({ client, expiredGraceSeconds: 3600 });
 
     await expect(store.save(RECORD)).resolves.toBeUndefined();
+    await expect(store.getOrCreateActive(RECORD, new Date())).resolves.toEqual({ record: RECORD, created: true });
     await expect(store.consumeIfValid(RECORD.tokenHash, RECORD.tripId, new Date())).resolves.toBe("ALREADY_USED");
   });
 });
