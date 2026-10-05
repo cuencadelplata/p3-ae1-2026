@@ -17,6 +17,8 @@ export class ApiError extends Error {
     public readonly code: string,
     message: string,
     public readonly details?: ErrorDetail[],
+    // Headers HTTP que acompañan la respuesta de error (por ejemplo, Retry-After).
+    public readonly headers?: Readonly<Record<string, string>>,
   ) {
     super(message);
     this.name = "ApiError";
