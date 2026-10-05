@@ -4,9 +4,7 @@ CREATE SCHEMA IF NOT EXISTS customers;
 -- 2. Tabla de Perfiles de Clientes
 CREATE TABLE IF NOT EXISTS customers.CustomerProfile (
     customer_id VARCHAR(50) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    phone VARCHAR(50) NOT NULL,
+    user_id INTEGER NOT NULL UNIQUE,
     preferred_vehicle_type VARCHAR(50) NOT NULL DEFAULT 'auto',
     notification_channel VARCHAR(50) NOT NULL DEFAULT 'email',
     status VARCHAR(50) NOT NULL DEFAULT 'ACTIVO' CHECK (
@@ -78,9 +76,7 @@ CREATE TRIGGER no_truncate_account_status
 INSERT INTO
     customers.CustomerProfile (
         customer_id,
-        name,
-        email,
-        phone,
+        user_id,
         preferred_vehicle_type,
         notification_channel,
         status,
@@ -88,9 +84,7 @@ INSERT INTO
     )
 VALUES (
         'cust_823a7b9c',
-        'Juan Pérez',
-        'juan.perez@example.com',
-        '+5493512345678',
+        12,
         'auto',
         'email',
         'ACTIVO',

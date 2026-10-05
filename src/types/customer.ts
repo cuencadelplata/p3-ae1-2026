@@ -7,6 +7,9 @@ export type VehicleType = z.infer<typeof VehicleTypeSchema>;
 export const NotificationChannelSchema = z.enum(['email', 'push']);
 export type NotificationChannel = z.infer<typeof NotificationChannelSchema>;
 
+export const UserIdSchema = z.number().int().positive().brand<'UserId'>();
+export type UserId = z.infer<typeof UserIdSchema>;
+
 // Estados de cuenta posibles (INACTIVO = baja del cliente; nunca se borra físicamente)
 export const AccountStatusEnumSchema = z.enum([
   'ACTIVO',
@@ -20,29 +23,24 @@ export type AccountStatusEnum = z.infer<typeof AccountStatusEnumSchema>;
 // Esquema de preferencias del cliente
 export const PreferencesSchema = z.object({
   preferredVehicleType: VehicleTypeSchema.default('auto'),
-  notificationChannel: NotificationChannelSchema.default('email'),
-  defaultHomeAddress: z.string().optional(),
-  defaultWorkAddress: z.string().optional()
-});
-export type Preferences = z.infer<typeof PreferencesSchema>;
+  notificationChannel: NotificationChannelSchema.default('email')
+}).strict();
+export type Preferences = Readonly<z.infer<typeof PreferencesSchema>>;
 
 // Esquema para registrar un cliente (POST /v1/customers)
 export const CreateCustomerSchema = z.object({
-  name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
-  email: z.string().email('Formato de correo electrónico inválido'),
-  phone: z.string().min(6, 'El teléfono debe tener al menos 6 caracteres'),
   preferences: PreferencesSchema.optional().default({
     preferredVehicleType: 'auto',
     notificationChannel: 'email'
   })
-});
-export type CreateCustomerDTO = z.infer<typeof CreateCustomerSchema>;
+}).strict();
+export type CreateCustomerDTO = Readonly<z.infer<typeof CreateCustomerSchema>>;
 
 // Esquema para actualizar preferencias (PUT /v1/customers/:id)
 export const UpdatePreferencesSchema = z.object({
   preferences: PreferencesSchema
-});
-export type UpdatePreferencesDTO = z.infer<typeof UpdatePreferencesSchema>;
+}).strict();
+export type UpdatePreferencesDTO = Readonly<z.infer<typeof UpdatePreferencesSchema>>;
 
 // Esquema para cambiar el estado de cuenta (PUT /v1/customers/:id/status)
 export const UpdateAccountStatusSchema = z.object({
@@ -52,16 +50,15 @@ export const UpdateAccountStatusSchema = z.object({
 export type UpdateAccountStatusDTO = z.infer<typeof UpdateAccountStatusSchema>;
 
 // Interfaces del Dominio
-export interface CustomerProfile {
-  customerId: string;
-  name: string;
-  email: string;
-  phone: string;
-  preferences: Preferences;
-  status: AccountStatusEnum;
-  createdAt: string;
-  updatedAt?: string;
-}
+export const CustomerProfileSchema = z.object({
+  customerId: z.string().regex(/^cust_[0-9a-f]{8}$/),
+  userId: UserIdSchema,
+  preferences: PreferencesSchema,
+  status: AccountStatusEnumSchema,
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }).optional()
+}).strict();
+export type CustomerProfile = Readonly<z.infer<typeof CustomerProfileSchema>>;
 
 export interface AccountStatusResponse {
   customerId: string;

@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../../src/app.js';
 import { customerRepository } from '../../src/repositories/customer.repository.js';
+import { m1AuthClient } from '../../src/clients/m1-auth.client.js';
+import { UserIdSchema } from '../../src/types/customer.js';
 
 describe('Endpoints REST - Módulo 2 Clientes (Supertest)', () => {
   it('GET /health debe retornar estado UP', async () => {
@@ -19,21 +21,21 @@ describe('Endpoints REST - Módulo 2 Clientes (Supertest)', () => {
   });
 
   it('POST /v1/customers debe rechazar body inválido con 400 Bad Request', async () => {
+    vi.spyOn(m1AuthClient, 'validateToken').mockResolvedValueOnce({ userId: UserIdSchema.parse(12), role: 'CLIENTE' });
     const res = await request(app)
       .post('/v1/customers')
-      .send({
-        name: '',
-        email: 'correo-invalido'
-      });
+      .set('Authorization', 'Bearer fake_token')
+      .send({ preferences: { preferredVehicleType: 'invalid_type' as any } });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('ValidationError');
   });
 
   it('GET /v1/customers/no-existe debe retornar 404 CustomerNotFound', async () => {
+    vi.spyOn(m1AuthClient, 'validateToken').mockResolvedValueOnce({ userId: UserIdSchema.parse(12), role: 'CLIENTE' });
     vi.spyOn(customerRepository, 'findById').mockResolvedValueOnce(null);
 
-    const res = await request(app).get('/v1/customers/cust_inexistente');
+    const res = await request(app).get('/v1/customers/cust_inexistente').set('Authorization', 'Bearer fake_token');
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('CustomerNotFound');
   });
@@ -41,9 +43,7 @@ describe('Endpoints REST - Módulo 2 Clientes (Supertest)', () => {
   it('GET /v1/customers/:id/trips debe retornar historial de viajes', async () => {
     vi.spyOn(customerRepository, 'findById').mockResolvedValueOnce({
       customerId: 'cust_823a7b9c',
-      name: 'Juan Pérez',
-      email: 'juan.perez@example.com',
-      phone: '+5493512345678',
+      userId: UserIdSchema.parse(12),
       preferences: { preferredVehicleType: 'auto', notificationChannel: 'email' },
       status: 'ACTIVO',
       createdAt: '2026-08-30T23:00:00Z'

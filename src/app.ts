@@ -5,8 +5,15 @@ import { openApiSpec } from './docs/openapi.js';
 import { customerController } from './controllers/customer.controller.js';
 import { asyncHandler } from './middlewares/async-handler.js';
 import { errorHandler } from './middlewares/error-handler.js';
+import { requireAuth } from './middlewares/auth.middleware.js';
+import { metricsHandler, httpMetricsMiddleware } from './observability/metrics.js';
+import { healthHandler } from './health/registry.js';
+import { mountStubs } from './stubs/index.js';
 
 export const app = express();
+
+// Metrics (before everything else)
+app.use(httpMetricsMiddleware);
 
 // Middlewares globales
 app.use(cors({
@@ -38,26 +45,31 @@ app.use(
   })
 );
 
-// 2. Healthcheck del servicio
-app.get('/health', (_req, res) => {
-  res.json({
-    status: 'UP',
-    service: 'm2-clientes-api',
-    docs: '/docs'
-  });
-});
+// 2. Healthcheck y Métricas
+app.get('/health', healthHandler);
+app.get('/metrics', metricsHandler);
 
-// 3. Rutas de la API REST (/v1/customers...)
+// 3. Stubs (Modo desarrollo/pruebas)
+mountStubs(app);
+
+// 4. Rutas de la API REST (/v1/customers...)
 // RF-2.1: asyncHandler envía los errores async al middleware central (Express 4 no lo hace solo)
-app.post('/v1/customers', asyncHandler(customerController.createCustomer));
-app.get('/v1/customers', asyncHandler(customerController.listCustomers));
-app.get('/v1/customers/:id', asyncHandler(customerController.getCustomerById));
-app.put('/v1/customers/:id', asyncHandler(customerController.updateCustomerPreferences));
+app.post('/v1/customers', requireAuth({ roles: ['CLIENTE'] }), asyncHandler(customerController.createCustomer));
+app.get('/v1/customers/me', requireAuth(), asyncHandler(customerController.getMe));
+app.get('/v1/customers', (req, res, next) => {
+  if (req.query.userId) {
+    requireAuth()(req, res, next);
+  } else {
+    next();
+  }
+}, asyncHandler(customerController.listCustomers));
+app.get('/v1/customers/:id', requireAuth(), asyncHandler(customerController.getCustomerById));
+app.put('/v1/customers/:id', requireAuth(), asyncHandler(customerController.updateCustomerPreferences));
 app.get('/v1/customers/:id/status', customerController.getAccountStatus);
 app.put('/v1/customers/:id/status', customerController.updateAccountStatus);
 app.get('/v1/customers/:id/trips', customerController.getCustomerTrips);
 
-// 4. Manejador 404 para rutas no reconocidas
+// 5. Manejador 404 para rutas no reconocidas
 app.use((_req, res) => {
   res.status(404).json({
     error: 'NotFound',

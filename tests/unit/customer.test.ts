@@ -2,44 +2,45 @@ import { describe, it, expect } from 'vitest';
 import { CreateCustomerSchema, UpdatePreferencesSchema, UpdateAccountStatusSchema } from '../../src/types/customer.js';
 
 describe('Validaciones de Dominio (Zod Schemas)', () => {
-  it('debe validar y aceptar un cliente con datos válidos', () => {
+  it('acepta un alta sin datos personales y aplica las preferencias por defecto', () => {
+    const result = CreateCustomerSchema.safeParse({});
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual({
+        preferences: {
+          preferredVehicleType: 'auto',
+          notificationChannel: 'email'
+        }
+      });
+    }
+  });
+
+  it('acepta un alta con las preferencias opcionales explícitas', () => {
     const validData = {
-      name: 'Juan Pérez',
-      email: 'juan.perez@example.com',
-      phone: '+5493512345678',
       preferences: {
-        preferredVehicleType: 'auto',
-        notificationChannel: 'email'
+        preferredVehicleType: 'moto',
+        notificationChannel: 'push'
       }
     };
 
     const result = CreateCustomerSchema.safeParse(validData);
+
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.name).toBe('Juan Pérez');
-      expect(result.data.email).toBe('juan.perez@example.com');
+      expect(result.data.preferences).toEqual(validData.preferences);
     }
   });
 
-  it('debe rechazar un email con formato inválido', () => {
-    const invalidData = {
+  it('rechaza datos personales porque la identidad pertenece a M1', () => {
+    const dataOwnedByM1 = {
       name: 'Juan Pérez',
-      email: 'correo-invalido-sin-arroba',
+      email: 'juan.perez@example.com',
       phone: '+5493512345678'
     };
 
-    const result = CreateCustomerSchema.safeParse(invalidData);
-    expect(result.success).toBe(false);
-  });
+    const result = CreateCustomerSchema.safeParse(dataOwnedByM1);
 
-  it('debe rechazar un nombre demasiado corto (menos de 2 caracteres)', () => {
-    const invalidData = {
-      name: 'J',
-      email: 'juan@example.com',
-      phone: '+5493512345678'
-    };
-
-    const result = CreateCustomerSchema.safeParse(invalidData);
     expect(result.success).toBe(false);
   });
 
@@ -55,19 +56,18 @@ describe('Validaciones de Dominio (Zod Schemas)', () => {
     expect(result.success).toBe(false);
   });
 
-  it('debe asignar valores por defecto en preferencias si no se envían', () => {
-    const dataWithoutPreferences = {
-      name: 'Carlos Gómez',
-      email: 'carlos@example.com',
-      phone: '+5493519876543'
+  it('rechaza direcciones dentro de RF-2.1 porque pertenecen a RF-2.2', () => {
+    const dataWithAddress = {
+      preferences: {
+        preferredVehicleType: 'auto',
+        notificationChannel: 'email',
+        defaultHomeAddress: 'Av. Siempre Viva 742'
+      }
     };
 
-    const result = CreateCustomerSchema.safeParse(dataWithoutPreferences);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.preferences.preferredVehicleType).toBe('auto');
-      expect(result.data.preferences.notificationChannel).toBe('email');
-    }
+    const result = CreateCustomerSchema.safeParse(dataWithAddress);
+
+    expect(result.success).toBe(false);
   });
 
   it('debe aceptar INACTIVO como estado de baja con un motivo', () => {
