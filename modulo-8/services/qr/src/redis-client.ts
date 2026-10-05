@@ -6,8 +6,9 @@ import { qrRedisScripts } from "./qr.redis-scripts";
 export interface QrRedisClientOptions {
   readonly url: string;
   readonly connectTimeoutMs?: number;
-  // Tiempo máximo de cada comando. Al vencer, la promesa se rechaza, pero si el comando ya
-  // se había enviado Redis puede ejecutarlo igual: el resultado queda indeterminado.
+  // Tiempo máximo que un comando espera en la cola de escritura del cliente. node-redis lo
+  // descarta al enviar el comando, así que no limita la espera de la respuesta: ese tope lo
+  // aplica el store (operationTimeoutMs).
   readonly commandTimeoutMs?: number;
   readonly log?: Logger;
 }
