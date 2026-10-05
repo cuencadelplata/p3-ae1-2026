@@ -7,16 +7,18 @@ Módulo M3 para la gestión de conductores y valoraciones de movilidad urbana, d
 ## 🚀 Puesta en marcha
 
 ### Opción 1: Con Docker Compose (Recomendada)
-Levanta Redis, la API Backend en Node.js y el Frontend en Nginx:
+Levanta Redis, RabbitMQ, la API Backend en Node.js, el consumidor de eventos de ejemplo y el Frontend en Nginx:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 - **Frontend (Test Runner & Swagger UI):** [http://localhost:4000](http://localhost:4000)
 - **API Backend (vía proxy frontend):** [http://localhost:4000/api](http://localhost:4000/api)
 - **API Backend directa:** [http://localhost:5000/api](http://localhost:5000/api)
 - **Redis:** `localhost:6379`
+- **RabbitMQ:** `localhost:5672` — panel en [http://localhost:15672](http://localhost:15672) (`guest` / `guest`)
+- **Consumidor de ejemplo:** `docker compose logs -f consumer`
 
 ### Opción 2: Local con Node.js
 ```bash
@@ -25,6 +27,22 @@ npm start
 ```
 - **Frontend & API:** [http://localhost:3000](http://localhost:3000)
 - **Health Check:** [http://localhost:3000/health](http://localhost:3000/health)
+- **Consumidor de ejemplo:** `npm run consumer` (requiere RabbitMQ en `RABBITMQ_URL`)
+
+---
+
+## 📨 Mensajería asíncrona con RabbitMQ (RNF-07)
+
+M3 publica eventos en el exchange topic `m3.conductores.events` cada vez que cambia el estado de un conductor:
+
+| Evento | Routing key | Se emite cuando |
+|---|---|---|
+| `DriverAvailabilityUpdated` | `driver.availability.updated` | `PUT /api/conductores/:id/disponible` cambia la disponibilidad (RF 3.3) |
+| `DriverStatusChanged` | `driver.status.changed` | `PUT /api/conductores/:id/habilitado` cambia la habilitación (RF 3.1) |
+
+- **Producer:** `M3-Conductor/src/events/eventPublisher.js` (publisher confirms, mensajes persistentes).
+- **Consumidor de ejemplo:** `M3-Conductor/src/consumers/driverEventsConsumer.js` (cola propia, `ack` manual).
+- **Contrato completo de los eventos:** [`M3-Conductor/docs/EVENTOS.md`](M3-Conductor/docs/EVENTOS.md).
 
 ---
 

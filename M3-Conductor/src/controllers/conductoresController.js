@@ -1,5 +1,9 @@
 const redisRepository = require('../repositories/redisRepository');
 const Conductor = require('../models/Conductor');
+const eventPublisher = require('../events/eventPublisher');
+
+// Valores válidos según el CHECK de la tabla `conductores` (src/schema/conductores.sql)
+const ESTADOS_HABILITACION = ['pendiente', 'activo', 'suspendido', 'rechazado'];
 
 /**
  * GET /conductores
@@ -122,10 +126,79 @@ const obtenerDisponible = async (req, res) => {
   }
 };
 
+/**
+ * PUT /conductores/:id/disponible
+ * RF 3.3 - El conductor informa su disponibilidad (heartbeat). Se guarda sólo
+ * en Redis y, si el valor cambió respecto del anterior, se emite el evento
+ * asíncrono DriverAvailabilityUpdated (RNF-07). Un heartbeat que repite el
+ * mismo valor sólo renueva el TTL y no genera evento.
+ * Body: { "disponible": true | false }
+ */
+const actualizarDisponible = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { disponible } = req.body || {};
+
+    if (typeof disponible !== 'boolean') {
+      return res.status(400).json({ error: "El campo 'disponible' es requerido y debe ser booleano" });
+    }
+
+    const resultado = await redisRepository.actualizarDisponibilidad(id, disponible);
+    const cambio = resultado.disponible !== resultado.disponibleAnterior;
+
+    if (cambio) {
+      // Fire-and-forget: la respuesta HTTP no espera al broker
+      eventPublisher.publicarDriverAvailabilityUpdated(resultado);
+    }
+
+    return res.status(200).json({ ...resultado, eventoEmitido: cambio });
+  } catch (error) {
+    return res.status(500).json({ error: 'Error al actualizar disponibilidad del conductor', detalle: error.message });
+  }
+};
+
+/**
+ * PUT /conductores/:id/habilitado
+ * RF 3.1 - Cambia el estado de habilitación del conductor (persistido en DB y
+ * refrescado en la caché de Redis). Si el estado cambió se emite el evento
+ * asíncrono DriverStatusChanged (RNF-07).
+ * Body: { "habilitado": "pendiente" | "activo" | "suspendido" | "rechazado", "motivo"?: string }
+ */
+const actualizarHabilitado = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { habilitado, motivo } = req.body || {};
+
+    if (!ESTADOS_HABILITACION.includes(habilitado)) {
+      return res.status(400).json({
+        error: `El campo 'habilitado' debe ser uno de: ${ESTADOS_HABILITACION.join(', ')}`
+      });
+    }
+
+    const resultado = await redisRepository.actualizarHabilitado(id, habilitado);
+
+    if (!resultado) {
+      return res.status(404).json({ error: `Conductor con ID '${id}' no encontrado` });
+    }
+
+    const cambio = resultado.habilitado !== resultado.habilitadoAnterior;
+
+    if (cambio) {
+      eventPublisher.publicarDriverStatusChanged({ ...resultado, motivo });
+    }
+
+    return res.status(200).json({ ...resultado, eventoEmitido: cambio });
+  } catch (error) {
+    return res.status(500).json({ error: 'Error al actualizar habilitación del conductor', detalle: error.message });
+  }
+};
+
 module.exports = {
   obtenerConductores,
   obtenerConductorPorId,
   crearConductor,
   obtenerHabilitado,
-  obtenerDisponible
+  obtenerDisponible,
+  actualizarDisponible,
+  actualizarHabilitado
 };

@@ -43,6 +43,47 @@ async function obtenerHabilitadoPorId(id) {
   return conductor ? { usuarioID: conductor.usuarioID, habilitado: conductor.habilitado } : null;
 }
 
+/**
+ * Actualiza el estado de habilitación (RF 3.1) de un conductor en la base de
+ * datos persistente.
+ *
+ * @param {string} id - usuarioID del conductor
+ * @param {string} habilitado - nuevo estado ('pendiente' | 'activo' | 'suspendido' | 'rechazado')
+ * @returns {Promise<{ usuarioID: string, habilitado: string, habilitadoAnterior: string } | null>}
+ *          null si el conductor no existe
+ */
+async function actualizarHabilitado(id, habilitado) {
+  const anterior = await obtenerHabilitadoPorId(id);
+  if (!anterior) {
+    return null;
+  }
+
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from("conductores")
+        .update({ habilitado, updated_at: new Date().toISOString() })
+        .eq("usuario_id", id);
+
+      if (error) throw error;
+    } catch (err) {
+      console.warn(
+        `[DB] Fallo al actualizar habilitación de '${id}' en Supabase, usando fallback en memoria: ${err.message}`
+      );
+    }
+  }
+
+  const conductor = inMemoryDB.get(id);
+  if (conductor) {
+    inMemoryDB.set(id, { ...conductor, habilitado });
+  }
+
+  return { usuarioID: id, habilitado, habilitadoAnterior: anterior.habilitado };
+}
+
 module.exports = {
-  obtenerHabilitadoPorId
+  obtenerHabilitadoPorId,
+  actualizarHabilitado
 };

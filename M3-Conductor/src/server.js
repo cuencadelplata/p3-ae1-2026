@@ -5,6 +5,7 @@ require("dotenv").config();
 
 const conductorRoutes = require("./routes/conductorRoutes");
 const { seedRedisIfEmpty } = require("./repositories/redisRepository");
+const rabbitmq = require("./config/rabbitmqClient");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -46,6 +47,12 @@ app.listen(PORT, async () => {
 
   // Poblar datos mock en Redis
   await seedRedisIfEmpty();
+
+  // Conexión anticipada a RabbitMQ (RNF-07). Si falla, el servidor sigue
+  // funcionando y el publisher reintenta en el próximo evento.
+  rabbitmq.getChannel().catch((err) => {
+    console.warn(`[RabbitMQ] No disponible al iniciar (${err.message}). Se reintentará al publicar.`);
+  });
 });
 
 module.exports = app;

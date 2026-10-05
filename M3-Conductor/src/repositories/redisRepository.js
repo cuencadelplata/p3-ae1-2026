@@ -196,12 +196,14 @@ async function obtenerDisponibilidad(id) {
 }
 
 /**
- * Setter de soporte para RF 3.3: refresca el heartbeat de disponibilidad de un
- * conductor en Redis. Pensado para que el propio Módulo 3 (al conectar/desconectar
- * un conductor) actualice este estado efímero; no se expone como endpoint propio
- * en este cambio, que se limita a los dos GET solicitados.
+ * RF 3.3 - Refresca el heartbeat de disponibilidad de un conductor en Redis
+ * (nunca en la base de datos). Devuelve también el valor anterior para que el
+ * controller sepa si hubo un cambio real y deba emitir DriverAvailabilityUpdated.
+ *
+ * @returns {Promise<{ usuarioID: string, disponible: boolean, disponibleAnterior: boolean }>}
  */
 async function actualizarDisponibilidad(id, disponible) {
+  const { disponible: disponibleAnterior } = await obtenerDisponibilidad(id);
   const valor = { usuarioID: id, disponible: Boolean(disponible) };
   try {
     await redis.set(keyDisponible(id), JSON.stringify(valor), "EX", TTL_DISPONIBLE);
@@ -209,7 +211,41 @@ async function actualizarDisponibilidad(id, disponible) {
     console.warn(`[Redis] Fallo al actualizar disponibilidad de '${id}', usando memoria: ${err.message}`);
   }
   inMemoryDisponibilidad.set(id, Boolean(disponible));
-  return valor;
+  return { ...valor, disponibleAnterior };
+}
+
+/**
+ * RF 3.1 - Actualiza la habilitación de un conductor (write-through).
+ *
+ * 1) Escribe en la base de datos (fuente de verdad).
+ * 2) Refresca la caché `conductor:{id}:habilitado` con TTL para que las
+ *    lecturas posteriores no devuelvan un valor viejo.
+ *
+ * @returns {Promise<{ usuarioID: string, habilitado: string, habilitadoAnterior: string } | null>}
+ */
+async function actualizarHabilitado(id, habilitado) {
+  const resultado = await conductorDBRepository.actualizarHabilitado(id, habilitado);
+  if (!resultado) {
+    return null;
+  }
+
+  try {
+    await redis.set(
+      keyHabilitado(id),
+      JSON.stringify({ usuarioID: id, habilitado }),
+      "EX",
+      TTL_HABILITADO
+    );
+  } catch (err) {
+    console.warn(`[Redis] Fallo al refrescar la caché de habilitación de '${id}': ${err.message}`);
+  }
+
+  const conductor = inMemoryConductores.get(id);
+  if (conductor) {
+    inMemoryConductores.set(id, { ...conductor, habilitado });
+  }
+
+  return resultado;
 }
 
 /**
@@ -263,5 +299,6 @@ module.exports = {
   registrarValoracion,
   obtenerHabilitado,
   obtenerDisponibilidad,
-  actualizarDisponibilidad
+  actualizarDisponibilidad,
+  actualizarHabilitado
 };
