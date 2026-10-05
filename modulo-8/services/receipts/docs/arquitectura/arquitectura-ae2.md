@@ -1,13 +1,17 @@
 # Arquitectura del servicio de comprobantes (AE2)
 
-Versión 2.1.0 del servicio `m8-documentos`. La arquitectura de AE1 se conserva como
+Versión 2.3.0 del servicio `m8-documentos`. La arquitectura de AE1 se conserva como
 evidencia en [componentes-m8.md](componentes-m8.md).
+
+Desde la 2.2.0, M7 se integra por REST: no publica `payment.confirmed` y el servicio
+le consulta el pago antes de emitir. La entrada por evento se conserva con un
+productor simulado (catálogo de eventos, sección 5.1).
 
 ## 1. Componentes
 
 ```mermaid
 flowchart LR
-    M7["M7 - Pagos"]
+    PROD["Productor de payment.confirmed<br/>(simulado en AE2)"]
     RD["Receipts Delivery (RF-8.4)"]
     SUB["Suscriptores de receipt.issued"]
     CLI["Cliente / API Gateway"]
@@ -19,7 +23,7 @@ flowchart LR
         DLQ["...dlq"]
     end
 
-    subgraph SVC["m8-documentos 2.1.0"]
+    subgraph SVC["m8-documentos 2.3.0"]
         HTTP["API REST<br/>/api/v1/receipts"]
         INT["API interna<br/>/internal/receipts"]
         CONS["Consumidor<br/>payment.confirmed"]
@@ -27,16 +31,18 @@ flowchart LR
         PDF["Generador PDF<br/>PDFKit"]
         LINK["Enlaces temporales"]
         RELAY["Relay de la<br/>bandeja de salida"]
+        PAY["Cliente M7<br/>timeout"]
         FISC["Cliente fiscal<br/>timeout + circuit breaker"]
         HEALTH["/health/live<br/>/health/ready"]
     end
 
     AUT["Autorizador fiscal<br/>(externo, simulado)"]
+    M7["M7 - Pagos<br/>(simulado: m7-payments-sandbox)"]
 
     PG[("PostgreSQL<br/>esquema receipts")]
     RED[("Redis<br/>m8:receipts:link:*")]
 
-    M7 -- publica --> EX
+    PROD -- publica --> EX
     EX -- payment.confirmed --> Q
     Q --> CONS
     CONS -. fallo transitorio o<br/>dependencia caída .-> RQ
@@ -47,6 +53,8 @@ flowchart LR
     RD --> INT
     HTTP --> EMI
     CONS --> EMI
+    EMI --> PAY
+    PAY -->|"GET /metodo-pago/{viajeId}"| M7
     EMI --> FISC
     FISC -- POST /v1/authorizations<br/>Idempotency-Key = tripId --> AUT
     EMI --> PDF
@@ -57,7 +65,7 @@ flowchart LR
     RELAY -- lee pendientes --> PG
     RELAY -- receipt.issued --> EX
     EX --> SUB
-    HEALTH -.-> PG & RED & MQ & AUT
+    HEALTH -.-> PG & RED & MQ & AUT & M7
 ```
 
 | Componente | Responsabilidad |
@@ -65,11 +73,12 @@ flowchart LR
 | API REST | Emisión manual, consulta, descarga y reenvío. Contrato: `openapi/receipts.openapi.yaml`. |
 | API interna | `delivery-reference` para Receipts Delivery. Contrato: catálogo de eventos, sección 6. |
 | Consumidor | ACK manual, reintentos con cola de espera, DLQ y bandeja de entrada. |
-| Emisión | Única lógica de emisión para ambos caminos; idempotente por `tripId`. Pide la autorización fiscal antes de generar el PDF. |
+| Emisión | Única lógica de emisión para ambos caminos; idempotente por `tripId`. Verifica el pago en M7 y pide la autorización fiscal antes de generar el PDF. |
+| Cliente M7 | Consulta `GET /metodo-pago/{viajeId}` con timeout de 2 s y traduce estado, medio de pago e importe al modelo interno. Solo un pago autorizado habilita la emisión. |
 | Cliente fiscal | Llamada al autorizador externo con timeout de 2 s y circuit breaker ([ADR-005](../adr/ADR-005-resiliencia-ae2.md)). |
 | Relay | Publica la bandeja de salida con confirmación de RabbitMQ; `SKIP LOCKED` entre réplicas. |
 | Enlaces temporales | Token opaco con TTL en Redis. |
-| Health | Vitalidad sin dependencias; disponibilidad por dependencia (PostgreSQL crítica) y estado del circuito. |
+| Health | Vitalidad sin dependencias; disponibilidad por dependencia (PostgreSQL crítica; Redis, RabbitMQ, fiscal y M7 no críticas) y estado del circuito. |
 
 ## 2. Propiedad de datos
 
@@ -116,8 +125,8 @@ erDiagram
 | Dato | Dueño | Cómo lo obtiene el servicio |
 | --- | --- | --- |
 | Comprobante, PDF, reenvíos, bandejas | **Este servicio** (esquema `receipts`, rol `m8_receipts`) | Propio |
-| Pago confirmado | M7 | Evento `payment.confirmed` |
-| Cliente, conductor, recorrido | M1 / M6 | Llegan en el evento (provisorio hasta AE4: la respuesta de M7 no los incluye); se guardan como foto inmutable |
+| Estado del pago, medio de pago e importe cobrado | M7 | Consulta REST `GET /metodo-pago/{viajeId}` al emitir; se guardan con el comprobante |
+| Cliente, conductor, recorrido y desglose de la tarifa | M1 / M6 / M7 | Llegan en el pedido o en el evento (provisorio hasta cerrar los contratos con M1, M2, M3 y M6); se guardan como foto inmutable |
 | Enlaces de descarga | Este servicio (Redis, efímero) | Propio; vencen solos |
 | Autorización fiscal | Autorizador fiscal (externo) | Llamada HTTP al emitir; se guarda con el comprobante. Solo se le envían identificadores e importes |
 
@@ -129,14 +138,15 @@ Fundamento en [ADR-004](../adr/ADR-004-persistencia-ae2.md).
 ```mermaid
 sequenceDiagram
     autonumber
-    participant M7 as M7 - Pagos
+    participant P as Productor (simulado)
     participant MQ as RabbitMQ
     participant C as Consumidor
     participant S as Emisión
+    participant M7 as M7 - Pagos
     participant DB as PostgreSQL
     participant R as Relay
 
-    M7->>MQ: payment.confirmed (messageId, correlationId = tripId)
+    P->>MQ: payment.confirmed (messageId, correlationId = tripId)
     MQ->>C: entrega (al menos una vez)
     C->>DB: ¿messageId en processed_messages?
     alt ya procesado
@@ -144,6 +154,9 @@ sequenceDiagram
     else nuevo
         C->>S: issueReceipt(pedido)
         S->>DB: ¿comprobante del tripId?
+        S->>M7: GET /metodo-pago/{tripId}
+        M7-->>S: estado, tipo, total, moneda
+        Note over S,M7: solo sigue con "autorizado"
         S->>S: autorización fiscal (timeout 2 s, circuit breaker)
         S->>S: genera el PDF con el código de autorización
         S->>DB: BEGIN · INSERT comprobante · INSERT PDF · INSERT outbox · COMMIT
@@ -161,10 +174,11 @@ sequenceDiagram
     end
 ```
 
-Si la base o el autorizador fiscal no responden, el consumidor republica el mensaje en
-la cola `.retry` (espera de 5 s) **sin descontar intentos**, hasta que la dependencia
-vuelva. Otro error inesperado se reintenta hasta 3 veces y después va a la DLQ. Un
-mensaje inválido o rechazado por el autorizador va directo a la DLQ. Si RabbitMQ no
+Si la base, M7 o el autorizador fiscal no responden, el consumidor republica el mensaje
+en la cola `.retry` (espera de 5 s) **sin descontar intentos**, hasta que la dependencia
+vuelva. Un pago pendiente o sin registrar en M7, u otro error inesperado, se reintenta
+hasta 3 veces y después va a la DLQ. Un mensaje inválido, un pago rechazado por M7 o un
+comprobante rechazado por el autorizador va directo a la DLQ. Si RabbitMQ no
 responde, el evento queda pendiente en `outbox_events`. Detalle en
 [ADR-005](../adr/ADR-005-resiliencia-ae2.md).
 
