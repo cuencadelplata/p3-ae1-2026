@@ -195,4 +195,108 @@ describe('Controlador Conductores (conductoresController)', () => {
       });
     });
   });
+
+  describe('obtenerHabilitado (RF 3.1)', () => {
+    test('debe retornar 400 si no se proporciona el ID', async () => {
+      req.params = {};
+
+      await conductoresController.obtenerHabilitado(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: 'ID de conductor es requerido' });
+    });
+
+    test('debe retornar 404 si el conductor no existe ni en caché ni en base de datos', async () => {
+      req.params = { id: 'inexistente' };
+      redisRepository.obtenerHabilitado.mockResolvedValue(null);
+
+      await conductoresController.obtenerHabilitado(req, res);
+
+      expect(redisRepository.obtenerHabilitado).toHaveBeenCalledWith('inexistente');
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: "Conductor con ID 'inexistente' no encontrado" });
+    });
+
+    test('debe retornar 200 con el estado de habilitación desde caché', async () => {
+      req.params = { id: 'cond_001' };
+      const mockResultado = { usuarioID: 'cond_001', habilitado: 'activo', origen: 'cache' };
+      redisRepository.obtenerHabilitado.mockResolvedValue(mockResultado);
+
+      await conductoresController.obtenerHabilitado(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(mockResultado);
+    });
+
+    test('debe retornar 200 con el estado de habilitación recargado desde la base de datos', async () => {
+      req.params = { id: 'cond_002' };
+      const mockResultado = { usuarioID: 'cond_002', habilitado: 'pendiente', origen: 'db' };
+      redisRepository.obtenerHabilitado.mockResolvedValue(mockResultado);
+
+      await conductoresController.obtenerHabilitado(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(mockResultado);
+    });
+
+    test('debe retornar error 500 si el repositorio falla', async () => {
+      req.params = { id: 'cond_001' };
+      redisRepository.obtenerHabilitado.mockRejectedValue(new Error('Redis connection error'));
+
+      await conductoresController.obtenerHabilitado(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error al obtener habilitación del conductor',
+        detalle: 'Redis connection error'
+      });
+    });
+  });
+
+  describe('obtenerDisponible (RF 3.3)', () => {
+    test('debe retornar 400 si no se proporciona el ID', async () => {
+      req.params = {};
+
+      await conductoresController.obtenerDisponible(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: 'ID de conductor es requerido' });
+    });
+
+    test('debe retornar 200 con disponible=true cuando hay un heartbeat vigente en Redis', async () => {
+      req.params = { id: 'cond_001' };
+      const mockResultado = { usuarioID: 'cond_001', disponible: true };
+      redisRepository.obtenerDisponibilidad.mockResolvedValue(mockResultado);
+
+      await conductoresController.obtenerDisponible(req, res);
+
+      expect(redisRepository.obtenerDisponibilidad).toHaveBeenCalledWith('cond_001');
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(mockResultado);
+    });
+
+    test('debe retornar 200 con disponible=false cuando no hay heartbeat (clave expirada o inexistente)', async () => {
+      req.params = { id: 'cond_002' };
+      const mockResultado = { usuarioID: 'cond_002', disponible: false };
+      redisRepository.obtenerDisponibilidad.mockResolvedValue(mockResultado);
+
+      await conductoresController.obtenerDisponible(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(mockResultado);
+    });
+
+    test('debe retornar error 500 si el repositorio falla', async () => {
+      req.params = { id: 'cond_001' };
+      redisRepository.obtenerDisponibilidad.mockRejectedValue(new Error('Redis connection error'));
+
+      await conductoresController.obtenerDisponible(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error al obtener disponibilidad del conductor',
+        detalle: 'Redis connection error'
+      });
+    });
+  });
 });

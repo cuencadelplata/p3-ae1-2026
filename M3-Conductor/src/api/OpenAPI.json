@@ -92,7 +92,75 @@
         }
       }
     },
-     "/conductores/": {
+     "/conductores/{id}/habilitado": {
+      "get": {
+        "summary": "Estado de habilitación del conductor (RF 3.1)",
+        "description": "Resuelve primero contra la caché de Redis; si no está cacheado, consulta la base de datos y recarga la caché con TTL. Es la única vía permitida para que otros módulos consulten este dato (no deben hacer SQL directo).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "usuarioID del conductor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de habilitación obtenido (desde caché o base de datos)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "usuarioID": { "type": "string" },
+                    "habilitado": { "type": "string", "enum": ["pendiente", "activo", "suspendido", "rechazado"] },
+                    "origen": { "type": "string", "enum": ["cache", "db"] }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Conductor no encontrado" }
+        }
+      }
+    },
+    "/conductores/{id}/disponible": {
+      "get": {
+        "summary": "Estado efímero de disponibilidad del conductor (RF 3.3)",
+        "description": "Consulta exclusivamente Redis (clave con TTL tipo heartbeat), sin acceder a la base de datos, pensado para que el Módulo 5 la consulte de forma optimizada y frecuente durante el matching de viajes.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "usuarioID del conductor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de disponibilidad obtenido desde Redis (false si no hay heartbeat vigente)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "usuarioID": { "type": "string" },
+                    "disponible": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conductores/": {
       "post": {
         "summary": "Crear un nuevo conductor",
         "requestBody": {

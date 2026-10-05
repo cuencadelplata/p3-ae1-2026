@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "test": "jest",
     "test:front": "npx serve public",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
@@ -12,13 +13,20 @@
     "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "ioredis": "^5.4.1",
-    "supabase": "^2.116.0"
+    "ioredis": "^5.4.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1"
+    "@playwright/test": "^1.62.1",
+    "jest": "^30.5.2"
+  },
+  "jest": {
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/tests/e2e/"
+    ]
   }
 }

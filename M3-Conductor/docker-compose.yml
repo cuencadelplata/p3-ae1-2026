@@ -28,6 +28,10 @@ services:
       PORT: 3000
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_TTL_HABILITADO: ${REDIS_TTL_HABILITADO:-300}
+      REDIS_TTL_DISPONIBLE: ${REDIS_TTL_DISPONIBLE:-60}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
     depends_on:
       redis:
         condition: service_healthy

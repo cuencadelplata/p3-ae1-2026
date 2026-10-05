@@ -3,7 +3,9 @@ const router = express.Router();
 const {
   obtenerConductores,
   obtenerConductorPorId,
-  crearConductor
+  crearConductor,
+  obtenerHabilitado,
+  obtenerDisponible
 } = require("../controllers/conductoresController");
 const {
   obtenerValoraciones,
@@ -14,6 +16,8 @@ const {
  * Rutas de conductores
  */
 router.get("/conductores", obtenerConductores);
+router.get("/conductores/:id/habilitado", obtenerHabilitado);
+router.get("/conductores/:id/disponible", obtenerDisponible);
 router.get("/conductores/:id", obtenerConductorPorId);
 router.post("/conductores", crearConductor);
 router.post("/conductores/", crearConductor);
