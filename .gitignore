@@ -146,3 +146,7 @@ vite.config.ts.timestamp-*
 
 # Estado local de agentes (Codex / oh-my-opencode)
 .omo/
+
+# Resultados de Playwright
+playwright-report/
+test-results/
