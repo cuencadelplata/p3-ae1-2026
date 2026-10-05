@@ -3,7 +3,7 @@ import axios from 'axios';
 import { execSync, spawn, type ChildProcess } from 'child_process';
 import { resolve } from 'path';
 
-const API_URL = 'http://localhost:3000/api';
+let API_URL = '';
 const M8_URL = process.env.M8_URL ?? 'http://host.docker.internal:3103';
 const M8_TEST_URL = process.env.M8_TEST_URL ?? 'http://localhost:3103';
 const PROJECT_ROOT = resolve(__dirname, '../../');
@@ -52,11 +52,19 @@ describe('E2E Tests - Docker Container', () => {
 
     console.log('Iniciando contenedor de Docker...');
     try {
-      const result = execSync(`docker run -d --network m6_viajes_default --add-host host.docker.internal:host-gateway -e DB_HOST=tripdb -e DB_PORT=5432 -e DB_USER=m6 -e DB_PASSWORD=m6pass -e DB_NAME=tripdb -e REDIS_URL=redis://redis:6379 -e RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672 -e M8_URL=${M8_URL} -p 3000:3000 m6-viajes:e2e`, {
+      const result = execSync(`docker run -d --network m6_viajes_default --add-host host.docker.internal:host-gateway -e DB_HOST=tripdb -e DB_PORT=5432 -e DB_USER=m6 -e DB_PASSWORD=m6pass -e DB_NAME=tripdb -e REDIS_URL=redis://redis:6379 -e RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672 -e M8_URL=${M8_URL} -p 127.0.0.1::3000 m6-viajes:e2e`, {
         cwd: PROJECT_ROOT,
         encoding: 'utf-8',
       }).trim();
       containerId = result;
+      const publishedPort = execSync(`docker port ${containerId} 3000/tcp`, {
+        cwd: PROJECT_ROOT,
+        encoding: 'utf-8',
+      }).trim().match(/:(\d+)$/)?.[1];
+      if (!publishedPort) {
+        throw new Error('No se pudo determinar el puerto publicado por Docker');
+      }
+      API_URL = `http://127.0.0.1:${publishedPort}/api`;
       console.log(`Contenedor iniciado con ID: ${containerId}`);
 
       // Esperar a que el contenedor esté listo (máximo 30 segundos)
@@ -64,7 +72,7 @@ describe('E2E Tests - Docker Container', () => {
       const maxAttempts = 30;
       while (attempts < maxAttempts) {
         try {
-          await axios.get('http://localhost:3000/health', { timeout: 2000 });
+          await axios.get(`http://127.0.0.1:${publishedPort}/health`, { timeout: 2000 });
           console.log('Contenedor está listo');
           break;
         } catch {
