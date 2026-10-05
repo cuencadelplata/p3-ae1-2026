@@ -1,10 +1,21 @@
 import { Router } from 'express';
-import { solicitarViaje, registrarArribo, asignarConductor, iniciarViaje } from '../controllers/viajes.controller.js';
+import {
+    solicitarViaje,
+    obtenerViaje,
+    cancelarViaje,
+    registrarArribo,
+    asignarConductor,
+    iniciarViaje,
+} from '../controllers/viajes.controller.js';
 
 const router = Router();
 //en este archivo definimos las rutas del modulo de viajes, que serán consumidas por el cliente (app móvil) y por otros servicios (M3, M8). Cada ruta llama a un controlador que implementa la lógica de negocio correspondiente.
 //endpoint para solicitar un viaje (RF-6.1)
 router.post('/', solicitarViaje);
+
+//endpoints de compatibilidad para RF-6.5 y RF-6.6
+router.get('/:id', obtenerViaje);
+router.patch('/:id/cancelacion', cancelarViaje);
 
 //endpoint para asignar conductor (RF-6.2)
 router.post('/:id/asignar', asignarConductor);

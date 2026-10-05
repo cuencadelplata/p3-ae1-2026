@@ -68,6 +68,78 @@ paths:
               examples:
                 db: { value: { error: "Base de datos no disponible, intente más tarde" } }
 
+  /api/viajes/{id}:
+    get:
+      tags:
+        - Viajes
+      summary: "RF-6.5/RF-6.6: Obtener un viaje para integración"
+      operationId: obtenerViaje
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Viaje encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajeIntegracionResponse'
+        '404':
+          description: El viaje no existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: TripDB no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/viajes/{id}/cancelacion:
+    patch:
+      tags:
+        - Viajes
+      summary: "RF-6.5/RF-6.6: Cancelar un viaje"
+      description: Cancela atómicamente un viaje en estado SOLICITADO o CONDUCTOR_EN_CAMINO.
+      operationId: cancelarViaje
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelarViajeRequest'
+            example:
+              actor: cliente
+              motivo: Cambio de planes
+      responses:
+        '200':
+          description: Viaje cancelado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajeIntegracionResponse'
+        '400':
+          description: Motivo inválido o transición no permitida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El viaje no existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: TripDB no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/viajes/{id}/asignar:
     post:
       tags:
@@ -317,6 +389,31 @@ components:
           format: date-time
           description: Timestamp de creación del viaje
           example: "2026-09-01T15:30:00Z"
+
+    ViajeIntegracionResponse:
+      type: object
+      required: [id, clienteId, conductorId, estado]
+      properties:
+        id:
+          type: string
+        clienteId:
+          type: string
+        conductorId:
+          type: string
+          nullable: true
+        estado:
+          $ref: '#/components/schemas/EstadoViaje'
+
+    CancelarViajeRequest:
+      type: object
+      required: [actor, motivo]
+      properties:
+        actor:
+          type: string
+          enum: [cliente, conductor]
+        motivo:
+          type: string
+          minLength: 1
 
     AsignarConductorRequest:
       type: object

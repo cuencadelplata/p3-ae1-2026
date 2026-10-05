@@ -37,6 +37,16 @@ async function emitirYGuardarQR(viaje: Viaje): Promise<GenerarQRResponse> {
 function respuestaQR(qr: GenerarQRResponse) {
     return { token: qr.token, qrDataUrl: qr.qrDataUrl, expiresAt: qr.expiresAt };
 }
+
+function viajeParaIntegracion(viaje: Viaje) {
+    return {
+        id: viaje.id,
+        clienteId: viaje.clienteId,
+        conductorId: viaje.conductorId ?? null,
+        estado: viaje.estado,
+    };
+}
+
 //en este archivo definimos los controladores del modulo de viajes, que implementan la lógica de negocio para cada endpoint definido en las rutas. Cada controlador recibe la solicitud HTTP, valida los datos, interactúa con los servicios y repositorios necesarios, y devuelve la respuesta HTTP correspondiente.
 export const solicitarViaje = async (req: Request, res: Response): Promise<any> => {
     const { clienteId, origen, destino } = req.body;
@@ -62,6 +72,63 @@ export const solicitarViaje = async (req: Request, res: Response): Promise<any> 
     }
 
     return res.status(201).json(nuevoViaje);
+};
+
+export const obtenerViaje = async (req: Request, res: Response): Promise<any> => {
+    const { id } = req.params;
+    if (typeof id !== 'string') {
+        return res.status(400).json({ error: 'Falta el id del viaje en la URL' });
+    }
+
+    let viaje: Viaje | null;
+    try {
+        viaje = await viajeRepo.buscarPorId(id);
+    } catch (error) {
+        console.error('ERROR EN viajeRepo.buscarPorId:', error);
+        return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
+    }
+
+    if (!viaje) return res.status(404).json({ error: 'Viaje no encontrado' });
+    return res.json(viajeParaIntegracion(viaje));
+};
+
+export const cancelarViaje = async (req: Request, res: Response): Promise<any> => {
+    const { id } = req.params;
+    if (typeof id !== 'string') {
+        return res.status(400).json({ error: 'Falta el id del viaje en la URL' });
+    }
+
+    const { actor, motivo } = req.body ?? {};
+    if (actor !== 'cliente' && actor !== 'conductor') {
+        return res.status(400).json({ error: 'El actor debe ser cliente o conductor' });
+    }
+    if (typeof motivo !== 'string' || !motivo.trim()) {
+        return res.status(400).json({ error: 'El motivo de cancelación es obligatorio' });
+    }
+
+    let viaje: Viaje | null;
+    try {
+        viaje = await viajeRepo.cancelarSiCancelable(id);
+    } catch (error) {
+        console.error('ERROR EN viajeRepo.cancelarSiCancelable:', error);
+        return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
+    }
+
+    if (!viaje) {
+        let viajeExistente: Viaje | null;
+        try {
+            viajeExistente = await viajeRepo.buscarPorId(id);
+        } catch (error) {
+            console.error('ERROR EN viajeRepo.buscarPorId:', error);
+            return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
+        }
+        if (!viajeExistente) return res.status(404).json({ error: 'Viaje no encontrado' });
+        return res.status(400).json({
+            error: `No se puede cancelar un viaje en estado ${viajeExistente.estado}`,
+        });
+    }
+
+    return res.json(viajeParaIntegracion(viaje));
 };
 
 export const asignarConductor = async (req: Request, res: Response): Promise<any> => {

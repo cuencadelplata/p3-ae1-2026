@@ -28,6 +28,18 @@ export async function buscarPorId(id: string): Promise<Viaje | null> {
     return mapRow(rows[0]);
 }
 
+export async function cancelarSiCancelable(id: string): Promise<Viaje | null> {
+    const { rows } = await pool.query(
+        `UPDATE viajes
+         SET estado = $1
+         WHERE id = $2 AND estado IN ($3, $4)
+         RETURNING *`,
+        [EstadoViaje.CANCELADO, id, EstadoViaje.SOLICITADO, EstadoViaje.CONDUCTOR_EN_CAMINO]
+    );
+    if (rows.length === 0) return null;
+    return mapRow(rows[0]);
+}
+
 export async function actualizarEstado(id: string, estado: EstadoViaje, conductorId?: string): Promise<void> {
     await pool.query(
         `UPDATE viajes SET estado = $1, conductor_id = COALESCE($2, conductor_id) WHERE id = $3`,
