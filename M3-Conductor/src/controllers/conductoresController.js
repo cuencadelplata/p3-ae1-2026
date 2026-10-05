@@ -1,5 +1,6 @@
 const redisRepository = require('../repositories/redisRepository');
 const Conductor = require('../models/Conductor');
+module.exports = require('../controllers/conductoresController');
 
 /**
  * GET /conductores

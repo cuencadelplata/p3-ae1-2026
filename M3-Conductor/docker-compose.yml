@@ -32,6 +32,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - p3-shared
+      - default
+  networks:
+    p3-shared:
+      name: p3-shared
 
   # Backend Node.js - Módulo 3 (Conductores & Valoraciones)
   api:

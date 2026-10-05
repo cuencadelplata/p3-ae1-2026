@@ -1,5 +1,6 @@
 const redisRepository = require('../repositories/redisRepository');
 const Valoracion = require('../models/Valoracion');
+module.exports = require('../controllers/valoracionesController');
 
 /**
  * GET /conductor/valoraciones
