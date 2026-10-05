@@ -1,5 +1,7 @@
 import { app } from './app.js';
 import { testDbConnection, dbConfig } from './config/db.js';
+import { prisma } from './config/prisma.js';
+import { disconnectRedis, redisClient } from './config/redis.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -22,12 +24,27 @@ async function startServer() {
     console.log('⚠️  Aviso: PostgreSQL no está activo aún (recuerda levantar con: docker compose up -d db-profiles)');
   }
 
-  app.listen(PORT, () => {
+  // Abre la conexión de Redis de RF-2.2 / RF-2.4 al arrancar (el cliente se crea en el primer uso)
+  redisClient.ping().catch(() => undefined);
+
+  const server = app.listen(PORT, () => {
     console.log(`🌐 Servidor Express escuchando en: http://localhost:${PORT}`);
     console.log(`📖 Documentación Interactiva Scalar: http://localhost:${PORT}/docs`);
     console.log(`🔍 Healthcheck: http://localhost:${PORT}/health`);
     console.log('----------------------------------------------------');
   });
+
+  // Cierre ordenado (RF-2.2): termina las requests en curso y libera Prisma y Redis
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.on(signal, () => {
+      server.close(() => {
+        disconnectRedis();
+        redisClient.disconnect();
+        void prisma.$disconnect().then(() => process.exit(0));
+      });
+      setTimeout(() => process.exit(1), 10_000).unref();
+    });
+  }
 }
 
 startServer();

@@ -1,0 +1,18 @@
+
+> modulo2-clientes-ae2@2.2.0 test:stack
+> node --test tests/stack.test.cjs
+
+✔ Stack real: M6 → RabbitMQ → M2 y M2 → outbox → RabbitMQ → M8 (2779.862166ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2841.060292
+npm notice
+npm notice New major version of npm available! 11.19.0 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice

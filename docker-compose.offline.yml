@@ -1,0 +1,23 @@
+# Arranque usando exclusivamente imágenes ya presentes; servicios locales aislados de Internet.
+services:
+  postgres:
+    pull_policy: never
+  redis:
+    pull_policy: never
+  rabbitmq:
+    pull_policy: never
+  migrate:
+    pull_policy: never
+  api:
+    pull_policy: never
+  worker:
+    pull_policy: never
+  m4:
+    pull_policy: never
+  m6:
+    pull_policy: never
+  m8:
+    pull_policy: never
+networks:
+  default:
+    internal: true

@@ -1,19 +1,38 @@
+# Módulo 2 (Clientes) completo: RF-2.1, 2.3, 2.5 (perfil, viajes, estado de cuenta)
+# y RF-2.2, 2.4 (direcciones frecuentes, calificación del conductor).
+# Los valores son defaults de desarrollo; en un entorno compartido se inyectan con .env.
+
+x-app: &app
+  image: leangau/m2-perfilhistorialestado:api
+  restart: unless-stopped
+
+x-ae2-env: &ae2-env
+  DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db-profiles:5432/profiles?schema=public&connection_limit=10&connect_timeout=3&pool_timeout=5
+  REDIS_URL: redis://redis:6379
+  RABBITMQ_URL: amqp://ae2:${RABBITMQ_PASSWORD:-ae2-dev}@rabbitmq:5672
+  INTEGRATION_SECRET: ${INTEGRATION_SECRET:-integration-dev}
+  M4_BASE_URL: http://m4:4004
+  M6_BASE_URL: ${M6_DOCKER_BASE_URL:-http://m6-sim:4000}
+  CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-60}
+  CHECKPOINT_DISABLE: "1"
+  PRISMA_HIDE_UPDATE_MESSAGE: "1"
+
 services:
   # Backend - Módulo 2 (Clientes)
   api:
-    image: leangau/m2-perfilhistorialestado:api
+    <<: *app
     container_name: p3-api
     restart: always
     ports:
       - "3000:3000"
     environment:
+      <<: *ae2-env
       PORT: 3000
       DB_HOST: db-profiles
       DB_PORT: 5432
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       DB_NAME: profiles
-      REDIS_URL: redis://redis:6379
       # Stubs internos: los módulos externos se simulan dentro del mismo contenedor
       STUBS_ENABLED: "true"
       M1_SERVICE_URL: http://localhost:3000/__stubs/m1
@@ -28,6 +47,37 @@ services:
     depends_on:
       db-profiles:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Migraciones de Prisma (tablas de RF-2.2 / RF-2.4 en el esquema public)
+  migrate:
+    <<: *app
+    restart: "no"
+    environment: *ae2-env
+    command: ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
+    depends_on:
+      db-profiles:
+        condition: service_healthy
+
+  # Worker de RF-2.2: consume TripCompleted de M6 y publica el outbox
+  worker:
+    <<: *app
+    container_name: p3-worker
+    environment: *ae2-env
+    command: ["node", "dist/worker.js"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   # Frontend - React + Vite (servido por nginx)
   client:
@@ -39,7 +89,7 @@ services:
     depends_on:
       - api
 
-  # Base de Datos Relacional (PostgreSQL) - Contiene el esquema 'customers'
+  # Base de Datos Relacional (PostgreSQL) - esquema 'customers' (RF-2.1/2.5) y 'public' (Prisma)
   db-profiles:
     image: postgres:16-alpine
     container_name: p3-db-profiles
@@ -47,7 +97,7 @@ services:
     environment:
       POSTGRES_DB: profiles
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
       - "5433:5432"
     volumes:
@@ -71,5 +121,52 @@ services:
       timeout: 3s
       retries: 5
 
+  # Mensajería de RF-2.2 (TripCompleted.v1 de M6, FavoriteAddressChanged.v1 hacia M8)
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    container_name: p3-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ae2
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-ae2-dev}
+    ports: ["127.0.0.1:56729:5672", "127.0.0.1:15679:15672"]
+    volumes: ["rabbitmq_data:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # Simuladores de RF-2.2 / RF-2.4 (mapas M4, viajes M6, notificaciones M8)
+  m4:
+    <<: *app
+    environment:
+      INTEGRATION_SECRET: ${INTEGRATION_SECRET:-integration-dev}
+    command: ["node", "dist/mocks/modulo4.mock.js"]
+    ports: ["127.0.0.1:4004:4004"]
+  m6-sim:
+    <<: *app
+    environment:
+      INTEGRATION_SECRET: ${INTEGRATION_SECRET:-integration-dev}
+      RABBITMQ_URL: amqp://ae2:${RABBITMQ_PASSWORD:-ae2-dev}@rabbitmq:5672
+    command: ["node", "dist/mocks/modulo6.demo.js"]
+    ports: ["127.0.0.1:4000:4000"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+  m8:
+    <<: *app
+    environment:
+      INTEGRATION_SECRET: ${INTEGRATION_SECRET:-integration-dev}
+      RABBITMQ_URL: amqp://ae2:${RABBITMQ_PASSWORD:-ae2-dev}@rabbitmq:5672
+      NOTIFICATIONS_DIR: /tmp/m8-notifications
+    command: ["node", "dist/mocks/modulo8.demo.js"]
+    ports: ["127.0.0.1:4008:4008"]
+    volumes: ["notifications:/tmp/m8-notifications"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
 volumes:
   postgres_data:
+  rabbitmq_data:
+  notifications:

@@ -3,10 +3,12 @@ Paradigmas 3 AE1 2026 - Grupo 5 - M2
 
 ## M2: Clientes
 
-Implementación del módulo M2 para los requisitos RF-2.1, RF-2.3 y RF-2.5:
+Implementación del módulo M2 para los requisitos RF-2.1 a RF-2.5:
 
 - **RF-2.1 Perfil de cliente:** alta (asociada al `userId` de M1 vía token JWT), consulta y actualización de preferencias. El nombre, teléfono y correo pertenecen a M1 y no se duplican en M2.
 - **RF-2.3 Historial de viajes:** consulta del listado de viajes consumiendo la API de M6 por `userId`, reenviando el token del usuario, sin acceso directo a su base de datos. Respuesta degradada vacía si M6 no está disponible.
+- **RF-2.2 Direcciones frecuentes:** orígenes y destinos favoritos o recientes del cliente, con sugerencias de regreso (B → A). Ver [RF-2.2 y RF-2.4](#direcciones-frecuentes-rf-22-y-calificación-del-conductor-rf-24).
+- **RF-2.4 Calificación del conductor:** el cliente califica al conductor de un viaje completado.
 - **RF-2.5 Estado de cuenta:** consulta con recálculo automático de bloqueos según penalizaciones vigentes de Soporte; cambio manual por el dueño del perfil. Los clientes nunca se eliminan: la baja se registra con el estado `INACTIVO`.
 
 ---
@@ -53,6 +55,23 @@ docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
 npx playwright install chromium
 npm run test:e2e
 docker compose down
+```
+
+### Paso 4 — Tests de RF-2.2 / RF-2.4
+
+```bash
+npm run test:ae2                 # unitarios (sin Docker)
+npm run test:ae2:integration     # requiere el compose levantado (base migrada y Redis)
+npm run test:stack               # requiere todo el compose (RabbitMQ, worker, simuladores)
+```
+
+Con el compose levantado, las variables para ejecutarlas desde el host son:
+
+```bash
+export DATABASE_URL='postgresql://postgres:postgres@localhost:5433/profiles?schema=public'
+export REDIS_URL=redis://localhost:6379
+export INTEGRATION_SECRET=integration-dev
+export RABBITMQ_URL=amqp://ae2:ae2-dev@localhost:56729
 ```
 
 La suite unitaria e integración no requiere Docker. Los tests E2E requieren que la API, PostgreSQL, Redis y el cliente estén disponibles. El override `docker-compose.e2e.yml` construye la API y el cliente con el código local; sin él, Compose descarga las imágenes publicadas en Docker Hub, que pueden estar desactualizadas.
@@ -178,6 +197,60 @@ Ambos clientes usan la misma política que M1 (`src/resilience/policies.ts`): ti
 
 ---
 
+## Direcciones frecuentes (RF-2.2) y calificación del conductor (RF-2.4)
+
+Todas las rutas requieren el **mismo token de M1** que el resto de M2 (rol `CLIENTE`). El `clienteId` de direcciones y calificaciones es el `userId` de M1, así quedan vinculados al perfil de RF-2.1. Nunca se acepta el `clienteId` desde el body ni desde un header: lo fija el token. Para obtener un token de prueba: `node scripts/token.cjs [userId]` (por defecto 12).
+
+| Método | Ruta | Propósito |
+|---|---|---|
+| POST | `/api/v1/direcciones` | Alta de favorita o promoción de reciente |
+| GET | `/api/v1/direcciones` | Lista propia con filtros y paginación |
+| GET | `/api/v1/direcciones/{id}` | Detalle y ETag |
+| PATCH | `/api/v1/direcciones/{id}` | Etiqueta y/o estado favorito |
+| DELETE | `/api/v1/direcciones/{id}` | Eliminar dirección propia |
+| GET | `/api/v1/direcciones/sugerencias` | Candidatos para ambos extremos y regreso B → A |
+| POST | `/api/v1/direcciones/desde-viaje` | Recupera recientes consultando M6 por viajeId |
+| GET | `/api/v1/geocodificacion?q=Plaza` | Buscar en M4 (simulado) |
+| POST | `/api/v1/calificaciones` | Calificar al conductor de un viaje completado |
+| GET | `/api/v1/calificaciones/viaje/{viajeId}` | Calificación de un viaje (cache-aside en Redis) |
+
+Las rutas heredadas `/calificaciones` y `/calificaciones/viaje/{viajeId}` (sin prefijo) se conservan, también autenticadas.
+
+Las escrituras de favoritos requieren `Idempotency-Key` (8–100 caracteres alfanuméricos, guion o guion bajo); PATCH/DELETE además requieren `If-Match: "1"` con la versión actual. Reutilizar una clave con otro cuerpo devuelve 409; la repetición válida devuelve la respuesta original y `Idempotency-Replayed: true`. Estas rutas responden los errores con el formato `{ status, code, message, correlationId }`.
+
+Body de `POST /api/v1/direcciones`:
+
+```json
+{
+  "tipo": "ORIGEN",
+  "etiqueta": "Casa",
+  "direccion": "Plaza 25 de Mayo, Resistencia",
+  "latitud": -27.4513,
+  "longitud": -58.9866
+}
+```
+
+Filtros: `?favorita=true`, `?recientes=true`, `?tipo=DESTINO&page=1&limit=20` (máximo 100 por página). Las coordenadas son opcionales y deben venir ambas o ninguna. La identidad de una dirección usa coordenadas a seis decimales si existen; en direcciones textuales normaliza mayúsculas, espacios y Unicode.
+
+**Persistencia y mensajería.** Sus tablas viven en el mismo PostgreSQL que el resto de M2 (esquema `public`, gestionado con Prisma; el servicio `migrate` aplica las migraciones al levantar el compose). Redis cachea con TTL de 60 s e invalidación por revisión. El `worker` consume `TripCompleted.v1` de M6 (→ recientes) y publica `FavoriteAddressChanged.v1` hacia M8 con outbox transaccional, inbox, deduplicación por viaje, tres reintentos y DLQ. Ver [EVENTOS.md](docs/EVENTOS.md).
+
+**Integraciones** (simuladas en el compose):
+
+| Módulo | Interacción | En el compose |
+|---|---|---|
+| M1 Identidad | Token JWT validado por M2 (igual que RF-2.1) | Stub de M1 dentro de la API |
+| M4 Ubicación | `GET /api/v1/geocodificacion?q=...` | Servicio `m4` (puerto 4004) |
+| M6 Viajes | `GET /api/viajes/{viajeId}` y evento `TripCompleted.v1` | Servicio `m6-sim` (puerto 4000) |
+| M8 Comunicaciones | Consume `FavoriteAddressChanged.v1` | Servicio `m8` (puerto 4008) |
+
+En `/health` aparecen como dependencias no críticas `prisma` y `worker` (heartbeat del worker en Redis). `/health/ready` responde lo mismo que `/health` y `/health/live` solo indica que el proceso está vivo.
+
+**Base existente de AE1.** Si una base ya tiene **exactamente** la tabla `calificaciones` del esquema original, registrarla antes de migrar: `npx prisma migrate resolve --applied 202610050001_base_ae1` y luego `npm run db:migrate`. No hacerlo sobre una base vacía.
+
+Documentación de detalle de la entrega AE2: [ARQUITECTURA.md](docs/ARQUITECTURA.md), [DEMO.md](docs/DEMO.md), [INTEGRACION-M6.md](docs/INTEGRACION-M6.md), [PRUEBAS.md](docs/PRUEBAS.md).
+
+---
+
 ## Stubs de módulos externos
 
 Con `STUBS_ENABLED=true` se montan en el mismo proceso:
@@ -220,6 +293,10 @@ Soporte: GET /usuarios/{userId}/penalizaciones   X-Secret-Key: <SOPORTE_SECRET_K
 
 M6:      GET /v1/trips?userId={id}   Authorization: Bearer <jwt>
          → 200 { userId, tripsCount, trips: [...] }
+
+M6:      GET /api/viajes/{viajeId}   (RF-2.2 importación de recientes y RF-2.4)
+         → 200 { id, clienteId, estado, origen, destino, ... }
+M4:      GET /api/v1/geocodificacion?q=...   x-service-key: <INTEGRATION_SECRET>
 ```
 
 M2 es consumido por:

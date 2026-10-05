@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs';
-import { openApiSpec } from '../src/docs/openapi.js';
+import { buildOpenApiSpec } from '../src/docs/merged-openapi.js';
 
-// Genera openapi.json en la raíz a partir de src/docs/openapi.ts (única fuente de verdad)
-writeFileSync('openapi.json', JSON.stringify(openApiSpec, null, 2) + '\n');
+// Genera openapi.json en la raíz: src/docs/openapi.ts (RF-2.1/2.3/2.5) + docs/openapi.json (RF-2.2/2.4)
+writeFileSync('openapi.json', JSON.stringify(buildOpenApiSpec(), null, 2) + '\n');
 console.log('openapi.json generado');

@@ -150,3 +150,6 @@ vite.config.ts.timestamp-*
 # Resultados de Playwright
 playwright-report/
 test-results/
+
+# Integración AE2 (RF-2.2 / RF-2.4)
+.env.local

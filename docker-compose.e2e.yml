@@ -1,6 +1,8 @@
 # Override para E2E: construye las imágenes con el código local en lugar de
 # usar las publicadas en Docker Hub.
 #   docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
+# migrate, worker y los simuladores usan la misma imagen que la API: también se
+# construyen localmente para no mezclar código nuevo con una imagen vieja.
 services:
   api:
     build: .
@@ -8,5 +10,15 @@ services:
       # Pausa corta del circuit breaker: el E2E de "M6 caído" lo abre y la siguiente
       # corrida no debe esperar 30 s a que se cierre
       CIRCUIT_BREAKER_RESET_MS: "1000"
+  migrate:
+    build: .
+  worker:
+    build: .
+  m4:
+    build: .
+  m6-sim:
+    build: .
+  m8:
+    build: .
   client:
     build: ./client

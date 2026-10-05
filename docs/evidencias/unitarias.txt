@@ -1,0 +1,48 @@
+
+> modulo2-clientes-ae2@2.2.0 test
+> npm run build && node --test tests/unit.test.cjs
+
+
+> modulo2-clientes-ae2@2.2.0 build
+> prisma generate && tsc
+
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+
+✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 38ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Interested in query caching in just a few lines of code? Try Accelerate today! https://pris.ly/tip-3-accelerate
+
+npm notice
+npm notice New major version of npm available! 11.19.0 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice
+{"event":"message_processed","type":"TripCompleted.v1","eventId":"bf2e769e-eb7a-49ef-8cbd-8f84ddf15680","correlationId":"test"}
+✔ Valida coordenadas, tipo y rechaza identidad en cuerpo (1.117375ms)
+✔ Normalización y huella no dependen del orden JSON (0.089542ms)
+✔ Control optimista requiere versión fuerte válida (0.19425ms)
+✔ Token: firma, audiencia, rol y vencimiento (0.655416ms)
+{"event":"message_retry","eventId":"07139fd2-ed2f-4616-93b1-c67e7dbc2f42","attempt":1}
+✔ Ack ocurre después de persistencia completada (2.452ms)
+✔ Error de procesamiento va a retry confirmado antes de ack (0.667041ms)
+{"event":"message_dead_letter","eventId":"dfbf9791-b432-455f-b4a7-64d402e02147","attempt":4}
+✔ Mensaje inválido y reintentos agotados van a DLQ (0.342458ms)
+✔ Si falla reenviar no hay ack; cierre permite redelivery (0.245917ms)
+✔ Demuestra la carrera del enfoque ingenuo comprobar-luego-insertar (0.20625ms)
+✔ Direcciones textuales sin coordenadas; no admite una coordenada sola (0.500334ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 51.993792
+npm notice
+npm notice New major version of npm available! 11.19.0 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice
