@@ -154,7 +154,10 @@ services:
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
-      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      # `ping` solo confirma que el nodo Erlang responde; el listener AMQP
+      # puede seguir iniciando. M5 necesita que el puerto 5672 ya acepte
+      # conexiones antes de arrancar.
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'check_port_connectivity']
       interval: 5s
       timeout: 15s
       retries: 12
