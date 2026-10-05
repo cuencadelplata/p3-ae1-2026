@@ -4,12 +4,21 @@ import { app } from '../../src/app.js';
 import { customerRepository } from '../../src/repositories/customer.repository.js';
 import { soporteClient } from '../../src/clients/soporte.client.js';
 import { m6Client } from '../../src/clients/m6.client.js';
+import { m1AuthClient } from '../../src/clients/m1-auth.client.js';
 import { ServiceUnavailableError } from '../../src/errors/service-unavailable.error.js';
-import type { AccountStatusResponse, CustomerProfile } from '../../src/types/customer.js';
+import { UserIdSchema, type AccountStatusResponse, type CustomerProfile } from '../../src/types/customer.js';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 const TOKEN = 'Bearer tok-test';
+
+/** Mockea requireAuth: cualquier Bearer válido resuelve al userId 12 con rol CLIENTE. */
+function mockAuthOk() {
+  vi.spyOn(m1AuthClient, 'validateToken').mockResolvedValue({
+    userId: UserIdSchema.parse(12),
+    role: 'CLIENTE'
+  });
+}
 
 function savedStatus(overrides: Partial<AccountStatusResponse> = {}): AccountStatusResponse {
   return {
@@ -24,9 +33,7 @@ function savedStatus(overrides: Partial<AccountStatusResponse> = {}): AccountSta
 function activeCustomer(): CustomerProfile {
   return {
     customerId: 'cust_823a7b9c',
-    name: 'Juan Pérez',
-    email: 'juan.perez@example.com',
-    phone: '+5493512345678',
+    userId: UserIdSchema.parse(12),
     preferences: { preferredVehicleType: 'auto', notificationChannel: 'email' },
     status: 'ACTIVO',
     createdAt: '2026-08-30T23:00:00Z'
@@ -34,6 +41,8 @@ function activeCustomer(): CustomerProfile {
 }
 
 // ─── GET /v1/customers/:id/status ─────────────────────────────────────────────
+// GET /status NO pasa por requireAuth (acepta token O X-Secret-Key en el controller),
+// por eso estos tests no necesitan mockear m1AuthClient.
 
 describe('GET /v1/customers/:id/status (RF-2.5)', () => {
   beforeEach(() => {
@@ -144,8 +153,10 @@ describe('GET /v1/customers/:id/status (RF-2.5)', () => {
 });
 
 // ─── PUT /v1/customers/:id/status ─────────────────────────────────────────────
+// PUT /status pasa por requireAuth → hay que mockear m1AuthClient.validateToken.
 
 describe('PUT /v1/customers/:id/status (RF-2.5)', () => {
+  beforeEach(() => mockAuthOk());
   afterEach(() => vi.restoreAllMocks());
 
   it('sin token → 401', async () => {
@@ -217,8 +228,10 @@ describe('PUT /v1/customers/:id/status (RF-2.5)', () => {
 });
 
 // ─── GET /v1/customers/:id/trips ──────────────────────────────────────────────
+// GET /trips pasa por requireAuth → hay que mockear m1AuthClient.validateToken.
 
 describe('GET /v1/customers/:id/trips (RF-2.3)', () => {
+  beforeEach(() => mockAuthOk());
   afterEach(() => vi.restoreAllMocks());
 
   it('sin token → 401', async () => {

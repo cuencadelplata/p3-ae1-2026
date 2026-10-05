@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ServiceUnavailableError, isServiceUnavailableError, describeError } from '../../src/errors/service-unavailable.error.js';
+import { isDuplicateUserIdError } from '../../src/errors/customer-already-exists.error.js';
 
 // Crea un error como los que lanza Node / pg, con un código opcional
 function errorWithCode(message: string, code?: string): Error {
@@ -43,5 +44,22 @@ describe('Clasificación de errores de infraestructura (RF-2.1)', () => {
     const aggregate = Object.assign(new AggregateError([], ''), { code: 'ECONNREFUSED' });
     expect(describeError(aggregate)).toBe('ECONNREFUSED');
     expect(describeError(new Error('Query read timeout'))).toBe('Query read timeout');
+  });
+});
+
+describe('Perfil duplicado por userId (RF-2.1)', () => {
+  it('debe reconocer la violación de UNIQUE sobre user_id', () => {
+    const pgError = Object.assign(new Error('duplicate key value violates unique constraint'), {
+      code: '23505',
+      constraint: 'customerprofile_user_id_key'
+    });
+    expect(isDuplicateUserIdError(pgError)).toBe(true);
+  });
+
+  it('no debe confundir otras violaciones de UNIQUE ni otros errores', () => {
+    const pkError = Object.assign(new Error('duplicate key'), { code: '23505', constraint: 'customerprofile_pkey' });
+    expect(isDuplicateUserIdError(pkError)).toBe(false);
+    expect(isDuplicateUserIdError(errorWithCode('connect ECONNREFUSED', 'ECONNREFUSED'))).toBe(false);
+    expect(isDuplicateUserIdError(null)).toBe(false);
   });
 });

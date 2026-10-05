@@ -13,6 +13,7 @@ services:
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_NAME: profiles
+      REDIS_URL: redis://redis:6379
       # Stubs internos: los módulos externos se simulan dentro del mismo contenedor
       STUBS_ENABLED: "true"
       M1_SERVICE_URL: http://localhost:3000/__stubs/m1
@@ -56,6 +57,18 @@ services:
       test: ["CMD-SHELL", "pg_isready -U postgres -d profiles"]
       interval: 5s
       timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: p3-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
       retries: 5
 
 volumes:

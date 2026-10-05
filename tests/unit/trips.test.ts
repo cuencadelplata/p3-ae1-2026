@@ -1,16 +1,15 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { TripsService } from '../../src/services/trips.service.js';
 import { ServiceUnavailableError } from '../../src/errors/service-unavailable.error.js';
-import type { CustomerProfile } from '../../src/types/customer.js';
+import { UserIdSchema, type CustomerProfile } from '../../src/types/customer.js';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function makeCustomer(customerId = 'cust_abc'): CustomerProfile {
   return {
     customerId,
-    name: 'Juan Pérez',
-    email: 'juan@example.com',
-    phone: '+549351111',
+    userId: UserIdSchema.parse(12),
     preferences: { preferredVehicleType: 'auto', notificationChannel: 'email' },
     status: 'ACTIVO',
     createdAt: '2026-09-01T00:00:00Z'
@@ -61,9 +60,9 @@ describe('TripsService.getTrips', () => {
 
   it('el customerId en la respuesta es siempre el interno de M2, no el userId de M1', async () => {
     // M6 devuelve userId=12, pero TripsService debe normalizar a customerId interno
-    const svc = new TripsService(makeRepo(makeCustomer('cust_xyz123')), makeM6([]));
-    const result = await svc.getTrips('cust_xyz123', 12, 'tok');
-    expect(result?.customerId).toBe('cust_xyz123');
+    const svc = new TripsService(makeRepo(makeCustomer('cust_ab12cd34')), makeM6([]));
+    const result = await svc.getTrips('cust_ab12cd34', 12, 'tok');
+    expect(result?.customerId).toBe('cust_ab12cd34');
   });
 
   it('M6 caído → respuesta degradada vacía (no 503)', async () => {

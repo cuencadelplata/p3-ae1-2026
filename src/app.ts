@@ -7,9 +7,17 @@ import { accountStatusController } from './controllers/account-status.controller
 import { tripsController } from './controllers/trips.controller.js';
 import { asyncHandler } from './middlewares/async-handler.js';
 import { errorHandler } from './middlewares/error-handler.js';
+import { requireAuth } from './middlewares/auth.middleware.js';
+import { metricsHandler, httpMetricsMiddleware } from './observability/metrics.js';
+import { healthHandler } from './health/registry.js';
 import { mountStubs } from './stubs/index.js';
+import { soporteStubRouter } from './stubs/soporte.stub.js';
+import { m6StubRouter } from './stubs/m6.stub.js';
 
 export const app = express();
+
+// Metrics (before everything else)
+app.use(httpMetricsMiddleware);
 
 // Middlewares globales
 app.use(cors({
@@ -18,7 +26,7 @@ app.use(cors({
     'http://localhost:80',   // nginx local
   ],
   methods: ['GET', 'POST', 'PUT', 'OPTIONS'], // Sin DELETE: los clientes solo se dan de baja por estado
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Secret-Key'],
 }));
 app.use(express.json());
 
@@ -41,33 +49,42 @@ app.use(
   })
 );
 
-// 2. Healthcheck del servicio
-app.get('/health', (_req, res) => {
-  res.json({
-    status: 'UP',
-    service: 'm2-clientes-api',
-    docs: '/docs'
-  });
-});
+// 2. Healthcheck y Métricas
+app.get('/health', healthHandler);
+app.get('/metrics', metricsHandler);
 
-// 3a. Stubs de módulos externos (solo si STUBS_ENABLED=true)
-mountStubs(app);
+// 3. Stubs de módulos externos (solo si STUBS_ENABLED=true).
+// M1 lo monta mountStubs por defecto; soporte y m6 (de Leandro) se pasan como adicionales.
+mountStubs(app, [
+  { name: 'soporte', router: soporteStubRouter },
+  { name: 'm6', router: m6StubRouter }
+]);
 
-// 3b. Rutas de la API REST (/v1/customers...)
-// RF-2.1: asyncHandler envía los errores async al middleware central (Express 4 no lo hace solo)
-app.post('/v1/customers', asyncHandler(customerController.createCustomer));
-app.get('/v1/customers', asyncHandler(customerController.listCustomers));
-app.get('/v1/customers/:id', asyncHandler(customerController.getCustomerById));
-app.put('/v1/customers/:id', asyncHandler(customerController.updateCustomerPreferences));
+// 4. Rutas de la API REST (/v1/customers...)
+// RF-2.1 (Erwin): perfil de cliente, protegido con requireAuth
+app.post('/v1/customers', requireAuth({ roles: ['CLIENTE'] }), asyncHandler(customerController.createCustomer));
+app.get('/v1/customers/me', requireAuth(), asyncHandler(customerController.getMe));
+app.get('/v1/customers', (req, res, next) => {
+  // El listado es abierto, salvo cuando se filtra por userId (uso de M8): ahí exige token
+  if (req.query.userId) {
+    requireAuth()(req, res, next);
+  } else {
+    next();
+  }
+}, asyncHandler(customerController.listCustomers));
+app.get('/v1/customers/:id', requireAuth(), asyncHandler(customerController.getCustomerById));
+app.put('/v1/customers/:id', requireAuth(), asyncHandler(customerController.updateCustomerPreferences));
 
-// RF-2.5: Estado de cuenta (Leandro) — asyncHandler evita que un error async cuelgue el request
+// RF-2.5: Estado de cuenta (Leandro)
+// GET /status acepta token de usuario O X-Secret-Key (lo valida el propio controller),
+// por eso no lleva requireAuth. PUT /status sí exige token de usuario (solo el dueño).
 app.get('/v1/customers/:id/status', asyncHandler(accountStatusController.getAccountStatus));
-app.put('/v1/customers/:id/status', asyncHandler(accountStatusController.updateAccountStatus));
+app.put('/v1/customers/:id/status', requireAuth(), asyncHandler(accountStatusController.updateAccountStatus));
 
-// RF-2.3: Historial de viajes (Leandro) — asyncHandler igual
-app.get('/v1/customers/:id/trips', asyncHandler(tripsController.getCustomerTrips));
+// RF-2.3: Historial de viajes (Leandro) — requiere token de usuario (se reenvía a M6)
+app.get('/v1/customers/:id/trips', requireAuth(), asyncHandler(tripsController.getCustomerTrips));
 
-// 4. Manejador 404 para rutas no reconocidas
+// 5. Manejador 404 para rutas no reconocidas
 app.use((_req, res) => {
   res.status(404).json({
     error: 'NotFound',
@@ -75,5 +92,5 @@ app.use((_req, res) => {
   });
 });
 
-// 5. Middleware central de errores (debe registrarse al final)
+// 6. Middleware central de errores (debe registrarse al final)
 app.use(errorHandler);

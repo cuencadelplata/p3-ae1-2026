@@ -5,9 +5,9 @@ Paradigmas 3 AE1 2026 - Grupo 5 - M2
 
 Implementación del módulo M2 para los requisitos RF-2.1, RF-2.3 y RF-2.5:
 
-- **RF-2.1 Perfil de cliente:** alta (asociada al userId de M1 via token JWT), consulta y actualización de preferencias.
-- **RF-2.3 Historial de viajes:** consulta del listado de viajes realizados consumiendo M6 por `userId`, reenviando el token del usuario. Respuesta degradada vacía si M6 no está disponible.
-- **RF-2.5 Estado de cuenta:** consulta con recálculo automático de bloqueos según penalizaciones vigentes de Soporte; cambio manual de estado por el dueño del perfil. Los clientes nunca se eliminan.
+- **RF-2.1 Perfil de cliente:** alta (asociada al `userId` de M1 vía token JWT), consulta y actualización de preferencias. El nombre, teléfono y correo pertenecen a M1 y no se duplican en M2.
+- **RF-2.3 Historial de viajes:** consulta del listado de viajes consumiendo la API de M6 por `userId`, reenviando el token del usuario, sin acceso directo a su base de datos. Respuesta degradada vacía si M6 no está disponible.
+- **RF-2.5 Estado de cuenta:** consulta con recálculo automático de bloqueos según penalizaciones vigentes de Soporte; cambio manual por el dueño del perfil. Los clientes nunca se eliminan: la baja se registra con el estado `INACTIVO`.
 
 ---
 
@@ -43,6 +43,7 @@ Cambie a la rama `M2-PerfilHistorialEstado`.
 ```bash
 npm install
 npm test
+npm run build
 ```
 
 ### Paso 3 — Tests E2E (requiere Docker)
@@ -54,21 +55,37 @@ npm run test:e2e
 docker compose down
 ```
 
+La suite unitaria e integración no requiere Docker. Los tests E2E requieren que la API, PostgreSQL, Redis y el cliente estén disponibles. La definición actual de Compose descarga las imágenes publicadas; `npm run build` valida el código local.
+
 ---
 
 ## Variables de entorno
 
-| Variable | Default | Descripción |
-|---|---|---|
-| `PORT` | `3000` | Puerto del servidor |
-| `DATABASE_URL` | — | Cadena de conexión PostgreSQL |
-| `STUBS_ENABLED` | `false` | Montar stubs internos de M1, Soporte y M6 |
-| `M1_SERVICE_URL` | `http://localhost:3000/__stubs/m1` | URL de M1 (Auth) |
-| `SOPORTE_SERVICE_URL` | `http://localhost:3000/__stubs/soporte` | URL del módulo de Soporte (penalizaciones) |
-| `M6_SERVICE_URL` | `http://localhost:3000/__stubs/m6` | URL del módulo M6 (Viajes) |
-| `PENALIZACIONES_TEMPORAL` | `2` | Penalizaciones vigentes para disparar BLOQUEADO_TEMPORAL |
-| `PENALIZACIONES_PERMANENTE` | `3` | Penalizaciones vigentes para disparar BLOQUEADO_PERMANENTE |
-| `SERVICE_RETRY_AFTER_SECONDS` | `10` | Segundos del header `Retry-After` en respuestas 503 |
+Los valores siguientes son los defaults de desarrollo; las credenciales reales deben inyectarse fuera del repositorio.
+
+| Variable | Default de desarrollo | Uso |
+| --- | --- | --- |
+| `PORT` | `3000` | Puerto HTTP de M2. |
+| `DB_HOST` / `DB_PORT` | `localhost` / `5433` fuera de Docker; `db-profiles` / `5432` dentro | PostgreSQL de perfiles. |
+| `DB_USER` / `DB_PASSWORD` / `DB_NAME` | `postgres` / `postgres` / `profiles` | Credenciales de PostgreSQL local. |
+| `DB_CONNECTION_TIMEOUT_MS` | `2000` | Límite para abrir una conexión. |
+| `DB_QUERY_TIMEOUT_MS` / `DB_STATEMENT_TIMEOUT_MS` | `3000` / `3000` | Límite de consultas y sentencias. |
+| `DB_IDLE_TIMEOUT_MS` | `30000` | Tiempo de inactividad del pool. |
+| `REDIS_URL` | `redis://localhost:6379` | Redis para caché de perfiles y validación de tokens. |
+| `M1_SERVICE_URL` | `http://localhost:3000/__stubs/m1` (con stubs) | URL del validador de identidad de M1. |
+| `SOPORTE_SERVICE_URL` | `http://localhost:3000/__stubs/soporte` (con stubs) | URL de penalizaciones de soporte. |
+| `M6_SERVICE_URL` | `http://localhost:3000/__stubs/m6` (con stubs) | URL del servicio de viajes. |
+| `STUBS_ENABLED` | `false` | Monta los stubs locales solo cuando vale literalmente `true`. |
+| `M1_JWT_SECRET` | Solo default de desarrollo del stub | Secreto HS256 del stub de M1; no usar el default en un entorno compartido. |
+| `SOPORTE_SECRET_KEY` | `secret-m2` | Clave de servicio que M2 envía a Soporte (header `X-Secret-Key`). |
+| `STATUS_SECRET_KEY` | `secret-status` | Clave que aceptan módulos internos en `GET /status` (header `X-Secret-Key`). |
+| `PENALIZACIONES_TEMPORAL` | `2` | Penalizaciones vigentes para disparar `BLOQUEADO_TEMPORAL`. |
+| `PENALIZACIONES_PERMANENTE` | `3` | Penalizaciones vigentes para disparar `BLOQUEADO_PERMANENTE`. |
+| `SERVICE_RETRY_AFTER_SECONDS` | `10` | Valor de `Retry-After` para un `503`. |
+
+Cuando `STUBS_ENABLED=false`, M2 usa las URLs de los módulos reales. Con `STUBS_ENABLED=true`, los stubs se montan bajo `/__stubs/{m1,soporte,m6}` para pruebas locales; sus endpoints de diagnóstico y caos son operativos y no forman parte de `/openapi.json`.
+
+La validación de identidad usa el bearer JWT de M1 (HS256, duración de una hora, payload `{ userId, role, iat, exp }`). M2 conserva en Redis la respuesta de validación en `auth:token:{sha256}` durante el menor de cinco minutos y el tiempo restante del token. Un token ausente o inválido responde `401`; un rol distinto de `CLIENTE` o un perfil ajeno responde `403`; un userId que ya tiene perfil responde `409 ProfileAlreadyExists`; si M1, PostgreSQL o Redis no están disponibles responde `503` con el header `Retry-After`. Una caída de M1 no se interpreta como token inválido.
 
 ---
 
@@ -86,12 +103,24 @@ El token es emitido por M1 (Auth). M2 lo valida llamando a `GET /auth/validar-id
 |---|---|---|---|---|
 | `POST` | `/v1/customers` | 🔒 CLIENTE | RF-2.1 | Crear perfil (body: preferencias opcionales) |
 | `GET` | `/v1/customers/me` | 🔒 | RF-2.1 | Perfil del usuario autenticado; 404 si no existe |
-| `GET` | `/v1/customers` | Abierto | — | Listar clientes; acepta `?userId=` |
+| `GET` | `/v1/customers` | Abierto (🔒 con `?userId=`) | — | Listar clientes |
 | `GET` | `/v1/customers/:id` | 🔒 | RF-2.1 | Perfil por ID interno |
 | `PUT` | `/v1/customers/:id` | 🔒 dueño | RF-2.1 | Actualizar preferencias |
-| `GET` | `/v1/customers/:id/status` | 🔒 | RF-2.5 | Estado de cuenta (recalcula con Soporte) |
+| `GET` | `/v1/customers/:id/status` | 🔒 o `X-Secret-Key` | RF-2.5 | Estado de cuenta (recalcula con Soporte) |
 | `PUT` | `/v1/customers/:id/status` | 🔒 dueño | RF-2.5 | Cambiar estado (baja, bloqueo, etc.) |
 | `GET` | `/v1/customers/:id/trips` | 🔒 | RF-2.3 | Historial de viajes (via M6) |
+
+El `POST` acepta body vacío o solo `preferences`; sin preferencias aplica `auto` y `email`. El `customerId` interno tiene formato `cust_xxx`. El perfil se devuelve sin datos personales de M1:
+
+```json
+{
+  "customerId": "cust_823a7b9c",
+  "userId": 12,
+  "preferences": { "preferredVehicleType": "auto", "notificationChannel": "email" },
+  "status": "ACTIVO",
+  "createdAt": "2026-10-04T18:00:00.000Z"
+}
+```
 
 ### Códigos de respuesta comunes
 
@@ -101,7 +130,13 @@ El token es emitido por M1 (Auth). M2 lo valida llamando a `GET /auth/validar-id
 | `403` | Rol incorrecto o el token no pertenece al dueño del recurso |
 | `404` | Recurso no encontrado |
 | `409` | Ya existe un perfil para ese usuario (`ProfileAlreadyExists`) |
-| `503` | DB no disponible. Header `Retry-After` indica cuántos segundos esperar. **M1 caído nunca devuelve 401.** |
+| `503` | PostgreSQL, Redis o M1 no disponible. Header `Retry-After` indica cuántos segundos esperar. **M1 caído nunca devuelve 401.** |
+
+Las respuestas de error siguen `{ "error": "...", "message": "..." }`; los errores de validación pueden incluir `details`.
+
+### Salud y métricas
+
+`GET /health` es público y expone el estado de PostgreSQL, Redis y las dependencias registradas (soporte y M6 incluidos), más los circuit breakers. `GET /metrics` es público y devuelve métricas Prometheus de HTTP, circuit breakers y caché. Los logs estructurados incluyen `requestId` para correlacionar cada solicitud y sus errores.
 
 ---
 

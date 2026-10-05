@@ -143,3 +143,6 @@ vite.config.ts.timestamp-*
 .vite/
 
 /docs/
+
+# Estado local de agentes (Codex / oh-my-opencode)
+.omo/

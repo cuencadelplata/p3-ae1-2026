@@ -5,7 +5,8 @@ import type {
   UpdatePreferencesDTO,
   UpdateAccountStatusDTO,
   AccountStatusResponse,
-  CustomerTripsResponse
+  CustomerTripsResponse,
+  UserId
 } from '../types/customer.js';
 
 export class CustomerService {
@@ -20,13 +21,11 @@ export class CustomerService {
   /**
    * RF-2.1: Crear nuevo perfil de cliente
    */
-  async createCustomer(dto: CreateCustomerDTO): Promise<CustomerProfile> {
+  async createCustomer(userId: UserId, dto: CreateCustomerDTO): Promise<CustomerProfile> {
     const randomHex = Math.random().toString(16).substring(2, 10);
     const newCustomer: CustomerProfile = {
       customerId: `cust_${randomHex}`,
-      name: dto.name,
-      email: dto.email,
-      phone: dto.phone,
+      userId,
       preferences: dto.preferences,
       status: 'ACTIVO',
       createdAt: new Date().toISOString()
@@ -40,6 +39,13 @@ export class CustomerService {
    */
   async getCustomerById(customerId: string): Promise<CustomerProfile | null> {
     return await this.repository.findById(customerId);
+  }
+
+  /**
+   * RF-2.1: Obtener perfil por User ID (de M1)
+   */
+  async getCustomerByUserId(userId: UserId): Promise<CustomerProfile | null> {
+    return await this.repository.findByUserId(userId);
   }
 
   /**

@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import { withChaos } from './chaos.js';
 
 /**
  * Stub del módulo de Soporte (penalizaciones).
@@ -121,4 +120,5 @@ router.get('/usuarios/:userId/penalizaciones', (req: Request, res: Response) => 
   });
 });
 
-export const soporteStub = withChaos('soporte', router);
+// Se exporta el router crudo; withChaos se aplica en mountStubs (ver src/stubs/index.ts)
+export const soporteStubRouter = router;

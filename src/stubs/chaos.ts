@@ -1,66 +1,90 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, type RequestHandler, type Router as ExpressRouter } from 'express';
+import { z } from 'zod';
 
-/**
- * Modo caos compartido para todos los stubs.
- * Cada stub se registra por nombre y puede recibir un modo de fallo independiente.
- *
- * POST /__stubs/<modulo>/__chaos
- *   { "mode": "down" }       → ECONNRESET (simula servicio caído)
- *   { "delayMs": 5000 }      → respuesta lenta (prueba timeout)
- *   { "failRate": 1 }        → siempre 500 (abre circuit breaker)
- *   {}                       → vuelve a la normalidad
- */
+export const STUB_NAMES = ['m1', 'soporte', 'm6'] as const;
+export type StubName = (typeof STUB_NAMES)[number];
 
-type ChaosConfig = {
-  mode?: 'down';
-  delayMs?: number;
-  failRate?: number;
+const ChaosRequestSchema = z.object({
+  mode: z.literal('down').optional(),
+  delayMs: z.number().int().min(0).max(60_000).optional(),
+  failRate: z.number().min(0).max(1).optional()
+}).strict();
+
+type ChaosState = {
+  readonly mode: 'normal' | 'down';
+  readonly delayMs: number;
+  readonly failRate: number;
 };
 
-const chaosState: Record<string, ChaosConfig> = {};
+const NORMAL_STATE = {
+  mode: 'normal',
+  delayMs: 0,
+  failRate: 0
+} as const satisfies ChaosState;
 
-/**
- * Envuelve un router de stub con el middleware de caos y el endpoint de control.
- * Debe llamarse DESPUÉS de registrar las rutas del stub.
- */
-export function withChaos(name: string, stubRouter: Router): Router {
-  const wrapper = Router();
+const chaosStates = new Map<StubName, ChaosState>();
 
-  // Endpoint de control: POST /__chaos
-  wrapper.post('/__chaos', (req: Request, res: Response) => {
-    chaosState[name] = req.body ?? {};
-    res.json({ stub: name, chaos: chaosState[name] });
-  });
+function currentState(name: StubName): ChaosState {
+  return chaosStates.get(name) ?? NORMAL_STATE;
+}
 
-  // Middleware de caos antes de las rutas reales
-  wrapper.use((req: Request, res: Response, next: NextFunction) => {
-    const cfg = chaosState[name];
-    if (!cfg) {
-      next();
-      return;
-    }
+function chaosMiddleware(name: StubName): RequestHandler {
+  return async (req, res, next) => {
+    const state = currentState(name);
 
-    if (cfg.mode === 'down') {
-      // Simula un ECONNRESET: destruir el socket sin respuesta
+    if (state.mode === 'down') {
       req.socket.destroy();
       return;
     }
 
-    if (typeof cfg.failRate === 'number' && cfg.failRate > 0 && Math.random() < cfg.failRate) {
-      res.status(500).json({ error: 'ChaosError', message: `[stub:${name}] Error inyectado por modo caos` });
-      return;
+    if (state.delayMs > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, state.delayMs));
     }
 
-    if (typeof cfg.delayMs === 'number' && cfg.delayMs > 0) {
-      setTimeout(next, cfg.delayMs);
+    if (state.failRate > 0 && Math.random() < state.failRate) {
+      res.status(500).json({
+        error: 'StubChaosFailure',
+        service: name
+      });
       return;
     }
 
     next();
+  };
+}
+
+export function withChaos(name: StubName, router: ExpressRouter): ExpressRouter {
+  const wrappedRouter = Router();
+
+  wrappedRouter.post('/__chaos', (req, res) => {
+    const parsed = ChaosRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: 'ValidationError',
+        message: 'La configuración de caos no es válida'
+      });
+      return;
+    }
+
+    const state = {
+      mode: parsed.data.mode ?? 'normal',
+      delayMs: parsed.data.delayMs ?? 0,
+      failRate: parsed.data.failRate ?? 0
+    } as const satisfies ChaosState;
+    chaosStates.set(name, state);
+
+    res.json({ service: name, chaos: state });
   });
 
-  // Montar el router real del stub
-  wrapper.use('/', stubRouter);
+  wrappedRouter.use(chaosMiddleware(name));
+  wrappedRouter.use(router);
+  return wrappedRouter;
+}
 
-  return wrapper;
+export function resetChaos(name?: StubName): void {
+  if (name === undefined) {
+    chaosStates.clear();
+    return;
+  }
+  chaosStates.delete(name);
 }

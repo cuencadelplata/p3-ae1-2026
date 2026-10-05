@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import { withChaos } from './chaos.js';
 
 /**
  * Stub del módulo M6 (Viajes).
@@ -98,4 +97,5 @@ router.get('/v1/trips', (req: Request, res: Response) => {
   });
 });
 
-export const m6Stub = withChaos('m6', router);
+// Se exporta el router crudo; withChaos se aplica en mountStubs (ver src/stubs/index.ts)
+export const m6StubRouter = router;
