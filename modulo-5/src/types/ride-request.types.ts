@@ -61,6 +61,31 @@ export interface M4DriverLocation {
   expiresAt?: string;
 }
 
+/**
+ * Contrato oficial HTTP M4: Búsqueda de Conductores Cercanos (GET /api/v1/drivers/nearby)
+ */
+export interface M4NearbyDriverItem {
+  driverId: number | string;
+  latitude: number;
+  longitude: number;
+  vehicleType: VehicleType;
+  available: boolean;
+  updatedAt?: string;
+  expiresAt?: string;
+  distanceKm?: number;
+  estimatedEtaMinutes?: number;
+  rating?: number;
+}
+
+export interface M4NearbyDriversResponse {
+  vehicleType: VehicleType;
+  searchRadiusKm: number;
+  candidatesCount: number;
+  searchTimestamp: string;
+  count: number;
+  drivers: M4NearbyDriverItem[];
+}
+
 export interface NearbyDriverStub {
   driverId: string;
   distanceKm: number;

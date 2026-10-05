@@ -20,6 +20,7 @@ import { RideRequestValidator } from '../schemas/ride-request.schema';
 import { randomUUID } from 'node:crypto';
 import { RedisService } from './redis.service';
 import { RabbitMQService, DriverCancellationEvent } from './rabbitmq.service';
+import { M4ClientService } from './m4-client.service';
 
 export class ConflictError extends Error {
   public code: string;
@@ -62,10 +63,16 @@ export class RideRequestService {
   // Servicios de soporte para AE2 (RNF-06 y RNF-07)
   private redisService: RedisService;
   private rabbitMQService: RabbitMQService;
+  private m4ClientService: M4ClientService;
 
-  constructor(redisService?: RedisService, rabbitMQService?: RabbitMQService) {
+  constructor(
+    redisService?: RedisService,
+    rabbitMQService?: RabbitMQService,
+    m4ClientService?: M4ClientService
+  ) {
     this.redisService = redisService || new RedisService();
     this.rabbitMQService = rabbitMQService || new RabbitMQService();
+    this.m4ClientService = m4ClientService || new M4ClientService();
 
     // Suscribirse a la cola despacho.reabrir para atender cancelaciones de conductor (integración con módulo de cancelaciones)
     this.rabbitMQService.subscribeToReopenDispatch((event) => this.handleDriverCancellation(event));
@@ -77,6 +84,10 @@ export class RideRequestService {
 
   public getRabbitMQService(): RabbitMQService {
     return this.rabbitMQService;
+  }
+
+  public getM4ClientService(): M4ClientService {
+    return this.m4ClientService;
   }
 
 
@@ -103,15 +114,16 @@ export class RideRequestService {
 
   /**
    * Integración con M4: Conductores Cercanos (RF-4.2 / RF-5.2)
-   * Consulta las ubicaciones y disponibilidad de conductores desde Redis (driver:{driverId}:location)
+   * Consulta las ubicaciones y disponibilidad de conductores vía HTTP GET /api/v1/drivers/nearby
    */
   public async fetchNearbyDriversFromM4(
     lat: number,
     lng: number,
     vehicleType: VehicleType,
-    radiusKm: number = 5.0
+    radiusKm: number = 5.0,
+    maxCandidates: number = 10
   ): Promise<NearbyDriverStub[]> {
-    return this.redisService.findNearbyDriversFromM4(lat, lng, vehicleType, radiusKm);
+    return this.m4ClientService.findNearbyDrivers(lat, lng, vehicleType, radiusKm, maxCandidates);
   }
 
   /**
@@ -255,7 +267,8 @@ export class RideRequestService {
       request.origin.latitude,
       request.origin.longitude,
       request.vehicleType,
-      radiusKm
+      radiusKm,
+      maxCandidates
     );
 
     // 4. Algoritmo de filtrado y ordenamiento:
