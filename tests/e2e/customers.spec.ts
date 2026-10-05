@@ -153,6 +153,17 @@ test.describe('M2 Customers E2E', () => {
       await expect(page.locator('.card .badge', { hasText: 'BLOQUEADO_PERMANENTE' })).toBeVisible();
       await expect(page.getByText('Automático (penalizaciones)')).toBeVisible();
     });
+
+    test('the profile header shows the same status as /status (single source of truth)', async ({ page }) => {
+      await openDemo(page, 'Perfil inhabilitado');
+      await page.getByRole('button', { name: 'Estado de cuenta' }).click();
+      const fromStatus = (await page.locator('.card .badge').textContent())!.trim();
+      expect(fromStatus).toBe('BLOQUEADO_PERMANENTE');
+
+      // El perfil lee el estado con un JOIN a AccountStatus: tras recargar debe coincidir
+      await page.reload();
+      await expect(page.locator('h1 + .badge')).toHaveText(fromStatus);
+    });
   });
 
   // ── RF-2.3: Historial de viajes ────────────────────────────────────────────
@@ -183,6 +194,17 @@ test.describe('M2 Customers E2E', () => {
 
     test.afterEach(async ({ request }) => {
       await request.post('/api/__stubs/m6/__chaos', { data: {} });
+
+      // El circuito de M6 quedó abierto: se espera a que vuelva a responder para no
+      // dejar el entorno degradado a los tests (o a la corrida) siguientes
+      const token = await getToken(request, uniqueUserId());
+      const headers = { Authorization: `Bearer ${token}` };
+      const created = await request.post(API, { headers, data: {} });
+      const { customerId } = (await created.json()) as { customerId: string };
+      await expect.poll(async () => {
+        const res = await request.get(`${API}/${customerId}/trips`, { headers });
+        return ((await res.json()) as { degraded: boolean }).degraded;
+      }, { timeout: 15_000 }).toBe(false);
     });
 
     test('shows a degraded message instead of "no trips" when M6 is down', async ({ page, request }) => {

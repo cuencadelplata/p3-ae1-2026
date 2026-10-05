@@ -4,5 +4,9 @@
 services:
   api:
     build: .
+    environment:
+      # Pausa corta del circuit breaker: el E2E de "M6 caído" lo abre y la siguiente
+      # corrida no debe esperar 30 s a que se cierre
+      CIRCUIT_BREAKER_RESET_MS: "1000"
   client:
     build: ./client
