@@ -190,13 +190,15 @@ test.describe('M2 Customers E2E', () => {
 
   // El modo caos del stub de M6 es global: estos tests van en serie y lo restauran siempre
   test.describe('RF-2.3 - M6 caído (serial)', () => {
-    test.describe.configure({ mode: 'serial' });
+    // Sin el override de E2E el circuito de M6 queda abierto 30 s: la limpieza puede tardar eso
+    test.describe.configure({ mode: 'serial', timeout: 60_000 });
 
     test.afterEach(async ({ request }) => {
       await request.post('/api/__stubs/m6/__chaos', { data: {} });
 
       // El circuito de M6 quedó abierto: se espera a que vuelva a responder para no
-      // dejar el entorno degradado a los tests (o a la corrida) siguientes
+      // dejar el entorno degradado a los tests (o a la corrida) siguientes.
+      // Con docker-compose.e2e.yml tarda ~1 s; con el compose base, hasta 30 s.
       const token = await getToken(request, uniqueUserId());
       const headers = { Authorization: `Bearer ${token}` };
       const created = await request.post(API, { headers, data: {} });
@@ -204,7 +206,7 @@ test.describe('M2 Customers E2E', () => {
       await expect.poll(async () => {
         const res = await request.get(`${API}/${customerId}/trips`, { headers });
         return ((await res.json()) as { degraded: boolean }).degraded;
-      }, { timeout: 15_000 }).toBe(false);
+      }, { timeout: 40_000 }).toBe(false);
     });
 
     test('shows a degraded message instead of "no trips" when M6 is down', async ({ page, request }) => {
