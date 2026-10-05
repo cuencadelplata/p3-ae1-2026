@@ -55,7 +55,7 @@ export function createViajeApi(options: ViajeApiOptions): Server {
       if (!match) return send(response, 404, { error: 'Ruta no encontrada' });
 
       if (request.method !== 'POST') {
-        return send(response, 405, { error: 'Método no permitido' }, { Allow: 'POST' });
+        return send(response, 405, { error: 'Método no permitido' }, { Allow: 'POST' }); //Issue #20
       }
       const input = await readJson(request) as { motivo?: string };
       const motivo = input.motivo?.trim() ?? '';
