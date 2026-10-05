@@ -20,6 +20,7 @@ evidencia del estado heredado de AE1.
 | 2026-09-30 | Contenido de `payment.confirmed` | Grupo M7 | Respondido sin cubrir los datos del comprobante; se mantiene la alternativa 1 de forma provisoria (ver 5.1) |
 | 2026-10-04 | Congelar contrato de entrada RF8.6 → RF8.1 (6 eventos de viaje, sobre, deduplicación, queue/bindings) y Outbox RF8.1 → RF8.7 | Damián Caminos (RF-8.6) / Invaldi (M8) | **CONGELADO Y CONFIRMADO** |
 | 2026-10-04 | Forma de integración de M7 con Comprobantes | M7 (RF-7.3) / Invaldi (M8) | M7 se integra solo por REST y no publicará `payment.confirmed`. Comprobantes consulta `GET /metodo-pago/{viajeId}` de M7 y emite solo con el pago autorizado (ver 5.1). Importe y moneda: consulta pendiente a M7 |
+| 2026-10-05 | Importe cobrado en la respuesta de M7 | M7 (RF-7.3) | M7 agregó `total` y `moneda` a `GET /metodo-pago/{viajeId}`, guardados al autorizar (commit `063e112` de M7). Comprobantes los usa desde la versión 2.3.0 (ver 5.1) |
 | 2026-10-04 | El reenvío devuelve el enlace temporal de la sección 6 | Lucas Cremaschi (RF-8.4) | Acordado sin cambios en el contrato |
 
 
@@ -235,7 +236,7 @@ Contrato REST de M7 que consume Comprobantes (openapi.yaml de M7, RF-7.2 y RF-7.
 
 ```
 GET /metodo-pago/{viajeId}
-200 { pagoId, clienteId, viajeId, tipo, detalle, fecha, estado }
+200 { pagoId, clienteId, viajeId, tipo, detalle, fecha, estado, total?, moneda? }
 404 { mensaje }   (el viaje no tiene un pago registrado)
 ```
 
@@ -246,6 +247,7 @@ GET /metodo-pago/{viajeId}
 | `estado: rechazado` | `RECHAZADO` | No se emite. Terminal: `422 PAYMENT_REJECTED` por REST; DLQ sin reintentos en el consumidor. |
 | Sin respuesta, `5xx` o fuera de contrato | — | Dependencia no disponible: `503 PAYMENTS_SERVICE_UNAVAILABLE`; el mensaje espera sin descontar intentos. |
 | `tipo: efectivo` / `tarjeta` / `transferencia` | `EFECTIVO` / `TARJETA` / `TRANSFERENCIA` | El medio de pago del comprobante se toma de M7. |
+| `total`, `moneda` (por defecto `ARS`), desde 2026-10-05 | `fare.total`, `fare.currency` | El importe del comprobante se toma de M7. El desglose de la entrada se conserva solo si está en la misma moneda y suma ese total (tolerancia de un centavo); si no, el comprobante muestra solo el total. Sin `total`, se usa la tarifa de la entrada. |
 
 En consecuencia:
 
@@ -253,8 +255,10 @@ En consecuencia:
   como al consumir este evento. El cliente REST no depende de un evento
   disparador: el disparador definitivo (por ejemplo `trip.completed` de M6 vía
   RF-8.6) se define al cerrar el contrato con M6.
-- La respuesta de M7 no incluye importe ni moneda. Se consultó a M7; mientras
-  tanto `fare` se conserva desde la entrada actual, sin inventar valores.
+- M7 agregó `total` y `moneda` a su respuesta el 2026-10-05, a pedido de
+  Comprobantes; se informan recién al autorizar el pago. El desglose de la tarifa
+  no es de M7: sigue llegando en la entrada y solo se muestra si cierra con el
+  total cobrado.
 - Cliente, conductor y recorrido se mantienen como están hasta cerrar los
   contratos con M1, M2, M3 y M6.
 - Este evento se conserva como entrada asíncrona, con productor simulado en AE2

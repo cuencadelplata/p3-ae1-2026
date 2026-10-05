@@ -1,6 +1,6 @@
 import { env } from '../config/env';
 import { DependencyUnavailableError } from '../errors/dependency-unavailable.error';
-import type { PaymentMethod, PaymentStatus } from '../models/receipt';
+import type { Fare, PaymentMethod, PaymentStatus } from '../models/receipt';
 import { createLogger, errorMessage } from '../observability/logger';
 
 /**
@@ -20,13 +20,25 @@ export const M7_PAYMENT_METHODS: Readonly<Record<string, PaymentMethod>> = {
   transferencia: 'TRANSFERENCIA',
 };
 
+/** Importe cobrado segun M7. M7 lo informa recien al autorizar el pago. */
+export interface M7Amount {
+  total: number;
+  currency: string;
+}
+
 /** Pago de un viaje segun M7, ya traducido al modelo interno. */
 export interface M7Payment {
   paymentId: string;
   tripId: string;
   method: PaymentMethod;
   status: PaymentStatus;
+  amount?: M7Amount;
 }
+
+// M7 completa la moneda con "ARS" cuando no la recibe al autorizar.
+const M7_DEFAULT_CURRENCY = 'ARS';
+const CURRENCY_PATTERN = /^[A-Z]{3}$/;
+const FARE_TOLERANCE = 0.01;
 
 export type PaymentNotAuthorizedCode = 'PAYMENT_PENDING' | 'PAYMENT_NOT_FOUND' | 'PAYMENT_REJECTED';
 
@@ -64,7 +76,50 @@ export function toM7Payment(body: unknown): M7Payment | null {
   if (typeof pagoId !== 'string' || typeof viajeId !== 'string' || !method || !status) {
     return null;
   }
-  return { paymentId: pagoId, tripId: viajeId, method, status };
+  const payment: M7Payment = { paymentId: pagoId, tripId: viajeId, method, status };
+
+  const { total, moneda } = data;
+  if (total === undefined || total === null) {
+    return payment;
+  }
+  const currency = moneda ?? M7_DEFAULT_CURRENCY;
+  if (typeof total !== 'number' || !Number.isFinite(total) || total < 0) {
+    return null;
+  }
+  if (typeof currency !== 'string' || !CURRENCY_PATTERN.test(currency)) {
+    return null;
+  }
+  return { ...payment, amount: { total, currency } };
+}
+
+/**
+ * Aplica a la tarifa el importe cobrado segun M7, que es quien cobro.
+ *
+ * El total y la moneda salen de M7. El desglose (base, distancia, tiempo,
+ * recargos y descuentos) llega en la entrada y M7 no lo informa: se conserva
+ * solo si esta en la misma moneda y suma el total de M7. Si no, se descarta y el
+ * comprobante muestra unicamente el total, nunca un desglose que no cierra.
+ * Sin importe de M7 la tarifa de la entrada queda como esta.
+ */
+export function applyM7Amount(fare: Fare, amount: M7Amount | undefined): Fare {
+  if (!amount) {
+    return fare;
+  }
+  const breakdown = fare.baseFare + fare.distanceAmount + fare.timeAmount + fare.surcharges - fare.discounts;
+  const breakdownMatches =
+    fare.currency.toUpperCase() === amount.currency && Math.abs(breakdown - amount.total) <= FARE_TOLERANCE;
+  if (breakdownMatches) {
+    return { ...fare, currency: amount.currency, total: amount.total };
+  }
+  return {
+    currency: amount.currency,
+    baseFare: 0,
+    distanceAmount: 0,
+    timeAmount: 0,
+    surcharges: 0,
+    discounts: 0,
+    total: amount.total,
+  };
 }
 
 /**
