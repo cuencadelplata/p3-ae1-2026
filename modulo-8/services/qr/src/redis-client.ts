@@ -63,3 +63,9 @@ export function createQrRedisClient(options: QrRedisClientOptions) {
 }
 
 export type QrRedisClient = ReturnType<typeof createQrRedisClient>;
+
+// Disponibilidad de Redis para el health: conexión lista y respuesta a PING. Sin conexión
+// responde false sin enviar el comando.
+export async function isRedisReady(client: QrRedisClient): Promise<boolean> {
+  return client.isReady && (await client.ping()) === "PONG";
+}
