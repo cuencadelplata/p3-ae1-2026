@@ -14,7 +14,11 @@ import { RabbitMqDeliveryConsumer } from '../infrastructure/messaging/rabbitmq-d
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3107;
 const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672';
 const M2_API_URL = process.env.M2_API_URL || 'http://localhost:3002';
-const M2_INTERNAL_API_KEY = process.env.M2_INTERNAL_API_KEY || 'm8_m2_internal_secret_example';
+const M2_INTERNAL_API_KEY = process.env.M2_INTERNAL_API_KEY || '';
+
+if (process.env.NODE_ENV === 'production' && !M2_INTERNAL_API_KEY) {
+  throw new Error('[RF8.7] Credencial no configurada: M2_INTERNAL_API_KEY es obligatoria en entorno de producción y no debe asumir valores por defecto.');
+}
 
 async function bootstrap() {
   const pgPool = getPgPool();
@@ -60,6 +64,7 @@ async function bootstrap() {
         postgres: pgOk ? 'ok' : 'down',
         rabbitmq: rmqOk ? 'ok' : 'down',
         pushProvider: 'ok',
+        m2_preferences: 'degraded_mode_supported',
       },
     };
   };

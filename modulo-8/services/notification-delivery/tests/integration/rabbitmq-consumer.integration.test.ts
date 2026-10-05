@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+
+process.env.NODE_ENV = 'test';
 import {
   EventConsumer,
   InMemoryTechnicalInbox,
