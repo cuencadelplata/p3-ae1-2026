@@ -1,7 +1,10 @@
+//server.js
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
 require("dotenv").config();
+const { connectRabbitMQ } = require("./infraestructure/rabbimq.client");
+const { startViajeFinalizadoConsumer } = require("./modules/valoraciones/consumers/viajeFinalizado.consumer");
 
 const conductorRoutes = require("./routes/conductorRoutes");
 const { seedRedisIfEmpty } = require("./repositories/redisRepository");
@@ -27,7 +30,7 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// Rutas de la API montadas en /api (según OpenAPI.json)
+// Rutas de la API montadas en /api /openapi.json
 app.use("/api", conductorRoutes);
 
 // Manejador para rutas no encontradas
@@ -42,10 +45,18 @@ app.listen(PORT, async () => {
   console.log(`   ➜ API:       http://localhost:${PORT}/api`);
   console.log(`   ➜ Frontend:  http://localhost:${PORT}`);
   console.log(`   ➜ Health:    http://localhost:${PORT}/health`);
+  console.log(`   ➜ RabbitMQ:  http://localhost:${PORT}/rabbitmq`);
   console.log(`====================================================`);
 
   // Poblar datos mock en Redis
   await seedRedisIfEmpty();
+  try {
+    await seedRedisIfEmpty();
+    await connectRabbitMQ();
+    await startViajeFinalizadoConsumer();
+  } catch (error) {
+    console.error("No se pudo iniciar Redis o RabbitMQ:", error.message);
+  }
 });
 
 module.exports = app;

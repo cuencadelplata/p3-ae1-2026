@@ -1,3 +1,6 @@
+const { guardarValoracionPendiente } = require("../../repositories/redisRepository");
+const { publicarValoracionHabilitada } = require("./ValoracionHabilitada.publisher");
+
 async function procesarViajeFinalizado(event) {
   if (
     event.eventType !==
@@ -48,21 +51,11 @@ async function procesarViajeFinalizado(event) {
       finalizadoAt || new Date().toISOString()
   };
 
-  /*
-   * ACÁ después llamás a tu repository real.
-   *
-   * Ejemplo futuro:
-   *
-   * await valoracionesRepository.create(
-   *   valoracionPendiente
-   * );
-   */
+  await guardarValoracionPendiente(valoracionPendiente);
+  await publicarValoracionHabilitada(valoracionPendiente);
 
-  console.log(
-    "[Valoraciones] Valoración habilitada:",
-    valoracionPendiente
-  );
-
+  console.log("[Valoraciones] Valoración habilitada:", valoracionPendiente.viajeId);
+  
   return valoracionPendiente;
 }
 

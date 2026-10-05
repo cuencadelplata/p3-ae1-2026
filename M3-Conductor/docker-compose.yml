@@ -35,9 +35,6 @@ services:
     networks:
       - p3-shared
       - default
-  networks:
-    p3-shared:
-      name: p3-shared
 
   # Backend Node.js - Módulo 3 (Conductores & Valoraciones)
   api:
@@ -83,6 +80,10 @@ services:
       - "4000:80"
     depends_on:
       - api
+
+networks:
+  p3-shared:
+    name: p3-shared
 
 volumes:
   redis_data:

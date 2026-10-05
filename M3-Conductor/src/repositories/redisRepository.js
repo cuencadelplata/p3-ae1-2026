@@ -1,5 +1,5 @@
 const redis = require("../config/redisClient");
-const { mockConductores, mockValoraciones } = require("../mocks/mockData");
+const { mockConductores, mockValoraciones } = require("../mocks/conductor/mockData");
 
 // Fallback en memoria por si Redis no está activo momentáneamente
 const inMemoryConductores = new Map();
@@ -137,11 +137,18 @@ async function registrarValoracion(datos) {
   return nuevaValoracion;
 }
 
+async function guardarValoracionPendiente(valoracion) {
+  const clave = `valoracion:pendiente:${valoracion.viajeId}`;
+  await redis.set(clave, JSON.stringify(valoracion));
+  return valoracion;
+}
+
 module.exports = {
   seedRedisIfEmpty,
   obtenerConductores,
   obtenerConductorPorId,
   crearConductor,
   obtenerValoraciones,
-  registrarValoracion
+  registrarValoracion,
+  guardarValoracionPendiente
 };
