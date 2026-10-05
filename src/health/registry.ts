@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 import { pool } from '../config/db.js';
 import { testRedisConnection } from '../config/redis.js';
-import { getCircuitStates, type CircuitStates } from '../resilience/policies.js';
+import { createPolicy, getCircuitStates, type CircuitStates } from '../resilience/policies.js';
 
 export type HealthCheck = () => Promise<boolean>;
 export type HealthStatus = 'UP' | 'DEGRADED';
@@ -81,9 +81,10 @@ export class HealthRegistry {
 }
 
 export const healthRegistry = new HealthRegistry();
+const postgresPolicy = createPolicy('postgres');
 
 healthRegistry.register('postgres', async () => {
-  await pool.query('SELECT 1');
+  await postgresPolicy.execute(() => pool.query('SELECT 1'), { idempotent: true });
   return true;
 });
 healthRegistry.register('redis', testRedisConnection, { critical: false });
