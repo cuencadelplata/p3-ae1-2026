@@ -5,6 +5,7 @@ import { resolve } from 'path';
 
 const API_URL = 'http://localhost:3000/api';
 const M8_URL = process.env.M8_URL ?? 'http://host.docker.internal:3103';
+const M8_TEST_URL = process.env.M8_TEST_URL ?? 'http://localhost:3103';
 const PROJECT_ROOT = resolve(__dirname, '../../');
 let containerId: string | null = null;
 
@@ -54,6 +55,31 @@ describe('E2E Tests - Docker Container', () => {
       throw error;
     }
   }, 60000);
+
+  it('M8 devuelve el mismo QR ante generación repetida y valida single-use', async () => {
+    const tripId = `idempotency-${Date.now()}`;
+    const [first, retry] = await Promise.all([
+      axios.post(`${M8_TEST_URL}/qr`, { tripId }),
+      axios.post(`${M8_TEST_URL}/qr`, { tripId }),
+    ]);
+
+    expect(first.data.token).toBe(retry.data.token);
+    expect(first.data.expiresAt).toBe(retry.data.expiresAt);
+
+    const validation = await axios.post(`${M8_TEST_URL}/qr/validate`, {
+      tripId,
+      token: first.data.token,
+    });
+    expect(validation.status).toBe(200);
+    expect(validation.data).toEqual({ valid: true });
+
+    try {
+      await axios.post(`${M8_TEST_URL}/qr/validate`, { tripId, token: first.data.token });
+      throw new Error('El segundo consumo debería ser rechazado');
+    } catch (error: any) {
+      expect(error.response?.status).toBe(409);
+    }
+  });
 
   afterAll(async () => {
     if (containerId) {

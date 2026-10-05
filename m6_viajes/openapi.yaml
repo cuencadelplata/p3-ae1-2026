@@ -41,7 +41,7 @@ paths:
                   destino: Centro Comercial
       responses:
         '201':
-          description: Viaje creado exitosamente
+              description: Estado no elegible para primer arribo/reintento QR o primer arribo sin conductor asignado.
           content:
             application/json:
               schema:
@@ -114,8 +114,10 @@ paths:
       description: |
         Requiere estado CONDUCTOR_EN_CAMINO y conductor asignado. Consulta a M3 si el conductor está habilitado
         (GET {M3_URL}/conductores/{id}/estado). La respuesta de M3 se cachea en Redis 60 s (clave conductor:{id}:estado).
-        Si M3 está caído o excede el timeout responde 503. Al éxito pasa a ARRIBADO, publica viaje.arribado,
-        y solicita a M8 el QR de vigencia limitada o reutiliza el vigente. La respuesta incluye token, imagen y vencimiento.
+        Si M3 está caído o excede el timeout responde 503. El primer arribo cambia a ARRIBADO y publica
+        viaje.arribado una sola vez; después solicita a M8 el QR. Si la generación falla, repetir PUT mientras
+        el viaje siga ARRIBADO solo recupera/genera el QR, sin volver a consultar M3 ni republicar el evento.
+        La respuesta incluye token, imagen y vencimiento.
       operationId: registrarArribo
       parameters:
         - $ref: '#/components/parameters/ViajeId'
@@ -127,7 +129,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/RegistrarArriboResponse'
         '400':
-          description: Transición inválida (viaje no está en CONDUCTOR_EN_CAMINO) o viaje sin conductor asignado.
+            description: Estado no elegible para primer arribo/reintento QR o primer arribo sin conductor asignado.
           content:
             application/json:
               schema:
@@ -143,6 +145,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           description: TripDB o M8 no disponibles.
+          headers:
+            Retry-After:
+              description: Tiempo sugerido para reintentar, cuando lo informa M8.
+              schema: { type: string }
           content:
             application/json:
               schema:

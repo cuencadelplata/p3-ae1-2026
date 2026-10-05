@@ -22,6 +22,17 @@ export async function actualizarQR(
     );
 }
 
+export async function marcarArribado(id: string): Promise<boolean> {
+    const { rows } = await pool.query(
+        `UPDATE viajes
+         SET estado = $1
+         WHERE id = $2 AND estado = $3
+         RETURNING id`,
+        [EstadoViaje.ARRIBADO, id, EstadoViaje.CONDUCTOR_EN_CAMINO]
+    );
+    return rows.length === 1;
+}
+
 export async function buscarPorId(id: string): Promise<Viaje | null> {
     const { rows } = await pool.query('SELECT * FROM viajes WHERE id = $1', [id]);
     if (rows.length === 0) return null;

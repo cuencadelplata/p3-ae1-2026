@@ -60,6 +60,7 @@ $tokenQR = $arribo.qr.token
 ```
 
 El QR se genera al registrar el arribo. La respuesta incluye `qr.token`, `qr.qrDataUrl` y `qr.expiresAt`.
+Si M8 no responde y el viaje quedó en `ARRIBADO`, repetí el mismo `PUT /arribo`: M6 reintenta solo la obtención del QR, sin volver a validar con M3 ni publicar nuevamente `viaje.arribado`.
 
 cuarto endpoint: iniciar viaje
 

@@ -120,48 +120,64 @@ export const registrarArribo = async (req: Request, res: Response): Promise<any>
         });
     }
 
-    if (viaje.estado !== EstadoViaje.CONDUCTOR_EN_CAMINO) {
+    let reintentoQR = viaje.estado === EstadoViaje.ARRIBADO;
+    if (!reintentoQR && viaje.estado !== EstadoViaje.CONDUCTOR_EN_CAMINO) {
         return res.status(400).json({
             error: `Transición inválida. El estado actual es ${viaje.estado}`
         });
     }
 
-    if (!viaje.conductorId) {
+    if (!reintentoQR && !viaje.conductorId) {
         return res.status(400).json({
             error: 'El viaje no tiene conductor asignado'
         });
     }
 
-    try {
-        const estadoConductor = await Promise.race([
-            consultarEstadoConductor(viaje.conductorId),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_M3')), 2000))
-        ]) as any;
+    if (!reintentoQR) {
+        try {
+            const estadoConductor = await Promise.race([
+                consultarEstadoConductor(viaje.conductorId!),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_M3')), 2000))
+            ]) as any;
 
-        if (estadoConductor && estadoConductor.habilitado === false) {
-            return res.status(403).json({ error: 'El conductor no está habilitado' });
+            if (estadoConductor && estadoConductor.habilitado === false) {
+                return res.status(403).json({ error: 'El conductor no está habilitado' });
+            }
+        } catch (error) {
+            console.warn('Advertencia: Servicio M3 no disponible o lento, permitiendo arribo en E2E por resiliencia:', error);
         }
-    } catch (error) {
-        console.warn('Advertencia: Servicio M3 no disponible o lento, permitiendo arribo en E2E por resiliencia:', error);
-    }
 
-    try {
-        await viajeRepo.actualizarEstado(id, EstadoViaje.ARRIBADO);
-    } catch (error) {
-        console.error('ERROR EN viajeRepo.actualizarEstado:', error);
-        return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
-    }
+        let arriboActualizado: boolean;
+        try {
+            arriboActualizado = await viajeRepo.marcarArribado(id);
+        } catch (error) {
+            console.error('ERROR EN viajeRepo.marcarArribado:', error);
+            return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
+        }
 
-    viaje.estado = EstadoViaje.ARRIBADO;
+        if (!arriboActualizado) {
+            try {
+                const viajeActual = await viajeRepo.buscarPorId(id);
+                if (!viajeActual || viajeActual.estado !== EstadoViaje.ARRIBADO) {
+                    return res.status(400).json({ error: 'El viaje ya no está disponible para registrar el arribo' });
+                }
+                viaje = viajeActual;
+            } catch {
+                return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
+            }
+        } else {
+            viaje.estado = EstadoViaje.ARRIBADO;
 
-    try {
-        await publicarEvento('viajes_exchange', 'viaje.arribado', {
-            viajeId: id,
-            conductorId: viaje.conductorId,
-            fecha: new Date().toISOString()
-        });
-    } catch (err) {
-        console.error('Advertencia: No se pudo publicar evento de arribo', err);
+            try {
+                await publicarEvento('viajes_exchange', 'viaje.arribado', {
+                    viajeId: id,
+                    conductorId: viaje.conductorId,
+                    fecha: new Date().toISOString()
+                });
+            } catch (err) {
+                console.error('Advertencia: No se pudo publicar evento de arribo', err);
+            }
+        }
     }
 
     let qr: GenerarQRResponse;

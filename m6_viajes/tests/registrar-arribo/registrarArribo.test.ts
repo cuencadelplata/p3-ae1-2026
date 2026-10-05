@@ -23,7 +23,14 @@ vi.mock('../../src/services/conductor.service', () => ({
 vi.mock('../../src/services/qr.service.js', () => {
   const codigos = new Map<string, string>();
   let generation = 0;
+  class M8ApiError extends Error {
+    constructor(readonly status: number, readonly code: string, readonly retryAfter?: string) {
+      super(code);
+    }
+  }
+
   return {
+    M8ApiError,
     generarQR: vi.fn(async (tripId: string) => {
       const token = `TEST-${tripId}-${++generation}`;
       codigos.set(tripId, token);
@@ -67,6 +74,61 @@ describe('Registrar Arribo del Conductor', () => {
     expect(res3.data.qr.expiresAt).toBeDefined();
     const qrService = await import('../../src/services/qr.service.js');
     expect(qrService.generarQR).toHaveBeenCalledTimes(1);
+
+    const conductorService = await import('../../src/services/conductor.service.js');
+    const rabbitService = await import('../../src/services/rabbitmq.service.js');
+    vi.mocked(conductorService.consultarEstadoConductor).mockClear();
+    vi.mocked(rabbitService.publicarEvento).mockClear();
+
+    const retry = mockResponse();
+    await registrarArribo(req3 as any, retry as any);
+
+    expect(retry.statusCode).toBe(200);
+    expect(retry.data.qr.token).toBe(res3.data.qr.token);
+    expect(qrService.generarQR).toHaveBeenCalledTimes(1);
+    expect(conductorService.consultarEstadoConductor).not.toHaveBeenCalled();
+    expect(rabbitService.publicarEvento).not.toHaveBeenCalled();
+  });
+
+  it('recupera el QR tras perderse la respuesta de M8 sin repetir M3 ni el evento', async () => {
+    const created = mockResponse();
+    await solicitarViaje(
+      mockRequest({ clienteId: 'cliente-retry', origen: 'A', destino: 'B' }) as any,
+      created as any
+    );
+    const viajeId = created.data.id;
+    await asignarConductor(mockRequest({ conductorId: 'conductor-retry' }, { id: viajeId }) as any, mockResponse() as any);
+
+    const qrService = await import('../../src/services/qr.service.js');
+    const conductorService = await import('../../src/services/conductor.service.js');
+    const rabbitService = await import('../../src/services/rabbitmq.service.js');
+    const tokenRecuperado = 'QR_RECUPERADO_DESPUES_DE_TIMEOUT';
+    const qrRecuperado = {
+      token: tokenRecuperado,
+      qrDataUrl: 'data:image/png;base64,recovered',
+      expiresAt: new Date(Date.now() + 300_000).toISOString(),
+    };
+    vi.mocked(qrService.generarQR)
+      .mockRejectedValueOnce(new qrService.M8ApiError(503, 'M8_UNAVAILABLE', '2'))
+      .mockResolvedValueOnce(qrRecuperado);
+    vi.mocked(conductorService.consultarEstadoConductor).mockClear();
+    vi.mocked(rabbitService.publicarEvento).mockClear();
+
+    const firstAttempt = mockResponse();
+    await registrarArribo(mockRequest({}, { id: viajeId }) as any, firstAttempt as any);
+    expect(firstAttempt.statusCode).toBe(503);
+    expect(firstAttempt.headers['Retry-After']).toBe('2');
+
+    const { rows: stateAfterFailure } = await pool.query('SELECT estado FROM viajes WHERE id = $1', [viajeId]);
+    expect(stateAfterFailure[0].estado).toBe('ARRIBADO');
+
+    const retry = mockResponse();
+    await registrarArribo(mockRequest({}, { id: viajeId }) as any, retry as any);
+
+    expect(retry.statusCode).toBe(200);
+    expect(retry.data.qr).toEqual(qrRecuperado);
+    expect(conductorService.consultarEstadoConductor).toHaveBeenCalledTimes(1);
+    expect(rabbitService.publicarEvento).toHaveBeenCalledTimes(1);
   });
 
   it('debe rechazar si no está en estado CONDUCTOR_EN_CAMINO', async () => {

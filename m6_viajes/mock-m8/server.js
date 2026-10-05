@@ -5,7 +5,37 @@ import QRCode from 'qrcode';
 const app = express();
 app.use(express.json());
 
-const qrs = new Map(); // token -> { tripId, used, expiresAt }
+const qrs = new Map(); // token -> { tripId, used, expiresAt, qrDataUrl }
+const activeTokenByTripId = new Map();
+const pendingQrByTripId = new Map();
+
+async function obtenerOCrearQR(tripId) {
+    const activeToken = activeTokenByTripId.get(tripId);
+    const activeQr = activeToken ? qrs.get(activeToken) : null;
+    if (activeQr && !activeQr.used && activeQr.expiresAt.getTime() > Date.now()) {
+        return { qr: activeQr, created: false };
+    }
+
+    const pending = pendingQrByTripId.get(tripId);
+    if (pending) return { qr: await pending, created: false };
+
+    const creation = (async () => {
+        const token = randomBytes(32).toString('base64url');
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+        const qrDataUrl = await QRCode.toDataURL(token);
+        const qr = { tripId, used: false, expiresAt, qrDataUrl, token };
+        qrs.set(token, qr);
+        activeTokenByTripId.set(tripId, token);
+        return qr;
+    })();
+    pendingQrByTripId.set(tripId, creation);
+
+    try {
+        return { qr: await creation, created: true };
+    } finally {
+        pendingQrByTripId.delete(tripId);
+    }
+}
 
 app.post('/qr', async (req, res) => {
     const { tripId } = req.body;
@@ -13,13 +43,16 @@ app.post('/qr', async (req, res) => {
         return res.status(400).json({ error: { code: 'TRIP_ID_REQUIRED' } });
     }
 
-    const token = randomBytes(32).toString('base64url');
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-    const qrDataUrl = await QRCode.toDataURL(token);
-
-    qrs.set(token, { tripId, used: false, expiresAt });
-
-    return res.status(201).json({ token, qrDataUrl, expiresAt: expiresAt.toISOString() });
+    try {
+        const { qr, created } = await obtenerOCrearQR(tripId);
+        return res.status(created ? 201 : 200).json({
+            token: qr.token,
+            qrDataUrl: qr.qrDataUrl,
+            expiresAt: qr.expiresAt.toISOString(),
+        });
+    } catch {
+        return res.status(503).json({ error: { code: 'QR_GENERATION_FAILED' } });
+    }
 });
 
 app.post('/qr/validate', (req, res) => {
