@@ -11,6 +11,7 @@ export interface AuthenticatedRequest
     usuarioAutenticado?: {
         userId: number;
         role: UserRole;
+        authMethod?: string;
     };
 }
 
@@ -25,7 +26,8 @@ export function authenticateToken(
     if (!authorization) {
         res.status(401).json({
             valid: false,
-            error: "Token requerido"
+            error: "Token requerido",
+            code: "missing_token"
         });
         return;
     }
@@ -39,7 +41,8 @@ export function authenticateToken(
     ) {
         res.status(401).json({
             valid: false,
-            error: "Formato de token incorrecto"
+            error: "Formato de token incorrecto",
+            code: "invalid_token"
         });
         return;
     }
@@ -61,14 +64,17 @@ export function authenticateToken(
         ) {
             res.status(401).json({
                 valid: false,
-                error: "Contenido del token inválido"
+                error: "Contenido del token inválido",
+                code: "invalid_token"
             });
             return;
         }
 
+        const payload = decoded as jwt.JwtPayload;
         req.usuarioAutenticado = {
-            userId: decoded.userId,
-            role: decoded.role as UserRole
+            userId: payload.userId,
+            role: payload.role as UserRole,
+            authMethod: typeof payload.authMethod === "string" ? payload.authMethod : "password"
         };
 
         next();
@@ -76,14 +82,16 @@ export function authenticateToken(
         if (error instanceof jwt.TokenExpiredError) {
             res.status(401).json({
                 valid: false,
-                error: "Token expirado"
+                error: "Token expirado",
+                code: "invalid_token"
             });
             return;
         }
 
         res.status(401).json({
             valid: false,
-            error: "Token inválido"
+            error: "Token inválido",
+            code: "invalid_token"
         });
     }
 }
@@ -116,4 +124,4 @@ export function authorizeRoles(...allowedRoles: UserRole[]) {
 
         next();
     };
-}
+}

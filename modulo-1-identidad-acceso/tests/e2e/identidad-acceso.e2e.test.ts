@@ -412,19 +412,20 @@ describe.sequential(
             });
         });
 
-        // ============ FLUJO 6: OAUTH2 STUBS ============
-        describe("Flujo 6: OAuth2/OpenID Connect (Stub)", () => {
+        // ============ FLUJO 6: OAUTH2 / OPENID CONNECT (AE2) ============
+        describe("Flujo 6: OAuth2/OpenID Connect (AE2 - Funcional)", () => {
             it("E2E-6.1: OAuth2 authorize con provider válido", async () => {
                 const response = await request(app)
                     .get("/auth/oauth2/authorize")
                     .query({
-                        provider: "GOOGLE",
+                        provider: "MOCK",
                         redirect_uri: "http://localhost:3000/callback"
                     });
 
-                expect(response.status).toBe(501);
-                expect(response.body.message).toContain("stub");
-                expect(response.body.availableProviders).toContain("GOOGLE");
+                expect(response.status).toBe(200);
+                expect(response.body.authorizationUrl).toBeDefined();
+                expect(response.body.state).toBeDefined();
+                expect(response.body.provider).toBe("MOCK");
             });
 
             it("E2E-6.2: Validar que provider sea obligatorio", async () => {
@@ -439,25 +440,30 @@ describe.sequential(
             });
 
             it("E2E-6.3: OAuth2 callback endpoint", async () => {
+                const authRes = await request(app)
+                    .get("/auth/oauth2/authorize")
+                    .query({ provider: "MOCK" });
+
                 const response = await request(app)
                     .get("/auth/oauth2/callback")
                     .query({
-                        provider: "GITHUB",
-                        code: "auth-code-xyz",
-                        state: "state-123"
+                        provider: "MOCK",
+                        code: "mock_auth_code_001",
+                        state: authRes.body.state
                     });
 
-                expect(response.status).toBe(501);
-                expect(response.body.message).toContain("stub");
-                expect(response.body.received.provider).toBe("GITHUB");
+                expect(response.status).toBe(200);
+                expect(response.body.token).toBeDefined();
+                expect(response.body.usuario).toBeDefined();
+                expect(response.body.provider).toBe("MOCK");
             });
 
             it("E2E-6.4: Link account requiere autenticación", async () => {
                 const response = await request(app)
                     .post("/auth/oauth2/link")
                     .send({
-                        provider: "GOOGLE",
-                        provider_id: "google-123"
+                        provider: "MOCK",
+                        provider_id: "mock-123"
                     });
 
                 expect(response.status).toBe(401);
@@ -468,11 +474,11 @@ describe.sequential(
                     .post("/auth/oauth2/link")
                     .set("Authorization", `Bearer ${token}`)
                     .send({
-                        provider: "GOOGLE",
-                        provider_id: "google-123"
+                        provider: "MOCK",
+                        provider_id: "mock-123"
                     });
 
-                expect(response.status).toBe(501);
+                expect(response.status).toBe(200);
                 expect(response.body.message).toContain("AE2");
             });
         });
