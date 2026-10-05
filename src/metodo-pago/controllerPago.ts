@@ -2,11 +2,11 @@ import { Request, Response } from "express";
 import { registrarMetodoPago, buscarPagoPorViaje, autorizarPago, rechazarPago } from "./procesoPago";
 import { procesarPagoMercadoPago } from "./PagoCliente";
 
-export function crearMetodoPago(req: Request, res: Response) {
+export async function crearMetodoPago(req: Request, res: Response) {
   try {
     const { clienteId, viajeId, tipo } = req.body;
 
-    const metodoPago = registrarMetodoPago(clienteId, viajeId, tipo);
+    const metodoPago = await registrarMetodoPago(clienteId, viajeId, tipo);
     res.status(201).json(metodoPago);
   } catch (error) {
     res.status(400).json({
@@ -16,10 +16,10 @@ export function crearMetodoPago(req: Request, res: Response) {
   }
 }
 
-export function obtenerMetodoPago(req: Request, res: Response) {
+export async function obtenerMetodoPago(req: Request, res: Response) {
   try {
     const viajeId = String(req.params.viajeId);
-    const metodoPago = buscarPagoPorViaje(viajeId);
+    const metodoPago = await buscarPagoPorViaje(viajeId);
 
     if (!metodoPago) {
       res.status(404).json({
@@ -56,10 +56,11 @@ export async function autorizarMetodoPago(req: Request, res: Response) {
       return;
     }
 
-    const metodoPago = autorizarPago(viajeId, idOrden);
-    metodoPago.paymentId = resultadoPago.paymentId;
-    metodoPago.total = total;
-    metodoPago.moneda = moneda ?? "ARS";
+    const metodoPago = await autorizarPago(viajeId, idOrden, {
+      paymentId: resultadoPago.paymentId,
+      total,
+      moneda: moneda ?? "ARS",
+    });
 
     res.status(200).json(metodoPago);
   } catch (error) {
@@ -70,10 +71,10 @@ export async function autorizarMetodoPago(req: Request, res: Response) {
   }
 }
 
-export function rechazarMetodoPago(req: Request, res: Response) {
+export async function rechazarMetodoPago(req: Request, res: Response) {
   try {
     const viajeId = String(req.params.viajeId);
-    const metodoPago = rechazarPago(viajeId);
+    const metodoPago = await rechazarPago(viajeId);
     res.status(200).json(metodoPago);
   } catch (error) {
     res.status(400).json({

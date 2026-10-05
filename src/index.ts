@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import { apiReference } from "@scalar/express-api-reference";
 import { readFileSync, existsSync } from "fs";

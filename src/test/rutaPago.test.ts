@@ -1,20 +1,67 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";  //vi = para mocks 
-import request from "supertest"; //simula los pedidos 
-import express from "express"; //armar servidor para manejar rutas, peticiones y respuestas HTTP sin tener que escribir todo eso a mano.
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import request from "supertest";
+import express from "express";
+
+vi.mock("../supabaseClient", () => {
+  return {
+    supabase: {
+      from: vi.fn(),
+    },
+  };
+});
+
+import { supabase } from "../supabaseClient";
 import rutaPago from "../metodo-pago/rutaPago";
-import * as procesoPago from "../metodo-pago/procesoPago"; //trae todo de procesoPago
 
-
-const app = express(); //crea "servidor"
+const app = express();
 app.use(express.json());
-app.use(rutaPago); 
+app.use(rutaPago);
+
+let builder: any;
+
+// Arma una fila con los nombres
+// de columna reales de la tabla (pago_Id, cliente_Id, viaje_Id, etc.)
+function filaPago(overrides: Record<string, any> = {}) {
+  return {
+    pago_Id: "uuid-test",
+    cliente_Id: "cliente1",
+    viaje_Id: "viaje-test",
+    tipo: "efectivo",
+    detalle: "",
+    fecha: new Date().toISOString(),
+    estado: "pendiente",
+    paymentId: null,
+    total: null,
+    moneda: null,
+    ...overrides,
+  };
+}
+
+// Antes de cada test, recrea el "builder" encadenable que simula
+// supabase.from("pagos").insert()/.update()/.select()/.eq()/.single()/.maybeSingle()
+beforeEach(() => {
+  builder = {
+    insert: vi.fn(() => builder),
+    update: vi.fn(() => builder),
+    select: vi.fn(() => builder),
+    eq: vi.fn(() => builder),
+    single: vi.fn(),
+    maybeSingle: vi.fn(),
+  };
+  (supabase.from as any).mockReturnValue(builder);
+});
 
 
-describe("POST /metodo-pago ruta", () => {  // la petición HTTP se queda ahí, hasta que esa tarea puntual termine
+describe("POST /metodo-pago ruta", () => {
   it("devuelve 201 y el método de pago registrado", async () => {
+    builder.single.mockResolvedValueOnce({
+      data: filaPago({ viaje_Id: "viaje-http-1" }),
+      error: null,
+    });
+
     const respuesta = await request(app)
-      .post("/metodo-pago") //le dice a la petición que ruta usar
-      .send({ clienteId: "cliente1", viajeId: "viaje-http-1", tipo: "efectivo" }); //manda
+      .post("/metodo-pago")
+      .send({ clienteId: "cliente1", viajeId: "viaje-http-1", tipo: "efectivo" });
 
     expect(respuesta.status).toBe(201);
     expect(respuesta.body.estado).toBe("pendiente");
@@ -24,7 +71,7 @@ describe("POST /metodo-pago ruta", () => {  // la petición HTTP se queda ahí, 
   it("devuelve 400 si faltan datos obligatorios", async () => {
     const respuesta = await request(app)
       .post("/metodo-pago")
-      .send({ tipo: "efectivo" }); // faltan clienteId y viajeId
+      .send({ tipo: "efectivo" });
 
     expect(respuesta.status).toBe(400);
   });
@@ -39,30 +86,27 @@ describe("POST /metodo-pago ruta", () => {  // la petición HTTP se queda ahí, 
 });
 
 
-
-
-
-describe("GET /metodo-pago/:viajeId ruta ", () => {
+describe("GET /metodo-pago/:viajeId ruta", () => {
   it("devuelve 200 y el método de pago si existe", async () => {
-    await request(app)
-      .post("/metodo-pago")
-      .send({ clienteId: "cliente1", viajeId: "viaje-http-2", tipo: "tarjeta" }); //crea pago 
+    builder.maybeSingle.mockResolvedValueOnce({
+      data: filaPago({ viaje_Id: "viaje-http-2", tipo: "tarjeta" }),
+      error: null,
+    });
 
     const respuesta = await request(app).get("/metodo-pago/viaje-http-2");
 
-    expect(respuesta.status).toBe(200); //aprueba 
+    expect(respuesta.status).toBe(200);
     expect(respuesta.body.viajeId).toBe("viaje-http-2");
   });
 
   it("devuelve 404 si no existe un pago para ese viaje", async () => {
-    const respuesta = await request(app).get(
-      "/metodo-pago/viaje-que-no-existe-http"
-    );
+    builder.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+
+    const respuesta = await request(app).get("/metodo-pago/viaje-que-no-existe-http");
 
     expect(respuesta.status).toBe(404);
   });
 });
-
 
 
 describe("POST /metodo-pago/:viajeId/autorizar", () => {
@@ -74,14 +118,25 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
     vi.unstubAllGlobals();
   });
 
-    it("autoriza un pago pendiente y devuelve 200 con el paymentId, total y moneda", async () => {
-    await request(app)
-      .post("/metodo-pago")
-      .send({ clienteId: "cliente1", viajeId: "viaje-http-3", tipo: "efectivo" });
-
+  it("autoriza un pago pendiente y devuelve 200 con paymentId, total y moneda", async () => {
     (fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ id: "mp-mock-123", status: "approved", transaction_amount: 1500 }),
+    });
+
+    builder.maybeSingle.mockResolvedValueOnce({
+      data: filaPago({ viaje_Id: "viaje-http-3" }),
+      error: null,
+    });
+    builder.single.mockResolvedValueOnce({
+      data: filaPago({
+        viaje_Id: "viaje-http-3",
+        estado: "autorizado",
+        paymentId: "mp-mock-123",
+        total: 1500,
+        moneda: "USD",
+      }),
+      error: null,
     });
 
     const respuesta = await request(app)
@@ -96,13 +151,24 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
   });
 
   it("si no mandan moneda, usa 'ARS' por defecto", async () => {
-    await request(app)
-      .post("/metodo-pago")
-      .send({ clienteId: "cliente1", viajeId: "viaje-sin-moneda", tipo: "efectivo" });
-
     (fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ id: "mp-mock-456", status: "approved", transaction_amount: 800 }),
+    });
+
+    builder.maybeSingle.mockResolvedValueOnce({
+      data: filaPago({ viaje_Id: "viaje-sin-moneda" }),
+      error: null,
+    });
+    builder.single.mockResolvedValueOnce({
+      data: filaPago({
+        viaje_Id: "viaje-sin-moneda",
+        estado: "autorizado",
+        paymentId: "mp-mock-456",
+        total: 800,
+        moneda: "ARS",
+      }),
+      error: null,
     });
 
     const respuesta = await request(app)
@@ -114,10 +180,6 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
   });
 
   it("devuelve 400 si falta el total", async () => {
-    await request(app)
-      .post("/metodo-pago")
-      .send({ clienteId: "cliente1", viajeId: "viaje-sin-total", tipo: "efectivo" });
-
     const respuesta = await request(app)
       .post("/metodo-pago/viaje-sin-total/autorizar")
       .send({ idOrden: "orden-sin-total" });
@@ -126,10 +188,6 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
   });
 
   it("devuelve 400 si falta el idOrden", async () => {
-    await request(app)
-      .post("/metodo-pago")
-      .send({ clienteId: "cliente1", viajeId: "viaje-sin-orden", tipo: "efectivo" });
-
     const respuesta = await request(app)
       .post("/metodo-pago/viaje-sin-orden/autorizar")
       .send({ total: 1500 });
@@ -138,10 +196,6 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
   });
 
   it("devuelve 402 si Mercado Pago rechaza el pago", async () => {
-    await request(app)
-      .post("/metodo-pago")
-      .send({ clienteId: "cliente1", viajeId: "viaje-rechazado-mp", tipo: "efectivo" });
-
     (fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ id: "mp-mock-rejected", status: "rejected", transaction_amount: 1500 }),
@@ -155,6 +209,13 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
   });
 
   it("devuelve 400 si no existe método de pago para ese viaje", async () => {
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: "mp-mock-x", status: "approved", transaction_amount: 1000 }),
+    });
+
+    builder.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+
     const respuesta = await request(app)
       .post("/metodo-pago/viaje-inexistente-http/autorizar")
       .send({ idOrden: "orden-x", total: 1000 });
@@ -164,34 +225,31 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
 });
 
 
-
-
-
-
 describe("POST /metodo-pago/:viajeId/rechazar", () => {
   it("rechaza un pago pendiente y devuelve 200", async () => {
-    await request(app)
-      .post("/metodo-pago")
-      .send({ clienteId: "cliente1", viajeId: "viaje-http-4", tipo: "efectivo" });
+    builder.maybeSingle.mockResolvedValueOnce({
+      data: filaPago({ viaje_Id: "viaje-http-4" }),
+      error: null,
+    });
+    builder.single.mockResolvedValueOnce({
+      data: filaPago({ viaje_Id: "viaje-http-4", estado: "rechazado" }),
+      error: null,
+    });
 
-    const respuesta = await request(app).post(
-      "/metodo-pago/viaje-http-4/rechazar"
-    );
+    const respuesta = await request(app).post("/metodo-pago/viaje-http-4/rechazar");
 
     expect(respuesta.status).toBe(200);
     expect(respuesta.body.estado).toBe("rechazado");
   });
 
   it("devuelve 400 si no existe método de pago para ese viaje", async () => {
-    const respuesta = await request(app).post(
-      "/metodo-pago/viaje-inexistente-http-2/rechazar"
-    );
+    builder.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+
+    const respuesta = await request(app).post("/metodo-pago/viaje-inexistente-http-2/rechazar");
 
     expect(respuesta.status).toBe(400);
   });
 });
-
-
 
 //Request: recibe de Express (app) y te devuelve un objeto que simula peticiones HTTP 
 // .post= le dice a la petición que ruta usar
