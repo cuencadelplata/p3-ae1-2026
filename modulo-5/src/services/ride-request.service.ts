@@ -168,6 +168,69 @@ export class RideRequestService {
   }
 
   /**
+   * Integración con M6: Gestión de Viajes (RF-6)
+   * 1. Crea el viaje en M6 via POST /api/viajes { clienteId, origen, destino }
+   * 2. Asigna el conductor al viaje via POST /api/viajes/:id/asignar { conductorId }
+   * En caso de indisponibilidad de M6, registra advertencia sin interrumpir el flujo de M5.
+   */
+  private async notifyM6TripAssigned(
+    clientId: string,
+    originAddress: string,
+    destinationAddress: string,
+    driverId: string
+  ): Promise<string | null> {
+    const m6BaseUrl = process.env.M6_SERVICE_URL || 'http://localhost:3000';
+
+    try {
+      // 1. Crear viaje en M6
+      const createRes = await fetch(`${m6BaseUrl}/api/viajes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clienteId: clientId,
+          origen: originAddress || 'Origen no especificado',
+          destino: destinationAddress || 'Destino no especificado'
+        }),
+        signal: AbortSignal.timeout(3000)
+      });
+
+      if (!createRes.ok) {
+        console.warn(`[M6] Error al crear viaje (${createRes.status}): ${await createRes.text()}`);
+        return null;
+      }
+
+      const tripData = (await createRes.json()) as { id?: string; viajeId?: string; _id?: string };
+      const tripId = tripData.id || tripData.viajeId || tripData._id;
+
+      if (!tripId) {
+        console.warn('[M6] No se recibió ID de viaje en la respuesta de M6');
+        return null;
+      }
+
+      // 2. Asignar conductor al viaje en M6
+      const assignRes = await fetch(`${m6BaseUrl}/api/viajes/${tripId}/asignar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conductorId: driverId
+        }),
+        signal: AbortSignal.timeout(3000)
+      });
+
+      if (!assignRes.ok) {
+        console.warn(`[M6] Error al asignar conductor al viaje ${tripId} (${assignRes.status}): ${await assignRes.text()}`);
+        return tripId;
+      }
+
+      console.log(`[M6] Viaje ${tripId} creado y asignado exitosamente al conductor ${driverId}`);
+      return tripId;
+    } catch (err: any) {
+      console.warn(`[M6] No disponible (${err.message}). Procediendo con fallback interno.`);
+      return null;
+    }
+  }
+
+  /**
    * Crea una nueva solicitud de viaje (RF-5.1)
    */
   public async createRideRequest(
@@ -635,7 +698,7 @@ export class RideRequestService {
       }
     }
 
-    // 5. Publicación Asíncrona del Evento hacia M6 (Viajes) y M8 (Notificaciones) vía RabbitMQ
+    // 5. Publicación Asíncrona del Evento hacia M8 (Notificaciones) y otros consumidores vía RabbitMQ
     await this.rabbitMqService.publishTripAssigned({
       requestId: request.id,
       offerId: offer.id,
@@ -648,8 +711,16 @@ export class RideRequestService {
       assignedAt: now.toISOString()
     });
 
+    // 6. Integración HTTP con M6 (Gestión de Viajes) para crear y asignar el viaje
+    await this.notifyM6TripAssigned(
+      request.clientId,
+      request.origin.address || `${request.origin.latitude},${request.origin.longitude}`,
+      request.destination.address || `${request.destination.latitude},${request.destination.longitude}`,
+      offer.driverId
+    );
+
     console.log(
-      `[RF-5.4 / RF-5.5] Oferta ${offer.id} ACEPTADA por conductor ${offer.driverId}. Solicitud ${request.id} ASIGNADA exclusivamente. Evento publicado a RabbitMQ (dispatch.assigned).`
+      `[RF-5.4 / RF-5.5] Oferta ${offer.id} ACEPTADA por conductor ${offer.driverId}. Solicitud ${request.id} ASIGNADA exclusivamente. Notificado M6 (HTTP) y M8 (RabbitMQ).`
     );
 
     return {
