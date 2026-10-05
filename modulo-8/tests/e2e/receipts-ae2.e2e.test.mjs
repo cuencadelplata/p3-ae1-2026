@@ -222,7 +222,7 @@ async function m7(path, body) {
   assert.ok(response.ok, `M7 ${path} respondio ${response.status}`);
 }
 
-test("con el pago pendiente en M7 no se emite; al autorizarse, el reintento emite con el medio de pago de M7", async () => {
+test("con el pago pendiente en M7 no se emite; al autorizarse, el reintento emite con el medio de pago y el importe de M7", async () => {
   const tripId = `${run}-m7-pendiente`;
   await m7("/metodo-pago", { clienteId: "cli-e2e", viajeId: tripId, tipo: "transferencia" });
 
@@ -231,7 +231,7 @@ test("con el pago pendiente en M7 no se emite; al autorizarse, el reintento emit
   await pause(1000);
   assert.equal((await fetch(`${RECEIPTS}/api/v1/receipts/${tripId}`)).status, 404, "pendiente: sin comprobante");
 
-  await m7(`/metodo-pago/${tripId}/autorizar`);
+  await m7(`/metodo-pago/${tripId}/autorizar`, { idOrden: `orden-${tripId}`, total: 1800, moneda: "ARS" });
   const receipt = await waitFor(
     async () => {
       const response = await fetch(`${RECEIPTS}/api/v1/receipts/${tripId}`);
@@ -240,6 +240,7 @@ test("con el pago pendiente en M7 no se emite; al autorizarse, el reintento emit
     { what: "la emision del comprobante en el reintento", timeoutMs: 20000 },
   );
   assert.equal(receipt.payment.method, "TRANSFERENCIA");
+  assert.equal(receipt.fare.total, 1800, "el total sale de M7, no del evento (1500)");
 });
 
 test("con el pago rechazado en M7 el mensaje termina en la DLQ y no hay comprobante", async () => {

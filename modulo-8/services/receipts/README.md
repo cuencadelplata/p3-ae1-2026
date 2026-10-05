@@ -28,7 +28,7 @@ de cada viaje (RF-8.3 y RF-8.4).
 | Logs | Texto libre | JSON con `correlationId`, sin datos personales |
 | Salud | `/health` | `/health/live` y `/health/ready` por dependencia y estado del circuito |
 | Servicio externo | No había | Autorizador fiscal simulado, con timeout de 2 s y circuit breaker |
-| Estado del pago | Se aceptaba el informado en la entrada | Se consulta a M7 (`GET /metodo-pago/{viajeId}`): solo se emite con el pago autorizado (2.2.0) |
+| Estado del pago | Se aceptaba el informado en la entrada | Se consulta a M7 (`GET /metodo-pago/{viajeId}`): solo se emite con el pago autorizado (2.2.0), con el medio de pago y el importe cobrado que informa M7 (2.3.0) |
 | Dependencia caída | Base caída: `500`; al arrancar, el proceso terminaba | `503` con `Retry-After`; arranca sin base y se recupera solo; los pagos esperan sin ir a la DLQ |
 
 Fundamentos: [ADR-003](docs/adr/ADR-003-backing-services-ae2.md) (RabbitMQ y Redis),

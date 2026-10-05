@@ -185,6 +185,33 @@ describe('Emision segun el estado del pago en M7 (Integration HTTP + PostgreSQL 
     assert.equal(receipt.payment.method, 'TRANSFERENCIA', 'el medio de pago sale de M7, no de la entrada');
   });
 
+  it('el comprobante debe tomar el total y la moneda que M7 guarda al autorizar', async () => {
+    const tripId = newTripId();
+    await registerPayment(tripId, 'tarjeta');
+    await m7(`/metodo-pago/${tripId}/autorizar`, { idOrden: `orden-${tripId}`, total: 6000, moneda: 'ARS' });
+
+    const { receipt } = await issueReceipt(receiptRequest(tripId));
+
+    // La entrada informa 5390.50 con desglose; M7 cobro 6000: el desglose no
+    // cierra con lo cobrado, asi que queda solo el total de M7.
+    assert.equal(receipt.fare.total, 6000);
+    assert.equal(receipt.fare.currency, 'ARS');
+    assert.equal(receipt.fare.baseFare, 0);
+    assert.equal(receipt.fare.discounts, 0);
+  });
+
+  it('si el total de M7 coincide con el desglose de la entrada, el desglose se conserva', async () => {
+    const tripId = newTripId();
+    await registerPayment(tripId, 'efectivo');
+    await m7(`/metodo-pago/${tripId}/autorizar`, { idOrden: `orden-${tripId}`, total: 5390.5 });
+
+    const { receipt } = await issueReceipt(receiptRequest(tripId));
+
+    assert.equal(receipt.fare.total, 5390.5);
+    assert.equal(receipt.fare.baseFare, 1200);
+    assert.equal(receipt.fare.discounts, 150);
+  });
+
   it('un pago rechazado no debe emitir comprobante', async () => {
     const tripId = newTripId();
     await registerPayment(tripId, 'tarjeta');
