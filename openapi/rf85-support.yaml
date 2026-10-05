@@ -1,0 +1,770 @@
+openapi: 3.0.3
+info:
+  title: M8 - Soporte asociado a viaje (RF8.5)
+  version: 2.0.0
+  description: |
+    Fragment OpenAPI de RF8.5 del Módulo 8 (Notificaciones, Documentos y Soporte).
+    Gestiona tickets de soporte asociados a un viaje y el historial de sus
+    cambios de estado.
+
+    **Identificadores.** `tripId` es un string opaco definido por otro módulo:
+    Support no lo interpreta ni lo convierte. `viajeId` es su alias deprecado
+    de AE1; se acepta en la entrada y se devuelve con el mismo valor mientras
+    dure la transición.
+
+    **Errores.** Todas las respuestas de error tienen la forma
+    `{ error: { code, message, details? }, correlationId }`.
+
+    **Correlación.** Toda respuesta lleva la cabecera `X-Correlation-Id`: el
+    valor recibido en el pedido si es válido, o uno generado.
+servers:
+  - url: http://localhost:3000
+    description: Servidor de desarrollo local
+tags:
+  - name: Tickets (RF8.5)
+    description: Tickets de soporte asociados a un viaje y su historial.
+  - name: RF8.6 (legacy AE1)
+    description: |
+      Publicación de prueba heredada de AE1. No pertenece a RF8.5: se retira
+      cuando RF8.6 extraiga el consumer RabbitMQ.
+
+paths:
+  /tickets:
+    post:
+      tags: [Tickets (RF8.5)]
+      summary: Crea un ticket de soporte asociado a un viaje
+      operationId: crearTicket
+      description: |
+        Crea el ticket en estado `ABIERTO`, versión 1, y registra la entrada
+        inicial de su historial.
+
+        Con la cabecera `Idempotency-Key`, repetir el mismo pedido no crea
+        otro ticket: responde `200` con el ticket existente, en su estado
+        actual. La comparación se hace sobre el pedido normalizado, por lo que
+        `{ tripId }` y `{ viajeId }` con el mismo valor son el mismo pedido.
+        La misma clave con un pedido distinto responde `409`.
+
+        Sin la cabecera, cada pedido crea un ticket.
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ActorId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevoTicket'
+            examples:
+              conTripId:
+                summary: Pedido con tripId
+                value:
+                  tripId: cierre-t3
+                  motivo: El conductor nunca llegó
+              conAliasDeprecado:
+                summary: Pedido de un cliente AE1 (viajeId)
+                value:
+                  viajeId: cierre-t3
+                  motivo: El conductor nunca llegó
+      responses:
+        '201':
+          description: Ticket creado.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+              examples:
+                creado:
+                  $ref: '#/components/examples/TicketAbierto'
+        '200':
+          description: |
+            Reintento idempotente: la `Idempotency-Key` ya había creado este
+            ticket. Devuelve el ticket en su estado actual, sin crear otro.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+              examples:
+                existente:
+                  $ref: '#/components/examples/TicketAbierto'
+        '400':
+          $ref: '#/components/responses/ErrorDeValidacion'
+        '409':
+          description: La `Idempotency-Key` ya se usó con un pedido distinto.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                conflictoDeIdempotencia:
+                  value:
+                    error:
+                      code: SUPPORT_IDEMPOTENCY_CONFLICT
+                      message: La Idempotency-Key ya se usó con un pedido distinto.
+                    correlationId: 4f8f6a1e-2b7c-4d7e-9c55-0b6f3c2a9d10
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/BaseNoDisponible'
+    get:
+      tags: [Tickets (RF8.5)]
+      summary: Lista tickets, con filtros y paginación
+      operationId: listarTickets
+      description: |
+        Devuelve un array de tickets ordenado por fecha de creación
+        descendente y, a igual fecha, por id descendente. El orden es estable:
+        un ticket creado entre dos páginas no altera las siguientes.
+
+        Si hay más resultados, la respuesta incluye la cabecera
+        `X-Next-Cursor`; enviarla como `cursor` devuelve la página siguiente.
+        Sin esa cabecera no hay más páginas.
+
+        Un parámetro presente pero vacío, repetido o fuera de rango responde
+        `400`.
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+        - name: tripId
+          in: query
+          description: Sólo los tickets de este viaje. Comparación exacta.
+          schema:
+            type: string
+            minLength: 1
+        - name: viajeId
+          in: query
+          deprecated: true
+          description: Alias deprecado de `tripId`. Si se envían ambos deben coincidir.
+          schema:
+            type: string
+            minLength: 1
+        - name: estado
+          in: query
+          description: Sólo los tickets en este estado.
+          schema:
+            $ref: '#/components/schemas/TicketStatus'
+        - name: limit
+          in: query
+          description: Cantidad máxima de tickets por página.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          description: Valor opaco recibido en `X-Next-Cursor` de la página anterior.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Página de tickets.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+            X-Next-Cursor:
+              $ref: '#/components/headers/X-Next-Cursor'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Ticket'
+              examples:
+                pagina:
+                  value:
+                    - id: d2de31d0-91d0-46fd-b775-8d9514c25927
+                      tripId: cierre-t3
+                      viajeId: cierre-t3
+                      motivo: El conductor nunca llegó
+                      estado: RESUELTO
+                      version: 2
+                      fechaCreacion: '2026-10-04T02:59:23.890Z'
+                      fechaActualizacion: '2026-10-04T02:59:24.570Z'
+        '400':
+          $ref: '#/components/responses/ErrorDeValidacion'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/BaseNoDisponible'
+
+  /tickets/{id}:
+    get:
+      tags: [Tickets (RF8.5)]
+      summary: Obtiene un ticket por su id
+      operationId: obtenerTicket
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Ticket encontrado.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+              examples:
+                ticket:
+                  $ref: '#/components/examples/TicketAbierto'
+        '404':
+          $ref: '#/components/responses/TicketNoEncontrado'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/BaseNoDisponible'
+
+  /tickets/{id}/estado:
+    patch:
+      tags: [Tickets (RF8.5)]
+      summary: Cambia el estado de un ticket
+      operationId: actualizarEstado
+      description: |
+        Transiciones permitidas:
+
+        | Desde | Hacia | Condición |
+        | --- | --- | --- |
+        | `ABIERTO` | `EN_PROCESO` | — |
+        | `ABIERTO` | `RESUELTO` | — |
+        | `EN_PROCESO` | `ABIERTO` | — |
+        | `EN_PROCESO` | `RESUELTO` | — |
+        | `RESUELTO` | `ABIERTO` | Reapertura: `motivo` obligatorio y no vacío |
+
+        `RESUELTO` → `EN_PROCESO` no está permitido y responde `409`
+        `SUPPORT_INVALID_TRANSITION`.
+
+        **Mismo estado.** Pedir el estado que el ticket ya tiene responde `200`
+        sin efecto: no agrega historial, no sube la versión y no publica
+        evento. Permite reintentar el pedido sin duplicar nada.
+
+        **Concurrencia.** Cada cambio real sube `version` en uno. Con
+        `expectedVersion`, el cambio sólo se aplica si coincide con la versión
+        actual; si no, responde `409` `SUPPORT_CONCURRENCY_CONFLICT`, también
+        cuando se pide el mismo estado. Sin `expectedVersion`, dos cambios
+        simultáneos tampoco se aplican los dos: uno responde `409`.
+
+        Cada cambio real agrega una entrada al historial, con el autor tomado
+        de `X-Actor-Id`.
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ActorId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambioDeEstado'
+            examples:
+              tomar:
+                summary: Tomar el ticket
+                value:
+                  estado: EN_PROCESO
+              conVersion:
+                summary: Resolver sólo si sigue en la versión 2
+                value:
+                  estado: RESUELTO
+                  expectedVersion: 2
+              reabrir:
+                summary: Reabrir un ticket resuelto
+                value:
+                  estado: ABIERTO
+                  motivo: El problema volvió a ocurrir
+      responses:
+        '200':
+          description: |
+            Estado actualizado, o sin efecto si el ticket ya estaba en ese
+            estado.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+              examples:
+                resuelto:
+                  value:
+                    id: d2de31d0-91d0-46fd-b775-8d9514c25927
+                    tripId: cierre-t3
+                    viajeId: cierre-t3
+                    motivo: El conductor nunca llegó
+                    estado: RESUELTO
+                    version: 2
+                    fechaCreacion: '2026-10-04T02:59:23.890Z'
+                    fechaActualizacion: '2026-10-04T02:59:24.570Z'
+        '400':
+          $ref: '#/components/responses/ErrorDeValidacion'
+        '404':
+          $ref: '#/components/responses/TicketNoEncontrado'
+        '409':
+          description: |
+            La transición no está permitida (`SUPPORT_INVALID_TRANSITION`) o el
+            ticket cambió desde que el cliente lo leyó
+            (`SUPPORT_CONCURRENCY_CONFLICT`).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                transicionInvalida:
+                  value:
+                    error:
+                      code: SUPPORT_INVALID_TRANSITION
+                      message: El cambio de estado no está permitido.
+                      details:
+                        - field: estado
+                          reason: No se permite pasar de RESUELTO a EN_PROCESO.
+                    correlationId: a8d707a9-dc31-439e-9564-49e2880994b3
+                conflictoDeVersion:
+                  value:
+                    error:
+                      code: SUPPORT_CONCURRENCY_CONFLICT
+                      message: El ticket cambió desde la última lectura. Consultalo de nuevo y reintentá.
+                    correlationId: 7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/BaseNoDisponible'
+
+  /tickets/{id}/historial:
+    get:
+      tags: [Tickets (RF8.5)]
+      summary: Devuelve el historial de estados de un ticket
+      operationId: obtenerHistorial
+      description: |
+        Entradas en orden cronológico. La primera se crea junto con el ticket
+        y tiene `estadoAnterior: null`.
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Historial del ticket.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TicketHistoryEntry'
+              examples:
+                historial:
+                  value:
+                    - id: 4
+                      ticketId: d2de31d0-91d0-46fd-b775-8d9514c25927
+                      estadoAnterior: null
+                      estadoNuevo: ABIERTO
+                      cambiadoPor: smoke
+                      motivo: null
+                      fecha: '2026-10-04T02:59:23.890Z'
+                    - id: 5
+                      ticketId: d2de31d0-91d0-46fd-b775-8d9514c25927
+                      estadoAnterior: ABIERTO
+                      estadoNuevo: RESUELTO
+                      cambiadoPor: null
+                      motivo: null
+                      fecha: '2026-10-04T02:59:24.570Z'
+        '404':
+          $ref: '#/components/responses/TicketNoEncontrado'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/BaseNoDisponible'
+
+  /events/publish:
+    post:
+      tags: [RF8.6 (legacy AE1)]
+      deprecated: true
+      summary: Publica eventos de prueba en RabbitMQ (heredado de AE1)
+      operationId: publicarEvento
+      description: |
+        Publica un evento, o una ráfaga, en el exchange `viajes_exchange` de
+        AE1 para pruebas y monitoreo.
+
+        Sólo existe cuando Support arranca con `SUPPORT_LEGACY_EVENTS=on` (el
+        valor por defecto); con `off` la ruta no se registra y responde `404`.
+        No pertenece a RF8.5: se retira cuando RF8.6 extraiga el consumer
+        RabbitMQ. Sus respuestas de error conservan el formato de AE1.
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [routingKey, payload]
+              properties:
+                routingKey:
+                  type: string
+                  description: Clave de enrutamiento (ej. viaje.completado, viaje.asignado, ticket.creado).
+                  example: viaje.completado
+                payload:
+                  type: object
+                  description: Objeto JSON con los datos del evento.
+                  example:
+                    viajeId: viaje-100
+                    importe: 2500
+                count:
+                  type: integer
+                  description: Cantidad de mensajes a publicar (por defecto 1, máximo 50).
+                  example: 5
+      responses:
+        '200':
+          description: |
+            Pedido procesado. `enviadosExitosamente` es 0 si el broker no está
+            disponible.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje:
+                    type: string
+                  routingKey:
+                    type: string
+                  solicitados:
+                    type: integer
+                  enviadosExitosamente:
+                    type: integer
+              examples:
+                publicado:
+                  value:
+                    mensaje: Eventos enviados a RabbitMQ
+                    routingKey: viaje.completado
+                    solicitados: 1
+                    enviadosExitosamente: 1
+        '400':
+          description: Faltan `routingKey` o `payload`. Formato de error de AE1.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+              examples:
+                faltanCampos:
+                  value:
+                    error: routingKey y payload son requeridos
+
+components:
+  parameters:
+    TicketId:
+      name: id
+      in: path
+      required: true
+      description: Id del ticket.
+      schema:
+        type: string
+        format: uuid
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: |
+        Identificador para correlacionar el pedido. Si no se envía, o no cumple
+        el formato, Support genera uno. Siempre se devuelve en la respuesta.
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9._:-]{1,128}$'
+      example: trip-42
+    ActorId:
+      name: X-Actor-Id
+      in: header
+      required: false
+      description: |
+        Quién hace el pedido. String opaco que queda como autor
+        (`cambiadoPor`) en el historial; `null` si no se envía.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+      example: agente/0042
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        Clave elegida por el cliente para poder reintentar el pedido sin crear
+        un ticket duplicado.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+      example: 5b0b9f2e-7c3a-4e1d-9a52-1f6d8c0e4a77
+
+  headers:
+    X-Correlation-Id:
+      description: Identificador de correlación del pedido, recibido o generado.
+      schema:
+        type: string
+      example: a8d707a9-dc31-439e-9564-49e2880994b3
+    X-Next-Cursor:
+      description: |
+        Cursor opaco de la página siguiente. Sólo está presente si hay más
+        resultados.
+      schema:
+        type: string
+
+  responses:
+    ErrorDeValidacion:
+      description: |
+        La solicitud contiene datos inválidos. `details` lista cada campo o
+        cabecera rechazado.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/X-Correlation-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            camposInvalidos:
+              value:
+                error:
+                  code: SUPPORT_VALIDATION_ERROR
+                  message: La solicitud contiene datos inválidos.
+                  details:
+                    - field: tripId
+                      reason: Debe ser un texto no vacío.
+                    - field: motivo
+                      reason: Debe ser un texto no vacío.
+                correlationId: 0e6c1a54-6f5d-4f0b-8a56-2f8d6c1b7e31
+            jsonMalformado:
+              value:
+                error:
+                  code: SUPPORT_VALIDATION_ERROR
+                  message: La solicitud contiene datos inválidos.
+                  details:
+                    - field: body
+                      reason: El JSON no es válido.
+                correlationId: 3d2a9b70-1c4e-4b8f-a6d2-5e7f9c0b1a23
+    TicketNoEncontrado:
+      description: No existe un ticket con ese id.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/X-Correlation-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            noEncontrado:
+              value:
+                error:
+                  code: SUPPORT_TICKET_NOT_FOUND
+                  message: Ticket no encontrado.
+                correlationId: trip-42
+    BaseNoDisponible:
+      description: |
+        La base de datos de Support no está disponible. El pedido no dejó
+        cambios parciales y puede reintentarse.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/X-Correlation-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            baseCaida:
+              value:
+                error:
+                  code: SUPPORT_DB_UNAVAILABLE
+                  message: El servicio de soporte no está disponible en este momento. Reintentá en unos instantes.
+                correlationId: 9b1f3c2d-8e4a-4f6b-b7c9-0d1e2f3a4b5c
+    ErrorInterno:
+      description: Error no esperado. El detalle queda en el log, nunca en la respuesta.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/X-Correlation-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            interno:
+              value:
+                error:
+                  code: SUPPORT_INTERNAL_ERROR
+                  message: No fue posible procesar la solicitud.
+                correlationId: corr-500
+
+  examples:
+    TicketAbierto:
+      summary: Ticket recién creado
+      value:
+        id: d2de31d0-91d0-46fd-b775-8d9514c25927
+        tripId: cierre-t3
+        viajeId: cierre-t3
+        motivo: El conductor nunca llegó
+        estado: ABIERTO
+        version: 1
+        fechaCreacion: '2026-10-04T02:59:23.890Z'
+        fechaActualizacion: '2026-10-04T02:59:23.890Z'
+
+  schemas:
+    TicketStatus:
+      type: string
+      enum: [ABIERTO, EN_PROCESO, RESUELTO]
+    NuevoTicket:
+      type: object
+      description: |
+        Debe incluir `tripId` o `viajeId`. Si se envían ambos deben tener el
+        mismo valor. Los ids son strings: un número u objeto se rechaza, no se
+        convierte.
+      required: [motivo]
+      properties:
+        tripId:
+          type: string
+          minLength: 1
+          description: Identificador del viaje. String opaco, no vacío.
+          example: cierre-t3
+        viajeId:
+          type: string
+          minLength: 1
+          deprecated: true
+          description: Alias deprecado de `tripId`, de AE1.
+        motivo:
+          type: string
+          minLength: 1
+          description: Motivo de la apertura del ticket.
+          example: El conductor nunca llegó
+    CambioDeEstado:
+      type: object
+      required: [estado]
+      properties:
+        estado:
+          $ref: '#/components/schemas/TicketStatus'
+        motivo:
+          type: string
+          description: |
+            Motivo del cambio; queda en el historial. Obligatorio y no vacío
+            para reabrir un ticket (`RESUELTO` → `ABIERTO`).
+          example: El problema volvió a ocurrir
+        expectedVersion:
+          type: integer
+          minimum: 1
+          description: |
+            Versión del ticket sobre la que el cliente tomó la decisión. Si no
+            coincide con la actual, el cambio no se aplica.
+          example: 2
+    Ticket:
+      type: object
+      required: [id, tripId, viajeId, motivo, estado, version, fechaCreacion, fechaActualizacion]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id único del ticket.
+        tripId:
+          type: string
+          description: Identificador del viaje asociado. String opaco.
+        viajeId:
+          type: string
+          deprecated: true
+          description: Alias deprecado de `tripId`; siempre tiene el mismo valor.
+        motivo:
+          type: string
+          description: Razón de la consulta o queja.
+        estado:
+          $ref: '#/components/schemas/TicketStatus'
+        version:
+          type: integer
+          minimum: 1
+          description: Empieza en 1 y sube en uno con cada cambio de estado real.
+        fechaCreacion:
+          type: string
+          format: date-time
+          description: Fecha y hora de apertura del ticket (UTC).
+        fechaActualizacion:
+          type: string
+          format: date-time
+          description: Fecha y hora del último cambio de estado (UTC).
+    TicketHistoryEntry:
+      type: object
+      required: [id, ticketId, estadoAnterior, estadoNuevo, cambiadoPor, motivo, fecha]
+      properties:
+        id:
+          type: integer
+          description: Id de la entrada de historial.
+        ticketId:
+          type: string
+          format: uuid
+        estadoAnterior:
+          allOf:
+            - $ref: '#/components/schemas/TicketStatus'
+          nullable: true
+          description: Estado previo; `null` en la entrada inicial, creada con el ticket.
+        estadoNuevo:
+          $ref: '#/components/schemas/TicketStatus'
+        cambiadoPor:
+          type: string
+          nullable: true
+          description: Valor de `X-Actor-Id` del pedido que hizo el cambio; `null` si no se envió.
+        motivo:
+          type: string
+          nullable: true
+          description: Motivo informado con el cambio; `null` si no se envió.
+        fecha:
+          type: string
+          format: date-time
+          description: Fecha y hora del cambio (UTC).
+    ErrorDetail:
+      type: object
+      required: [field, reason]
+      properties:
+        field:
+          type: string
+          description: Campo del cuerpo, parámetro o cabecera rechazado.
+        reason:
+          type: string
+    Error:
+      type: object
+      required: [error, correlationId]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - SUPPORT_VALIDATION_ERROR
+                - SUPPORT_TICKET_NOT_FOUND
+                - SUPPORT_INVALID_TRANSITION
+                - SUPPORT_CONCURRENCY_CONFLICT
+                - SUPPORT_IDEMPOTENCY_CONFLICT
+                - SUPPORT_DB_UNAVAILABLE
+                - SUPPORT_INTERNAL_ERROR
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                $ref: '#/components/schemas/ErrorDetail'
+        correlationId:
+          type: string

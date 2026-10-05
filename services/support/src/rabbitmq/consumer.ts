@@ -7,31 +7,87 @@ import { ticketRepository } from '../models/ticket.model.js';
 export class RabbitMQConsumer {
   private static connection: any = null;
   private static channel: any = null;
+  private static reconnectTimer: NodeJS.Timeout | null = null;
   private static readonly QUEUE_NAME = 'm8_async_events';
   private static readonly EXCHANGE_NAME = 'viajes_exchange';
+  private static readonly RECONNECT_DELAY_MS = 5000;
 
   static async connect(url: string = 'amqp://localhost:5672') {
+    let connection: any = null;
     try {
       console.log(`[RabbitMQ] Conectando a ${url}...`);
-      this.connection = await amqp.connect(url);
-      this.channel = await this.connection.createChannel();
+      connection = await amqp.connect(url);
+      // Sin listener de 'error', Node termina el proceso cuando el broker se cae.
+      connection.on('error', (error: unknown) => console.error('[RabbitMQ] Error en la conexión:', error));
+      connection.on('close', () => this.handleDisconnect(connection, url));
+
+      const channel = await connection.createChannel();
+      channel.on('error', (error: unknown) => console.error('[RabbitMQ] Error en el canal:', error));
+      channel.on('close', () => this.handleDisconnect(connection, url));
 
       // Aseguramos que el exchange y la cola existan (arquitectura resiliente)
-      await this.channel!.assertExchange(this.EXCHANGE_NAME, 'topic', { durable: true });
-      await this.channel!.assertQueue(this.QUEUE_NAME, { durable: true });
+      await channel.assertExchange(this.EXCHANGE_NAME, 'topic', { durable: true });
+      await channel.assertQueue(this.QUEUE_NAME, { durable: true });
 
       // Escuchamos eventos clave (ej. viaje completado, ticket creado, etc.)
-      await this.channel!.bindQueue(this.QUEUE_NAME, this.EXCHANGE_NAME, 'viaje.#');
-      await this.channel!.bindQueue(this.QUEUE_NAME, this.EXCHANGE_NAME, 'ticket.#');
+      await channel.bindQueue(this.QUEUE_NAME, this.EXCHANGE_NAME, 'viaje.#');
+      await channel.bindQueue(this.QUEUE_NAME, this.EXCHANGE_NAME, 'ticket.#');
 
+      this.connection = connection;
+      this.channel = channel;
       console.log(`[RabbitMQ] Conectado exitosamente. Esperando mensajes en la cola: ${this.QUEUE_NAME}`);
 
-      this.startConsuming();
+      await this.startConsuming(channel);
     } catch (error) {
       console.error('[RabbitMQ] Error de conexión:', error);
-      // En un entorno productivo usaríamos reintentos exponenciales
-      setTimeout(() => this.connect(url), 5000);
+      this.connection = null;
+      this.channel = null;
+      this.closeQuietly(connection);
+      this.scheduleReconnect(url);
     }
+  }
+
+  // Un canal o una conexión cerrados nunca deben terminar el proceso: los
+  // tickets (RF-8.5) siguen funcionando sin broker.
+  private static handleDisconnect(connection: any, url: string) {
+    // Ya atendido, o evento tardío de una conexión descartada.
+    if (this.connection !== connection) return;
+
+    console.error(`[RabbitMQ] Conexión o canal cerrados. Reintentando en ${this.RECONNECT_DELAY_MS / 1000}s...`);
+    this.connection = null;
+    this.channel = null;
+    this.closeQuietly(connection);
+    this.scheduleReconnect(url);
+  }
+
+  private static scheduleReconnect(url: string) {
+    if (this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.connect(url);
+    }, this.RECONNECT_DELAY_MS);
+  }
+
+  private static closeQuietly(connection: any) {
+    if (!connection) return;
+    try {
+      Promise.resolve(connection.close()).catch(() => undefined);
+    } catch {
+      // Ya estaba cerrada.
+    }
+  }
+
+  private static safeAck(channel: any, msg: any) {
+    try {
+      channel.ack(msg);
+    } catch (error) {
+      console.error('[RabbitMQ] No se pudo confirmar el mensaje (canal cerrado):', error);
+    }
+  }
+
+  // Indica si hay un canal abierto con el broker (lo usa el readiness de Support).
+  static isConnected(): boolean {
+    return this.channel !== null;
   }
 
   /**
@@ -53,14 +109,12 @@ export class RabbitMQConsumer {
     }
   }
 
-  private static async startConsuming() {
-    if (!this.channel) return;
-
+  private static async startConsuming(channel: any) {
     // Prefetch(1) asegura que RabbitMQ entregue solo 1 mensaje a la vez al consumidor,
     // manteniendo el resto en la cola ("Queued messages") para poderlos monitorear en el Dashboard.
-    await this.channel.prefetch(1);
+    await channel.prefetch(1);
 
-    this.channel.consume(this.QUEUE_NAME, async (msg: any) => {
+    await channel.consume(this.QUEUE_NAME, async (msg: any) => {
       if (!msg) return;
 
       try {
@@ -110,7 +164,7 @@ export class RabbitMQConsumer {
             const pdfUrl = await DocumentServiceMock.generatePDF(payload.viajeId, payload.importe || 0);
             await NotificationServiceMock.sendNotification(payload.viajeId, 'EMAIL', `Tu comprobante está listo: ${pdfUrl}`);
 
-            const tickets = ticketRepository.listarTodos().filter(t => t.viajeId === payload.viajeId);
+            const tickets = (await ticketRepository.listarTodos()).filter(t => t.viajeId === payload.viajeId);
             if (tickets.length > 0) {
               console.log(`[RabbitMQ] El viaje completado tiene ${tickets.length} tickets asociados. Actualizando estados...`);
             }
@@ -121,12 +175,13 @@ export class RabbitMQConsumer {
         }
 
         console.log(`[RabbitMQ] ✅ Mensaje procesado exitosamente [${routingKey}] - Enviando ACK`);
-        // Confirmamos (ACK) que el mensaje fue procesado para sacarlo de la cola
-        this.channel!.ack(msg);
       } catch (error) {
         console.error('[RabbitMQ] ❌ Error procesando mensaje:', error);
-        this.channel!.ack(msg);
       }
+
+      // Un único ACK, también ante error (semántica AE1), sobre el canal que
+      // entregó el mensaje.
+      this.safeAck(channel, msg);
     });
   }
 }

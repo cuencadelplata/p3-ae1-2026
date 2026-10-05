@@ -1,27 +1,20 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  HTTP_EVENT_TYPE_TO_TRIP_NOTIFICATION_EVENT_TYPE,
   NOTIFICATION_STATUSES,
-  type EventType,
   type Notification,
   type NotificationRequest,
 } from "./notification.types";
 import type { PushProvider } from "./push-provider";
-
-const messagesByEventType: Record<EventType, string> = {
-  TRIP_REQUESTED: "Tu solicitud de viaje fue recibida.",
-  DRIVER_ASSIGNED: "Se asignó un conductor a tu viaje.",
-  DRIVER_ARRIVED: "Tu conductor ha llegado al punto de encuentro.",
-  TRIP_STARTED: "Tu viaje ha comenzado.",
-  TRIP_CANCELLED: "Tu viaje fue cancelado.",
-  TRIP_COMPLETED: "Tu viaje ha finalizado.",
-};
+import { getTripNotificationContent } from "./trip-notification-content";
 
 export async function processNotification(
   request: NotificationRequest,
   pushProvider: PushProvider,
 ): Promise<Notification> {
-  const message = messagesByEventType[request.eventType];
+  const tripEventType = HTTP_EVENT_TYPE_TO_TRIP_NOTIFICATION_EVENT_TYPE[request.eventType];
+  const { message } = getTripNotificationContent(tripEventType);
   const notificationId = randomUUID();
   const createdAt = new Date().toISOString();
 

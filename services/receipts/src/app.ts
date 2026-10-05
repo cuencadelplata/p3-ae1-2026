@@ -5,6 +5,7 @@ import { env } from './config/env';
 import { isRedisReady } from './cache/redis';
 import { isDatabaseReady } from './db/pool';
 import { fiscalClient } from './integrations/fiscal-authorizer';
+import { paymentsClient } from './integrations/m7-payments';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
 import { requestContext } from './middlewares/request-context.middleware';
 import type { DependencyChecks } from './observability/health';
@@ -27,6 +28,7 @@ export function createApp(options: AppOptions = {}): Express {
     redis: isRedisReady,
     rabbitmq: async () => false,
     fiscal: () => fiscalClient.isReachable(),
+    payments: () => paymentsClient.isReachable(),
     ...options.checks,
   };
 

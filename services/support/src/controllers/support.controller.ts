@@ -1,98 +1,103 @@
 import { Request, Response } from 'express';
-import { ticketRepository, TicketStatus } from '../models/ticket.model.js';
+import {
+  leerActor,
+  leerCambioDeEstado,
+  leerConsultaDeTickets,
+  leerIdempotencyKey,
+  leerNuevoTicket,
+} from '../http/ticket-requests.js';
 import { RabbitMQConsumer } from '../rabbitmq/consumer.js';
+import { TicketService } from '../services/ticket.service.js';
 
-export class SupportController {
-  
-  // Endpoint: POST /tickets
-  static async crearTicket(req: Request, res: Response) {
-    const { viajeId, motivo } = req.body;
+export interface SupportControllerDeps {
+  ticketService: TicketService;
+}
 
-    // Validación básica
-    if (!viajeId || !motivo) {
-      res.status(400).json({ error: 'viajeId y motivo son requeridos' });
-      return;
-    }
+// Los errores se lanzan como SupportError y los convierte supportErrorHandler.
+export function createSupportController({ ticketService }: SupportControllerDeps) {
+  return {
 
-    const nuevoTicket = ticketRepository.crear(viajeId, motivo);
+    // Endpoint: POST /tickets
+    async crearTicket(req: Request, res: Response) {
+      const { tripId, motivo } = leerNuevoTicket(req.body);
+      const actor = leerActor(req.get('X-Actor-Id'));
+      const idempotencyKey = leerIdempotencyKey(req.get('Idempotency-Key'));
 
-    // Disparar evento asíncrono a RabbitMQ
-    await RabbitMQConsumer.publishEvent('ticket.creado', nuevoTicket);
+      const { ticket, creado } = await ticketService.crearTicket(tripId, motivo, { actor, idempotencyKey });
 
-    res.status(201).json(nuevoTicket);
+      // 200 cuando la Idempotency-Key ya había creado este ticket.
+      res.status(creado ? 201 : 200).json(ticket);
+    },
+
+    // Endpoint: GET /tickets/:id
+    async obtenerTicket(req: Request, res: Response) {
+      const id = req.params.id as string;
+      const ticket = await ticketService.obtenerTicket(id);
+
+      res.json(ticket);
+    },
+
+    // Endpoint: PATCH /tickets/:id/estado
+    async actualizarEstado(req: Request, res: Response) {
+      const id = req.params.id as string;
+      const { estado, motivo, expectedVersion } = leerCambioDeEstado(req.body);
+      const actor = leerActor(req.get('X-Actor-Id'));
+
+      const ticketActualizado = await ticketService.actualizarEstado(id, estado, { actor, motivo, expectedVersion });
+
+      res.json(ticketActualizado);
+    },
+
+    // Endpoint: GET /tickets/:id/historial
+    async obtenerHistorial(req: Request, res: Response) {
+      const id = req.params.id as string;
+      const historial = await ticketService.obtenerHistorial(id);
+
+      res.json(historial);
+    },
+
+    // Endpoint: GET /tickets?tripId=&estado=&limit=&cursor=
+    async listarTodos(req: Request, res: Response) {
+      const consulta = leerConsultaDeTickets(req.query);
+      const { tickets, siguienteCursor } = await ticketService.listarTickets(consulta);
+
+      // El cuerpo sigue siendo un array: el cursor de la página siguiente va
+      // en una cabecera, y sólo si hay más resultados.
+      if (siguienteCursor) {
+        res.setHeader('X-Next-Cursor', siguienteCursor);
+      }
+      res.json(tickets);
+    },
+  };
+}
+
+// Endpoint: POST /events/publish (RF-8.6, heredado de AE1)
+// Permite publicar eventos en RabbitMQ (ej: viaje.completado, viaje.asignado, ticket.creado)
+// Permite incluir 'count' para emitir ráfagas de mensajes y observar la actividad en el panel de RabbitMQ.
+export async function publicarEvento(req: Request, res: Response) {
+  const { routingKey, payload, count } = req.body;
+
+  if (!routingKey || !payload) {
+    res.status(400).json({ error: 'routingKey y payload son requeridos' });
+    return;
   }
 
-  // Endpoint: GET /tickets/:id
-  static obtenerTicket(req: Request, res: Response) {
-    const id = req.params.id as string;
-    const ticket = ticketRepository.obtenerPorId(id);
+  const cantidad = Math.max(1, Math.min(Number(count) || 1, 50));
+  let exitosos = 0;
 
-    if (!ticket) {
-      res.status(404).json({ error: 'Ticket no encontrado' });
-      return;
-    }
-
-    res.json(ticket);
-  }
-
-  // Endpoint: PATCH /tickets/:id/estado
-  static async actualizarEstado(req: Request, res: Response) {
-    const id = req.params.id as string;
-    const { estado } = req.body;
-
-    // Validar que el estado sea correcto
-    const estadosValidos: TicketStatus[] = ['ABIERTO', 'EN_PROCESO', 'RESUELTO'];
-    if (!estadosValidos.includes(estado)) {
-      res.status(400).json({ error: 'Estado inválido. Valores permitidos: ABIERTO, EN_PROCESO, RESUELTO' });
-      return;
-    }
-
-    const ticketActualizado = ticketRepository.actualizarEstado(id, estado as TicketStatus);
-    if (!ticketActualizado) {
-      res.status(404).json({ error: 'Ticket no encontrado' });
-      return;
-    }
-
-    // Disparar evento asíncrono a RabbitMQ
-    await RabbitMQConsumer.publishEvent('ticket.actualizado', ticketActualizado);
-
-    res.json(ticketActualizado);
-  }
-
-  // Endpoint: GET /tickets (solo para revisión y pruebas)
-  static listarTodos(req: Request, res: Response) {
-    const tickets = ticketRepository.listarTodos();
-    res.json(tickets);
-  }
-
-  // Endpoint: POST /events/publish
-  // Permite publicar eventos en RabbitMQ (ej: viaje.completado, viaje.asignado, ticket.creado)
-  // Permite incluir 'count' para emitir ráfagas de mensajes y observar la actividad en el panel de RabbitMQ.
-  static async publicarEvento(req: Request, res: Response) {
-    const { routingKey, payload, count } = req.body;
-
-    if (!routingKey || !payload) {
-      res.status(400).json({ error: 'routingKey y payload son requeridos' });
-      return;
-    }
-
-    const cantidad = Math.max(1, Math.min(Number(count) || 1, 50));
-    let exitosos = 0;
-
-    for (let i = 0; i < cantidad; i++) {
-      const ok = await RabbitMQConsumer.publishEvent(routingKey, {
-        ...payload,
-        _secuencia: i + 1,
-        _timestamp: new Date().toISOString()
-      });
-      if (ok) exitosos++;
-    }
-
-    res.status(200).json({
-      mensaje: 'Eventos enviados a RabbitMQ',
-      routingKey,
-      solicitados: cantidad,
-      enviadosExitosamente: exitosos
+  for (let i = 0; i < cantidad; i++) {
+    const ok = await RabbitMQConsumer.publishEvent(routingKey, {
+      ...payload,
+      _secuencia: i + 1,
+      _timestamp: new Date().toISOString()
     });
+    if (ok) exitosos++;
   }
+
+  res.status(200).json({
+    mensaje: 'Eventos enviados a RabbitMQ',
+    routingKey,
+    solicitados: cantidad,
+    enviadosExitosamente: exitosos
+  });
 }
