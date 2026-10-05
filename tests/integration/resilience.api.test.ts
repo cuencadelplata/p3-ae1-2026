@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../../src/app.js';
 import { customerRepository } from '../../src/repositories/customer.repository.js';
+import { customerCache } from '../../src/cache/customer.cache.js';
 import { m1AuthClient } from '../../src/clients/m1-auth.client.js';
 import { CustomerAlreadyExistsError } from '../../src/errors/customer-already-exists.error.js';
 import { UserIdSchema } from '../../src/types/customer.js';
@@ -16,6 +17,11 @@ const validCustomer = {
 };
 
 describe('RF-2.1 - Errores controlados con PostgreSQL caído', () => {
+  beforeEach(() => {
+    vi.spyOn(customerCache, 'get').mockResolvedValue(null);
+    vi.spyOn(customerCache, 'set').mockResolvedValue();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });

@@ -7,15 +7,6 @@ CREATE TABLE IF NOT EXISTS customers.CustomerProfile (
     user_id INTEGER NOT NULL UNIQUE,
     preferred_vehicle_type VARCHAR(50) NOT NULL DEFAULT 'auto',
     notification_channel VARCHAR(50) NOT NULL DEFAULT 'email',
-    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVO' CHECK (
-        status IN (
-            'ACTIVO',
-            'INACTIVO',
-            'BLOQUEADO_TEMPORAL',
-            'BLOQUEADO_PERMANENTE',
-            'EN_REVISIÓN'
-        )
-    ),
     created_at TIMESTAMP
     WITH
         TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -82,7 +73,6 @@ INSERT INTO
         user_id,
         preferred_vehicle_type,
         notification_channel,
-        status,
         created_at
     )
 VALUES (
@@ -90,7 +80,6 @@ VALUES (
         12,
         'auto',
         'email',
-        'ACTIVO',
         '2026-08-30T23:00:00Z'
     ) ON CONFLICT (customer_id) DO NOTHING;
 

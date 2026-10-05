@@ -51,8 +51,8 @@ export class CustomerRepository {
         // 1. Insertar en CustomerProfile usando RETURNING *
         const insertProfileQuery = `
           INSERT INTO customers.CustomerProfile
-            (customer_id, user_id, preferred_vehicle_type, notification_channel, status, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
+            (customer_id, user_id, preferred_vehicle_type, notification_channel, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6)
           RETURNING *;
         `;
         const profileValues = [
@@ -60,7 +60,6 @@ export class CustomerRepository {
           customer.userId,
           customer.preferences.preferredVehicleType,
           customer.preferences.notificationChannel,
-          customer.status,
           customer.createdAt,
           customer.updatedAt ?? customer.createdAt
         ];
