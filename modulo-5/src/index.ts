@@ -92,6 +92,10 @@ app.post('/api/v1/ride-requests/:requestId/candidates', rideRequestController.se
 app.post('/api/v1/ride-requests/:requestId/offers', rideRequestController.sendOffers);
 app.get('/api/v1/ride-requests/:requestId/offers', rideRequestController.getOffers);
 
+// Alias de compatibilidad e interoperabilidad para clientes que consultan viajes por ID
+app.get('/viajes/:requestId', rideRequestController.getById);
+app.get('/api/v1/viajes/:requestId', rideRequestController.getById);
+
 // Rutas API v1 - Gestión de Ofertas de Conductor (RF-5.4)
 app.post('/api/v1/offers/:offerId/respond', rideRequestController.respondOffer);
 app.post('/api/v1/offers/:offerId/accept', rideRequestController.acceptOffer);
