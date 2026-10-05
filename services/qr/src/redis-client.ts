@@ -47,10 +47,11 @@ export function createQrRedisClient(options: QrRedisClientOptions) {
   // El cliente emite un error por cada intento fallido: se informa sólo el primero hasta que
   // vuelve a estar listo. El mensaje no incluye la URL, que puede contener credenciales.
   let disconnected = false;
-  client.on("error", (error: Error) => {
+  client.on("error", (error: Error & { code?: string }) => {
     if (!disconnected) {
       disconnected = true;
-      log("error", "sin conexión con Redis, reintentando", { reason: error.message });
+      // Un rechazo de conexión puede llegar como AggregateError sin mensaje, sólo con code.
+      log("error", "sin conexión con Redis, reintentando", { reason: error.message || error.code || error.name });
     }
   });
   client.on("ready", () => {
