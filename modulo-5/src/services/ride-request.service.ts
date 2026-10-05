@@ -79,16 +79,69 @@ export class RideRequestService {
   }
 
   /**
-   * Stub de integración con M7: Estimación de Tarifa (RF-7.1)
+   * Integración con M7: Estimación de Tarifa (RF-7.1)
+   * Llama a POST /tarifa/estimacion del Módulo 7.
+   * Si M7 no está disponible, aplica cálculo local de fallback.
    */
   private async fetchEstimatedFareFromM7(
     distanceKm: number,
-    vehicleType: VehicleType
+    vehicleType: VehicleType,
+    origin?: { latitude: number; longitude: number; address?: string },
+    destination?: { latitude: number; longitude: number; address?: string }
   ): Promise<EstimatedFare> {
+    const m7BaseUrl = process.env.M7_SERVICE_URL || 'http://localhost:3007';
+    const durationMin = Math.max(5, Math.round(distanceKm * 2.5));
+
+    try {
+      const response = await fetch(`${m7BaseUrl}/tarifa/estimacion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          origen: {
+            lat: origin?.latitude ?? 0,
+            lng: origin?.longitude ?? 0,
+            direccion: origin?.address ?? ''
+          },
+          destino: {
+            lat: destination?.latitude ?? 0,
+            lng: destination?.longitude ?? 0,
+            direccion: destination?.address ?? ''
+          },
+          distanciaKm: Math.round(distanceKm * 10) / 10,
+          tiempoEstimadoMin: durationMin,
+          // M7 usa lowercase: 'auto' | 'moto'
+          vehicleType: vehicleType.toLowerCase()
+        }),
+        signal: AbortSignal.timeout(3000) // timeout de 3s para no bloquear el flujo
+      });
+
+      if (response.ok) {
+        const data = (await response.json()) as {
+          estimacionId?: string;
+          estimatedFare?: number;
+          currency?: string;
+          distanciaKm?: number;
+          tiempoEstimadoMin?: number;
+        };
+
+        return {
+          amount: data.estimatedFare ?? 0,
+          currency: data.currency ?? 'ARS',
+          estimatedDistanceKm: data.distanciaKm ?? Math.round(distanceKm * 10) / 10,
+          estimatedDurationMin: data.tiempoEstimadoMin ?? durationMin,
+          fareToken: data.estimacionId ?? `ft_${randomUUID()}`
+        };
+      }
+
+      console.warn(`[M7] Respuesta no exitosa (${response.status}). Usando cálculo local de fallback.`);
+    } catch (err: any) {
+      console.warn(`[M7] No disponible (${err.message}). Usando cálculo local de fallback.`);
+    }
+
+    // Fallback local si M7 no responde
     const baseFare = vehicleType === 'AUTO' ? 1500 : 900;
     const perKmRate = vehicleType === 'AUTO' ? 500 : 300;
     const estimatedAmount = baseFare + distanceKm * perKmRate;
-    const durationMin = Math.max(5, Math.round(distanceKm * 2.5));
 
     return {
       amount: Math.round(estimatedAmount * 100) / 100,
@@ -153,7 +206,12 @@ export class RideRequestService {
     // 4. Calcular distancia estimada y consultar tarifa a M7
     const distanceMeters = RideRequestValidator.calculateDistanceMeters(dto.origin, dto.destination);
     const distanceKm = distanceMeters / 1000;
-    const estimatedFare = await this.fetchEstimatedFareFromM7(distanceKm, dto.vehicleType);
+    const estimatedFare = await this.fetchEstimatedFareFromM7(
+      distanceKm,
+      dto.vehicleType,
+      dto.origin,
+      dto.destination
+    );
 
     // 4. Instanciar nueva solicitud
     const now = new Date();
