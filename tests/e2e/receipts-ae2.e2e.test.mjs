@@ -17,6 +17,7 @@ const RECEIPTS = process.env.RECEIPTS_URL ?? "http://localhost:3008";
 const M7 = process.env.M7_URL ?? "http://localhost:4020";
 const RABBIT_API = process.env.RABBITMQ_API_URL ?? "http://localhost:15672/api";
 const RABBIT_AUTH = `Basic ${Buffer.from(process.env.RABBITMQ_API_CREDENTIALS ?? "guest:guest").toString("base64")}`;
+const RECEIPTS_AUTHORIZATION = process.env.RECEIPTS_AUTHORIZATION ?? "Bearer e2e-operator";
 const EXCHANGE = "mobility.events";
 const DLQ = "m8.receipts.payment-confirmed.dlq";
 const MAX_TTL_TO_WAIT_SECONDS = 30;
@@ -68,6 +69,12 @@ async function waitFor(check, { timeoutMs = 15000, what = "la condicion" } = {})
 }
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function receiptFetch(path, options = {}) {
+  const headers = new Headers(options.headers);
+  headers.set("authorization", RECEIPTS_AUTHORIZATION);
+  return fetch(`${RECEIPTS}${path}`, { ...options, headers });
+}
 
 function paymentConfirmed(tripId) {
   return {
@@ -131,7 +138,7 @@ test("payment.confirmed emite el comprobante y un unico receipt.issued aunque ll
   await publish("payment.confirmed", event, event.messageId);
   const receipt = await waitFor(
     async () => {
-      const response = await fetch(`${RECEIPTS}/api/v1/receipts/${tripId}`);
+      const response = await receiptFetch(`/api/v1/receipts/${tripId}`);
       return response.ok ? (await response.json()).data : null;
     },
     { what: "la emision del comprobante" },
@@ -171,7 +178,7 @@ test("payment.confirmed emite el comprobante y un unico receipt.issued aunque ll
   const serialized = JSON.stringify(issued[0]);
   assert.ok(!serialized.includes("Cliente Privado") && !serialized.includes("privado.e2e"), "sin datos personales");
 
-  const again = await (await fetch(`${RECEIPTS}/api/v1/receipts/${tripId}`)).json();
+  const again = await (await receiptFetch(`/api/v1/receipts/${tripId}`)).json();
   assert.equal(again.data.receiptId, receipt.receiptId);
 });
 
@@ -189,7 +196,7 @@ test("el enlace temporal descarga el PDF y deja de funcionar al vencer", async (
   const tripId = `${run}-enlace`;
   const event = paymentConfirmed(tripId);
   await publish("payment.confirmed", event, event.messageId);
-  await waitFor(async () => (await fetch(`${RECEIPTS}/api/v1/receipts/${tripId}`)).ok, { what: "la emision" });
+  await waitFor(async () => (await receiptFetch(`/api/v1/receipts/${tripId}`)).ok, { what: "la emision" });
 
   const reference = await fetch(`${RECEIPTS}/internal/receipts/${tripId}/delivery-reference`);
   assert.equal(reference.status, 200);
@@ -229,12 +236,12 @@ test("con el pago pendiente en M7 no se emite; al autorizarse, el reintento emit
   const event = paymentConfirmed(tripId);
   await publish("payment.confirmed", event, event.messageId);
   await pause(1000);
-  assert.equal((await fetch(`${RECEIPTS}/api/v1/receipts/${tripId}`)).status, 404, "pendiente: sin comprobante");
+  assert.equal((await receiptFetch(`/api/v1/receipts/${tripId}`)).status, 404, "pendiente: sin comprobante");
 
   await m7(`/metodo-pago/${tripId}/autorizar`, { idOrden: `orden-${tripId}`, total: 1800, moneda: "ARS" });
   const receipt = await waitFor(
     async () => {
-      const response = await fetch(`${RECEIPTS}/api/v1/receipts/${tripId}`);
+      const response = await receiptFetch(`/api/v1/receipts/${tripId}`);
       return response.ok ? (await response.json()).data : null;
     },
     { what: "la emision del comprobante en el reintento", timeoutMs: 20000 },
@@ -255,7 +262,7 @@ test("con el pago rechazado en M7 el mensaje termina en la DLQ y no hay comproba
     async () => (await readQueue(DLQ, { requeue: true })).some((message) => message.properties.message_id === event.messageId),
     { what: "la llegada del pago rechazado a la DLQ" },
   );
-  assert.equal((await fetch(`${RECEIPTS}/api/v1/receipts/${tripId}`)).status, 404);
+  assert.equal((await receiptFetch(`/api/v1/receipts/${tripId}`)).status, 404);
 });
 
 test("los PDF ya no se publican como archivos estaticos", async () => {

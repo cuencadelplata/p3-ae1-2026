@@ -46,7 +46,7 @@ services:
       REDIS_URL: redis://redis:6379
       RECEIPT_LINK_TTL_SECONDS: "${RECEIPT_LINK_TTL_SECONDS:-900}"
       # RF8.4 reenvía el Bearer del usuario a M1; no usa credenciales M2M.
-      M1_IDENTITY_URL: "${M1_IDENTITY_URL:-}"
+      M1_IDENTITY_URL: "${M1_IDENTITY_URL:-http://m1-identity-sandbox:4011/auth/validar-identidad-y-rol}"
       M1_TIMEOUT_MS: "${M1_TIMEOUT_MS:-2000}"
       FISCAL_API_URL: http://fiscal-sandbox:4010
       M7_PAYMENTS_URL: http://m7-payments-sandbox:4020
@@ -61,6 +61,21 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      m1-identity-sandbox:
+        condition: service_healthy
+
+  # Sandbox de identidad exclusivo para desarrollo y E2E. Reproduce el
+  # contrato confirmado de M1 sin introducir credenciales M2M en M8.
+  m1-identity-sandbox:
+    build:
+      context: ./infra/m1-identity-sandbox
+    environment:
+      PORT: "4011"
+    healthcheck:
+      test: [ "CMD", "node", "-e", "fetch('http://127.0.0.1:4011/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   # Segunda instancia del servicio de comprobantes, para demostrar RNF-09 con
   # dos replicas que comparten base de datos y cola. Solo se levanta con el

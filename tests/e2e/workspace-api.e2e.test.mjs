@@ -7,6 +7,7 @@ const urls = {
   receipts: "http://localhost:3008",
   support: "http://localhost:3000",
 };
+const receiptsAuthorization = process.env.RECEIPTS_AUTHORIZATION ?? "Bearer e2e-operator";
 
 const gateId = `m8-7w-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -93,11 +94,15 @@ test("Receipts emite, conserva idempotencia, consulta y descarga PDF", async () 
   assert.equal(repeated.response.status, 200);
   assert.equal(repeated.body.data.receiptId, receiptId);
 
-  const queried = await requestJson(`${urls.receipts}/api/v1/receipts/${tripId}`);
+  const queried = await requestJson(`${urls.receipts}/api/v1/receipts/${tripId}`, {
+    headers: { authorization: receiptsAuthorization },
+  });
   assert.equal(queried.response.status, 200);
   assert.equal(queried.body.data.receiptId, receiptId);
 
-  const pdf = await fetch(`${urls.receipts}/api/v1/receipts/${tripId}/pdf`);
+  const pdf = await fetch(`${urls.receipts}/api/v1/receipts/${tripId}/pdf`, {
+    headers: { authorization: receiptsAuthorization },
+  });
   assert.equal(pdf.status, 200);
   assert.match(pdf.headers.get("content-type") ?? "", /^application\/pdf/);
 });
