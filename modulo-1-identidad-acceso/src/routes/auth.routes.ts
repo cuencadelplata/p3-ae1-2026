@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import {
     login,
     register,
@@ -6,16 +6,20 @@ import {
 } from "../controllers/auth.controller";
 import {
     requestRecovery,
-    resetPasswordHandler,
+    resetPasswordHandler
+} from "../controllers/recovery.controller";
+import {
     oauth2Authorize,
     oauth2Callback,
-    oauth2LinkAccount
-} from "../controllers/recovery.controller";
+    oauth2LinkAccount,
+    listProviders,
+    getUserInfo
+} from "../controllers/oauth2.controller";
 import { authenticateToken } from "../middleware/auth.middleware";
 
 const router = Router();
 
-// ============ Autenticación Básica ============
+// ============ RF-1.1, RF-1.2, RF-1.3: Autenticación Básica ============
 router.post(
     "/registrar-usuario",
     register
@@ -32,7 +36,7 @@ router.get(
     validateToken
 );
 
-// ============ RF-1.4: Recuperación y Permiso ============
+// ============ RF-1.4: Recuperación de Contraseña ============
 router.post(
     "/solicitar-recuperacion",
     requestRecovery
@@ -45,6 +49,11 @@ router.post(
 
 // ============ RF-1.5: Integración Estándar OAuth2/OpenID Connect ============
 router.get(
+    "/oauth2/providers",
+    listProviders
+);
+
+router.get(
     "/oauth2/authorize",
     oauth2Authorize
 );
@@ -55,9 +64,20 @@ router.get(
 );
 
 router.post(
+    "/oauth2/callback",
+    oauth2Callback
+);
+
+router.post(
     "/oauth2/link",
     authenticateToken,
     oauth2LinkAccount
+);
+
+router.get(
+    "/oauth2/userinfo",
+    authenticateToken,
+    getUserInfo
 );
 
 export default router;

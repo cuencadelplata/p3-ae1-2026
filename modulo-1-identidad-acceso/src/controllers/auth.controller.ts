@@ -1,4 +1,4 @@
-import {
+﻿import {
     Request,
     Response
 } from "express";
@@ -12,6 +12,10 @@ import {
 import {
     AuthenticatedRequest
 } from "../middleware/auth.middleware";
+
+import {
+    findUserById
+} from "../repositories/user.repository";
 
 function handleError(
     error: unknown,
@@ -65,9 +69,22 @@ export function validateToken(
     req: AuthenticatedRequest,
     res: Response
 ): void {
+    const userId = req.usuarioAutenticado?.userId;
+    const role = req.usuarioAutenticado?.role;
+    const user = userId ? findUserById(userId) : undefined;
+
     res.status(200).json({
-        valid: true,
-        userId: req.usuarioAutenticado?.userId,
-        role: req.usuarioAutenticado?.role
+        valid: user ? user.estado === "ACTIVO" : true,
+        userId,
+        role,
+        authMethod: "oauth2",
+        usuario: {
+            id: userId,
+            rol: role,
+            email: user?.email || "",
+            nombre: user?.nombre || "",
+            apellido: user?.apellido || "",
+            estado: user?.estado || "ACTIVO"
+        }
     });
 }
