@@ -6,6 +6,8 @@ import type {
   VehicleType
 } from '../types/location.types.js';
 import type { LocationRepository } from '../repositories/location.repository.js';
+import type { LocationHistoryRepository } from '../repositories/location-history.repository.js';
+import { MemoryLocationHistoryRepository } from '../repositories/memory-location-history.repository.js';
 
 export class NotFoundError extends Error {}
 export class LocationValidationError extends Error {}
@@ -15,7 +17,8 @@ export class LocationService {
   public constructor(
     private readonly repository: LocationRepository,
     private readonly ttlSeconds = 60,
-    private readonly now: () => number = Date.now
+    private readonly now: () => number = Date.now,
+    private readonly historyRepository: LocationHistoryRepository = new MemoryLocationHistoryRepository()
   ) {
     if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
       throw new LocationValidationError('LOCATION_TTL_SECONDS debe ser un numero mayor a cero');
@@ -54,6 +57,7 @@ export class LocationService {
         'La ubicacion recibida es anterior a la ultima ubicacion registrada'
       );
     }
+    await this.historyRepository.save(result.location);
     return result.location;
   }
 
@@ -62,10 +66,16 @@ export class LocationService {
     const updated: DriverLocation = {
       ...location,
       available,
+      updatedAt: new Date(this.now()).toISOString(),
       expiresAt: new Date(this.now() + this.ttlSeconds * 1000).toISOString()
     };
     await this.repository.saveIfNewer(updated, this.ttlSeconds);
+    await this.historyRepository.save(updated);
     return updated;
+  }
+
+  public async getLocationHistory(driverId: string, limit: number) {
+    return this.historyRepository.findByDriver(driverId, limit);
   }
 
   public async getActiveLocation(driverId: string): Promise<DriverLocation> {
@@ -123,6 +133,7 @@ export class LocationService {
 
   public async clear(): Promise<void> {
     await this.repository.clear();
+    await this.historyRepository.clear();
   }
 
   private haversineDistance(pointA: Coordinates, pointB: Coordinates): number {

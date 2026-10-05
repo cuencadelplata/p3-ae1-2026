@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import {
   estimateSchema,
   geocodeSchema,
+  locationHistoryQuerySchema,
   nearbyQuerySchema,
   updateAvailabilitySchema,
   updateLocationSchema
@@ -45,6 +46,14 @@ export class LocationController {
     void this.handle(res, async () =>
       res.status(200).json(await this.service.getActiveLocation(String(req.params.driverId)))
     );
+  };
+
+  public getLocationHistory = (req: Request, res: Response): void => {
+    void this.handle(res, async () => {
+      const query = locationHistoryQuerySchema.parse(req.query);
+      const entries = await this.service.getLocationHistory(String(req.params.driverId), query.limit);
+      return res.status(200).json({ count: entries.length, entries });
+    });
   };
 
   public removeLocation = (req: Request, res: Response): void => {

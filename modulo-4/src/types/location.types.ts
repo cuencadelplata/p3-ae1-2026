@@ -18,6 +18,12 @@ export interface NearbyDriver extends DriverLocation {
   estimatedEtaMinutes: number;
 }
 
+export interface LocationHistoryEntry extends Omit<DriverLocation, 'expiresAt'> {
+  id: number;
+  recordedAt: string;
+  createdAt: string;
+}
+
 export interface DistanceEstimate {
   distanceKm: number;
   estimatedEtaMinutes: number;

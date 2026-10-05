@@ -11,3 +11,6 @@ CREATE TABLE IF NOT EXISTS driver_location_history (
 
 CREATE INDEX IF NOT EXISTS idx_driver_location_history_driver_recorded
   ON driver_location_history (driver_id, recorded_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_driver_location_history_idempotency
+  ON driver_location_history (driver_id, recorded_at);

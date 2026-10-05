@@ -5,9 +5,15 @@ import { fileURLToPath } from 'node:url';
 import { LocationController } from './controllers/location.controller.js';
 import { LocationService } from './services/location.service.js';
 import { MemoryLocationRepository } from './repositories/memory-location.repository.js';
+import { MemoryLocationHistoryRepository } from './repositories/memory-location-history.repository.js';
 
 const ttlSeconds = Number(process.env.LOCATION_TTL_SECONDS ?? 60);
-export const locationService = new LocationService(new MemoryLocationRepository(), ttlSeconds);
+export const locationService = new LocationService(
+  new MemoryLocationRepository(),
+  ttlSeconds,
+  Date.now,
+  new MemoryLocationHistoryRepository()
+);
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectDirectory = path.resolve(moduleDirectory, '..');
 
@@ -54,6 +60,7 @@ application.get('/health', async (_req, res) => {
 
 application.put('/api/v1/drivers/:driverId/location', controller.updateLocation);
 application.get('/api/v1/drivers/:driverId/location', controller.getLocation);
+application.get('/api/v1/drivers/:driverId/location-history', controller.getLocationHistory);
 application.delete('/api/v1/drivers/:driverId/location', controller.removeLocation);
 application.patch('/api/v1/drivers/:driverId/availability', controller.updateAvailability);
 application.get('/api/v1/drivers/nearby', controller.findNearby);

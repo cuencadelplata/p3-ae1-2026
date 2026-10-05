@@ -15,6 +15,10 @@ export const updateAvailabilitySchema = z.object({
   available: z.boolean()
 });
 
+export const locationHistoryQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).default(20)
+});
+
 export const nearbyQuerySchema = z.object({
   latitude: z.coerce.number().min(-90).max(90),
   longitude: z.coerce.number().min(-180).max(180),
