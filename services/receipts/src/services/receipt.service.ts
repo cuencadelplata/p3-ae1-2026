@@ -252,6 +252,8 @@ function buildReceipt(request: ReceiptRequest): Receipt {
     receiptNumber: buildReceiptNumber(issuedAt, receiptId),
     tripId: request.tripId,
     issuedAt: issuedAt.toISOString(),
+    ...(request.customerUserId === undefined ? {} : { customerUserId: request.customerUserId }),
+    ...(request.driverUserId === undefined ? {} : { driverUserId: request.driverUserId }),
     customer: request.customer,
     driver: request.driver,
     trip: request.trip,

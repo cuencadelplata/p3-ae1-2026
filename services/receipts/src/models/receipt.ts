@@ -66,6 +66,10 @@ export interface FiscalAuthorization {
 export interface ReceiptRequest {
   tripId: string;
   issuedAt?: string;
+  /** Identificador canónico numérico de M1; no reemplaza customer.id. */
+  customerUserId?: number;
+  /** Identificador canónico numérico de M1; no reemplaza driver.id. */
+  driverUserId?: number;
   customer: Customer;
   driver: Driver;
   trip: TripDetail;
@@ -86,6 +90,9 @@ export interface Receipt {
   receiptNumber: string;
   tripId: string;
   issuedAt: string;
+  /** IDs canónicos de M1 usados exclusivamente para autorización RF8.4. */
+  customerUserId?: number;
+  driverUserId?: number;
   customer: Customer;
   driver: Driver;
   trip: TripDetail;

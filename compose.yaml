@@ -45,6 +45,9 @@ services:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
       REDIS_URL: redis://redis:6379
       RECEIPT_LINK_TTL_SECONDS: "${RECEIPT_LINK_TTL_SECONDS:-900}"
+      # RF8.4 reenvía el Bearer del usuario a M1; no usa credenciales M2M.
+      M1_IDENTITY_URL: "${M1_IDENTITY_URL:-}"
+      M1_TIMEOUT_MS: "${M1_TIMEOUT_MS:-2000}"
       FISCAL_API_URL: http://fiscal-sandbox:4010
       M7_PAYMENTS_URL: http://m7-payments-sandbox:4020
     # Si el proceso termina por cualquier motivo, Docker lo vuelve a levantar.

@@ -28,6 +28,8 @@ interface ReceiptRow {
   receipt_number: string;
   trip_id: string;
   issued_at: Date;
+  customer_user_id: string | number | null;
+  driver_user_id: string | number | null;
   customer: Receipt['customer'];
   driver: Receipt['driver'];
   trip: Receipt['trip'];
@@ -38,11 +40,15 @@ interface ReceiptRow {
 }
 
 function toReceipt(row: ReceiptRow): Receipt {
+  const customerUserId = toCanonicalUserId(row.customer_user_id);
+  const driverUserId = toCanonicalUserId(row.driver_user_id);
   return {
     receiptId: row.receipt_id,
     receiptNumber: row.receipt_number,
     tripId: row.trip_id,
     issuedAt: row.issued_at.toISOString(),
+    ...(customerUserId === undefined ? {} : { customerUserId }),
+    ...(driverUserId === undefined ? {} : { driverUserId }),
     customer: row.customer,
     driver: row.driver,
     trip: row.trip,
@@ -57,6 +63,17 @@ function toReceipt(row: ReceiptRow): Receipt {
   };
 }
 
+function toCanonicalUserId(value: string | number | null): number | undefined {
+  if (value === null) {
+    return undefined;
+  }
+  const userId = typeof value === 'number' ? value : Number(value);
+  if (!Number.isSafeInteger(userId) || userId < 1) {
+    throw new Error('El comprobante contiene un identificador canónico de usuario inválido');
+  }
+  return userId;
+}
+
 function isTripIdConflict(error: unknown): boolean {
   const pgError = error as { code?: string; constraint?: string } | null;
   return pgError?.code === UNIQUE_VIOLATION && pgError.constraint === TRIP_ID_UNIQUE_CONSTRAINT;
@@ -64,7 +81,7 @@ function isTripIdConflict(error: unknown): boolean {
 
 export async function findByTripId(tripId: string): Promise<Receipt | null> {
   const result = await pool.query<ReceiptRow>(
-    `SELECT r.receipt_id, r.receipt_number, r.trip_id, r.issued_at,
+    `SELECT r.receipt_id, r.receipt_number, r.trip_id, r.issued_at, r.customer_user_id, r.driver_user_id,
             r.customer, r.driver, r.trip, r.fare, r.payment, r.fiscal,
             COALESCE(
               (SELECT json_agg(
@@ -117,13 +134,15 @@ export async function create(receipt: Receipt, pdf: Buffer, issuedEvent: outbox.
     await client.query('BEGIN');
     await client.query(
       `INSERT INTO receipts.receipts
-         (receipt_id, receipt_number, trip_id, issued_at, customer, driver, trip, fare, payment, fiscal)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+         (receipt_id, receipt_number, trip_id, issued_at, customer_user_id, driver_user_id, customer, driver, trip, fare, payment, fiscal)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         receipt.receiptId,
         receipt.receiptNumber,
         receipt.tripId,
         receipt.issuedAt,
+        receipt.customerUserId ?? null,
+        receipt.driverUserId ?? null,
         JSON.stringify(receipt.customer),
         JSON.stringify(receipt.driver),
         JSON.stringify(receipt.trip),

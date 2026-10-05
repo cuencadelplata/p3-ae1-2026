@@ -133,9 +133,10 @@ export const env = {
   /** RF-8.4: Ventana de tiempo para el rate limiting de reenvios, en segundos. */
   resendRateLimitWindowSeconds: readPositiveInt('RESEND_RATE_LIMIT_WINDOW_SECONDS', 60),
 
-  /** RF-8.4 / M1: Clave secreta para verificacion de tokens JWT de identidad M1. */
-  jwtSecret: readText('JWT_SECRET', 'clave-local-desarrollo-m1-cambiar-en-produccion'),
-
-  /** RF-8.4 / M1: Exigir obligatoriedad de autenticacion en todas las rutas (false en dev para compatibilidad con E2E heredados). */
-  authRequired: readText('AUTH_REQUIRED', 'false').toLowerCase() === 'true',
+  /**
+   * RF-8.4 / M1: endpoint canónico que valida el Bearer recibido del usuario.
+   * No se configura una clave compartida ni un mecanismo M2M no acordado.
+   */
+  m1IdentityUrl: readText('M1_IDENTITY_URL', '').replace(/\/+$/, ''),
+  m1TimeoutMs: readPositiveInt('M1_TIMEOUT_MS', 2000),
 } as const;
