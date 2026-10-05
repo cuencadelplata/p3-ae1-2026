@@ -3,7 +3,7 @@
 # Los valores son defaults de desarrollo; en un entorno compartido se inyectan con .env.
 
 x-app: &app
-  image: leangau/m2-perfilhistorialestado:api
+  image: leangau/integration-m2-ae2:api
   restart: unless-stopped
 
 x-ae2-env: &ae2-env
@@ -81,7 +81,7 @@ services:
 
   # Frontend - React + Vite (servido por nginx)
   client:
-    image: leangau/m2-perfilhistorialestado:client
+    image: leangau/integration-m2-ae2:client
     container_name: p3-client
     restart: always
     ports:
