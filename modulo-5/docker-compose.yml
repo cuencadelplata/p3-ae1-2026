@@ -15,6 +15,24 @@ services:
       retries: 5
     restart: unless-stopped
 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: m5-rabbitmq
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
   dispatch-service:
     build:
       context: .
@@ -28,8 +46,11 @@ services:
       - PORT=3005
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
     depends_on:
       - redis
+      - rabbitmq
     restart: unless-stopped
     volumes:
       - ./openapi:/app/openapi:ro
@@ -58,4 +79,5 @@ services:
 
 volumes:
   redis-data:
+  rabbitmq-data:
 

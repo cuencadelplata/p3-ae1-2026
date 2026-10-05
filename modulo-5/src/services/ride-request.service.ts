@@ -18,6 +18,7 @@ import {
 } from '../types/ride-request.types';
 import { RideRequestValidator } from '../schemas/ride-request.schema';
 import { RedisService } from './redis.service';
+import { RabbitMQService } from './rabbitmq.service';
 import { randomUUID } from 'node:crypto';
 
 export class ConflictError extends Error {
@@ -58,13 +59,19 @@ export class RideRequestService {
   private idempotencyStore: Map<string, RideRequest> = new Map();
   private offers: Map<string, RideOffer> = new Map();
   private redisService: RedisService;
+  private rabbitmqService: RabbitMQService;
 
-  constructor(redisService?: RedisService) {
+  constructor(redisService?: RedisService, rabbitmqService?: RabbitMQService) {
     this.redisService = redisService || new RedisService();
+    this.rabbitmqService = rabbitmqService || new RabbitMQService();
   }
 
   public getRedisService(): RedisService {
     return this.redisService;
+  }
+
+  public getRabbitMQService(): RabbitMQService {
+    return this.rabbitmqService;
   }
 
   /**
@@ -261,8 +268,11 @@ export class RideRequestService {
     await this.redisService.updateClientActiveLock(clientId, newRequest.id, 180);
     await this.redisService.saveIdempotentRequest(idempotencyKey, newRequest, 86400);
 
+    // 8. Publicación asíncrona desacoplada de evento de dominio a RabbitMQ (RNF-07, Criterio 5)
+    await this.rabbitmqService.publishRideRequestCreated(newRequest);
+
     console.log(
-      `[RF-5.1] Solicitud de viaje creada con Redis: ID=${newRequest.id} | Cliente=${clientId} | Vehículo=${newRequest.vehicleType} | Tarifa=$${estimatedFare.amount} ARS | Origen="${dto.origin.address}" ➔ Destino="${dto.destination.address}"`
+      `[RF-5.1] Solicitud de viaje creada con Redis y RabbitMQ: ID=${newRequest.id} | Cliente=${clientId} | Vehículo=${newRequest.vehicleType} | Tarifa=$${estimatedFare.amount} ARS | Origen="${dto.origin.address}" ➔ Destino="${dto.destination.address}"`
     );
 
     return newRequest;

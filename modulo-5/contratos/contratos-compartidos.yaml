@@ -189,3 +189,95 @@ contratos_sincronos:
             error:
               type: "string"
               example: "distanciaKm debe ser un número mayor a 0"
+
+# ==============================================================================
+# CONTRATOS COMPARTIDOS — COMUNICACIÓN ASÍNCRONA (RabbitMQ / Mensajería)
+# ==============================================================================
+contratos_asincronos:
+  - id: "EVENTO-M5-RIDE-REQUESTED"
+    titulo: "Evento de Dominio: Solicitud de Viaje Creada"
+    productor: "Módulo 5 (Solicitud y Despacho - Agustín Quetglas)"
+    consumidores_potenciales:
+      - "Módulo 8 (Notificaciones, Documentos y Soporte - Notificación al cliente)"
+      - "Módulo 4 (Ubicación y Disponibilidad - Radar de demanda)"
+    requisito_relacionado: "RF-5.1 (Solicitud de viaje) -> RNF-07 (Mensajería RabbitMQ)"
+    mecanismo: "RabbitMQ (AMQP 0-9-1)"
+    exchange: "mobility.events"
+    exchange_type: "topic"
+    routing_key: "ride.requested"
+    durable: true
+    persistent: true
+    schema:
+      type: "object"
+      required:
+        - messageId
+        - eventType
+        - version
+        - occurredAt
+        - correlationId
+        - producer
+        - data
+      properties:
+        messageId:
+          type: "string"
+          format: "uuid"
+          example: "a81d43a7-5a02-4d2b-b892-933e4f3a7620"
+        eventType:
+          type: "string"
+          example: "ride.requested"
+        version:
+          type: "integer"
+          example: 1
+        occurredAt:
+          type: "string"
+          format: "date-time"
+          example: "2026-10-05T11:00:00.000Z"
+        correlationId:
+          type: "string"
+          example: "req_9876543210"
+        producer:
+          type: "string"
+          example: "m5"
+        data:
+          type: "object"
+          required:
+            - rideRequestId
+            - clientUserId
+            - origin
+            - destination
+            - vehicleType
+            - estimatedFare
+            - createdAt
+          properties:
+            rideRequestId:
+              type: "string"
+              example: "req_9876543210"
+            clientUserId:
+              type: "integer"
+              description: "ID de usuario numérico canónico de M1"
+              example: 42
+            origin:
+              type: "object"
+              properties:
+                latitude: { type: "number", example: -27.46 }
+                longitude: { type: "number", example: -58.98 }
+                address: { type: "string", example: "Av. Costanera 1234" }
+            destination:
+              type: "object"
+              properties:
+                latitude: { type: "number", example: -27.47 }
+                longitude: { type: "number", example: -58.99 }
+                address: { type: "string", example: "San Juan 500" }
+            vehicleType:
+              type: "string"
+              enum: ["AUTO", "MOTO"]
+              example: "AUTO"
+            estimatedFare:
+              type: "object"
+              properties:
+                amount: { type: "number", example: 2225 }
+                currency: { type: "string", example: "ARS" }
+            createdAt:
+              type: "string"
+              format: "date-time"
+              example: "2026-10-05T11:00:00.000Z"

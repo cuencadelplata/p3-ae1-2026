@@ -3,6 +3,7 @@ import path from 'path';
 import { RideRequestService } from './services/ride-request.service';
 import { RideRequestController } from './controllers/ride-request.controller';
 import { RedisService } from './services/redis.service';
+import { RabbitMQService } from './services/rabbitmq.service';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -26,22 +27,28 @@ app.use('/openapi', express.static(path.join(__dirname, '../openapi')));
 
 // Inyección de dependencias
 const redisService = new RedisService();
-const rideRequestService = new RideRequestService(redisService);
+const rabbitmqService = new RabbitMQService();
+const rideRequestService = new RideRequestService(redisService, rabbitmqService);
 const rideRequestController = new RideRequestController(rideRequestService);
 
 if (process.env.NODE_ENV !== 'test') {
   redisService.init().catch(() => {});
+  rabbitmqService.init().catch(() => {});
 }
 
 // Health check con diagnóstico de dependencias (RNF-16)
 app.get('/health', async (_req, res) => {
-  const redisOk = await redisService.isHealthy();
+  const [redisOk, rabbitOk] = await Promise.all([
+    redisService.isHealthy(),
+    rabbitmqService.isHealthy()
+  ]);
   res.status(200).json({
     status: 'UP',
     service: 'm5-dispatch-service',
     timestamp: new Date().toISOString(),
     dependencies: {
-      redis: redisOk ? 'CONNECTED' : 'DEGRADED_FALLBACK'
+      redis: redisOk ? 'CONNECTED' : 'DEGRADED_FALLBACK',
+      rabbitmq: rabbitOk ? 'CONNECTED' : 'DEGRADED_FALLBACK'
     }
   });
 });

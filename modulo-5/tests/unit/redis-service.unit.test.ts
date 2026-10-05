@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, afterAll } from '@jest/globals';
 import { RedisService } from '../../src/services/redis.service';
 import { RideRequest, EstimatedFare } from '../../src/types/ride-request.types';
 
