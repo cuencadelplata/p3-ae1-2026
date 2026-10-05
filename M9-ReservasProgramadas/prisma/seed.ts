@@ -3,12 +3,9 @@ import { EstadoReserva, PrismaClient, TipoVehiculo } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  await prisma.outboxEvent.deleteMany();
-  await prisma.reservaVersion.deleteMany();
-  await prisma.reserva.deleteMany();
-
   const reservas = [
     {
+      id: '00000000-0000-4000-8000-000000000101',
       clienteId: '00000000-0000-4000-8000-000000000001',
       origen: 'Terminal de Ómnibus',
       destino: 'Aeropuerto',
@@ -21,6 +18,7 @@ async function main() {
       idSolicitud: 'SOL-001',
     },
     {
+      id: '00000000-0000-4000-8000-000000000102',
       clienteId: '00000000-0000-4000-8000-000000000002',
       origen: 'Centro',
       destino: 'Puerto',
@@ -38,9 +36,10 @@ async function main() {
     },
   ];
 
-  for (const item of reservas) {
-    const reserva = await prisma.reserva.create({
-      data: {
+  await prisma.$transaction([
+    prisma.reserva.createMany({
+      data: reservas.map((item) => ({
+        id: item.id,
         clienteId: item.clienteId,
         origen: item.origen,
         destino: item.destino,
@@ -55,30 +54,31 @@ async function main() {
         choferId: item.choferId ?? null,
         nombreChofer: item.nombreChofer ?? null,
         valoracion: item.valoracion ?? null,
-      },
-    });
-
-    await prisma.reservaVersion.create({
-      data: {
-        reservaId: reserva.id,
+      })),
+      skipDuplicates: true,
+    }),
+    prisma.reservaVersion.createMany({
+      data: reservas.map((item) => ({
+        reservaId: item.id,
         version: 1,
-        clienteId: reserva.clienteId,
-        origen: reserva.origen,
-        destino: reserva.destino,
-        vehiculo: reserva.vehiculo,
-        fechaHoraProgramada: reserva.fechaHoraProgramada,
-        estado: reserva.estado,
-        asignacionId: reserva.asignacionId,
-        choferId: reserva.choferId,
-        nombreChofer: reserva.nombreChofer,
-        valoracion: reserva.valoracion,
-        tarifaEstimada: reserva.tarifaEstimada,
-        moneda: reserva.moneda,
-        criterioAsignacion: reserva.criterioAsignacion,
-        idSolicitud: reserva.idSolicitud,
-      },
-    });
-  }
+        clienteId: item.clienteId,
+        origen: item.origen,
+        destino: item.destino,
+        vehiculo: item.vehiculo,
+        fechaHoraProgramada: item.fechaHoraProgramada,
+        estado: item.estado,
+        asignacionId: item.asignacionId ?? null,
+        choferId: item.choferId ?? null,
+        nombreChofer: item.nombreChofer ?? null,
+        valoracion: item.valoracion ?? null,
+        tarifaEstimada: item.tarifaEstimada,
+        moneda: item.moneda,
+        criterioAsignacion: item.criterioAsignacion,
+        idSolicitud: item.idSolicitud,
+      })),
+      skipDuplicates: true,
+    }),
+  ]);
 
   console.log('Seed de reservas generado correctamente.');
 }

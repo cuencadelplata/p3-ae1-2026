@@ -23,30 +23,6 @@ CREATE TABLE "reservas" (
 );
 
 -- CreateTable
-CREATE TABLE "reserva_versiones" (
-    "reserva_id" UUID NOT NULL,
-    "version" INTEGER NOT NULL,
-    "cliente_id" UUID NOT NULL,
-    "origen" VARCHAR(200) NOT NULL,
-    "destino" VARCHAR(200) NOT NULL,
-    "vehiculo" "tipo_vehiculo" NOT NULL,
-    "fecha_hora_programada" TIMESTAMPTZ(3) NOT NULL,
-    "estado" "estado_reserva" NOT NULL DEFAULT 'PENDIENTE_ASIGNACION',
-    "asignacion_id" TEXT,
-    "chofer_id" TEXT,
-    "nombre_chofer" VARCHAR(200),
-    "valoracion" DECIMAL(3,2),
-    "tarifa_estimada" DECIMAL(12,2),
-    "moneda" VARCHAR(3) DEFAULT 'ARS',
-    "criterio_asignacion" VARCHAR(80),
-    "id_solicitud" TEXT,
-    "creado_en" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "actualizado_en" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "reserva_versiones_pkey" PRIMARY KEY ("reserva_id", "version")
-);
-
--- CreateTable
 CREATE TABLE "outbox_eventos" (
     "id" UUID NOT NULL,
     "tipo" VARCHAR(100) NOT NULL,
@@ -67,12 +43,6 @@ CREATE INDEX "reservas_estado_fecha_hora_programada_id_idx"
 
 CREATE INDEX "reservas_cliente_id_fecha_hora_programada_id_idx"
     ON "reservas"("cliente_id", "fecha_hora_programada", "id");
-
-CREATE INDEX "reserva_versiones_estado_fecha_hora_programada_reserva_id_v_idx"
-    ON "reserva_versiones"("estado", "fecha_hora_programada", "reserva_id", "version");
-
-CREATE INDEX "reserva_versiones_cliente_id_fecha_hora_programada_reserva__idx"
-    ON "reserva_versiones"("cliente_id", "fecha_hora_programada", "reserva_id", "version");
 
 CREATE INDEX "outbox_eventos_status_creado_en_idx"
     ON "outbox_eventos"("status", "creado_en");
