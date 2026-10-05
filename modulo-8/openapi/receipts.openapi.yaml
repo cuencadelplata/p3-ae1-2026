@@ -47,7 +47,7 @@ paths:
       summary: Emite el comprobante PDF de un viaje finalizado (RF-8.3)
       description: |
         Recibe los datos del viaje completado (M6) y del pago liquidado (M7) y genera el archivo PDF correspondiente.
-        
+
         **Idempotencia (RNF-08):** Si ya existe un comprobante para el `tripId` enviado, la API responde `200 OK`
         con los datos del comprobante vigente en lugar de duplicar el archivo. Si es nuevo responde `201 Created`.
 
