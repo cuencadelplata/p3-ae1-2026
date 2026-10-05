@@ -49,8 +49,10 @@
 
 ## Reporte de pruebas
 
-Medido el 2026-10-04 sobre `86d9251`, con Node 24.19.0, pnpm 10.33.0, Redis 7.4.11 y Windows 11.
-Los comandos están en el README.
+Medido el 2026-10-04 con Node 24.19.0, pnpm 10.33.0, Redis 7.4.11 y Windows 11. La suite, el
+typecheck y el build corresponden a `948f4e2`. Concurrencia, resiliencia y Docker se midieron
+sobre `86d9251`; entre ambos commits no cambió el código del servicio (`src`, `Dockerfile`,
+`compose.yaml`). Los comandos están en el README.
 
 | Verificación | Resultado |
 | --- | --- |
@@ -59,5 +61,5 @@ Los comandos están en el README.
 | Concurrencia: N validaciones simultáneas del mismo QR | Store ingenuo con N=10: 10×200. Lua con N=10, 20 y 100: 1×200 y N−1×409. Dos instancias con N=20: 1×200 y 19×409. Memoria, generar en A y validar en B: 404. Vencido con N=10: 10×410. Viajes mezclados: viaje correcto 1×200 y 9×409, otro viaje 10×404 |
 | Mutación: consumo en dos pasos sin Lua | Fallan 5 de 10 pruebas de concurrencia: solución con N=10, 20 y 100, dos instancias y viajes mezclados |
 | Resiliencia con proxy TCP y tope de 300 ms | Redis caído: 503 en 2–6 ms, ready 503, live 200. Redis colgado: 503 en 305–307 ms, y al volver la misma validación da 200. Respuesta perdida: 503 en 305–318 ms, y al volver 409. Corte con el comando en vuelo: 503 en 20–22 ms. Recuperación: ready 200 a los 190–194 ms |
-| Estabilidad | 5 corridas seguidas de concurrencia y 5 de resiliencia, sin fallas |
+| Estabilidad | 5 corridas seguidas de concurrencia y 5 de resiliencia, sin fallas. En una corrida limpia previa al push, el caso del borde `now === expiresAt` del contrato del store falló una vez (225/226): comparaba el reloj de Node con el de Redis, que iba entre 0.5 y 1.5 ms atrás. Se corrigió en `948f4e2`, usando el reloj con el que cada store decide el vencimiento. Después: 30 corridas del archivo y 4 de la suite completa, sin fallas |
 | Docker | E2E de QR aprobado. Con Redis detenido: 503 con `Retry-After: 5` en 8 y 3 ms; el healthcheck del contenedor siguió con exit 0 (healthy). Recuperación sin reiniciar el contenedor. `docker compose stop qr`: 577 ms, exit 0, cierre ordenado |
