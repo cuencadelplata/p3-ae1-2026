@@ -57,7 +57,11 @@ export class InMemoryReservaRepository implements ReservaRepository {
   public async listarPaginado(page = 1, pageSize = 20): Promise<Reserva[]> {
     const start = (page - 1) * pageSize;
     return [...this.reservas.values()]
-      .sort((a, b) => Date.parse(a.fechaHoraProgramada) - Date.parse(b.fechaHoraProgramada))
+      .sort(
+        (a, b) =>
+          Date.parse(a.fechaHoraProgramada) - Date.parse(b.fechaHoraProgramada) ||
+          a.id.localeCompare(b.id),
+      )
       .slice(start, start + pageSize)
       .map(clone);
   }
@@ -87,7 +91,7 @@ export class InMemoryReservaRepository implements ReservaRepository {
     return [...this.reservas.values()]
       .filter(
         (reserva) =>
-          reserva.estado === 'PROGRAMADA' &&
+          (reserva.estado === 'PROGRAMADA' || reserva.estado === 'ACTIVANDO') &&
           reserva.asignacion !== null &&
           Date.parse(reserva.fechaHoraProgramada) <= fechaLimite.getTime(),
       )

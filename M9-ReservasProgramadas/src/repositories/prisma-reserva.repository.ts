@@ -1,4 +1,9 @@
-import { Prisma, PrismaClient, EstadoReserva as PrismaEstadoReserva, TipoVehiculo as PrismaTipoVehiculo } from '@prisma/client';
+import {
+  Prisma,
+  PrismaClient,
+  EstadoReserva as PrismaEstadoReserva,
+  TipoVehiculo as PrismaTipoVehiculo,
+} from '@prisma/client';
 import type {
   CambiosReserva,
   CambioEstadoReserva,
@@ -12,7 +17,9 @@ import type { ReservaRepository } from './reserva.repository.js';
 const mapEstado = (estado: PrismaEstadoReserva): EstadoReserva => estado as EstadoReserva;
 const mapTipoVehiculo = (vehiculo: PrismaTipoVehiculo): TipoVehiculo => vehiculo as TipoVehiculo;
 
-const decimalToNumber = (value: Prisma.Decimal | number | string | null | undefined): number | null => {
+const decimalToNumber = (
+  value: Prisma.Decimal | number | string | null | undefined,
+): number | null => {
   if (value === null || value === undefined) return null;
   return Number(value);
 };
@@ -51,6 +58,7 @@ const reservaFromPrisma = (reserva: {
   moneda: string | null;
   criterioAsignacion: string | null;
   idSolicitud: string | null;
+  version: number;
   creadoEn: Date;
   actualizadoEn: Date;
 }): Reserva => ({
@@ -75,6 +83,29 @@ const reservaFromPrisma = (reserva: {
   actualizadoEn: reserva.actualizadoEn.toISOString(),
 });
 
+const reservaVersionData = (
+  reserva: Parameters<typeof reservaFromPrisma>[0],
+): Prisma.ReservaVersionUncheckedCreateInput => ({
+  reservaId: reserva.id,
+  version: reserva.version,
+  clienteId: reserva.clienteId,
+  origen: reserva.origen,
+  destino: reserva.destino,
+  vehiculo: reserva.vehiculo,
+  fechaHoraProgramada: reserva.fechaHoraProgramada,
+  estado: reserva.estado,
+  asignacionId: reserva.asignacionId,
+  choferId: reserva.choferId,
+  nombreChofer: reserva.nombreChofer,
+  valoracion: reserva.valoracion,
+  tarifaEstimada: reserva.tarifaEstimada,
+  moneda: reserva.moneda,
+  criterioAsignacion: reserva.criterioAsignacion,
+  idSolicitud: reserva.idSolicitud,
+  creadoEn: reserva.creadoEn,
+  actualizadoEn: reserva.actualizadoEn,
+});
+
 export class PrismaReservaRepository implements ReservaRepository {
   public constructor(private readonly prisma: PrismaClient = new PrismaClient()) {}
 
@@ -92,7 +123,10 @@ export class PrismaReservaRepository implements ReservaRepository {
           vehiculo: input.vehiculo as PrismaTipoVehiculo,
           fechaHoraProgramada: new Date(input.fechaHoraProgramada),
           estado: PrismaEstadoReserva.PENDIENTE_ASIGNACION,
-          tarifaEstimada: input.tarifaEstimada === null || input.tarifaEstimada === undefined ? null : new Prisma.Decimal(input.tarifaEstimada),
+          tarifaEstimada:
+            input.tarifaEstimada === null || input.tarifaEstimada === undefined
+              ? null
+              : new Prisma.Decimal(input.tarifaEstimada),
           moneda: input.moneda ?? 'ARS',
           criterioAsignacion: 'MEJOR_CALIFICACION',
         },
@@ -113,6 +147,7 @@ export class PrismaReservaRepository implements ReservaRepository {
           reservaId: creada.id,
         },
       });
+      await tx.reservaVersion.create({ data: reservaVersionData(creada) });
 
       return creada;
     });
@@ -127,7 +162,7 @@ export class PrismaReservaRepository implements ReservaRepository {
 
   public async listar(): Promise<Reserva[]> {
     const reservas = await this.prisma.reserva.findMany({
-      orderBy: { fechaHoraProgramada: 'asc' },
+      orderBy: [{ fechaHoraProgramada: 'asc' }, { id: 'asc' }],
     });
     return reservas.map(reservaFromPrisma);
   }
@@ -135,7 +170,7 @@ export class PrismaReservaRepository implements ReservaRepository {
   public async listarPaginado(page = 1, pageSize = 20): Promise<Reserva[]> {
     const offset = (page - 1) * pageSize;
     const reservas = await this.prisma.reserva.findMany({
-      orderBy: { fechaHoraProgramada: 'asc' },
+      orderBy: [{ fechaHoraProgramada: 'asc' }, { id: 'asc' }],
       skip: offset,
       take: pageSize,
     });
@@ -146,7 +181,10 @@ export class PrismaReservaRepository implements ReservaRepository {
     const actual = await this.prisma.reserva.findUnique({ where: { id } });
     if (actual === null) return null;
 
-    if (actual.estado !== PrismaEstadoReserva.PROGRAMADA && actual.estado !== PrismaEstadoReserva.PENDIENTE_ASIGNACION) {
+    if (
+      actual.estado !== PrismaEstadoReserva.PROGRAMADA &&
+      actual.estado !== PrismaEstadoReserva.PENDIENTE_ASIGNACION
+    ) {
       return null;
     }
 
@@ -157,7 +195,9 @@ export class PrismaReservaRepository implements ReservaRepository {
           origen: input.origen ?? actual.origen,
           destino: input.destino ?? actual.destino,
           vehiculo: input.vehiculo ? (input.vehiculo as PrismaTipoVehiculo) : actual.vehiculo,
-          fechaHoraProgramada: input.fechaHoraProgramada ? new Date(input.fechaHoraProgramada) : actual.fechaHoraProgramada,
+          fechaHoraProgramada: input.fechaHoraProgramada
+            ? new Date(input.fechaHoraProgramada)
+            : actual.fechaHoraProgramada,
           tarifaEstimada:
             input.tarifaEstimada === undefined
               ? actual.tarifaEstimada
@@ -165,9 +205,14 @@ export class PrismaReservaRepository implements ReservaRepository {
                 ? null
                 : new Prisma.Decimal(input.tarifaEstimada),
           moneda: input.moneda ?? actual.moneda,
-          asignacionId: input.asignacion === undefined ? actual.asignacionId : input.asignacion?.id ?? null,
-          choferId: input.asignacion === undefined ? actual.choferId : input.asignacion?.choferId ?? null,
-          nombreChofer: input.asignacion === undefined ? actual.nombreChofer : input.asignacion?.nombreChofer ?? null,
+          asignacionId:
+            input.asignacion === undefined ? actual.asignacionId : (input.asignacion?.id ?? null),
+          choferId:
+            input.asignacion === undefined ? actual.choferId : (input.asignacion?.choferId ?? null),
+          nombreChofer:
+            input.asignacion === undefined
+              ? actual.nombreChofer
+              : (input.asignacion?.nombreChofer ?? null),
           valoracion:
             input.asignacion === undefined
               ? actual.valoracion
@@ -175,6 +220,7 @@ export class PrismaReservaRepository implements ReservaRepository {
                 ? null
                 : new Prisma.Decimal(input.asignacion.valoracion),
           criterioAsignacion: actual.criterioAsignacion ?? 'MEJOR_CALIFICACION',
+          version: { increment: 1 },
           estado:
             input.asignacion === undefined
               ? actual.estado
@@ -184,6 +230,7 @@ export class PrismaReservaRepository implements ReservaRepository {
           actualizadoEn: new Date(),
         },
       });
+      await tx.reservaVersion.create({ data: reservaVersionData(actualizacion) });
 
       await tx.outboxEvent.create({
         data: {
@@ -210,7 +257,10 @@ export class PrismaReservaRepository implements ReservaRepository {
     const cancelada = await this.prisma.$transaction(async (tx) => {
       const reserva = await tx.reserva.findUnique({ where: { id } });
       if (reserva === null) return null;
-      if (reserva.estado !== PrismaEstadoReserva.PROGRAMADA && reserva.estado !== PrismaEstadoReserva.PENDIENTE_ASIGNACION) {
+      if (
+        reserva.estado !== PrismaEstadoReserva.PROGRAMADA &&
+        reserva.estado !== PrismaEstadoReserva.PENDIENTE_ASIGNACION
+      ) {
         return null;
       }
 
@@ -222,9 +272,11 @@ export class PrismaReservaRepository implements ReservaRepository {
           choferId: null,
           nombreChofer: null,
           valoracion: null,
+          version: { increment: 1 },
           actualizadoEn: new Date(),
         },
       });
+      await tx.reservaVersion.create({ data: reservaVersionData(actualizada) });
 
       await tx.outboxEvent.create({
         data: {
@@ -249,7 +301,7 @@ export class PrismaReservaRepository implements ReservaRepository {
   public async buscarPendientes(fechaLimite: Date, limite = 100): Promise<Reserva[]> {
     const reservas = await this.prisma.reserva.findMany({
       where: {
-        estado: PrismaEstadoReserva.PROGRAMADA,
+        estado: { in: [PrismaEstadoReserva.PROGRAMADA, PrismaEstadoReserva.ACTIVANDO] },
         asignacionId: { not: null },
         fechaHoraProgramada: { lte: fechaLimite },
       },
@@ -277,9 +329,11 @@ export class PrismaReservaRepository implements ReservaRepository {
         data: {
           estado: nuevoEstado as PrismaEstadoReserva,
           idSolicitud: cambio.idSolicitud ?? existente.idSolicitud,
+          version: { increment: 1 },
           actualizadoEn: new Date(),
         },
       });
+      await tx.reservaVersion.create({ data: reservaVersionData(actualizada) });
 
       await tx.outboxEvent.create({
         data: {
