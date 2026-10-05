@@ -35,11 +35,9 @@ export class AccountStatusController {
       return;
     }
 
-    // userId: viene del auth inyectado por requireAuth (E7) o del fallback del header
-    const auth   = (req as any).auth as { userId: number } | undefined;
-    const userId = auth?.userId ?? 0;
-
-    const statusInfo = await this.service.getAccountStatus(id, userId);
+    // El service obtiene el userId desde el perfil (customerId → userId),
+    // así funciona igual con token de usuario o con X-Secret-Key.
+    const statusInfo = await this.service.getAccountStatus(id);
 
     if (!statusInfo) {
       res.status(404).json({

@@ -35,7 +35,7 @@ export default function CustomerDetail() {
     }
   }, [activeTab, id, status, trips]);
 
-  if (loading) return <p className="loading">Loading…</p>;
+  if (loading) return <p className="loading">Cargando…</p>;
   if (error)   return <p className="error-msg">Error: {error}</p>;
   if (!customer) return null;
 
@@ -43,15 +43,15 @@ export default function CustomerDetail() {
     <div>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-        <Link to="/" style={{ color: '#6366f1', fontSize: '0.875rem' }}>← Customers</Link>
+        <Link to="/" style={{ color: '#6366f1', fontSize: '0.875rem' }}>← Inicio</Link>
         <span style={{ color: '#d1d5db' }}>|</span>
-        <h1 style={{ fontSize: '1.3rem' }}>{customer.name}</h1>
+        <h1 style={{ fontSize: '1.3rem' }}>Usuario #{customer.userId}</h1>
         <span className={`badge ${statusBadge(customer.status)}`}>{customer.status}</span>
       </div>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', borderBottom: '1px solid #e5e7eb' }}>
-        {(['profile', 'status', 'trips'] as Tab[]).map(tab => (
+        {([['profile', 'Perfil'], ['status', 'Estado de cuenta'], ['trips', 'Viajes']] as [Tab, string][]).map(([tab, label]) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -64,7 +64,7 @@ export default function CustomerDetail() {
               borderBottom: activeTab === tab ? '2px solid #6366f1' : '2px solid transparent',
             }}
           >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            {label}
           </button>
         ))}
       </div>
@@ -88,17 +88,18 @@ function ProfileTab({ customer, onUpdate }: { customer: CustomerProfile; onUpdat
   return (
     <div style={{ display: 'grid', gap: '20px', gridTemplateColumns: '1fr 1fr' }}>
       <div className="card">
-        <h2 style={sectionTitle}>Contact</h2>
+        <h2 style={sectionTitle}>Identidad</h2>
         <dl style={dlStyle}>
-          <dt style={dtStyle}>ID</dt>
+          <dt style={dtStyle}>Customer ID</dt>
           <dd><code style={{ fontSize: '0.8rem' }}>{customer.customerId}</code></dd>
-          <dt style={dtStyle}>Email</dt>
-          <dd>{customer.email}</dd>
-          <dt style={dtStyle}>Phone</dt>
-          <dd>{customer.phone}</dd>
-          <dt style={dtStyle}>Member since</dt>
+          <dt style={dtStyle}>User ID (M1)</dt>
+          <dd>{customer.userId}</dd>
+          <dt style={dtStyle}>Alta</dt>
           <dd>{formatDate(customer.createdAt)}</dd>
         </dl>
+        <p style={{ marginTop: '16px', fontSize: '0.78rem', color: '#9ca3af', lineHeight: 1.4 }}>
+          El nombre, teléfono y correo pertenecen a M1. M2 solo guarda el vínculo por <code>userId</code> y las preferencias.
+        </p>
       </div>
       <PreferencesEditor customer={customer} onUpdate={onUpdate} />
     </div>
@@ -107,30 +108,39 @@ function ProfileTab({ customer, onUpdate }: { customer: CustomerProfile; onUpdat
 
 /* ── Status tab ── */
 function StatusTab({ data }: { data: AccountStatusResponse | null }) {
-  if (!data) return <p className="loading">Loading status…</p>;
+  if (!data) return <p className="loading">Cargando estado…</p>;
   return (
     <div className="card" style={{ maxWidth: '480px' }}>
-      <h2 style={sectionTitle}>Account Status</h2>
+      <h2 style={sectionTitle}>Estado de cuenta</h2>
       <dl style={dlStyle}>
-        <dt style={dtStyle}>Status</dt>
+        <dt style={dtStyle}>Estado</dt>
         <dd><span className={`badge ${statusBadge(data.status)}`}>{data.status}</span></dd>
-        <dt style={dtStyle}>Reason</dt>
+        <dt style={dtStyle}>Motivo</dt>
         <dd>{data.reason}</dd>
-        <dt style={dtStyle}>Last updated</dt>
+        {data.blockOrigin && (
+          <>
+            <dt style={dtStyle}>Origen</dt>
+            <dd>{data.blockOrigin === 'AUTOMATICO' ? 'Automático (penalizaciones)' : 'Manual'}</dd>
+          </>
+        )}
+        <dt style={dtStyle}>Actualizado</dt>
         <dd>{formatDate(data.updatedAt)}</dd>
       </dl>
+      <p style={{ marginTop: '16px', fontSize: '0.78rem', color: '#9ca3af', lineHeight: 1.4 }}>
+        El estado se recalcula en cada consulta con las penalizaciones vigentes de Soporte.
+      </p>
     </div>
   );
 }
 
 /* ── Trips tab ── */
 function TripsTab({ data }: { data: CustomerTripsResponse | null }) {
-  if (!data) return <p className="loading">Loading trips…</p>;
-  if (data.trips.length === 0) return <p className="loading">No trips found.</p>;
+  if (!data) return <p className="loading">Cargando viajes…</p>;
+  if (data.trips.length === 0) return <p className="loading">No se encontraron viajes.</p>;
   return (
     <div>
       <p style={{ marginBottom: '16px', color: '#6b7280', fontSize: '0.875rem' }}>
-        {data.tripsCount} trip{data.tripsCount !== 1 ? 's' : ''} found
+        {data.tripsCount} viaje{data.tripsCount !== 1 ? 's' : ''} (datos de M6)
       </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         {data.trips.map(t => (
@@ -161,5 +171,5 @@ function TripsTab({ data }: { data: CustomerTripsResponse | null }) {
 }
 
 const sectionTitle: React.CSSProperties = { fontSize: '0.95rem', fontWeight: 600, marginBottom: '16px', color: '#374151' };
-const dlStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: '120px 1fr', rowGap: '10px', alignItems: 'start' };
+const dlStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: '140px 1fr', rowGap: '10px', alignItems: 'start' };
 const dtStyle: React.CSSProperties = { fontSize: '0.8rem', color: '#9ca3af', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em', paddingTop: '2px' };

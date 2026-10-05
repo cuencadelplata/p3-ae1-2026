@@ -7,18 +7,16 @@ export type AccountStatusEnum =
   | 'BLOQUEADO_PERMANENTE'
   | 'EN_REVISIÓN';
 
+export type BlockOrigin = 'AUTOMATICO' | 'MANUAL';
+
 export interface Preferences {
   preferredVehicleType: VehicleType;
   notificationChannel: NotificationChannel;
-  defaultHomeAddress?: string;
-  defaultWorkAddress?: string;
 }
 
 export interface CustomerProfile {
   customerId: string;
-  name: string;
-  email: string;
-  phone: string;
+  userId: number;
   preferences: Preferences;
   status: AccountStatusEnum;
   createdAt: string;
@@ -30,6 +28,7 @@ export interface AccountStatusResponse {
   status: AccountStatusEnum;
   reason: string;
   updatedAt: string;
+  blockOrigin?: BlockOrigin;
 }
 
 export interface TripSummary {
@@ -48,8 +47,5 @@ export interface CustomerTripsResponse {
 }
 
 export interface CreateCustomerDTO {
-  name: string;
-  email: string;
-  phone: string;
   preferences?: Partial<Preferences>;
 }

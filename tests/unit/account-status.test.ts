@@ -19,6 +19,10 @@ function savedStatus(overrides: Partial<AccountStatusResponse> = {}): AccountSta
 function makeRepo(statusRow: AccountStatusResponse | null = savedStatus()) {
   return {
     findAccountStatus: vi.fn().mockResolvedValue(statusRow),
+    // El service lee el userId del perfil para consultar Soporte
+    findById: vi.fn().mockResolvedValue(
+      statusRow ? { customerId: statusRow.customerId, userId: 12, preferences: { preferredVehicleType: 'auto', notificationChannel: 'email' }, status: statusRow.status, createdAt: '2026-09-01T00:00:00Z' } : null
+    ),
     updateAccountStatus: vi.fn().mockImplementation(async (_id: string, dto: any) =>
       savedStatus({ status: dto.status, reason: dto.reason, blockOrigin: dto.blockOrigin })
     )

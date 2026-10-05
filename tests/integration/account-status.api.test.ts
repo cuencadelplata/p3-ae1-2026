@@ -47,6 +47,8 @@ function activeCustomer(): CustomerProfile {
 describe('GET /v1/customers/:id/status (RF-2.5)', () => {
   beforeEach(() => {
     delete process.env.STATUS_SECRET_KEY;
+    // El service lee el userId del perfil para consultar Soporte
+    vi.spyOn(customerRepository, 'findById').mockResolvedValue(activeCustomer());
   });
   afterEach(() => {
     vi.restoreAllMocks();

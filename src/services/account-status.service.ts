@@ -58,14 +58,20 @@ export class AccountStatusService {
    * Si Soporte está caído devuelve el último estado persistido.
    *
    * @param customerId  ID interno del cliente (cust_xxx)
-   * @param userId      userId de M1 (necesario para llamar a Soporte)
+   *
+   * El userId se obtiene del propio perfil guardado (no del request), para que
+   * la consulta funcione igual con token de usuario o con X-Secret-Key.
    */
   async getAccountStatus(
-    customerId: string,
-    userId: number
+    customerId: string
   ): Promise<AccountStatusResponse | null> {
     const saved = await this.repository.findAccountStatus(customerId);
     if (!saved) return null;
+
+    // El userId para consultar Soporte sale del perfil, no del request
+    const profile = await this.repository.findById(customerId);
+    if (!profile) return null;
+    const userId = profile.userId;
 
     // Intentar recalcular con las penalizaciones de Soporte
     let totalPenalizaciones: number;

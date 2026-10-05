@@ -28,6 +28,8 @@ services:
     depends_on:
       db-profiles:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
   # Frontend - React + Vite (servido por nginx)
   client:

@@ -9,8 +9,9 @@ import { Router, Request, Response } from 'express';
  *   200 { userId, tripsCount, trips: [...] }
  *
  * Datos fijos (sin aleatoriedad para que los tests sean determinísticos):
- *   userId 12 → 2 viajes completados
+ *   userId 12 → 2 viajes completados (escenario "perfil habilitado")
  *   userId 13 → 1 viaje completado
+ *   userId 14 → 3 viajes, uno cancelado (escenario "perfil inhabilitado")
  *   cualquier otro → sin viajes
  */
 
@@ -50,6 +51,32 @@ const DB: Record<number, Trip[]> = {
       fare: 1450.0,
       status: 'COMPLETADO',
       createdAt: '2026-09-01T11:00:00Z'
+    }
+  ],
+  14: [
+    {
+      tripId: 'trip_aaa2',
+      origin: 'Nueva Córdoba',
+      destination: 'Cerro de las Rosas, Córdoba',
+      fare: 2300.0,
+      status: 'COMPLETADO',
+      createdAt: '2026-09-05T12:00:00Z'
+    },
+    {
+      tripId: 'trip_aaa3',
+      origin: 'Shopping Dinosaurio, Córdoba',
+      destination: 'Barrio Jardín, Córdoba',
+      fare: 1980.0,
+      status: 'CANCELADO',
+      createdAt: '2026-09-10T14:00:00Z'
+    },
+    {
+      tripId: 'trip_aaa4',
+      origin: 'Terminal de Ómnibus, Córdoba',
+      destination: 'Villa Allende',
+      fare: 4100.0,
+      status: 'COMPLETADO',
+      createdAt: '2026-09-15T16:00:00Z'
     }
   ]
 };
