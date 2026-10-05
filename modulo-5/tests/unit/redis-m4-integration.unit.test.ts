@@ -28,7 +28,7 @@ describe('Integración Módulo 4 en Redis (RF-5.2)', () => {
     await redisService.clearM4Drivers();
   });
 
-  it('debe guardar y consultar ubicaciones según el contrato de M4 (m4:driver:{driverId}:location)', async () => {
+  it('debe guardar y consultar ubicaciones según el contrato de M4 (driver:{driverId}:location)', async () => {
     const driverData: M4DriverLocation = {
       driverId: 'driver-corrientes',
       latitude: -34.6040, // Muy cerca del Obelisco (~50 metros)

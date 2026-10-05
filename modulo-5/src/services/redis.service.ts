@@ -149,13 +149,13 @@ export class RedisService {
 
   /**
    * Guarda o actualiza la ubicación y estado de un conductor de M4 en Redis (RF-4.2 / RF-5.2)
-   * Formato acordado con Módulo 4: SET m4:driver:{driverId}:location "{...}" EX ttlSeconds
+   * Formato acordado con Módulo 4: SET driver:{driverId}:location "{...}" EX ttlSeconds
    */
   public async saveM4DriverLocation(
     location: M4DriverLocation,
     ttlSeconds: number = 60
   ): Promise<void> {
-    const key = `m4:driver:${location.driverId}:location`;
+    const key = `driver:${location.driverId}:location`;
     const payload = JSON.stringify(location);
 
     if (this.isConnected && this.client) {
@@ -172,7 +172,7 @@ export class RedisService {
 
   /**
    * Busca conductores cercanos vigentes de M4 en Redis según el formato acordado con Módulo 4:
-   * 1. Consulta las claves m4:driver:*:location
+   * 1. Consulta las claves driver:*:location
    * 2. Filtra por available === true
    * 3. Filtra por vehicleType coincidente (AUTO / MOTO)
    * 4. Calcula la distancia mediante la fórmula de Haversine al origen solicitado
@@ -190,7 +190,7 @@ export class RedisService {
     // 1. Obtener datos desde Redis si está conectado
     if (this.isConnected && this.client) {
       try {
-        const keys = await this.client.keys('m4:driver:*:location');
+        const keys = await this.client.keys('driver:*:location');
         if (keys.length > 0) {
           const values = await this.client.mget(...keys);
           for (const raw of values) {
@@ -214,7 +214,7 @@ export class RedisService {
     if (driversMap.size === 0) {
       const now = Date.now();
       for (const [key, item] of this.memoryFallback.entries()) {
-        if (key.startsWith('m4:driver:') && key.endsWith(':location')) {
+        if (key.startsWith('driver:') && key.endsWith(':location')) {
           if (now <= item.expiresAt) {
             try {
               const parsed = JSON.parse(item.data) as M4DriverLocation;
@@ -283,7 +283,7 @@ export class RedisService {
   public async clearM4Drivers(): Promise<void> {
     if (this.isConnected && this.client) {
       try {
-        const keys = await this.client.keys('m4:driver:*:location');
+        const keys = await this.client.keys('driver:*:location');
         if (keys.length > 0) {
           await this.client.del(...keys);
         }
@@ -293,7 +293,7 @@ export class RedisService {
     }
 
     for (const key of Array.from(this.memoryFallback.keys())) {
-      if (key.startsWith('m4:driver:') && key.endsWith(':location')) {
+      if (key.startsWith('driver:') && key.endsWith(':location')) {
         this.memoryFallback.delete(key);
       }
     }

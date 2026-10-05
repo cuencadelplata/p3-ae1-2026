@@ -103,7 +103,7 @@ export class RideRequestService {
 
   /**
    * Integración con M4: Conductores Cercanos (RF-4.2 / RF-5.2)
-   * Consulta las ubicaciones y disponibilidad de conductores desde Redis (m4:driver:{driverId}:location)
+   * Consulta las ubicaciones y disponibilidad de conductores desde Redis (driver:{driverId}:location)
    */
   public async fetchNearbyDriversFromM4(
     lat: number,
