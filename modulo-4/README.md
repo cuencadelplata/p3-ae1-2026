@@ -11,6 +11,7 @@ Version actual de la API: `2.0.0`.
 - Concurrencia: un script atomico evita que una ubicacion vieja reemplace una mas nueva.
 - Idempotencia: repetir la misma actualizacion conserva un unico estado consistente.
 - El healthcheck comprueba tambien que Redis se encuentre disponible.
+- PostgreSQL conserva el historial permanente de ubicaciones y cambios de disponibilidad.
 
 ## Alcance AE1
 
@@ -30,7 +31,7 @@ La API es dueña solamente del estado efimero de ubicacion: `driverId`, coordena
 - M5 consulta candidatos cercanos y puede cambiar su disponibilidad.
 - M6 puede informar cambios de disponibilidad al iniciar o finalizar un viaje.
 
-En AE2 Redis es la fuente de verdad para las ubicaciones temporales. La API no consulta bases de datos de otros modulos.
+En AE2 Redis es la fuente de verdad para las ubicaciones temporales. PostgreSQL conserva el historial propio de M4 y no reemplaza la busqueda rapida ni el TTL de Redis. La API no consulta bases de datos de otros modulos.
 
 Cada conductor se guarda con una clave de este formato:
 
@@ -41,6 +42,8 @@ driver:{driverId}:location
 El valor contiene las coordenadas, tipo de vehiculo, disponibilidad, `updatedAt` y `expiresAt`. La comparacion de `updatedAt` y el guardado se realizan en una unica operacion atomica de Redis.
 
 Los diagramas se encuentran en [docs/arquitectura.md](docs/arquitectura.md).
+
+Cada actualizacion aceptada tambien se registra en la tabla `driver_location_history`. El historial se puede consultar mediante `GET /api/v1/drivers/{driverId}/location-history`, aun cuando la ubicacion activa ya haya vencido en Redis.
 
 ## Ejecutar con Docker Compose
 
@@ -60,6 +63,7 @@ docker compose up --build -d
 - UI independiente: `http://localhost:8084`
 - API: `http://localhost:3004`
 - Redis: servicio interno `redis:6379` (no se publica fuera de Docker)
+- PostgreSQL: servicio interno `postgres:5432` (no se publica fuera de Docker)
 - Health check: `http://localhost:3004/health`
 - Scalar: `http://localhost:3004/docs`
 - OpenAPI: `http://localhost:3004/openapi/openapi-m4.yaml`
@@ -96,6 +100,7 @@ El Dockerfile tambien ejecuta todos los tests durante la construccion y cancela 
 - `PORT`: puerto interno de la API, valor predeterminado `3004`.
 - `LOCATION_TTL_SECONDS`: vigencia de una ubicacion, valor predeterminado `60`.
 - `REDIS_URL`: conexion a Redis, valor local predeterminado `redis://127.0.0.1:6379`.
+- `DATABASE_URL`: conexion a PostgreSQL, valor local predeterminado `postgresql://m4_user:m4_password@127.0.0.1:5432/m4_locations`.
 
 ## Limitaciones conocidas
 

@@ -8,7 +8,8 @@ flowchart LR
   M5[M5 Solicitud y Despacho] -->|buscar candidatos y cambiar disponibilidad| API[M4 API REST]
   M6[M6 Ciclo del viaje] -. inicio y fin del viaje .-> API
   UI[M4 UI - Nginx] -->|REST / JSON| API
-  API --> MEM[(Estado temporal en memoria + TTL)]
+  API --> REDIS[(Redis: estado actual + TTL)]
+  API --> POSTGRES[(PostgreSQL: historial permanente)]
   DEV[Docente / desarrollador] -->|OpenAPI| SCALAR[Scalar]
   SCALAR --> API
 ```
@@ -27,6 +28,7 @@ sequenceDiagram
   Conductor->>UI: Publica coordenadas y disponibilidad
   UI->>API: PUT /drivers/{id}/location
   API-->>UI: Ubicacion con updatedAt y expiresAt
+  API->>POSTGRES: Registra la actualizacion en el historial
   M5->>API: GET /drivers/nearby
   API-->>M5: Candidatos ordenados, distancia y ETA
   M5->>API: PATCH /drivers/{id}/availability
@@ -36,3 +38,7 @@ sequenceDiagram
 ## Caso concurrente
 
 Dos actualizaciones del mismo conductor pueden llegar fuera de orden por latencia de red. Antes de guardar, M4 compara la marca temporal recibida con `updatedAt`. Si el mensaje es anterior, devuelve `409 STALE_LOCATION_UPDATE` y conserva la ubicacion mas reciente.
+
+## Persistencia
+
+Redis mantiene solamente el estado operativo vigente y elimina las ubicaciones al vencer el TTL. PostgreSQL guarda una fila por actualizacion aceptada en `driver_location_history`. La combinacion `driver_id` y `recorded_at` es unica para que repetir el mismo mensaje no duplique el historial.

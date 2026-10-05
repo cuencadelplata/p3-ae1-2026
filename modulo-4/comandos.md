@@ -26,7 +26,7 @@ Antes de continuar, comprobar que aparezca un resultado similar a este:
 
 ```text
 Test Files  2 passed (2)
-Tests       19 passed (19)
+Tests       23 passed (23)
 ```
 
 Este es el mejor momento para sacar la captura de los tests aprobados.
@@ -50,7 +50,7 @@ Como alternativa, durante el desarrollo se pueden reconstruir ambas imagenes loc
 docker compose up --build -d
 ```
 
-Este comando inicia tres contenedores: `redis` para las ubicaciones temporales, `m4-api` para la API REST y `m4-ui` para la interfaz grafica.
+Este comando inicia cuatro contenedores: `redis` para las ubicaciones temporales, `postgres` para el historial permanente, `m4-api` para la API REST y `m4-ui` para la interfaz grafica.
 
 ## 4. Comprobar el estado del contenedor
 
@@ -58,7 +58,7 @@ Este comando inicia tres contenedores: `redis` para las ubicaciones temporales, 
 docker compose ps
 ```
 
-Muestra los contenedores activos. Deben aparecer `redis`, `m4-api` y `m4-ui` con estado saludable.
+Muestra los contenedores activos. Deben aparecer `redis`, `postgres`, `m4-api` y `m4-ui` con estado saludable.
 
 Para comprobar Redis directamente:
 
@@ -68,6 +68,15 @@ docker compose exec redis redis-cli KEYS "driver:*:location"
 ```
 
 El primer comando debe responder `PONG`. El segundo muestra las claves de los conductores que todavia no vencieron.
+
+Para comprobar PostgreSQL y consultar el historial directamente:
+
+```powershell
+docker compose exec postgres pg_isready -U m4_user -d m4_locations
+docker compose exec postgres psql -U m4_user -d m4_locations -c "SELECT driver_id, latitude, longitude, available, recorded_at FROM driver_location_history ORDER BY recorded_at DESC;"
+```
+
+El primer comando confirma que PostgreSQL acepta conexiones. El segundo muestra los registros permanentes guardados por la API.
 
 Tambien se puede consultar directamente la salud de la API:
 
@@ -103,7 +112,7 @@ Abrir la documentacion interactiva:
 http://localhost:3004/docs
 ```
 
-Scalar muestra los siete endpoints, sus parametros, cuerpos y respuestas. La documentacion se sirve desde la propia aplicacion y no depende de Swagger Online.
+Scalar muestra los ocho endpoints, sus parametros, cuerpos y respuestas. La documentacion se sirve desde la propia aplicacion y no depende de Swagger Online.
 
 El archivo OpenAPI original tambien se puede abrir en:
 
@@ -137,6 +146,14 @@ Invoke-RestMethod "http://localhost:3004/api/v1/drivers/nearby?latitude=-27.4692
 
 Llama al endpoint `GET /drivers/nearby`. Busca autos disponibles dentro de un radio de 5 km, los ordena por distancia y calcula su ETA. En la respuesta debe aparecer `profe-demo`.
 
+### Consultar el historial permanente
+
+```powershell
+Invoke-RestMethod "http://localhost:3004/api/v1/drivers/profe-demo/location-history?limit=20" | ConvertTo-Json -Depth 5
+```
+
+Llama al endpoint `GET /drivers/{driverId}/location-history`. La informacion proviene de PostgreSQL y continua disponible aunque la ubicacion temporal desaparezca de Redis por TTL.
+
 ### Cambiar su disponibilidad
 
 ```powershell
@@ -159,8 +176,8 @@ Muestra la salida generada por el servicio dentro del contenedor.
 docker compose down
 ```
 
-Detiene y elimina los dos contenedores y su red interna, pero conserva las imagenes construidas.
+Detiene y elimina los cuatro contenedores y su red interna, pero conserva las imagenes construidas y los volumenes de Redis y PostgreSQL.
 
 ## Resumen para explicar oralmente
 
-El Modulo 4 administra ubicaciones temporales y disponibilidad de conductores. Permite registrar y consultar ubicaciones, buscar candidatos cercanos por tipo de vehiculo, cambiar su disponibilidad, geocodificar direcciones simuladas y estimar distancia y tiempo de llegada. La interfaz grafica utiliza la misma API REST documentada localmente con OpenAPI y Scalar.
+El Modulo 4 administra ubicaciones temporales y disponibilidad de conductores. Redis conserva el estado actual con TTL y PostgreSQL mantiene un historial permanente. La API permite registrar y consultar ubicaciones, buscar candidatos cercanos por tipo de vehiculo, cambiar su disponibilidad, geocodificar direcciones simuladas y estimar distancia y tiempo de llegada. La interfaz grafica utiliza la misma API REST documentada localmente con OpenAPI y Scalar.
