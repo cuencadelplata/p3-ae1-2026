@@ -1,0 +1,44 @@
+{
+  "receiptId": "be2feeaf-c508-4432-9747-0dc72349ef65",
+  "receiptNumber": "CMP-2026-BE2FEEAFC5",
+  "tripId": "trip-test-1788304869106",
+  "issuedAt": "2026-09-01T23:21:09.602Z",
+  "customer": {
+    "id": "cli-101",
+    "fullName": "Carlos Tevez",
+    "email": "carlos.tevez@example.com",
+    "documentId": "30.123.456"
+  },
+  "driver": {
+    "id": "drv-505",
+    "fullName": "Juan Roman Riquelme",
+    "vehicle": {
+      "type": "AUTO",
+      "plate": "AF987ZK",
+      "model": "Volkswagen Gol Trend 2022"
+    }
+  },
+  "trip": {
+    "origin": "Brandsen 805, CABA (La Bombonera)",
+    "destination": "Av. Corrientes 1000, CABA (El Obelisco)",
+    "startedAt": "2026-09-01T18:00:00.000Z",
+    "finishedAt": "2026-09-01T18:25:00.000Z",
+    "distanceKm": 6.5,
+    "durationMin": 25
+  },
+  "fare": {
+    "currency": "ARS",
+    "baseFare": 1500,
+    "distanceAmount": 3200,
+    "timeAmount": 1300,
+    "surcharges": 500,
+    "discounts": 500,
+    "total": 6000
+  },
+  "payment": {
+    "method": "TARJETA",
+    "status": "APROBADO",
+    "authorizationCode": "AUTH-TEST-9988"
+  },
+  "deliveries": []
+}

@@ -1,4 +1,4 @@
-﻿openapi: 3.0.3
+openapi: 3.0.3
 info:
   title: M8 - Notificaciones, Documentos y Soporte (Comprobantes PDF)
   description: |
@@ -281,6 +281,58 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /receipts/resend:
+    post:
+      tags:
+        - Comprobantes (RF-8.3 / RF-8.4)
+      summary: Reenvío de comprobante de viaje por body (RF-8.4)
+      description: |
+        Vuelve a solicitar el envío del comprobante enviando el tripId en el cuerpo de la petición JSON.
+      operationId: resendReceiptWithBody
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendRequest'
+            example:
+              tripId: "trip-2026-000123"
+              channel: "EMAIL"
+              destination: "lucia.fernandez@example.com"
+      responses:
+        '202':
+          description: Reenvío aceptado y registrado en el historial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResendEnvelope'
+        '400':
+          description: Formato de tripId inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Comprobante no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: El comprobante existe pero su archivo PDF no está disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Destino o canal de envío inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+
   /receipts/{tripId}/resend:
     post:
       tags:
@@ -322,6 +374,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Comprobante no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: El comprobante existe pero su archivo PDF no está disponible
           content:
             application/json:
               schema:
@@ -436,9 +494,9 @@ components:
   responses:
     DependencyUnavailable:
       description: |
-        Una dependencia no está disponible: la base de datos (`DATABASE_UNAVAILABLE`) o el autorizador
-        fiscal (`FISCAL_SERVICE_UNAVAILABLE`, sin respuesta o con el circuito abierto). El pedido se
-        puede repetir después del tiempo indicado en `Retry-After`.
+        Una dependencia no está disponible: la base de datos (`DATABASE_UNAVAILABLE`), el autorizador
+        fiscal (`FISCAL_SERVICE_UNAVAILABLE`), o el generador de enlaces (`DOWNLOAD_LINKS_UNAVAILABLE`). 
+        El pedido se puede repetir después del tiempo indicado en `Retry-After`.
       headers:
         Retry-After:
           description: Segundos sugeridos antes de reintentar.
@@ -781,6 +839,10 @@ components:
     ResendRequest:
       type: object
       properties:
+        tripId:
+          type: string
+          description: "Opcional. Identificador del viaje (si se envía por el cuerpo en lugar de la URL)."
+          example: "trip-2026-000123"
         channel:
           type: string
           enum: [EMAIL, SMS, PUSH]
@@ -799,7 +861,17 @@ components:
             - type: object
               properties:
                 lastDelivery:
-                  $ref: '#/components/schemas/DeliveryRecord'
+                  allOf:
+                    - $ref: '#/components/schemas/DeliveryRecord'
+                    - type: object
+                      properties:
+                        url:
+                          type: string
+                          example: "http://localhost:3008/api/v1/receipts/downloads/random-token-here"
+                        expiresAt:
+                          type: string
+                          format: date-time
+                          example: "2026-08-28T14:37:00.000Z"
 
     ErrorResponse:
       type: object

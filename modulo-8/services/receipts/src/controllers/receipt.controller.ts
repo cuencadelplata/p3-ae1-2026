@@ -131,13 +131,13 @@ export const resendReceipt: RequestHandler = async (req, res, next) => {
     const receiptCurrent = await receiptService.getReceipt(tripId);
     authorizeReceiptPermission(receiptCurrent, req.usuarioAutenticado);
 
-    const { receipt, delivery } = await receiptService.resendReceipt(
+    const { receipt, delivery, url, expiresAt } = await receiptService.resendReceipt(
       tripId,
       validation.value.channel,
       validation.value.destination,
     );
 
-    res.status(202).json({ data: { ...toResponse(receipt), lastDelivery: delivery } });
+    res.status(202).json({ data: { ...toResponse(receipt), lastDelivery: { ...delivery, url, expiresAt } } });
   } catch (error) {
     next(error);
   }
@@ -163,13 +163,13 @@ export const resendReceiptWithBody: RequestHandler = async (req, res, next) => {
     const receiptCurrent = await receiptService.getReceipt(tripId);
     authorizeReceiptPermission(receiptCurrent, req.usuarioAutenticado);
 
-    const { receipt, delivery } = await receiptService.resendReceipt(
+    const { receipt, delivery, url, expiresAt } = await receiptService.resendReceipt(
       tripId,
       validation.value.channel,
       validation.value.destination,
     );
 
-    res.status(202).json({ data: { ...toResponse(receipt), lastDelivery: delivery } });
+    res.status(202).json({ data: { ...toResponse(receipt), lastDelivery: { ...delivery, url, expiresAt } } });
   } catch (error) {
     next(error);
   }
