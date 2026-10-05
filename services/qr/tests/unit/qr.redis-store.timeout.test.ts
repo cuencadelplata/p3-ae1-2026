@@ -6,19 +6,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createRedisQrStore, DEFAULT_OPERATION_TIMEOUT_MS, QrStoreTimeoutError } from "../../src/qr.redis-store";
 import { QrStoreUnavailableError } from "../../src/qr.store";
-import type { QrRecord } from "../../src/qr.types";
+import type { QrOperationalRecord } from "../../src/qr.store";
 import type { QrRedisClient } from "../../src/redis-client";
 
-const RECORD: QrRecord = {
+const RECORD: QrOperationalRecord = {
   id: "qr-1",
   tripId: "trip-demo-001",
   tokenHash: "a".repeat(64),
+  token: "token-opaco",
   createdAt: new Date("2026-09-01T12:00:00.000Z"),
   expiresAt: new Date("2026-09-01T12:05:00.000Z"),
   usedAt: null,
 };
 
-type FakeClient = Partial<Record<"qrSave" | "qrConsume", () => Promise<unknown>>>;
+type FakeClient = Partial<Record<"qrSave" | "qrGetOrCreate" | "qrConsume", () => Promise<unknown>>>;
 
 function storeWith(client: FakeClient, operationTimeoutMs?: number) {
   return createRedisQrStore({
@@ -59,11 +60,12 @@ describe("createRedisQrStore — tope de tiempo de las operaciones", () => {
 
   it.each([
     ["save", (store: ReturnType<typeof storeWith>) => store.save(RECORD)],
+    ["get-or-create", (store: ReturnType<typeof storeWith>) => store.getOrCreateActive(RECORD, new Date())],
     ["consume", (store: ReturnType<typeof storeWith>) => store.consumeIfValid(RECORD.tokenHash, RECORD.tripId, new Date())],
   ] as const)("%s sin respuesta: al vencer el tope por defecto rechaza con resultado indeterminado", async (operation, run) => {
     const never = () => new Promise<never>(() => {});
     let settled = false;
-    const result = rejectionOf(run(storeWith({ qrSave: never, qrConsume: never }))).then((error) => {
+    const result = rejectionOf(run(storeWith({ qrSave: never, qrGetOrCreate: never, qrConsume: never }))).then((error) => {
       settled = true;
       return error;
     });

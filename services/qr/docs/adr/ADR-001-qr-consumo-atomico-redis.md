@@ -11,9 +11,11 @@ validaciones simultáneas en distintas instancias.
 
 ## Decisión
 
-Una clave hash por QR, `m8:qr:<sha256 del token>`, y dos scripts Lua:
+Una clave hash por QR, `m8:qr:<sha256 del token>`, una clave índice por viaje y tres scripts Lua:
 
 - **Guardado:** `DEL`, `HSET` y `PEXPIRE` en el mismo script.
+- **Generación get-or-create:** si existe un QR activo, no consumido y no vencido para el viaje,
+  devuelve el mismo token y vencimiento; si no existe, crea uno nuevo.
 - **Consumo:** comprueba existencia, viaje, uso y vencimiento con `TIME` de Redis, y marca `usedAt`.
 
 Redis ejecuta cada script de forma atómica: bloquea cualquier otra actividad del servidor mientras
@@ -58,16 +60,11 @@ y se corrigió en 4f93950 con un tope propio por operación (2 s).
 
 Cuando vence el tope, o se corta la conexión con el comando ya enviado, Redis pudo haberlo
 ejecutado: la respuesta es 503 y un reintento puede recibir 409. Está demostrado con respuestas
-perdidas en `qr.resilience.test.ts` y documentado en el contrato. No se implementó idempotencia
-por solicitud.
+perdidas en `qr.resilience.test.ts` y documentado en el contrato. No se implementa idempotencia de
+validación por solicitud; la generación de QR sí es get-or-create mientras el QR esté activo.
 
 ## Pendientes
 
-- **Varios QR activos por viaje.** Hoy cada `POST /qr` crea uno nuevo e independiente.
-  Recomendación: no invalidar los anteriores en AE2. Hacerlo requiere un índice por viaje (una
-  segunda estructura en Redis que hay que mantener consistente) y abre una carrera entre generar y
-  validar. El riesgo es acotado: cada QR es de un solo uso, vence según `QR_TTL_SECONDS` (300 s por
-  defecto) y el inicio del viaje lo decide M6. Revisar si M6 necesita un único QR vigente por viaje.
 - **`maxLength` de `tripId` y `token`.** Hoy sólo los acota el límite de 100 kB del cuerpo; en los
   logs, `tripId` se recorta a 64 caracteres.
 - **Formato del token** (43 caracteres base64url), para rechazar sin consultar Redis.

@@ -161,8 +161,12 @@ describe("createRedisQrStore — consumo", () => {
     const record = createRecord(await redisNowMs(client));
 
     await client.scriptFlush();
-    const loaded = await client.scriptExists([qrRedisScripts.qrSave.SHA1, qrRedisScripts.qrConsume.SHA1]);
-    expect(loaded.map(Number)).toEqual([0, 0]);
+    const loaded = await client.scriptExists([
+      qrRedisScripts.qrSave.SHA1,
+      qrRedisScripts.qrGetOrCreate.SHA1,
+      qrRedisScripts.qrConsume.SHA1,
+    ]);
+    expect(loaded.map(Number)).toEqual([0, 0, 0]);
 
     await store.save(record);
     expect(await store.consumeIfValid(record.tokenHash, TRIP_ID, new Date())).toBe("OK");
@@ -170,7 +174,7 @@ describe("createRedisQrStore — consumo", () => {
 });
 
 describe("createRedisQrStore — contenido de Redis", () => {
-  it("ninguna clave ni campo contiene el token en claro ni datos extra", async () => {
+  it("las claves no contienen el token y el hash conserva sólo los campos operativos necesarios", async () => {
     const store = createStore();
     const service = createQrService({
       store,
@@ -181,7 +185,8 @@ describe("createRedisQrStore — contenido de Redis", () => {
       log: () => {},
     });
 
-    const { token } = await service.generateQr(TRIP_ID);
+    const tripId = `${TRIP_ID}-contenido`;
+    const { token } = await service.generateQr(tripId);
     const tokenHash = createHash("sha256").update(token).digest("hex");
     const key = `${keyPrefix}${tokenHash}`;
 
@@ -192,17 +197,19 @@ describe("createRedisQrStore — contenido de Redis", () => {
     }
 
     const stored = await client.hGetAll(key);
-    expect(Object.keys(stored).sort()).toEqual(["createdAt", "expiresAt", "id", "tripId"]);
-    expect(stored.tripId).toBe(TRIP_ID);
-    for (const value of Object.values(stored)) {
+    expect(Object.keys(stored).sort()).toEqual(["createdAt", "expiresAt", "id", "token", "tripId"]);
+    expect(stored.tripId).toBe(tripId);
+    expect(stored.token).toBe(token);
+    for (const value of Object.values(stored).filter((value) => value !== stored.token)) {
       expect(value).not.toContain(token);
     }
 
-    await service.validateQr(TRIP_ID, token);
+    await service.validateQr(tripId, token);
 
     const consumed = await client.hGetAll(key);
-    expect(Object.keys(consumed).sort()).toEqual(["createdAt", "expiresAt", "id", "tripId", "usedAt"]);
-    for (const value of Object.values(consumed)) {
+    expect(Object.keys(consumed).sort()).toEqual(["createdAt", "expiresAt", "id", "token", "tripId", "usedAt"]);
+    expect(consumed.token).toBe(token);
+    for (const value of Object.values(consumed).filter((value) => value !== consumed.token)) {
       expect(value).not.toContain(token);
     }
   });

@@ -4,8 +4,8 @@ import { ApiError } from "./http/api-error";
 import type { Logger } from "./observability/logger";
 import type { GeneratedQrToken } from "./qr-generator";
 import type { QrConfig } from "./qr.config";
-import { QrStoreUnavailableError, type ConsumeOutcome, type QrStore } from "./qr.store";
-import type { QrGenerationResponse, QrRecord, QrValidationResponse } from "./qr.types";
+import { QrStoreUnavailableError, type ConsumeOutcome, type QrOperationalRecord, type QrStore } from "./qr.store";
+import type { QrGenerationResponse, QrValidationResponse } from "./qr.types";
 
 export interface QrServiceDeps {
   readonly store: QrStore;
@@ -21,13 +21,7 @@ export interface QrService {
   validateQr(tripId: string, token: string): Promise<QrValidationResponse>;
 }
 
-// Largo del prefijo del tokenHash que se registra en los logs: alcanza para correlacionar
-// eventos de un mismo QR sin publicar el hash completo. El token en claro nunca se registra.
 const LOGGED_TOKEN_HASH_LENGTH = 8;
-
-// El tripId llega del cliente sin largo máximo (sólo lo acota el tamaño del cuerpo): en los
-// logs se recorta para que una línea no crezca sin límite. La validación y el registro
-// guardado usan el valor completo.
 const LOGGED_TRIP_ID_MAX_LENGTH = 64;
 const TRUNCATION_MARK = "…";
 
@@ -39,9 +33,6 @@ export function loggableTripId(tripId: string): string {
 
 type RejectionReason = Exclude<ConsumeOutcome, "OK">;
 
-// Segundos que se sugieren al cliente en Retry-After cuando el almacenamiento no está
-// disponible. Coincide con la espera máxima entre intentos de reconexión del cliente Redis
-// (5 s): antes de ese plazo la conexión ya debería haberse reintentado al menos una vez.
 export const STORE_RETRY_AFTER_SECONDS = 5;
 
 const STORE_UNAVAILABLE_MESSAGE = "El servicio de QR no está disponible en este momento. Intente nuevamente más tarde.";
@@ -49,9 +40,6 @@ const STORE_UNAVAILABLE_MESSAGE = "El servicio de QR no está disponible en este
 export function createQrService(deps: QrServiceDeps): QrService {
   const hashPrefix = (tokenHash: string): string => tokenHash.slice(0, LOGGED_TOKEN_HASH_LENGTH);
 
-  // El motivo es interno: TRIP_MISMATCH se registra para diagnóstico, pero hacia afuera es
-  // el mismo 404 que NOT_FOUND. Se registra en warn porque es el único rechazo que indica un
-  // QR presentado para otro viaje.
   function logRejection(tripId: string, tokenHash: string, reason: RejectionReason): void {
     deps.log(reason === "TRIP_MISMATCH" ? "warn" : "info", "QR rechazado", {
       event: "qr.rejected",
@@ -61,8 +49,6 @@ export function createQrService(deps: QrServiceDeps): QrService {
     });
   }
 
-  // Fail-closed: sin el almacenamiento no se emite ni se aprueba ningún QR. Se registra una
-  // línea por solicitud afectada, sin la causa completa (puede incluir direcciones internas).
   async function withStore<T>(tripId: string, call: () => Promise<T>): Promise<T> {
     try {
       return await call();
@@ -85,12 +71,25 @@ export function createQrService(deps: QrServiceDeps): QrService {
 
   async function generateQr(tripId: string): Promise<QrGenerationResponse> {
     const { token, tokenHash } = deps.generateQrToken();
+    const createdAt = deps.now();
+    const expiresAt = new Date(createdAt.getTime() + deps.config.ttlSeconds * 1000);
+
+    const candidate: QrOperationalRecord = {
+      id: randomUUID(),
+      tripId,
+      tokenHash,
+      token,
+      createdAt,
+      expiresAt,
+      usedAt: null,
+    };
+
+    const operational = await withStore(tripId, () => deps.store.getOrCreateActive(candidate, createdAt));
 
     let qrDataUrl: string;
     try {
-      qrDataUrl = await deps.generateQrDataUrl(token);
+      qrDataUrl = await deps.generateQrDataUrl(operational.record.token);
     } catch (error) {
-      // Sólo el nombre del error: el mensaje de la biblioteca podría incluir el contenido.
       deps.log("error", "no fue posible generar la imagen del QR", {
         tripId: loggableTripId(tripId),
         errorName: error instanceof Error ? error.name : typeof error,
@@ -98,27 +97,18 @@ export function createQrService(deps: QrServiceDeps): QrService {
       throw new ApiError(500, "QR_PROCESSING_ERROR", "No fue posible generar el QR.");
     }
 
-    const createdAt = deps.now();
-    const expiresAt = new Date(createdAt.getTime() + deps.config.ttlSeconds * 1000);
-
-    const record: QrRecord = {
-      id: randomUUID(),
-      tripId,
-      tokenHash,
-      createdAt,
-      expiresAt,
-      usedAt: null,
-    };
-
-    await withStore(tripId, () => deps.store.save(record));
-    deps.log("info", "QR emitido", {
-      event: "qr.issued",
+    deps.log("info", operational.created ? "QR emitido" : "QR operativo reutilizado", {
+      event: operational.created ? "qr.issued" : "qr.reused",
       tripId: loggableTripId(tripId),
-      tokenHashPrefix: hashPrefix(tokenHash),
-      expiresAt: expiresAt.toISOString(),
+      tokenHashPrefix: hashPrefix(operational.record.tokenHash),
+      expiresAt: operational.record.expiresAt.toISOString(),
     });
 
-    return { token, qrDataUrl, expiresAt: expiresAt.toISOString() };
+    return {
+      token: operational.record.token,
+      qrDataUrl,
+      expiresAt: operational.record.expiresAt.toISOString(),
+    };
   }
 
   async function validateQr(tripId: string, token: string): Promise<QrValidationResponse> {
