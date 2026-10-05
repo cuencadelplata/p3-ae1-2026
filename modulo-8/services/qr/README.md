@@ -13,7 +13,7 @@ el QR; decidir el inicio del viaje y cambiar su estado corresponde a M6.
 
 | Ruta | Uso |
 | --- | --- |
-| `POST /qr` | Genera un QR para `tripId`: devuelve el token, el PNG como data URL y `expiresAt`. |
+| `POST /qr` | Genera o reutiliza el QR activo para `tripId`: devuelve el token, el PNG como data URL y `expiresAt`. |
 | `POST /qr/validate` | Valida y consume el QR (`tripId` y `token`). |
 | `GET /health/live` | El proceso responde. No consulta Redis. |
 | `GET /health/ready`, `GET /health` | Disponibilidad: 503 si Redis no responde en 2 s. |
@@ -33,7 +33,8 @@ Códigos, cuerpos y ejemplos: ver el contrato.
 
 Una clave hash por QR, `m8:qr:<sha256 del token>`, con `id`, `tripId`, `createdAt`,
 `expiresAt` y `usedAt` en milisegundos desde epoch (sin `usedAt`: no usado). El TTL es el tiempo
-que falta hasta `expiresAt` más el margen. El token en claro no se guarda. Las pruebas usan
+que falta hasta `expiresAt` más el margen. El token opaco se conserva sólo mientras el QR está
+activo para poder responder reintentos idempotentes. Las pruebas usan
 `m8:qr:test:<uuid>:` y borran sólo ese prefijo.
 
 ## Observabilidad

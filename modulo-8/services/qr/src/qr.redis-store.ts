@@ -1,7 +1,16 @@
+import { createHash } from "node:crypto";
+
 import { ClientClosedError, ClientOfflineError, ErrorReply } from "redis";
 
-import { QrScriptReplyError, type SaveScriptArgs } from "./qr.redis-scripts";
-import { QrStoreUnavailableError, type ConsumeOutcome, type QrStore, type QrStoreOperation } from "./qr.store";
+import { QrScriptReplyError, type GetOrCreateScriptArgs, type SaveScriptArgs } from "./qr.redis-scripts";
+import {
+  QrStoreUnavailableError,
+  type ConsumeOutcome,
+  type QrGetOrCreateResult,
+  type QrOperationalRecord,
+  type QrStore,
+  type QrStoreOperation,
+} from "./qr.store";
 import type { QrRecord } from "./qr.types";
 import type { QrRedisClient } from "./redis-client";
 
@@ -70,9 +79,10 @@ async function runWithTimeout<T>(
 
 // Almacenamiento de QR en Redis, compartido por todas las instancias del servicio.
 //
-// Una clave por QR, `${keyPrefix}${tokenHash}`, de tipo hash con id, tripId, createdAt,
+// Una clave por QR, `${keyPrefix}${tokenHash}`, de tipo hash con id, tripId, token, createdAt,
 // expiresAt y usedAt en milisegundos desde epoch; usedAt ausente significa que no se usó.
-// La clave se arma con el hash del token: el token en claro nunca llega a Redis.
+// La clave se arma con el hash del token. El token opaco se conserva sólo como dato
+// operativo mientras el QR está activo para poder responder reintentos de POST /qr.
 //
 // El vencimiento se decide con la hora de Redis, por eso se ignora el parámetro `now`. La
 // fecha expiresAt la calcula el proceso Node al generar el QR: un desfase entre ambos relojes
@@ -88,6 +98,8 @@ export function createRedisQrStore(options: RedisQrStoreOptions): QrStore {
   const operationTimeoutMs = options.operationTimeoutMs ?? DEFAULT_OPERATION_TIMEOUT_MS;
 
   const keyFor = (tokenHash: string): string => `${keyPrefix}${tokenHash}`;
+  const tripKeyFor = (tripId: string): string =>
+    `${keyPrefix}trip:${createHash("sha256").update(tripId).digest("hex")}`;
 
   async function save(record: QrRecord): Promise<void> {
     const args: SaveScriptArgs = {
@@ -102,10 +114,26 @@ export function createRedisQrStore(options: RedisQrStoreOptions): QrStore {
     await runWithTimeout("save", operationTimeoutMs, () => client.qrSave(args));
   }
 
-  async function consumeIfValid(tokenHash: string, tripId: string, _now: Date): Promise<ConsumeOutcome> {
-    const key = keyFor(tokenHash);
-    return runWithTimeout("consume", operationTimeoutMs, () => client.qrConsume(key, tripId));
+  async function getOrCreateActive(record: QrOperationalRecord, _now: Date): Promise<QrGetOrCreateResult> {
+    const args: GetOrCreateScriptArgs = {
+      qrKey: keyFor(record.tokenHash),
+      tripKey: tripKeyFor(record.tripId),
+      keyPrefix,
+      id: record.id,
+      tripId: record.tripId,
+      tokenHash: record.tokenHash,
+      token: record.token,
+      createdAtMs: record.createdAt.getTime(),
+      expiresAtMs: record.expiresAt.getTime(),
+      graceMs,
+    };
+    return runWithTimeout("get-or-create", operationTimeoutMs, () => client.qrGetOrCreate(args));
   }
 
-  return { save, consumeIfValid };
+  async function consumeIfValid(tokenHash: string, tripId: string, _now: Date): Promise<ConsumeOutcome> {
+    const key = keyFor(tokenHash);
+    return runWithTimeout("consume", operationTimeoutMs, () => client.qrConsume(key, tripKeyFor(tripId), tripId, tokenHash));
+  }
+
+  return { save, getOrCreateActive, consumeIfValid };
 }

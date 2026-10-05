@@ -5,7 +5,7 @@
  * No debe usarse fuera de las pruebas.
  */
 import { createRedisQrStore } from "../../src/qr.redis-store";
-import type { ConsumeOutcome, QrStore } from "../../src/qr.store";
+import type { ConsumeOutcome, QrGetOrCreateResult, QrOperationalRecord, QrStore } from "../../src/qr.store";
 import type { QrRedisClient } from "../../src/redis-client";
 
 export interface NaiveRedisQrStoreOptions {
@@ -20,6 +20,10 @@ export function createNaiveRedisQrStore(options: NaiveRedisQrStoreOptions): QrSt
   const { client, keyPrefix } = options;
   // El guardado no participa de la carrera: se reutiliza el del store real.
   const saver = createRedisQrStore({ client, keyPrefix, expiredGraceSeconds: 3600 });
+
+  async function getOrCreateActive(record: QrOperationalRecord, now: Date): Promise<QrGetOrCreateResult> {
+    return saver.getOrCreateActive(record, now);
+  }
 
   async function consumeIfValid(tokenHash: string, tripId: string, now: Date): Promise<ConsumeOutcome> {
     const key = `${keyPrefix}${tokenHash}`;
@@ -47,7 +51,7 @@ export function createNaiveRedisQrStore(options: NaiveRedisQrStoreOptions): QrSt
     return "OK";
   }
 
-  return { save: saver.save, consumeIfValid };
+  return { save: saver.save, getOrCreateActive, consumeIfValid };
 }
 
 // Barrera para `parties` participantes: cada llamada espera hasta que hayan llegado todos y

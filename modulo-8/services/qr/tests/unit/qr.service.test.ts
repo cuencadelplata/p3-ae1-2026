@@ -1,15 +1,20 @@
 /*
  * RF-8.2 — Pruebas unitarias del servicio QR.
- * Verifican generación, validación, hash y traducción de errores sin HTTP.
+ * Verifican generación idempotente, validación, hash y traducción de errores sin HTTP.
  */
 import { createHash } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "../../src/http/api-error";
 import { QrScriptReplyError } from "../../src/qr.redis-scripts";
 import { createQrService, STORE_RETRY_AFTER_SECONDS, type QrServiceDeps } from "../../src/qr.service";
-import { QrStoreUnavailableError, type ConsumeOutcome } from "../../src/qr.store";
-import { ApiError } from "../../src/http/api-error";
+import {
+  QrStoreUnavailableError,
+  type ConsumeOutcome,
+  type QrGetOrCreateResult,
+  type QrOperationalRecord,
+} from "../../src/qr.store";
 
 const TRIP_ID = "trip-demo-001";
 const NOW = new Date("2026-09-01T12:00:00.000Z");
@@ -20,11 +25,27 @@ const QR_DATA_URL = "data:image/png;base64,AAAA";
 
 interface DepsOverrides {
   consumeOutcome?: ConsumeOutcome;
+  getOrCreateResult?: QrGetOrCreateResult;
   generateQrDataUrl?: ReturnType<typeof vi.fn<(token: string) => Promise<string>>>;
+}
+
+function candidateRecord(): QrOperationalRecord {
+  return {
+    id: expect.any(String) as unknown as string,
+    tripId: TRIP_ID,
+    tokenHash: TOKEN_HASH,
+    token: TOKEN,
+    createdAt: NOW,
+    expiresAt: new Date(NOW.getTime() + TTL_SECONDS * 1000),
+    usedAt: null,
+  };
 }
 
 function createDeps(overrides: DepsOverrides = {}) {
   const save = vi.fn<(record: unknown) => Promise<void>>().mockResolvedValue(undefined);
+  const getOrCreateActive = vi
+    .fn<(record: QrOperationalRecord, now: Date) => Promise<QrGetOrCreateResult>>()
+    .mockImplementation(async (record) => overrides.getOrCreateResult ?? { record, created: true });
   const consumeIfValid = vi
     .fn<(tokenHash: string, tripId: string, now: Date) => Promise<ConsumeOutcome>>()
     .mockResolvedValue(overrides.consumeOutcome ?? "OK");
@@ -32,7 +53,7 @@ function createDeps(overrides: DepsOverrides = {}) {
     overrides.generateQrDataUrl ?? vi.fn<(token: string) => Promise<string>>().mockResolvedValue(QR_DATA_URL);
 
   const deps: QrServiceDeps = {
-    store: { save, consumeIfValid },
+    store: { save, getOrCreateActive, consumeIfValid },
     config: { ttlSeconds: TTL_SECONDS },
     generateQrToken: () => ({ token: TOKEN, tokenHash: TOKEN_HASH }),
     generateQrDataUrl,
@@ -40,7 +61,7 @@ function createDeps(overrides: DepsOverrides = {}) {
     log: vi.fn(),
   };
 
-  return { deps, save, consumeIfValid, generateQrDataUrl };
+  return { deps, save, getOrCreateActive, consumeIfValid, generateQrDataUrl };
 }
 
 async function captureAsyncApiError(fn: () => Promise<unknown>): Promise<ApiError> {
@@ -56,36 +77,40 @@ async function captureAsyncApiError(fn: () => Promise<unknown>): Promise<ApiErro
 }
 
 describe("createQrService — generateQr", () => {
-  it("guarda un QrRecord con tokenHash (nunca el token en claro) y expiresAt = createdAt + ttlSeconds", async () => {
-    const { deps, save } = createDeps();
+  it("solicita al store el QR operativo con token, tokenHash y expiresAt = createdAt + ttlSeconds", async () => {
+    const { deps, getOrCreateActive } = createDeps();
     const service = createQrService(deps);
 
     await service.generateQr(TRIP_ID);
 
-    expect(save).toHaveBeenCalledTimes(1);
-    const savedRecord = save.mock.calls[0][0];
-    expect(savedRecord).toEqual({
-      id: expect.any(String),
-      tripId: TRIP_ID,
-      tokenHash: TOKEN_HASH,
-      createdAt: NOW,
-      expiresAt: new Date(NOW.getTime() + TTL_SECONDS * 1000),
-      usedAt: null,
-    });
-    expect(savedRecord).not.toHaveProperty("token");
+    expect(getOrCreateActive).toHaveBeenCalledTimes(1);
+    expect(getOrCreateActive.mock.calls[0][0]).toEqual(candidateRecord());
+    expect(getOrCreateActive.mock.calls[0][1]).toBe(NOW);
   });
 
-  it("devuelve el token en claro, el qrDataUrl y expiresAt en ISO 8601", async () => {
-    const { deps } = createDeps();
+  it("devuelve el QR operativo recuperado por el store sin renovar expiresAt", async () => {
+    const existing: QrOperationalRecord = {
+      id: "qr-existente",
+      tripId: TRIP_ID,
+      tokenHash: "c".repeat(64),
+      token: "token-operativo-existente",
+      createdAt: new Date(NOW.getTime() - 60_000),
+      expiresAt: new Date(NOW.getTime() + 240_000),
+      usedAt: null,
+    };
+    const { deps, generateQrDataUrl } = createDeps({
+      getOrCreateResult: { record: existing, created: false },
+    });
     const service = createQrService(deps);
 
     const result = await service.generateQr(TRIP_ID);
 
     expect(result).toEqual({
-      token: TOKEN,
+      token: existing.token,
       qrDataUrl: QR_DATA_URL,
-      expiresAt: new Date(NOW.getTime() + TTL_SECONDS * 1000).toISOString(),
+      expiresAt: existing.expiresAt.toISOString(),
     });
+    expect(generateQrDataUrl).toHaveBeenCalledWith(existing.token);
   });
 
   it("convierte un fallo de generateQrDataUrl en 500 QR_PROCESSING_ERROR sin filtrar el mensaje interno", async () => {
@@ -101,17 +126,7 @@ describe("createQrService — generateQr", () => {
     expect(error.code).toBe("QR_PROCESSING_ERROR");
     expect(error.message).toBe("No fue posible generar el QR.");
     expect(error.message).not.toContain(internalMessage);
-  });
-
-  it("no llama a store.save cuando generateQrDataUrl rechaza", async () => {
-    const { deps, save } = createDeps({
-      generateQrDataUrl: vi.fn<(token: string) => Promise<string>>().mockRejectedValue(new Error("boom")),
-    });
-    const service = createQrService(deps);
-
-    await captureAsyncApiError(() => service.generateQr(TRIP_ID));
-
-    expect(save).not.toHaveBeenCalled();
+    expect(error.message).not.toContain(TOKEN);
   });
 });
 
@@ -181,7 +196,7 @@ describe("createQrService — almacenamiento no disponible", () => {
   const STORE_UNAVAILABLE_MESSAGE =
     "El servicio de QR no está disponible en este momento. Intente nuevamente más tarde.";
 
-  function unavailable(operation: "save" | "consume", outcomeUnknown: boolean): QrStoreUnavailableError {
+  function unavailable(operation: "get-or-create" | "consume", outcomeUnknown: boolean): QrStoreUnavailableError {
     const cause = Object.assign(new Error("connect ECONNREFUSED 10.0.0.5:6379"), { name: "ConnectionError" });
     return new QrStoreUnavailableError(operation, outcomeUnknown, { cause });
   }
@@ -195,16 +210,16 @@ describe("createQrService — almacenamiento no disponible", () => {
     expect(STORE_RETRY_AFTER_SECONDS).toBe(5);
   }
 
-  it("generateQr responde 503 si falla el guardado y no devuelve el token", async () => {
-    const { deps, save } = createDeps();
-    save.mockRejectedValue(unavailable("save", false));
+  it("generateQr responde 503 si falla el get-or-create y no devuelve el token", async () => {
+    const { deps, getOrCreateActive } = createDeps();
+    getOrCreateActive.mockRejectedValue(unavailable("get-or-create", false));
 
     const error = await captureAsyncApiError(() => createQrService(deps).generateQr(TRIP_ID));
 
     expectStoreUnavailable(error);
     expect(vi.mocked(deps.log)).toHaveBeenCalledWith("warn", "almacenamiento de QR no disponible", {
       event: "qr.store_unavailable",
-      operation: "save",
+      operation: "get-or-create",
       tripId: TRIP_ID,
       errorName: "ConnectionError",
     });

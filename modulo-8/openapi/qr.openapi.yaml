@@ -12,8 +12,9 @@ info:
       `tripId` ni datos personales, de pago o del recorrido.
     - M8 sólo genera, valida y consume el QR. M8 no inicia ni modifica el viaje:
       la transición de estado la decide y ejecuta M6.
-    - M8 conserva el hash SHA-256 del token, nunca el token en claro. El token
-      se devuelve una única vez, en la respuesta de generación.
+    - M8 conserva el hash SHA-256 del token. Mientras el QR está activo, también
+      conserva el token opaco como dato operativo para poder responder reintentos
+      de generación sin crear QR duplicados.
     - El estado de los QR vive en Redis, compartido por todas las instancias del
       servicio. Si Redis no está disponible, las operaciones responden
       `503 QR_STORE_UNAVAILABLE` y ningún QR se aprueba sin haberse consumido de
@@ -100,6 +101,10 @@ paths:
         Genera un QR temporal y de un solo uso asociado al viaje indicado. El QR
         codifica únicamente un token opaco; M8 no modifica el estado del viaje.
         El QR vence según `QR_TTL_SECONDS`.
+
+        La operación es idempotente mientras exista un QR activo, no consumido y
+        no vencido para el mismo `tripId`: un reintento devuelve el mismo `token`,
+        `qrDataUrl` y `expiresAt`, sin extender el vencimiento.
       operationId: generateQr
       parameters:
         - $ref: '#/components/parameters/CorrelationId'
@@ -115,7 +120,7 @@ paths:
                   tripId: trip-demo-001
       responses:
         '201':
-          description: QR generado correctamente.
+          description: QR generado correctamente, o QR activo existente devuelto de forma idempotente.
           headers:
             X-Correlation-Id:
               $ref: '#/components/headers/CorrelationId'

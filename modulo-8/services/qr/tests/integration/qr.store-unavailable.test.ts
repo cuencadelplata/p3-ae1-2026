@@ -72,7 +72,7 @@ describe.each([
   }
 
   it.each([
-    ["POST /qr", "/qr", { tripId: TRIP_ID }, "save"],
+    ["POST /qr", "/qr", { tripId: TRIP_ID }, "get-or-create"],
     ["POST /qr/validate", "/qr/validate", { tripId: TRIP_ID, token: "valor-opaco" }, "consume"],
   ] as const)("%s responde 503 con Retry-After, cuerpo exacto y correlationId, rápido", async (_name, path, body, operation) => {
     const startedAt = performance.now();

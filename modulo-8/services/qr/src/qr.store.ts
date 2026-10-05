@@ -2,7 +2,16 @@ import type { QrRecord } from "./qr.types";
 
 export type ConsumeOutcome = "OK" | "NOT_FOUND" | "TRIP_MISMATCH" | "ALREADY_USED" | "EXPIRED";
 
-export type QrStoreOperation = "save" | "consume";
+export type QrStoreOperation = "save" | "get-or-create" | "consume";
+
+export interface QrOperationalRecord extends QrRecord {
+  readonly token: string;
+}
+
+export interface QrGetOrCreateResult {
+  readonly record: QrOperationalRecord;
+  readonly created: boolean;
+}
 
 // El almacenamiento no pudo completar la operación por una falla de infraestructura (sin
 // conexión, demora, error informado por el almacenamiento). La causa original queda en
@@ -38,16 +47,33 @@ export class QrStoreUnavailableError extends Error {
 // puede ignorarlo y decidir el vencimiento con su propia hora.
 export interface QrStore {
   save(record: QrRecord): Promise<void>;
+  getOrCreateActive(record: QrOperationalRecord, now: Date): Promise<QrGetOrCreateResult>;
   consumeIfValid(tokenHash: string, tripId: string, now: Date): Promise<ConsumeOutcome>;
 }
 
 // Implementación en memoria: el estado vive en el proceso, se pierde al reiniciar y no se
 // comparte entre instancias.
 export function createInMemoryQrStore(): QrStore {
-  const records = new Map<string, QrRecord>();
+  const records = new Map<string, QrOperationalRecord | QrRecord>();
 
   async function save(record: QrRecord): Promise<void> {
     records.set(record.tokenHash, record);
+  }
+
+  async function getOrCreateActive(record: QrOperationalRecord, now: Date): Promise<QrGetOrCreateResult> {
+    for (const existing of records.values()) {
+      if (
+        existing.tripId === record.tripId &&
+        existing.usedAt === null &&
+        now.getTime() < existing.expiresAt.getTime() &&
+        "token" in existing
+      ) {
+        return { record: existing, created: false };
+      }
+    }
+
+    records.set(record.tokenHash, record);
+    return { record, created: true };
   }
 
   // El cuerpo no debe contener ningún await. Una función async se ejecuta de forma
@@ -78,5 +104,5 @@ export function createInMemoryQrStore(): QrStore {
     return "OK";
   }
 
-  return { save, consumeIfValid };
+  return { save, getOrCreateActive, consumeIfValid };
 }
