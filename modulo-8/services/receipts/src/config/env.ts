@@ -43,7 +43,7 @@ const port = readPort('PORT', 3008);
 export const env = {
   nodeEnv: readText('NODE_ENV', 'development'),
   serviceName: 'm8-documentos',
-  serviceVersion: readText('SERVICE_VERSION', '2.1.0'),
+  serviceVersion: readText('SERVICE_VERSION', '2.2.0'),
   port,
 
   /** Prefijo de la API REST versionada. */
@@ -105,6 +105,15 @@ export const env = {
 
   /** Tiempo que el circuito permanece abierto antes de probar de nuevo, en milisegundos. */
   fiscalCircuitOpenMs: readPositiveInt('FISCAL_CIRCUIT_OPEN_MS', 10000),
+
+  /**
+   * API de pagos de M7 (GET /metodo-pago/{viajeId}), fuente de verdad del estado
+   * del pago. Simulada en modulo-8/infra/m7-payments-sandbox.
+   */
+  m7PaymentsUrl: readText('M7_PAYMENTS_URL', 'http://localhost:4020').replace(/\/+$/, ''),
+
+  /** Tiempo maximo de espera de una consulta a M7, en milisegundos. */
+  m7TimeoutMs: readPositiveInt('M7_TIMEOUT_MS', 2000),
 
   /** Datos de presentacion del emisor dentro del PDF. */
   issuerName: readText('RECEIPT_ISSUER_NAME', 'Plataforma de Movilidad Urbana'),

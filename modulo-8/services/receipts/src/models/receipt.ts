@@ -1,5 +1,7 @@
 export const VEHICLE_TYPES = ['AUTO', 'MOTO'] as const;
-export const PAYMENT_METHODS = ['EFECTIVO', 'TARJETA', 'BILLETERA'] as const;
+// TRANSFERENCIA corresponde al tipo "transferencia" de M7. BILLETERA no existe en
+// M7: se conserva por compatibilidad con los comprobantes y contratos anteriores.
+export const PAYMENT_METHODS = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'BILLETERA'] as const;
 export const PAYMENT_STATUSES = ['APROBADO', 'PENDIENTE', 'RECHAZADO'] as const;
 export const DELIVERY_CHANNELS = ['EMAIL', 'SMS', 'PUSH'] as const;
 

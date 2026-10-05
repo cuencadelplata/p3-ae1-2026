@@ -7,7 +7,7 @@ cada servicio conserva su propio puerto y contrato.
 | --- | ---: | --- |
 | Notifications | 3101 | RF-8.1, procesamiento PUSH mock. |
 | QR | 3103 | RF-8.2, QR temporal de un solo uso. |
-| Receipts | 3008 | RF-8.3 y RF-8.4, comprobantes PDF y reenvío simulado. En `ae2/juan-gualtieri`: versión 2.1.0 con PostgreSQL, RabbitMQ, Redis y autorizador fiscal simulado (`fiscal-sandbox`, puerto 4010) ([README](services/receipts/README.md)). |
+| Receipts | 3008 | RF-8.3 y RF-8.4, comprobantes PDF y reenvío simulado. En `ae2/juan-gualtieri`: versión 2.2.0 con PostgreSQL, RabbitMQ, Redis, autorizador fiscal simulado (`fiscal-sandbox`, puerto 4010) y API de pagos de M7 simulada (`m7-payments-sandbox`, puerto 4020) ([README](services/receipts/README.md)). |
 | Support | 3000 | RF-8.5 y base parcial de integración RabbitMQ para RF-8.6. |
 
 ## Requisitos y uso

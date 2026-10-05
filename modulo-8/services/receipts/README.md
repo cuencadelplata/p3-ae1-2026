@@ -28,6 +28,7 @@ de cada viaje (RF-8.3 y RF-8.4).
 | Logs | Texto libre | JSON con `correlationId`, sin datos personales |
 | Salud | `/health` | `/health/live` y `/health/ready` por dependencia y estado del circuito |
 | Servicio externo | No había | Autorizador fiscal simulado, con timeout de 2 s y circuit breaker |
+| Estado del pago | Se aceptaba el informado en la entrada | Se consulta a M7 (`GET /metodo-pago/{viajeId}`): solo se emite con el pago autorizado (2.2.0) |
 | Dependencia caída | Base caída: `500`; al arrancar, el proceso terminaba | `503` con `Retry-After`; arranca sin base y se recupera solo; los pagos esperan sin ir a la DLQ |
 
 Fundamentos: [ADR-003](docs/adr/ADR-003-backing-services-ae2.md) (RabbitMQ y Redis),
@@ -49,15 +50,15 @@ docker compose up -d --build --wait
 ```
 
 `--wait` termina cuando todos los contenedores están sanos. Levanta los cuatro
-servicios del módulo más PostgreSQL, RabbitMQ, Redis y el autorizador fiscal simulado
-(`fiscal-sandbox`); la configuración por defecto
+servicios del módulo más PostgreSQL, RabbitMQ, Redis, el autorizador fiscal simulado
+(`fiscal-sandbox`) y la API de pagos de M7 simulada (`m7-payments-sandbox`); la configuración por defecto
 funciona sin crear un `.env` (valores en [`modulo-8/.env.example`](../../.env.example)).
 
 Verificación:
 
 ```powershell
 curl http://localhost:3008/health/ready
-# {"status":"ok","dependencies":{"postgres":{...},"redis":{...},"rabbitmq":{...},"fiscal":{...}},"circuits":{"fiscal":"closed"},...}
+# {"status":"ok","dependencies":{"postgres":{...},"redis":{...},"rabbitmq":{...},"fiscal":{...},"payments":{...}},"circuits":{"fiscal":"closed"},...}
 ```
 
 | Recurso | URL |
@@ -66,6 +67,7 @@ curl http://localhost:3008/health/ready
 | Documentación interactiva (Scalar) | http://localhost:3008/docs |
 | Consola de RabbitMQ | http://localhost:15672 (guest / guest) |
 | Autorizador fiscal simulado | http://localhost:4010 (`GET /admin/mode`) |
+| API de pagos de M7 simulada | http://localhost:4020 (`GET /metodo-pago/{viajeId}`, `GET /admin/mode`) |
 
 Para detener: `docker compose down`. Para borrar además los datos: `docker compose down -v`.
 
@@ -113,7 +115,7 @@ Desde `modulo-8`:
 
 ```powershell
 pnpm install --frozen-lockfile
-docker compose up -d --wait postgres rabbitmq redis fiscal-sandbox   # solo las dependencias
+docker compose up -d --wait postgres rabbitmq redis fiscal-sandbox m7-payments-sandbox   # solo las dependencias
 
 pnpm --filter m8-documentos run build
 pnpm --filter m8-documentos run typecheck:test
@@ -128,6 +130,7 @@ Las pruebas corren contra PostgreSQL, RabbitMQ, Redis y el autorizador simulado 
 | `tests/unit` | Validación, armado de eventos, logger, repositorio, circuit breaker, detección de dependencias caídas |
 | `tests/integration/payment-confirmed.consumer.test.ts` | Consumo, reentrega, DLQ, reintentos agotados, recuperación, dependencia caída sin DLQ y rechazo fiscal |
 | `tests/integration/fiscal-authorizer.test.ts` | Timeout, `5xx`, conexión rechazada, rechazo `422`, apertura y cierre del circuito, idempotencia del autorizador |
+| `tests/integration/m7-payments.test.ts` | Cliente de M7 (`404`, `5xx`, timeout, respuesta fuera de contrato) y emisión según el pago: pendiente que se emite al autorizarse, rechazo terminal, por REST y por evento |
 | `tests/integration/receipt-issued.outbox.test.ts` | Publicación única, RabbitMQ caído, dos relays |
 | `tests/integration/concurrencia.test.ts` | La carrera sin `UNIQUE` (8 comprobantes) frente a con `UNIQUE` (1); dos réplicas reales |
 | `tests/integration/download-link.test.ts` | Enlace temporal, TTL en Redis y vencimiento (410) |
@@ -151,7 +154,7 @@ Contrato completo: [`openapi/receipts.openapi.yaml`](../../openapi/receipts.open
 
 | Método y ruta | Descripción |
 | --- | --- |
-| `POST /api/v1/receipts` | Emite el comprobante. `201` nuevo, `200` si ya existía (idempotente). `503` si el autorizador fiscal no responde; `422` si lo rechaza. |
+| `POST /api/v1/receipts` | Emite el comprobante si M7 informa el pago autorizado. `201` nuevo, `200` si ya existía (idempotente). `409` si el pago está pendiente o sin registrar en M7; `422` si M7 lo rechazó o el autorizador fiscal rechaza el comprobante; `503` si M7 o el autorizador no responden. |
 | `GET /api/v1/receipts/{tripId}` | Datos del comprobante. |
 | `GET /api/v1/receipts/{tripId}/pdf` | Descarga directa del PDF. |
 | `GET /api/v1/receipts/downloads/{token}` | Descarga por enlace temporal. `410` si venció. |
@@ -162,7 +165,7 @@ Contrato completo: [`openapi/receipts.openapi.yaml`](../../openapi/receipts.open
 Todas las respuestas llevan `X-Correlation-Id`. Los errores usan un formato único:
 `{ "error": { "code", "message", "path", "timestamp" } }`. Una dependencia caída responde
 `503` con `Retry-After` (`DATABASE_UNAVAILABLE`, `FISCAL_SERVICE_UNAVAILABLE`,
-`DOWNLOAD_LINKS_UNAVAILABLE`), nunca `500`.
+`PAYMENTS_SERVICE_UNAVAILABLE`, `DOWNLOAD_LINKS_UNAVAILABLE`), nunca `500`.
 
 ## Mensajería
 
@@ -195,6 +198,8 @@ descontar intentos y no llega a la DLQ.
 | `FISCAL_API_URL` | `http://localhost:4010` | Autorizador fiscal |
 | `FISCAL_TIMEOUT_MS` | `2000` | Timeout de cada autorización |
 | `FISCAL_CIRCUIT_FAILURE_THRESHOLD` / `FISCAL_CIRCUIT_OPEN_MS` | `3` / `10000` | Fallas que abren el circuito y tiempo abierto |
+| `M7_PAYMENTS_URL` | `http://localhost:4020` | API de pagos de M7 (estado del pago por viaje) |
+| `M7_TIMEOUT_MS` | `2000` | Timeout de cada consulta a M7 |
 
 Lista completa en [`.env.example`](.env.example). Ninguna credencial está fija en el
 código: los valores por defecto son solo para el entorno local.
@@ -217,9 +222,10 @@ Imagen publicada: `juanigualtieri/m8-documentos:2.0.0`. La de AE1 es `arkeoff/m8
 | Síntoma | Causa y solución |
 | --- | --- |
 | `role "m8_receipts" does not exist` al arrancar | El volumen de PostgreSQL es anterior al script de inicialización. `docker compose down -v` y volver a levantar. |
-| `/health/ready` en `degraded` | Falta Redis, RabbitMQ o el autorizador fiscal: el servicio sigue atendiendo y se reconecta solo. |
+| `/health/ready` en `degraded` | Falta Redis, RabbitMQ, el autorizador fiscal o M7: el servicio sigue atendiendo y se reconecta solo. |
 | `/health/ready` en `503` | PostgreSQL no responde. El servicio sigue vivo y se recupera cuando vuelve. |
 | `POST /receipts` responde `503 FISCAL_SERVICE_UNAVAILABLE` | El autorizador no responde o su circuito está abierto. Revisar `docker compose ps fiscal-sandbox` y `http://localhost:4010/admin/mode`. |
+| `POST /receipts` responde `409 PAYMENT_PENDING` | M7 todavía no autorizó el pago. En el sandbox: `POST http://localhost:4020/metodo-pago/{viajeId}/autorizar`. |
 | Un puerto ya está en uso | Cambiar `POSTGRES_HOST_PORT` o `REDIS_HOST_PORT` en `modulo-8/.env`. |
 
 ## Documentación

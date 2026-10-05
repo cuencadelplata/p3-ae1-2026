@@ -50,7 +50,7 @@ jobs:
 
       - name: Start test backing services
         run: |
-          docker compose up -d --wait postgres rabbitmq redis fiscal-sandbox
+          docker compose up -d --wait postgres rabbitmq redis fiscal-sandbox m7-payments-sandbox
 
       - name: Run workspace tests
         run: pnpm run test

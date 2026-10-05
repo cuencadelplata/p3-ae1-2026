@@ -40,6 +40,7 @@ services:
       REDIS_URL: redis://redis:6379
       RECEIPT_LINK_TTL_SECONDS: "${RECEIPT_LINK_TTL_SECONDS:-900}"
       FISCAL_API_URL: http://fiscal-sandbox:4010
+      M7_PAYMENTS_URL: http://m7-payments-sandbox:4020
     # Si el proceso termina por cualquier motivo, Docker lo vuelve a levantar.
     # Una dependencia caida no lo hace terminar: sigue atendiendo en modo
     # degradado y se reconecta solo (ver /health/ready).
@@ -71,6 +72,19 @@ services:
     environment:
       FISCAL_MODE: "${FISCAL_MODE:-normal}"
       SLOW_DELAY_MS: "${FISCAL_SLOW_DELAY_MS:-5000}"
+    restart: unless-stopped
+
+  # API de pagos de M7 simulada: el comprobante se emite solo si M7 informa el
+  # pago como autorizado. Los pagos se registran y autorizan con el mismo
+  # contrato de M7 (POST /metodo-pago, /autorizar, /rechazar).
+  m7-payments-sandbox:
+    build:
+      context: ./infra/m7-payments-sandbox
+    ports:
+      - "${M7_HOST_PORT:-4020}:4020"
+    environment:
+      M7_MODE: "${M7_MODE:-normal}"
+      UNREGISTERED_TRIPS: "${M7_UNREGISTERED_TRIPS:-autorizado}"
     restart: unless-stopped
 
   rabbitmq:
