@@ -1,8 +1,11 @@
 import crypto from 'node:crypto';
 
+export const CANONICAL_M1_ROLES = ['CLIENTE', 'CONDUCTOR', 'OPERADOR'] as const;
+export type M1Role = (typeof CANONICAL_M1_ROLES)[number];
+
 export interface AuthenticatedUser {
   userId: number;
-  role?: string;
+  role?: M1Role;
 }
 
 /**
@@ -43,15 +46,25 @@ export function verifyJwtSignature(token: string, secret: string): boolean {
 /**
  * Extrae y valida el usuario autenticado desde el encabezado Authorization: Bearer <token>.
  *
- * Política de seguridad:
- * 1. En producción (NODE_ENV=production):
- *    - Se prohíbe cualquier token de test ("test-token-*").
- *    - Se exige verificación criptográfica HMAC-SHA256 contra M1_JWT_SECRET (o JWT_SECRET).
- *    - Si la clave secreta no está configurada en variables de entorno, FALLA CERRADO (retorna null / 401).
- *    - No se inventa ningún mecanismo OAuth2/M2M inseguro ni bypass.
- * 2. En entorno de test (NODE_ENV=test o ejecución bajo test runner):
- *    - Se permite resolver tokens de test explícitos "test-token-<id>".
- *    - Si se provee M1_JWT_SECRET con token firmado, se valida su firma criptográfica.
+ * Política de seguridad e integración con M1:
+ * 1. Contrato Canónico de M1:
+ *    - `userId`: número entero positivo >= 1 (obligatorio).
+ *    - `role`: opcional, pero si está presente debe pertenecer a los roles canónicos:
+ *      'CLIENTE', 'CONDUCTOR', 'OPERADOR'. Nunca se inventa un rol por defecto. Si el rol
+ *      es inválido, se rechaza el token.
+ *    - `exp`: si está presente en el payload, debe ser un timestamp Unix numérico en segundos
+ *      y no estar vencido. Si expiró, se rechaza el token. Si M1_JWT_REQUIRE_EXP=true,
+ *      la presencia de exp es obligatoria.
+ * 2. Mecanismo Criptográfico (Integración Pendiente con M1):
+ *    - El contrato funcional de claims fue confirmado con M1, pero el esquema de verificación
+ *      criptográfica definitiva (distribución de secreto simétrico vs clave asimétrica/JWKS)
+ *      sigue pendiente de confirmación formal por el equipo de M1.
+ *    - Política Fail-Closed: en producción (NODE_ENV=production), si no se configuró M1_JWT_SECRET,
+ *      no se permite ningún bypass ni mecanismo ad-hoc: falla cerrado retornando null (401).
+ *    - Se rechaza estrictamente cualquier token vencido o con firma no coincidente.
+ * 3. Entorno de Test:
+ *    - Tokens de formato "test-token-*" están ESTRICTAMENTE PROHIBIDOS en producción.
+ *    - En tests (NODE_ENV=test), se permite resolver "test-token-<id>" o "test-token-<rol>-<id>".
  */
 export function extractAuthenticatedUser(authHeader?: string): AuthenticatedUser | null {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -66,16 +79,32 @@ export function extractAuthenticatedUser(authHeader?: string): AuthenticatedUser
     process.env.NODE_ENV === 'test' ||
     process.argv.some((arg) => arg.includes('--test'));
 
-  // 1. Manejo de tokens de testing directo tipo "test-token-91" o "test-token-usr-0091"
+  // 1. Manejo de tokens de testing directo tipo "test-token-91" o "test-token-cliente-91"
   if (token.startsWith('test-token-')) {
     // ESTRICTO: Tokens de prueba están TOTALMENTE PROHIBIDOS en producción
     if (isProduction || !isTest) {
       return null;
     }
-    const rawId = token.replace('test-token-usr-', '').replace('test-token-', '');
-    const numId = parseInt(rawId, 10);
+
+    let clean = token.replace('test-token-', '');
+    let assignedRole: M1Role | undefined = undefined;
+
+    for (const r of CANONICAL_M1_ROLES) {
+      const prefix = `${r.toLowerCase()}-`;
+      if (clean.startsWith(prefix)) {
+        assignedRole = r;
+        clean = clean.slice(prefix.length);
+        break;
+      }
+    }
+
+    clean = clean.replace('usr-', '');
+    const numId = parseInt(clean, 10);
     if (!Number.isNaN(numId) && Number.isInteger(numId) && numId >= 1) {
-      return { userId: numId, role: 'CLIENT' };
+      return {
+        userId: numId,
+        ...(assignedRole ? { role: assignedRole } : {}),
+      };
     }
     return null;
   }
@@ -100,17 +129,48 @@ export function extractAuthenticatedUser(authHeader?: string): AuthenticatedUser
     return null;
   }
 
-  // 3. Extracción y validación estricta del contrato canónico de M1 (userId numérico + role)
+  // 3. Extracción y validación estricta del contrato canónico de M1
   const payload = parseJwtPayload(token);
   if (!payload) return null;
 
+  // 3.1. Validación de userId (obligatorio, numérico entero >= 1)
   const rawUserId = payload.userId;
   if (typeof rawUserId !== 'number' || !Number.isInteger(rawUserId) || rawUserId < 1) {
     return null;
   }
 
+  // 3.2. Validación de expiración (exp)
+  const requireExp = process.env.M1_JWT_REQUIRE_EXP === 'true';
+  const rawExp = payload.exp;
+
+  if (requireExp && (rawExp === undefined || typeof rawExp !== 'number')) {
+    return null;
+  }
+
+  if (rawExp !== undefined) {
+    if (typeof rawExp !== 'number' || Number.isNaN(rawExp)) {
+      return null;
+    }
+    const nowInSeconds = Math.floor(Date.now() / 1000);
+    if (rawExp <= nowInSeconds) {
+      return null; // Token expirado
+    }
+  }
+
+  // 3.3. Validación de rol canónico M1 (CLIENTE, CONDUCTOR, OPERADOR)
+  // No inventar rol si falta (sin fallback). Si está presente, debe ser uno de los roles canónicos.
+  const rawRole = payload.role;
+  let validatedRole: M1Role | undefined = undefined;
+
+  if (rawRole !== undefined) {
+    if (typeof rawRole !== 'string' || !CANONICAL_M1_ROLES.includes(rawRole as M1Role)) {
+      return null; // Rol inválido o no reconocido por M1
+    }
+    validatedRole = rawRole as M1Role;
+  }
+
   return {
     userId: rawUserId,
-    role: typeof payload.role === 'string' ? payload.role : 'CLIENT',
+    ...(validatedRole ? { role: validatedRole } : {}),
   };
 }
