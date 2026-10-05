@@ -18,15 +18,31 @@ describe('RF-6.4 - Finalización del viaje', () => {
 
     const response = await fetch(`${running.url}/api/viajes/V-100/finalizacion`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ tiempoMinutos: 42, distanciaKm: 18.5, horaFin: '2026-09-01T10:42:00Z', metodoPago: 'tarjeta' }),
+      body: JSON.stringify({
+        origen: { latitude: 0, longitude: 0 },
+        destino: { latitude: 0, longitude: 0.01 },
+        tipoVehiculo: 'auto',
+        horaFin: '2026-09-01T10:42:00Z',
+        metodoPago: 'tarjeta',
+        distanciaKm: 999,
+        tiempoMinutos: 999,
+      }),
     });
-    const body = await response.json() as { viaje: Viaje; paymentId: string };
+    const body = await response.json() as {
+      viaje: Viaje;
+      paymentId: string;
+      metricasEstimadas: boolean;
+      fuenteMetrica: string;
+    };
 
     expect(response.status).toBe(200);
     expect(body.viaje.estado).toBe('completado');
-    expect(body.viaje.total).toBe(150 + 18.5 * 80 + 42 * 25);
-    expect(body.viaje.tiempoMinutos).toBe(42);
-    expect(body.viaje.distanciaKm).toBe(18.5);
+    expect(body.viaje.total).toBe(927.5);
+    expect(body.viaje.tiempoMinutos).toBe(3);
+    expect(body.viaje.distanciaKm).toBe(1.11);
+    expect(body.viaje.metricasEstimadas).toBe(true);
+    expect(body.metricasEstimadas).toBe(true);
+    expect(body.fuenteMetrica).toBe('M4');
     expect(body.paymentId).toBe('PAY-V-100');
   });
 
@@ -38,7 +54,13 @@ describe('RF-6.4 - Finalización del viaje', () => {
 
     const response = await fetch(`${running.url}/api/viajes/V-101/finalizacion`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ tiempoMinutos: 30, distanciaKm: 12, horaFin: '2026-09-01T08:30:00Z', metodoPago: 'efectivo' }),
+      body: JSON.stringify({
+        origen: { latitude: -34.6, longitude: -58.4 },
+        destino: { latitude: -34.7, longitude: -58.5 },
+        tipoVehiculo: 'auto',
+        horaFin: '2026-09-01T08:30:00Z',
+        metodoPago: 'efectivo',
+      }),
     });
 
     expect(response.status).toBe(400);
@@ -52,7 +74,7 @@ describe('RF-6.4 - Finalización del viaje', () => {
     const simulatorPort = (running.simulator.address() as { port: number }).port;
     const simulatorUrl = `http://127.0.0.1:${simulatorPort}`;
 
-    const fareResponse = await fetch(`${simulatorUrl}/tarifas/estimacion`, {
+    const fareResponse = await fetch(`${simulatorUrl}/tarifa/estimacion`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({

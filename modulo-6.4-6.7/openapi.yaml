@@ -22,7 +22,7 @@ paths:
         '200': { description: Proceso disponible }
   /api/viajes/{viajeId}/finalizacion:
     post:
-      summary: Finaliza un viaje y captura su pago
+      summary: Finaliza un viaje y solicita autorización del pago
       parameters:
         - { name: viajeId, in: path, required: true, schema: { type: string } }
       requestBody:
@@ -31,8 +31,13 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/FinalizarViaje' }
       responses:
-        '200': { description: Viaje finalizado }
+        '200':
+          description: Viaje finalizado con métricas estimadas por M4 y pago autorizado por M7
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FinalizacionResponse' }
         '400': { description: Transición inválida }
+        '502': { description: Respuesta inválida de una dependencia externa }
         '503': { description: Dependencia externa o base de datos no disponible }
   /api/viajes/{viajeId}/cancelacion-cliente:
     post:
@@ -97,12 +102,56 @@ components:
         inicio: { type: string, format: date-time }
     FinalizarViaje:
       type: object
-      required: [tiempoMinutos, distanciaKm, horaFin, metodoPago]
+      required: [origen, destino, tipoVehiculo, horaFin, metodoPago]
       properties:
-        tiempoMinutos: { type: number, minimum: 0 }
-        distanciaKm: { type: number, minimum: 0 }
+        origen: { $ref: '#/components/schemas/CoordenadasViaje' }
+        destino: { $ref: '#/components/schemas/CoordenadasViaje' }
+        tipoVehiculo: { type: string, enum: [auto, moto] }
         horaFin: { type: string, format: date-time }
+        metodoPago: { type: string, enum: [efectivo, tarjeta, transferencia] }
+    CoordenadasViaje:
+      type: object
+      required: [latitude, longitude]
+      properties:
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        address: { type: string }
+    FinalizacionResponse:
+      type: object
+      required: [viaje, paymentId, metricasEstimadas, fuenteMetrica]
+      properties:
+        viaje: { $ref: '#/components/schemas/Viaje' }
+        paymentId: { type: string }
+        metricasEstimadas:
+          type: boolean
+          enum: [true]
+          description: Indica que distancia y duración son estimaciones, no mediciones reales.
+        fuenteMetrica:
+          type: string
+          enum: [M4]
+    Viaje:
+      type: object
+      required: [id, clienteId, conductorId, estado, inicio]
+      properties:
+        id: { type: string }
+        clienteId: { type: string }
+        conductorId: { type: string }
+        estado: { type: string, enum: [solicitado, asignado, 'en curso', completado, cancelado] }
+        inicio: { type: string, format: date-time }
+        horaFin: { type: string, format: date-time }
+        distanciaKm:
+          type: number
+          description: Distancia estimada por M4, no distancia real recorrida.
+        tiempoMinutos:
+          type: number
+          description: ETA estimado por M4, no duración real medida.
+        total: { type: number }
         metodoPago: { type: string }
+        origen: { $ref: '#/components/schemas/CoordenadasViaje' }
+        destino: { $ref: '#/components/schemas/CoordenadasViaje' }
+        tipoVehiculo: { type: string, enum: [auto, moto] }
+        fuenteMetrica: { type: string, enum: [M4] }
+        metricasEstimadas: { type: boolean, enum: [true] }
     CancelarCliente:
       type: object
       required: [motivo]

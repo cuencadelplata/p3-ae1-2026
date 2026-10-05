@@ -10,7 +10,9 @@ Implementación del módulo M6 para los requisitos RF-6.4 a RF-6.7:
  - Cancelación por conductor.
  - Historial de transiciones.
 
-La API principal delega las operaciones de tarifa, pagos y despacho en APIs externas. Esas APIs se ejecutan en la imagen de dependencias y no forman parte de los endpoints provistos por M6. El simulador preserva los contratos usados por M6; la integración de captura con RabbitMQ queda pendiente de acuerdo con M7, como documenta su rama AE2.
+La API principal delega las operaciones de tarifa, pagos y despacho en APIs externas. Esas APIs se ejecutan en la imagen de dependencias y no forman parte de los endpoints provistos por M6. Para finalizar, M6 consulta a M4 `POST /api/v1/estimate` usando las coordenadas de origen y destino, y envía su distancia y ETA estimados a M7 para cotizar la tarifa. Estas métricas son estimaciones, no mediciones reales del viaje. M6 registra el método de pago y solicita su autorización a M7.
+
+En Docker Compose, `M4_URL` y `M7_URL` permiten configurar las URL base de esos módulos. Por defecto apuntan al simulador local; para M4 la URL base incluye `/api/v1`.
 
 Los viajes y sus historiales se persisten en PostgreSQL mediante el volumen `m6-data` de Docker Compose. Si PostgreSQL o una dependencia HTTP deja de responder, M6 devuelve `503` y el proceso permanece activo; `GET /health` verifica la disponibilidad HTTP del proceso, no la de sus dependencias.
 
@@ -92,7 +94,7 @@ Respuesta exitosa: `201 Created`.
 
 `POST /api/viajes/{viajeId}/finalizacion`
 
-Implementa RF-6.4. Registra el tiempo, la distancia, la hora de finalización y el método de pago. Consulta la estimación de tarifa a la API externa, cambia el viaje a `completado` y solicita la captura del pago.
+Implementa RF-6.4. Recibe origen, destino, tipo de vehículo, hora de finalización y método de pago. Obtiene distancia y ETA estimados de M4, consulta la tarifa a M7, registra y autoriza el pago, y cambia el viaje a `completado`. La respuesta identifica la fuente de las métricas y aclara que son estimadas.
 
 Respuesta exitosa: `200 OK`, con el viaje actualizado y el identificador del pago.
 
@@ -124,7 +126,11 @@ Respuesta exitosa: `200 OK`, con la propiedad `historial`.
 
 Estos endpoints son consumidos por M6 para simular dependencias de otros módulos; no son endpoints provistos por nuestra API:
 
- - `POST /api/tarifas/estimacion`
+ - M4: `POST /api/v1/estimate`
+ - M7: `POST /tarifa/estimacion`
+ - M7: `POST /metodo-pago`
+ - M7: `POST /metodo-pago/{viajeId}/autorizar`
+
+Los flujos RF-6.5 y RF-6.6 todavía usan rutas históricas del simulador (`/api/tarifas/cargo-cancelacion` y `/api/despacho/reabrir`). No se consideran validadas contra los contratos actuales de los módulos externos.
  - `POST /api/tarifas/cargo-cancelacion`
- - `POST /api/pagos/captura`
  - `POST /api/despacho/reabrir`

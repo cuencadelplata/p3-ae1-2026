@@ -2,22 +2,26 @@ import { crearViaje, post } from './helpers.js';
 import { execFileSync } from 'node:child_process';
 
 describe('RF-6.4 - Finalización del viaje en Docker', () => {
-  it('registra la finalización y captura el pago mediante el simulador', async () => {
+  it('registra la finalización y autoriza el pago mediante el simulador', async () => {
     const viajeId = `E2E-64-${Date.now()}`;
     await crearViaje({ id: viajeId, estado: 'en curso' });
 
     const { response, body } = await post(`/api/viajes/${viajeId}/finalizacion`, {
-      tiempoMinutos: 42,
-      distanciaKm: 18.5,
+      origen: { latitude: 0, longitude: 0 },
+      destino: { latitude: 0, longitude: 0.01 },
+      tipoVehiculo: 'auto',
       horaFin: '2026-09-01T10:42:00Z',
       metodoPago: 'tarjeta',
     });
 
     expect(response.status).toBe(200);
     expect(body.viaje.estado).toBe('completado');
-    expect(body.viaje.total).toBe(150 + 18.5 * 80 + 42 * 25);
-    expect(body.viaje.tiempoMinutos).toBe(42);
-    expect(body.viaje.distanciaKm).toBe(18.5);
+    expect(body.viaje.total).toBe(927.5);
+    expect(body.viaje.tiempoMinutos).toBe(3);
+    expect(body.viaje.distanciaKm).toBe(1.11);
+    expect(body.viaje.metricasEstimadas).toBe(true);
+    expect(body.metricasEstimadas).toBe(true);
+    expect(body.fuenteMetrica).toBe('M4');
     expect(body.paymentId).toBe(`PAY-${viajeId}`);
   });
 
@@ -26,8 +30,9 @@ describe('RF-6.4 - Finalización del viaje en Docker', () => {
     await crearViaje({ id: viajeId, estado: 'completado' });
 
     const { response, body } = await post(`/api/viajes/${viajeId}/finalizacion`, {
-      tiempoMinutos: 30,
-      distanciaKm: 12,
+      origen: { latitude: -34.6, longitude: -58.4 },
+      destino: { latitude: -34.7, longitude: -58.5 },
+      tipoVehiculo: 'auto',
       horaFin: '2026-09-01T08:30:00Z',
       metodoPago: 'efectivo',
     });
@@ -43,8 +48,9 @@ describe('RF-6.4 - Finalización del viaje en Docker', () => {
     execFileSync('docker', ['compose', 'stop', 'simulador']);
     try {
       const { response } = await post(`/api/viajes/${viajeId}/finalizacion`, {
-        tiempoMinutos: 42,
-        distanciaKm: 18.5,
+        origen: { latitude: 0, longitude: 0 },
+        destino: { latitude: 0, longitude: 0.01 },
+        tipoVehiculo: 'auto',
         horaFin: '2026-09-01T10:42:00Z',
         metodoPago: 'tarjeta',
       });

@@ -9,7 +9,23 @@ export function createSimulator(): Server {
     const input = body ? JSON.parse(body) as Record<string, unknown> : {};
     let result: Record<string, unknown> | undefined;
 
-    if (request.method === 'POST' && request.url === '/tarifas/estimacion') {
+    if (request.method === 'POST' && request.url === '/api/v1/estimate') {
+      const origin = asCoordinates(input.origin);
+      const destination = asCoordinates(input.destination);
+      if (!origin || !destination) {
+        response.writeHead(400, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: 'Coordenadas de origen y destino inválidas' }));
+        return;
+      }
+      const distanceKm = haversineDistance(origin, destination);
+      result = {
+        distanceKm: Math.round(distanceKm * 100) / 100,
+        estimatedEtaMinutes: Math.max(1, Math.ceil((distanceKm / 25) * 60)),
+      };
+    } else if (
+      request.method === 'POST' &&
+      (request.url === '/tarifa/estimacion' || request.url === '/tarifas/estimacion')
+    ) {
       const vehicleType = input.vehicleType;
       const multiplier = vehicleType === 'moto' ? 0.7 : vehicleType === 'auto' ? 1 : undefined;
       if (!input.origen || !input.destino || !multiplier || Number(input.distanciaKm) <= 0 || Number(input.tiempoEstimadoMin) <= 0) {
@@ -83,7 +99,10 @@ export function createSimulator(): Server {
     }
 
     if (result) {
-      response.writeHead(request.url === '/tarifas/estimacion' ? 200 : 201, { 'content-type': 'application/json' });
+      const isEstimate = request.url === '/api/v1/estimate' ||
+        request.url === '/tarifa/estimacion' ||
+        request.url === '/tarifas/estimacion';
+      response.writeHead(isEstimate ? 200 : 201, { 'content-type': 'application/json' });
       response.end(JSON.stringify(result));
       return;
     }
@@ -92,8 +111,6 @@ export function createSimulator(): Server {
     result = { total: 150 + Number(input.distanciaKm) * 80 + Number(input.tiempoMinutos) * 25 };
     } else if (request.url === '/api/tarifas/cargo-cancelacion') {
     result = { cargo: input.estado === 'asignado' ? 200 : 0 };
-    } else if (request.url === '/api/pagos/captura') {
-    result = { paymentId: `PAY-${input.viajeId}` };
     } else if (request.url === '/api/despacho/reabrir') {
     result = {
       reabrirDespacho: true,
@@ -109,6 +126,40 @@ export function createSimulator(): Server {
     response.writeHead(200, { 'content-type': 'application/json' });
     response.end(JSON.stringify(result));
   });
+}
+
+function asCoordinates(value: unknown): { latitude: number; longitude: number } | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const coordinates = value as Record<string, unknown>;
+  const { latitude, longitude } = coordinates;
+  if (
+    typeof latitude !== 'number' ||
+    !Number.isFinite(latitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    typeof longitude !== 'number' ||
+    !Number.isFinite(longitude) ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
+    return undefined;
+  }
+  return { latitude, longitude };
+}
+
+function haversineDistance(
+  origin: { latitude: number; longitude: number },
+  destination: { latitude: number; longitude: number },
+): number {
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latitudeDelta = toRadians(destination.latitude - origin.latitude);
+  const longitudeDelta = toRadians(destination.longitude - origin.longitude);
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(toRadians(origin.latitude)) *
+      Math.cos(toRadians(destination.latitude)) *
+      Math.sin(longitudeDelta / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 if (process.argv[1]?.endsWith('/server.js') || process.argv[1]?.endsWith('simulator/server.js')) {

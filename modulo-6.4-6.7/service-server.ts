@@ -10,7 +10,10 @@ const pool = new Pool({
 pool.on('error', (error) => console.error('Error en conexión PostgreSQL inactiva:', error.message));
 
 const server = createViajeApi({
-  externalApis: new HttpExternalApisClient(process.env.SIMULATOR_URL ?? 'http://127.0.0.1:3001'),
+  externalApis: new HttpExternalApisClient(
+    process.env.M7_URL ?? process.env.SIMULATOR_URL ?? 'http://127.0.0.1:3001',
+    process.env.M4_URL ?? `${process.env.SIMULATOR_URL ?? 'http://127.0.0.1:3001'}/api/v1`,
+  ),
   repository: new PostgresViajeRepository(pool),
 });
 server.listen(Number(process.env.PORT ?? 3000), '0.0.0.0', () => {

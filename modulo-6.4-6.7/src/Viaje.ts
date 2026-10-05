@@ -7,12 +7,25 @@ export interface ViajeTransicion {
   detalle?: string;
 }
 
+export interface CoordenadasViaje {
+  latitude: number;
+  longitude: number;
+  address?: string;
+}
+
+export type TipoVehiculoViaje = 'auto' | 'moto';
+
 export interface FinalizarViajeInput {
   tiempoMinutos: number;
   distanciaKm: number;
   horaFin: Date;
   metodoPago: string;
   total: number;
+  origen: CoordenadasViaje;
+  destino: CoordenadasViaje;
+  tipoVehiculo: TipoVehiculoViaje;
+  fuenteMetrica: 'M4';
+  metricasEstimadas: true;
 }
 
 export interface CrearViajeInput {
@@ -31,6 +44,11 @@ export interface CrearViajeInput {
   total?: number;
   motivoCancelacion?: string;
   cargoCancelacion?: number;
+  origen?: CoordenadasViaje;
+  destino?: CoordenadasViaje;
+  tipoVehiculo?: TipoVehiculoViaje;
+  fuenteMetrica?: 'M4';
+  metricasEstimadas?: boolean;
 }
 
 export interface CancelarPorClienteInput {
@@ -65,6 +83,11 @@ export class Viaje {
   cargoCancelacion?: number;
   motivoCancelacionConductor?: string;
   retornoDespacho?: RetornoDespacho;
+  origen?: CoordenadasViaje;
+  destino?: CoordenadasViaje;
+  tipoVehiculo?: TipoVehiculoViaje;
+  fuenteMetrica?: 'M4';
+  metricasEstimadas?: boolean;
   historialTransiciones: ViajeTransicion[];
 
   constructor(data: CrearViajeInput) {
@@ -83,7 +106,22 @@ export class Viaje {
     this.total = data.total;
     this.motivoCancelacion = data.motivoCancelacion;
     this.cargoCancelacion = data.cargoCancelacion;
+    this.origen = data.origen;
+    this.destino = data.destino;
+    this.tipoVehiculo = data.tipoVehiculo;
+    this.fuenteMetrica = data.fuenteMetrica;
+    this.metricasEstimadas = data.metricasEstimadas;
     this.historialTransiciones = [];
+  }
+
+  validarFinalizacion(): void {
+    if (this.estado === 'completado') {
+      throw new Error('No se puede finalizar un viaje ya finalizado');
+    }
+
+    if (this.estado !== 'en curso' && this.estado !== 'asignado') {
+      throw new Error(`No se puede finalizar un viaje en estado ${this.estado}`);
+    }
   }
 
   private registrarTransicion(from: ViajeEstado, to: ViajeEstado, detalle?: string): void {
@@ -99,19 +137,18 @@ export class Viaje {
   }
 
   finalizar(data: FinalizarViajeInput): void {
-    if (this.estado === 'completado') {
-      throw new Error('No se puede finalizar un viaje ya finalizado');
-    }
-
-    if (this.estado !== 'en curso' && this.estado !== 'asignado') {
-      throw new Error(`No se puede finalizar un viaje en estado ${this.estado}`);
-    }
+    this.validarFinalizacion();
 
     this.tiempoMinutos = data.tiempoMinutos;
     this.distanciaKm = data.distanciaKm;
     this.horaFin = data.horaFin;
     this.metodoPago = data.metodoPago;
     this.total = data.total;
+    this.origen = data.origen;
+    this.destino = data.destino;
+    this.tipoVehiculo = data.tipoVehiculo;
+    this.fuenteMetrica = data.fuenteMetrica;
+    this.metricasEstimadas = data.metricasEstimadas;
 
     const estadoAnterior = this.estado;
     this.estado = 'completado';

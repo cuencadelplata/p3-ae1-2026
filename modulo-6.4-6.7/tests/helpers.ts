@@ -11,7 +11,10 @@ export async function startServices(viajes: Map<string, Viaje>): Promise<{
   const simulator = createSimulator();
   const simulatorPort = await listen(simulator);
   const api = createViajeApi({
-    externalApis: new HttpExternalApisClient(`http://127.0.0.1:${simulatorPort}`),
+    externalApis: new HttpExternalApisClient(
+      `http://127.0.0.1:${simulatorPort}`,
+      `http://127.0.0.1:${simulatorPort}/api/v1`,
+    ),
     viajes,
   });
   const apiPort = await listen(api);

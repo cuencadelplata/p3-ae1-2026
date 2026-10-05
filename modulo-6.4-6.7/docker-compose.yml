@@ -7,6 +7,8 @@ services:
     ports: ["3000:3000"]
     environment:
       SIMULATOR_URL: http://simulador:3001
+      M4_URL: ${M4_URL:-http://simulador:3001/api/v1}
+      M7_URL: ${M7_URL:-http://simulador:3001}
       DATABASE_URL: postgres://m6:m6_local@db:5432/m6
     depends_on:
       - db
