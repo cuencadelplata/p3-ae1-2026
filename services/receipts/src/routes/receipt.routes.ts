@@ -15,11 +15,12 @@ export const receiptRouter = Router();
 receiptRouter.get('/downloads/:token', downloadByToken);
 
 // Middleware de autenticacion M1 (evalua tokens Bearer de M1 y aplica authRequired)
-receiptRouter.use(authenticateM1);
+// RF-8.4 solo exige autenticación M1 en los endpoints de consulta/reenvío de comprobantes.
+// La emisión del comprobante (RF-8.3) sigue siendo una operación del módulo y no debe
+// verse bloqueada por el middleware global de M1.
 
 receiptRouter.post('/', createReceipt);
-receiptRouter.post('/resend', resendReceiptWithBody);
-receiptRouter.get('/:tripId', getReceipt);
-receiptRouter.get('/:tripId/pdf', downloadReceipt);
-receiptRouter.post('/:tripId/resend', resendReceipt);
-
+receiptRouter.post('/resend', authenticateM1, resendReceiptWithBody);
+receiptRouter.get('/:tripId', authenticateM1, getReceipt);
+receiptRouter.get('/:tripId/pdf', authenticateM1, downloadReceipt);
+receiptRouter.post('/:tripId/resend', authenticateM1, resendReceipt);
