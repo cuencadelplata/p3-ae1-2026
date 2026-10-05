@@ -1,23 +1,27 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Server } from 'node:http';
-import { Viaje } from '../../src/m6-rf-6.4-rf6.7/Viaje.js';
-import { startServices, stopServices } from './helpers.js';
+import { crearViaje, startServices, stopServices, StubViajesApiClient } from './helpers.js';
 
-describe('RF-6.4 - Finalización del viaje', () => {
+describe('RF-6.4 - Fachada de finalización', () => {
   const services: { api?: Server; simulator?: Server } = {};
 
   afterEach(() => {
     if (services.api && services.simulator) stopServices(services.api, services.simulator);
+    services.api = undefined;
+    services.simulator = undefined;
   });
 
-  it('registra tiempo, distancia, tarifa y pago mediante APIs externas', async () => {
-    const viaje = new Viaje({ id: 'V-100', clienteId: 'C-1', conductorId: 'D-1', estado: 'en curso', tarifaBase: 0, tarifaPorKm: 0, tarifaPorMinuto: 0, inicio: new Date('2026-09-01T10:00:00Z') });
-    const running = await startServices(new Map([[viaje.id, viaje]]));
+  it('reenvía la finalización a Viajes y conserva su respuesta', async () => {
+    const viajesApi = new StubViajesApiClient();
+    const running = await startServices(viajesApi);
     services.api = running.api;
     services.simulator = running.simulator;
+    const viaje = await crearViaje(running.url, 'C-1');
+    viajesApi.cambiarEstado(viaje.id, 'EN_CURSO');
 
-    const response = await fetch(`${running.url}/api/viajes/V-100/finalizacion`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+    const response = await fetch(`${running.url}/api/viajes/${viaje.id}/finalizacion`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         origen: { latitude: 0, longitude: 0 },
         destino: { latitude: 0, longitude: 0.01 },
@@ -29,31 +33,38 @@ describe('RF-6.4 - Finalización del viaje', () => {
       }),
     });
     const body = await response.json() as {
-      viaje: Viaje;
+      viaje: Record<string, unknown>;
       paymentId: string;
       metricasEstimadas: boolean;
       fuenteMetrica: string;
     };
 
     expect(response.status).toBe(200);
-    expect(body.viaje.estado).toBe('completado');
-    expect(body.viaje.total).toBe(927.5);
-    expect(body.viaje.tiempoMinutos).toBe(3);
-    expect(body.viaje.distanciaKm).toBe(1.11);
-    expect(body.viaje.metricasEstimadas).toBe(true);
-    expect(body.metricasEstimadas).toBe(true);
-    expect(body.fuenteMetrica).toBe('M4');
-    expect(body.paymentId).toBe('PAY-V-100');
+    expect(body.viaje).toMatchObject({
+      id: viaje.id,
+      estado: 'completado',
+      total: 927.5,
+      tiempoMinutos: 3,
+      distanciaKm: 1.11,
+    });
+    expect(body).toMatchObject({
+      paymentId: `PAY-${viaje.id}`,
+      metricasEstimadas: true,
+      fuenteMetrica: 'M4',
+    });
+    expect(viajesApi.viajes.get(viaje.id)?.estado).toBe('COMPLETADO');
   });
 
-  it('rechaza finalizar un viaje ya completado', async () => {
-    const viaje = new Viaje({ id: 'V-101', clienteId: 'C-2', conductorId: 'D-2', estado: 'completado', tarifaBase: 0, tarifaPorKm: 0, tarifaPorMinuto: 0, inicio: new Date('2026-09-01T08:00:00Z') });
-    const running = await startServices(new Map([[viaje.id, viaje]]));
+  it('propaga la transición inválida informada por Viajes', async () => {
+    const viajesApi = new StubViajesApiClient();
+    const running = await startServices(viajesApi);
     services.api = running.api;
     services.simulator = running.simulator;
+    const viaje = await crearViaje(running.url, 'C-2');
 
-    const response = await fetch(`${running.url}/api/viajes/V-101/finalizacion`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+    const response = await fetch(`${running.url}/api/viajes/${viaje.id}/finalizacion`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         origen: { latitude: -34.6, longitude: -58.4 },
         destino: { latitude: -34.7, longitude: -58.5 },
@@ -64,11 +75,37 @@ describe('RF-6.4 - Finalización del viaje', () => {
     });
 
     expect(response.status).toBe(400);
-    expect((await response.json()).error).toContain('ya finalizado');
+    expect((await response.json()).error).toContain('estado SOLICITADO');
+  });
+
+  it('devuelve 502 si Viajes devuelve una respuesta inválida', async () => {
+    const running = await startServices({
+      crearViaje: async (input) => ({
+        status: 201,
+        body: {
+          id: 'CENTRAL-1',
+          clienteId: input.clienteId,
+          estado: 'SOLICITADO',
+          fechaCreacion: new Date().toISOString(),
+        },
+      }),
+      finalizarViaje: async () => ({ status: 502, body: { error: 'Respuesta inválida de M4' } }),
+      obtenerHistorial: async () => ({ status: 200, body: { historial: [] } }),
+    });
+    services.api = running.api;
+    services.simulator = running.simulator;
+    const viaje = await crearViaje(running.url);
+
+    const response = await fetch(`${running.url}/api/viajes/${viaje.id}/finalizacion`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(response.status).toBe(502);
   });
 
   it('simula los contratos HTTP de tarifas y pagos de M7', async () => {
-    const running = await startServices(new Map());
+    const running = await startServices();
     services.api = running.api;
     services.simulator = running.simulator;
     const simulatorPort = (running.simulator.address() as { port: number }).port;
@@ -88,22 +125,5 @@ describe('RF-6.4 - Finalización del viaje', () => {
     const fare = await fareResponse.json() as { estimatedFare: number; currency: string };
     expect(fareResponse.status).toBe(200);
     expect(fare).toMatchObject({ estimatedFare: 7225, currency: 'ARS' });
-
-    const paymentResponse = await fetch(`${simulatorUrl}/metodo-pago`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ clienteId: 'C-7', viajeId: 'V-700', tipo: 'tarjeta' }),
-    });
-    const payment = await paymentResponse.json() as { pagoId: string; estado: string };
-    expect(paymentResponse.status).toBe(201);
-    expect(payment).toMatchObject({ pagoId: 'PAY-V-700', estado: 'pendiente' });
-
-    const authorizationResponse = await fetch(`${simulatorUrl}/metodo-pago/V-700/autorizar`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ idOrden: 'ORD-V-700' }),
-    });
-    expect(authorizationResponse.status).toBe(200);
-    expect(await authorizationResponse.json()).toMatchObject({ pagoId: 'PAY-V-700', estado: 'autorizado' });
   });
 });

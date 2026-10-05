@@ -5,16 +5,21 @@ info:
 paths:
   /api/viajes:
     post:
-      summary: Crea un viaje para iniciar su ciclo de vida
+      summary: Solicita un viaje a través del módulo central Viajes
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/CrearViaje' }
       responses:
-        '201': { description: Viaje creado }
-        '400': { description: Datos inválidos }
-        '503': { description: Base de datos no disponible }
+        '201':
+          description: Viaje creado por el módulo central
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CrearViajeResponse' }
+        '400': { description: Datos inválidos o estado inicial no permitido }
+        '502': { description: Respuesta inválida del módulo Viajes }
+        '503': { description: Módulo Viajes no disponible }
   /health:
     get:
       summary: Verifica que el proceso HTTP de M6 está activo
@@ -62,16 +67,28 @@ components:
   schemas:
     CrearViaje:
       type: object
-      required: [id, clienteId, conductorId, estado, tarifaBase, tarifaPorKm, tarifaPorMinuto, inicio]
+      required: [clienteId, origen, destino]
       properties:
-        id: { type: string }
         clienteId: { type: string }
-        conductorId: { type: string }
-        estado: { type: string, enum: [solicitado, asignado, en curso, completado, cancelado] }
-        tarifaBase: { type: number }
-        tarifaPorKm: { type: number }
-        tarifaPorMinuto: { type: number }
-        inicio: { type: string, format: date-time }
+        origen: { type: string }
+        destino: { type: string }
+        estado:
+          type: string
+          enum: [SOLICITADO, solicitado]
+          description: Opcional; la fachada siempre crea viajes en estado SOLICITADO.
+    CrearViajeResponse:
+      type: object
+      required: [viaje]
+      properties:
+        viaje:
+          type: object
+          required: [id, clienteId, conductorId, estado]
+          properties:
+            id: { type: string }
+            clienteId: { type: string }
+            conductorId: { type: string, nullable: true }
+            estado: { type: string, enum: [solicitado] }
+            inicio: { type: string, format: date-time }
     FinalizarViaje:
       type: object
       required: [origen, destino, tipoVehiculo, horaFin, metodoPago]

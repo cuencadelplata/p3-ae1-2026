@@ -3,16 +3,16 @@ Paradigmas 3 AE1 2026 - Grupo 10 - M6
 
 # M6: Viajes
 
-Implementación del módulo M6 para los requisitos RF-6.4 y RF-6.7:
+Fachada compatible para los requisitos RF-6.4 y RF-6.7:
 
  - Finalización de viajes.
  - Historial de transiciones.
 
-La API principal delega las operaciones de tarifa y pagos en APIs externas. Esas APIs se ejecutan en la imagen de dependencias y no forman parte de los endpoints provistos por M6. Para finalizar, M6 consulta a M4 `POST /api/v1/estimate` usando las coordenadas de origen y destino, y envía su distancia y ETA estimados a M7 para cotizar la tarifa. Estas métricas son estimaciones, no mediciones reales del viaje. M6 registra el método de pago y solicita su autorización a M7.
+El módulo no mantiene un modelo, historial ni base de datos propios para viajes. El módulo central `m6_viajes` es la única fuente de verdad y es responsable del ciclo de vida, la persistencia, las llamadas a M4/M7 y el historial. Esta API conserva las rutas RF-6.4/6.7 como fachada HTTP que reenvía solicitudes y respuestas a Viajes.
 
-En Docker Compose, `M4_URL` y `M7_URL` permiten configurar las URL base de esos módulos. Por defecto apuntan al simulador local; para M4 la URL base incluye `/api/v1`.
+`RF6_API_URL` configura la URL base del módulo central (por defecto `http://127.0.0.1:3000`). La fachada responde en su propio puerto; el Compose de integración publica Viajes en `3000` y la fachada en `3002`.
 
-Los viajes y sus historiales se persisten en PostgreSQL mediante el volumen `m6-data` de Docker Compose. Si PostgreSQL o una dependencia HTTP deja de responder, M6 devuelve `503` y el proceso permanece activo; `GET /health` verifica la disponibilidad HTTP del proceso, no la de sus dependencias.
+La creación de viajes se reenvía al módulo central y solo admite un estado inicial `SOLICITADO`. Los estados no se pueden fijar arbitrariamente desde esta fachada. Finalización e historial se delegan al mismo viaje central. `GET /health` comprueba la disponibilidad del proceso de la fachada, no la de Viajes ni sus dependencias.
 
 ## Imágenes Docker Hub
 
@@ -64,7 +64,7 @@ npm install
 npm test
 ```
 
-Para ejecutar los tests end-to-end, que requieren los servicios Docker:
+Para ejecutar los tests end-to-end, que levantan un stack aislado con Viajes, PostgreSQL, Redis, RabbitMQ y un simulador de M3/M4/M7/M8:
 
 ```sh
 npm run docker:e2e:up
@@ -72,7 +72,7 @@ npm run test:e2e
 npm run docker:e2e:down
 ```
 
-La suite E2E incluye pruebas que detienen y vuelven a iniciar el simulador y PostgreSQL para verificar que el contenedor M6 siga disponible. Requiere Docker Compose y permiso para ejecutar `docker compose stop/start`.
+La suite E2E incluye pruebas que detienen y vuelven a iniciar el simulador y la base de datos de ese stack para comprobar los errores y la disponibilidad de la fachada. Requiere Docker Compose y permiso para ejecutar `docker compose stop/start`.
 
 La suite unitaria/de integración local usa puertos efímeros y levanta el servicio M6 y el simulador durante cada prueba. No requiere iniciar Docker.
 
@@ -84,7 +84,7 @@ La especificación completa se encuentra en [openapi.yaml](openapi.yaml).
 
 `POST /api/viajes`
 
-Crea un viaje en memoria para iniciar su ciclo de vida. Recibe los identificadores del cliente y conductor, el estado inicial, las tarifas configuradas y la hora de inicio. `Esta API se creó por necesidad de simulación, ya que se necesitaría la otra mitad del M6 para cumplir los requerimientos dados.`
+Reenvía la solicitud al módulo central. Recibe `clienteId`, `origen` y `destino`; la respuesta conserva la envoltura histórica `{ "viaje": ... }`. El ID lo genera Viajes y el estado inicial siempre es `SOLICITADO`.
 
 Respuesta exitosa: `201 Created`.
 
@@ -92,7 +92,7 @@ Respuesta exitosa: `201 Created`.
 
 `POST /api/viajes/{viajeId}/finalizacion`
 
-Implementa RF-6.4. Recibe origen, destino, tipo de vehículo, hora de finalización y método de pago. Obtiene distancia y ETA estimados de M4, consulta la tarifa a M7, registra y autoriza el pago, y cambia el viaje a `completado`. La respuesta identifica la fuente de las métricas y aclara que son estimadas.
+Implementa la fachada de RF-6.4. Reenvía la solicitud y devuelve sin transformar el status ni el JSON producido por Viajes. El módulo central obtiene las métricas y gestiona la tarifa y el pago.
 
 Respuesta exitosa: `200 OK`, con el viaje actualizado y el identificador del pago.
 
@@ -100,15 +100,17 @@ Respuesta exitosa: `200 OK`, con el viaje actualizado y el identificador del pag
 
 `GET /api/viajes/{viajeId}/historial-transiciones`
 
-Implementa RF-6.7. Devuelve el historial inmutable de cambios de estado registrados para el viaje, incluyendo estado anterior, estado nuevo, fecha y detalle.
+Implementa la fachada de RF-6.7. Devuelve sin transformar el historial de cambios de estado registrado por Viajes, incluyendo estado anterior, estado nuevo, fecha y detalle.
 
 Respuesta exitosa: `200 OK`, con la propiedad `historial`.
 
-## Contrato de APIs externas
+## Entorno de integración
 
-Estos endpoints son consumidos por M6 para simular dependencias de otros módulos; no son endpoints provistos por nuestra API:
+El simulador dentro de este módulo proporciona, solo para pruebas E2E, contratos compatibles con las dependencias HTTP que consume el backend central:
 
+ - M3: `GET /conductor/{conductorId}/estado`
  - M4: `POST /api/v1/estimate`
- - M7: `POST /tarifa/estimacion`
- - M7: `POST /metodo-pago`
- - M7: `POST /metodo-pago/{viajeId}/autorizar`
+ - M7: estimación y autorización de pago
+ - M8: generación y validación de QR
+
+En ejecución normal, estas responsabilidades y sus datos pertenecen al módulo central, no a esta fachada.
