@@ -1,5 +1,5 @@
 import cors from 'cors';
-import express from 'express';
+import express, { type RequestHandler } from 'express';
 import helmet from 'helmet';
 import path from 'node:path';
 import swaggerUi from 'swagger-ui-express';
@@ -7,15 +7,16 @@ import swaggerUi from 'swagger-ui-express';
 import { openApiDocument } from './docs/openapi.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { notFoundHandler } from './middleware/not-found.middleware.js';
-import { healthRouter } from './routes/health.routes.js';
+import { createHealthRouter } from './routes/health.routes.js';
 import { createReservaRouter } from './routes/reserva.routes.js';
 import type { ReservaService } from './services/reserva.service.js';
 
 export interface AppDependencies {
   reservaService?: ReservaService;
+  healthHandler?: RequestHandler;
 }
 
-export const createApp = ({ reservaService }: AppDependencies = {}) => {
+export const createApp = ({ reservaService, healthHandler }: AppDependencies = {}) => {
   const application = express();
 
   application.disable('x-powered-by');
@@ -35,7 +36,7 @@ export const createApp = ({ reservaService }: AppDependencies = {}) => {
   application.use(express.json());
   application.use(express.static(path.resolve('public')));
 
-  application.use('/health', healthRouter);
+  application.use('/health', createHealthRouter(healthHandler));
   application.get('/openapi.json', (_request, response) => response.json(openApiDocument));
   application.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
   if (reservaService !== undefined) {

@@ -40,6 +40,23 @@ describe('middleware de errores', () => {
       },
     });
   });
+
+  it('responde con 503 para errores de conexión de PostgreSQL', () => {
+    const json = vi.fn();
+    const response = {
+      status: vi.fn().mockReturnValue({ json }),
+    } as unknown as Response;
+
+    errorHandler({ code: 'P1001' }, {} as Request, response, vi.fn() as NextFunction);
+
+    expect(response.status).toHaveBeenCalledWith(503);
+    expect(json).toHaveBeenCalledWith({
+      error: {
+        codigo: 'BASE_DATOS_NO_DISPONIBLE',
+        mensaje: 'La base de datos no está disponible. Reintente la operación.',
+      },
+    });
+  });
 });
 
 describe('not found middleware', () => {

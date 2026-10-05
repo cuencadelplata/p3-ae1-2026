@@ -20,6 +20,20 @@ services:
     networks:
       - reservas-network
 
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+    environment:
+      DATABASE_URL: postgresql://reservas:reservas_dev@postgres:5432/reservas?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - reservas-network
+    restart: 'no'
+
   m9-reservas:
     image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v1.0.0}
     build:
@@ -40,12 +54,12 @@ services:
       timeout: 3s
       retries: 5
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       m5-stub:
-        condition: service_healthy
+        condition: service_started
       m7-stub:
-        condition: service_healthy
+        condition: service_started
     networks:
       - reservas-network
     restart: unless-stopped

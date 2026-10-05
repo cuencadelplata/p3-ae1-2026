@@ -14,29 +14,44 @@ const checkUrl = async (url: string): Promise<boolean> => {
   }
 };
 
-export const getHealth: RequestHandler = async (_request, response) => {
-  const dbStatus = await prisma
-    .$queryRaw<{ ok: number }[]>`SELECT 1 AS ok`
-    .then(() => 'ok')
-    .catch(() => 'down');
+export interface HealthProbes {
+  database: () => Promise<unknown>;
+  m5: () => Promise<boolean>;
+  m7: () => Promise<boolean>;
+}
 
-  const m5Status = await checkUrl(`${env.M5_URL}/health`)
-    .then((ok) => (ok ? 'ok' : 'down'))
-    .catch(() => 'down');
-
-  const m7Status = await checkUrl(`${env.M7_URL}/health`)
-    .then((ok) => (ok ? 'ok' : 'down'))
-    .catch(() => 'down');
-
-  const overallStatus = dbStatus === 'ok' && m5Status === 'ok' && m7Status === 'ok' ? 'ok' : 'degraded';
-
-  response.status(overallStatus === 'ok' ? 200 : 503).json({
-    service: 'm9-reservas-programadas',
-    status: overallStatus,
-    dependencies: {
-      database: dbStatus,
-      m5: m5Status,
-      m7: m7Status,
-    },
-  });
+const probeStatus = async (probe: () => Promise<unknown>): Promise<'ok' | 'down'> => {
+  try {
+    return (await probe()) === false ? 'down' : 'ok';
+  } catch {
+    return 'down';
+  }
 };
+
+export const createHealthController =
+  (probes: HealthProbes): RequestHandler =>
+  async (_request, response) => {
+    const [dbStatus, m5Status, m7Status] = await Promise.all([
+      probeStatus(probes.database),
+      probeStatus(probes.m5),
+      probeStatus(probes.m7),
+    ]);
+    const overallStatus =
+      dbStatus === 'ok' && m5Status === 'ok' && m7Status === 'ok' ? 'ok' : 'degraded';
+
+    response.status(overallStatus === 'ok' ? 200 : 503).json({
+      service: 'm9-reservas-programadas',
+      status: overallStatus,
+      dependencies: {
+        database: dbStatus,
+        m5: m5Status,
+        m7: m7Status,
+      },
+    });
+  };
+
+export const getHealth = createHealthController({
+  database: () => prisma.$queryRaw<{ ok: number }[]>`SELECT 1 AS ok`,
+  m5: () => checkUrl(`${env.M5_URL}/health`),
+  m7: () => checkUrl(`${env.M7_URL}/health`),
+});
