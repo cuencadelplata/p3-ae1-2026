@@ -155,36 +155,91 @@ paths:
                   email: { type: string, format: email }
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /auth/oauth2/providers:
+    get:
+      tags: [OAuth2]
+      summary: Listar proveedores OAuth2 disponibles
+      description: Retorna la lista de proveedores soportados (GOOGLE, AUTH0, MOCK) y su estado de configuracion.
+      responses:
+        '200':
+          description: Lista de proveedores configurados
+
   /auth/oauth2/authorize:
     get:
       tags: [OAuth2]
-      summary: Iniciar autorizacion OAuth2
+      summary: Iniciar autorizacion OAuth2 / OpenID Connect
       parameters:
-        - { name: provider, in: query, required: true, schema: { type: string, enum: [GOOGLE, GITHUB, MICROSOFT, CUSTOM] } }
-        - { name: redirect_uri, in: query, required: true, schema: { type: string, format: uri } }
-        - { name: scopes, in: query, required: false, schema: { type: string } }
+        - { name: provider, in: query, required: false, schema: { type: string, enum: [GOOGLE, AUTH0, MOCK, GITHUB, MICROSOFT, CUSTOM] } }
+        - { name: role, in: query, required: false, schema: { type: string, enum: [CLIENTE, CONDUCTOR, OPERADOR], default: CLIENTE } }
+        - { name: redirect_uri, in: query, required: false, schema: { type: string, format: uri } }
+        - { name: redirect, in: query, required: false, schema: { type: string, description: "Si es true, redirige con HTTP 302" } }
       responses:
-        '501':
-          description: Stub pendiente de implementacion real
+        '200':
+          description: URL y state generados exitosamente
+        '302':
+          description: Redireccion directa al Identity Provider externo
+
   /auth/oauth2/callback:
     get:
       tags: [OAuth2]
-      summary: Callback OAuth2
+      summary: Callback OAuth2 / OpenID Connect
       parameters:
-        - { name: provider, in: query, required: true, schema: { type: string } }
         - { name: code, in: query, required: true, schema: { type: string } }
-        - { name: state, in: query, required: false, schema: { type: string } }
+        - { name: state, in: query, required: true, schema: { type: string } }
+        - { name: provider, in: query, required: false, schema: { type: string } }
       responses:
-        '501':
-          description: Stub pendiente de implementacion real
+        '200':
+          description: Autenticacion exitosa y emision de JWT
+        '400':
+          description: Parametros invalidos o token CSRF alterado
+    post:
+      tags: [OAuth2]
+      summary: Callback OAuth2 via POST
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, state]
+              properties:
+                code: { type: string }
+                state: { type: string }
+                provider: { type: string }
+                redirect_uri: { type: string }
+      responses:
+        '200':
+          description: Autenticacion exitosa y emision de JWT
+
   /auth/oauth2/link:
     post:
       tags: [OAuth2]
-      summary: Vincular cuenta OAuth2
+      summary: Vincular cuenta OAuth2 a usuario autenticado
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider: { type: string }
+                code: { type: string }
+                state: { type: string }
+                provider_id: { type: string }
+      responses:
+        '200':
+          description: Proveedor vinculado exitosamente
+
+  /auth/oauth2/userinfo:
+    get:
+      tags: [OAuth2]
+      summary: Perfil del usuario autenticado via OAuth2
       security: [{ bearerAuth: [] }]
       responses:
-        '501':
-          description: Stub pendiente de implementacion real
+        '200':
+          description: Perfil completo del usuario e identidades vinculadas
+
 components:
   securitySchemes:
     bearerAuth:
