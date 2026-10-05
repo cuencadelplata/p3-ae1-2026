@@ -39,12 +39,12 @@ import { createRf6Simulator } from '../../simulator/m6-rf6.5-rf6.6/rf6-server.js
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ motivo: 'Falla mecánica' }),
       });
-      const body = await response.json() as { viaje: { estado: string; actorCancelacion?: string } };
+      const body = await response.json() as { viaje: { id: string; estado: string; actorCancelacion?: string } };
       const persisted = await fetch(`http://127.0.0.1:${rf6Port}/api/viajes/${viaje.id}`);
 
       expect(response.status).toBe(200);
-      expect(body.viaje).toMatchObject({ estado: 'CANCELADO', actorCancelacion: 'conductor' });
-      expect(await persisted.json()).toMatchObject({ estado: 'CANCELADO', motivoCancelacion: 'Falla mecánica' });
+      expect(body.viaje).toMatchObject({ id: viaje.id, estado: 'CANCELADO', actorCancelacion: 'conductor' });
+      expect(await persisted.json()).toMatchObject({ id: viaje.id, estado: 'CANCELADO', motivoCancelacion: 'Falla mecánica' });
       expect(messages[0]).toMatchObject({
         routingKey: 'despacho.reabrir',
         payload: { viajeId: viaje.id, clienteId: 'cliente-sim', conductorId: 'conductor-sim', evento: 'cancelacion_conductor' },
@@ -52,6 +52,34 @@ import { createRf6Simulator } from '../../simulator/m6-rf6.5-rf6.6/rf6-server.js
     } finally {
       await close(api);
       await close(rf6);
+    }
+  });
+
+  it('rechaza y no publica si RF-6 devuelve otro viaje al consultar el ID solicitado', async () => {
+    const api = createViajeApi({
+      rf6Api: {
+        async getViaje() {
+          return { id: 'otro-id', clienteId: 'cliente-sim', estado: 'CONDUCTOR_EN_CAMINO' };
+        },
+        async cancelViaje() {
+          throw new Error('No debe intentar cancelar otro viaje');
+        },
+      },
+      events: { async publish() { throw new Error('No debe publicar para otro viaje'); } },
+    });
+    const apiPort = await listen(api);
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${apiPort}/api/viajes/solicitado-id/cancelacion-conductor`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ motivo: 'Falla mecánica' }),
+      });
+
+      expect(response.status).toBe(502);
+      expect(await response.json()).toEqual({ error: 'RF-6 devolvió un ID distinto al solicitado' });
+    } finally {
+      await close(api);
     }
   });
 });

@@ -60,12 +60,19 @@ export function createViajeApi(options: ViajeApiOptions): Server {
       if (!motivo) return send(response, 400, { error: 'El motivo de cancelación es obligatorio' });
 
       const actor = match[2] === 'cancelacion-cliente' ? 'cliente' : 'conductor';
-      const viaje = await options.rf6Api.getViaje(match[1]);
+      const viajeId = decodeURIComponent(match[1]);
+      const viaje = await options.rf6Api.getViaje(viajeId);
+      if (String(viaje.id) !== viajeId) {
+        return send(response, 502, { error: 'RF-6 devolvió un ID distinto al solicitado' });
+      }
       if (!['SOLICITADO', 'CONDUCTOR_EN_CAMINO'].includes(viaje.estado)) {
         return send(response, 400, { error: `No se puede cancelar un viaje en estado ${viaje.estado}` });
       }
 
-      const viajeCancelado = await options.rf6Api.cancelViaje({ viajeId: match[1], actor, motivo });
+      const viajeCancelado = await options.rf6Api.cancelViaje({ viajeId, actor, motivo });
+      if (String(viajeCancelado.id) !== viajeId) {
+        return send(response, 502, { error: 'RF-6 devolvió un ID distinto al cancelado' });
+      }
       const routingKey = actor === 'conductor' ? 'despacho.reabrir' : 'cancelacion_cliente';
       await options.events.publish(routingKey, {
         viajeId: String(viajeCancelado.id),
