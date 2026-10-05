@@ -107,6 +107,8 @@ test.describe('M2 Customers E2E', () => {
 
     test('updates customer preferences', async ({ page, request }) => {
       await openFreshProfile(page, request);
+      const heading = await page.getByRole('heading', { level: 1 }).textContent();
+      expect(heading).toMatch(/^Usuario #\d+$/);
 
       await page.getByLabel('Preferred vehicle').selectOption('auto');
       await page.getByLabel('Notification channel').selectOption('email');
@@ -114,6 +116,9 @@ test.describe('M2 Customers E2E', () => {
 
       await expect(page.getByText('✓ Saved')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Save preferences' })).toBeDisabled();
+      // El encabezado y los datos de identidad se conservan tras guardar (el PUT no devuelve userId)
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(heading!);
+      await expect(page.getByText(/^cust_[0-9a-f]+$/)).toBeVisible();
 
       // Persistió: tras recargar siguen los valores nuevos
       await page.reload();

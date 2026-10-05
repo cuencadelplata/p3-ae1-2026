@@ -144,14 +144,37 @@ Las respuestas de error siguen `{ "error": "...", "message": "..." }`; los error
 
 ## Lógica de estado de cuenta (RF-2.5)
 
-`GET /v1/customers/:id/status` recalcula el estado en cada consulta:
+**Quién puede consultarlo.** `GET /v1/customers/:id/status` acepta dos credenciales:
 
-1. Llama a Soporte (`GET /usuarios/{userId}/penalizaciones`) reenviando el token del usuario.
+- **Token de usuario (M1):** solo el dueño del perfil. Un token válido de otro usuario responde `403`; un token inválido, `401`.
+- **`X-Secret-Key: <STATUS_SECRET_KEY>`:** para que otros módulos consulten el estado de cualquier cliente sin token de usuario. Una clave incorrecta responde `401`.
+
+`PUT /v1/customers/:id/status` exige token de usuario y solo lo permite el dueño (`403` si no lo es). El body se valida primero: un estado inválido responde `400` sin consultar la base.
+
+**Recálculo.** Cada consulta recalcula el estado:
+
+1. Llama a Soporte (`GET /usuarios/{userId}/penalizaciones`) con la clave de servicio `SOPORTE_SECRET_KEY` (header `X-Secret-Key`). No se reenvía el token del usuario: es una llamada de servicio a servicio.
 2. Aplica los umbrales (`PENALIZACIONES_TEMPORAL`, `PENALIZACIONES_PERMANENTE`).
-3. Si el nuevo estado difiere del guardado, lo persiste.
-4. **Si Soporte está caído** → devuelve el último estado guardado sin error (degradación elegante).
+3. Si el nuevo estado difiere del guardado, lo persiste e invalida el perfil cacheado.
+4. **Si Soporte está caído** (timeout, error o circuito abierto) → devuelve el último estado guardado sin error (degradación elegante).
 
 Regla de desbloqueo automático: solo los bloqueos con `blockOrigin = AUTOMATICO` pueden revertirse solos cuando bajan las penalizaciones. Los bloqueos `MANUAL` (aplicados vía `PUT /status`) son intocables por este mecanismo.
+
+El estado de cuenta vive solo en la tabla `AccountStatus`; el perfil lo lee con un `JOIN`. Las consultas de estado comparten el circuit breaker de PostgreSQL.
+
+---
+
+## Historial de viajes (RF-2.3)
+
+`GET /v1/customers/:id/trips` exige token de usuario y solo lo ve el dueño del perfil (`403` si no lo es). M2 consulta M6 con el `userId` **del perfil** (no el de quien pide), reenviando el token del usuario.
+
+Si M6 no responde (timeout, error o circuito abierto) la respuesta es `200` con `trips: []` y `degraded: true`. Con `degraded: false` la lista viene de M6, y una lista vacía significa que el usuario no tiene viajes. El front muestra "No se pudo cargar el historial." cuando `degraded` es `true`.
+
+---
+
+## Resiliencia hacia M6 y Soporte
+
+Ambos clientes usan la misma política que M1 (`src/resilience/policies.ts`): timeout de 1,5 s, reintentos de lecturas y circuit breaker de 3 fallas consecutivas con pausa de 30 s. Se ajusta con `M6_POLICY_TIMEOUT_MS` y `SOPORTE_POLICY_TIMEOUT_MS`. Ambos figuran en `GET /health` como dependencias **no críticas**: si caen, el servicio responde `200 DEGRADED`.
 
 ---
 
@@ -192,7 +215,7 @@ M2 consume (no provee) estos endpoints:
 M1:      GET /auth/validar-identidad-y-rol   Authorization: Bearer <jwt>
          → 200 { valid, userId, role } | 401
 
-Soporte: GET /usuarios/{userId}/penalizaciones   Authorization: Bearer <jwt>
+Soporte: GET /usuarios/{userId}/penalizaciones   X-Secret-Key: <SOPORTE_SECRET_KEY>
          → 200 { userId, total, penalizaciones: [...] }
 
 M6:      GET /v1/trips?userId={id}   Authorization: Bearer <jwt>

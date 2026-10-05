@@ -27,7 +27,9 @@ export default function PreferencesEditor({ customer, onUpdate }: Props) {
     setError('');
     try {
       const updated = await api.updatePreferences(customer.customerId, prefs);
-      onUpdate(updated);
+      // El PUT devuelve solo customerId, preferences y status: se combina con el perfil actual
+      // para no perder userId ni createdAt
+      onUpdate({ ...customer, ...updated });
       setSaved(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unexpected error');
