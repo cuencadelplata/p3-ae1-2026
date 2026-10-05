@@ -54,7 +54,9 @@ export function createViajeApi(options: ViajeApiOptions): Server {
       const match = request.url?.match(/^\/api\/viajes\/([^/]+)\/(cancelacion-cliente|cancelacion-conductor)$/);
       if (!match) return send(response, 404, { error: 'Ruta no encontrada' });
 
-      if (request.method !== 'POST') return send(response, 404, { error: 'Ruta no encontrada' });
+      if (request.method !== 'POST') {
+        return send(response, 405, { error: 'Método no permitido' }, { Allow: 'POST' });
+      }
       const input = await readJson(request) as { motivo?: string };
       const motivo = input.motivo?.trim() ?? '';
       if (!motivo) return send(response, 400, { error: 'El motivo de cancelación es obligatorio' });
@@ -97,7 +99,7 @@ async function readJson(request: IncomingMessage): Promise<Record<string, unknow
   return body ? JSON.parse(body) as Record<string, unknown> : {};
 }
 
-function send(response: ServerResponse, status: number, body: unknown): void {
-  response.writeHead(status, { 'content-type': 'application/json' });
+function send(response: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
+  response.writeHead(status, { 'content-type': 'application/json', ...headers });
   response.end(JSON.stringify(body));
 }

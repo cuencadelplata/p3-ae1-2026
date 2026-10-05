@@ -38,4 +38,16 @@ describe('RF-6.5 - Cancelación por cliente', () => {
     expect(response.status).toBe(400);
     expect((await response.json()).error).toContain('estado CANCELADO');
   });
+
+  it('responde 405 con Allow para un método no permitido y 404 para una ruta inexistente', async () => {
+    const running = await startServices(new Map());
+    services.api = running.api;
+
+    const methodResponse = await fetch(`${running.url}/api/viajes/V-202/cancelacion-cliente`);
+    expect(methodResponse.status).toBe(405);
+    expect(methodResponse.headers.get('allow')).toBe('POST');
+
+    const routeResponse = await fetch(`${running.url}/api/viajes/V-202/desconocida`, { method: 'POST' });
+    expect(routeResponse.status).toBe(404);
+  });
 });
