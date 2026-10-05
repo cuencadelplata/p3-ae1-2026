@@ -1,7 +1,9 @@
+﻿import crypto from "crypto";
 import db from "../config/database";
 import {
     UserRole,
     UserRow,
+    UserStatus,
     PasswordRecoveryTokenRow,
     OAuth2ProviderRow,
     OAuth2Provider
@@ -53,6 +55,28 @@ export function createUser(
         .run(nombre, apellido, dni, telefono, email, passwordHash, rol);
 
     return Number(result.lastInsertRowid);
+}
+
+export function createOAuth2User(
+    email: string,
+    role: UserRole = "CLIENTE",
+    nombre: string = "",
+    apellido: string = ""
+): number {
+    // Generar una contraseña aleatoria de 32 caracteres para satisfacer la restricción NOT NULL
+    const randomPasswordHash = crypto.randomBytes(32).toString("hex");
+    return createUser(nombre, apellido, "", "", email, randomPasswordHash, role);
+}
+
+export function updateUserStatus(
+    id: number,
+    status: UserStatus
+): void {
+    db.prepare(`
+        UPDATE usuarios
+        SET estado = ?
+        WHERE id = ?
+    `).run(status, id);
 }
 
 // ============ Password Recovery Functions ============
@@ -140,6 +164,15 @@ export function createOAuth2Provider(
     return Number(result.lastInsertRowid);
 }
 
+export function createOAuth2ProviderLink(
+    usuarioId: number,
+    providerName: OAuth2Provider,
+    providerUserId: string,
+    providerEmail?: string
+): number {
+    return createOAuth2Provider(usuarioId, providerName, providerUserId, providerEmail);
+}
+
 export function findOAuth2ProviderByProviderUserId(
     providerName: OAuth2Provider,
     providerUserId: string
@@ -152,6 +185,13 @@ export function findOAuth2ProviderByProviderUserId(
         .get(providerName, providerUserId) as OAuth2ProviderRow | undefined;
 }
 
+export function findOAuth2Provider(
+    providerName: OAuth2Provider,
+    providerUserId: string
+): OAuth2ProviderRow | undefined {
+    return findOAuth2ProviderByProviderUserId(providerName, providerUserId);
+}
+
 export function findOAuth2ProvidersByUserId(
     usuarioId: number
 ): OAuth2ProviderRow[] {
@@ -161,4 +201,23 @@ export function findOAuth2ProvidersByUserId(
             WHERE usuario_id = ? AND estado = 'ACTIVO'
         `)
         .all(usuarioId) as OAuth2ProviderRow[];
+}
+
+export function updateOAuth2LastLogin(providerId: number): void {
+    db.prepare(`
+        UPDATE oauth2_providers
+        SET last_login_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    `).run(providerId);
+}
+
+export function unlinkOAuth2Provider(
+    usuarioId: number,
+    providerName: OAuth2Provider
+): void {
+    db.prepare(`
+        UPDATE oauth2_providers
+        SET estado = 'DESVINCULADO'
+        WHERE usuario_id = ? AND provider_name = ?
+    `).run(usuarioId, providerName);
 }
