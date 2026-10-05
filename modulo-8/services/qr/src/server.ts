@@ -1,10 +1,11 @@
 import { createApp } from "./app";
+import { createLogger } from "./observability/logger";
 import { generateQrDataUrl, generateQrToken } from "./qr-generator";
 import { loadQrConfig, type QrConfig } from "./qr.config";
 import { createRedisQrStore } from "./qr.redis-store";
 import { createQrService } from "./qr.service";
 import { createQrRedisClient, isRedisReady } from "./redis-client";
-import { createGracefulShutdown, type ShutdownLog } from "./shutdown";
+import { createGracefulShutdown } from "./shutdown";
 
 // Punto de arranque del servicio QR: arma las dependencias, atiende HTTP y cierra en orden.
 //
@@ -25,9 +26,7 @@ const port =
 // cierre de Redis ocurra aunque haya solicitudes que no terminan.
 const SHUTDOWN_TIMEOUT_MS = 8_000;
 
-const log: ShutdownLog = (level, message, fields = {}) => {
-  console[level](JSON.stringify({ level, component: "server", message, ...fields }));
-};
+const log = createLogger("server");
 
 function loadConfigOrExit(): QrConfig & { readonly redisUrl: string } {
   let config: QrConfig;
@@ -58,6 +57,7 @@ const qrService = createQrService({
   generateQrToken,
   generateQrDataUrl,
   now: () => new Date(),
+  log: createLogger("qr"),
 });
 
 const server = createApp({ qrService, checkRedis: () => isRedisReady(redisClient) }).listen(port, () => {

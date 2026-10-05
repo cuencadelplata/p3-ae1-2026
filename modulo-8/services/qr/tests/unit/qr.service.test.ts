@@ -36,6 +36,7 @@ function createDeps(overrides: DepsOverrides = {}) {
     generateQrToken: () => ({ token: TOKEN, tokenHash: TOKEN_HASH }),
     generateQrDataUrl,
     now: () => NOW,
+    log: vi.fn(),
   };
 
   return { deps, save, consumeIfValid, generateQrDataUrl };

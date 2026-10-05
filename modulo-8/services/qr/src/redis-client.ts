@@ -1,12 +1,7 @@
 import { createClient } from "redis";
 
+import { createLogger, type Logger } from "./observability/logger";
 import { qrRedisScripts } from "./qr.redis-scripts";
-
-export type RedisClientLog = (
-  level: "info" | "error",
-  message: string,
-  fields?: Record<string, unknown>,
-) => void;
 
 export interface QrRedisClientOptions {
   readonly url: string;
@@ -14,7 +9,7 @@ export interface QrRedisClientOptions {
   // Tiempo máximo de cada comando. Al vencer, la promesa se rechaza, pero si el comando ya
   // se había enviado Redis puede ejecutarlo igual: el resultado queda indeterminado.
   readonly commandTimeoutMs?: number;
-  readonly log?: RedisClientLog;
+  readonly log?: Logger;
 }
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 2000;
@@ -22,16 +17,12 @@ const DEFAULT_COMMAND_TIMEOUT_MS = 2000;
 const RECONNECT_STEP_MS = 200;
 const RECONNECT_MAX_DELAY_MS = 5000;
 
-const defaultLog: RedisClientLog = (level, message, fields = {}) => {
-  console[level](JSON.stringify({ level, component: "redis", message, ...fields }));
-};
-
 // Crea el cliente sin conectarlo: quien lo use decide cuándo llamar a connect() y close().
 //
 // Con disableOfflineQueue, un comando sin conexión falla en el momento en lugar de esperar
 // la reconexión. Mientras tanto el cliente se reconecta solo, con espera creciente acotada.
 export function createQrRedisClient(options: QrRedisClientOptions) {
-  const log = options.log ?? defaultLog;
+  const log = options.log ?? createLogger("redis");
 
   const client = createClient({
     url: options.url,
