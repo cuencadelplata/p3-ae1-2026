@@ -1,6 +1,6 @@
 import { describe, it, beforeAll, afterAll, expect } from 'vitest';
 import axios from 'axios';
-import { execSync } from 'child_process';
+import { execSync, spawn, type ChildProcess } from 'child_process';
 import { resolve } from 'path';
 
 const API_URL = 'http://localhost:3000/api';
@@ -8,9 +8,36 @@ const M8_URL = process.env.M8_URL ?? 'http://host.docker.internal:3103';
 const M8_TEST_URL = process.env.M8_TEST_URL ?? 'http://localhost:3103';
 const PROJECT_ROOT = resolve(__dirname, '../../');
 let containerId: string | null = null;
+let mockM8Process: ChildProcess | null = null;
 
 describe('E2E Tests - Docker Container', () => {
   beforeAll(async () => {
+    if (!process.env.M8_URL) {
+      mockM8Process = spawn(process.execPath, ['mock-m8/server.js'], {
+        cwd: PROJECT_ROOT,
+        env: { ...process.env, PORT: '3103' },
+        stdio: 'ignore',
+      });
+
+      let attempts = 0;
+      while (attempts < 30) {
+        try {
+          await axios.get('http://localhost:3103/health', { timeout: 1000 });
+          break;
+        } catch {
+          if (mockM8Process.exitCode !== null) {
+            throw new Error('El mock M8 no pudo iniciarse');
+          }
+          attempts++;
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      }
+
+      if (attempts >= 30) {
+        throw new Error('El mock M8 no respondió dentro de 30 segundos');
+      }
+    }
+
     console.log('Construyendo imagen de Docker...');
     try {
       execSync('docker build -t m6-viajes:e2e .', {
@@ -54,7 +81,7 @@ describe('E2E Tests - Docker Container', () => {
       console.error('Error al iniciar el contenedor de Docker:', error);
       throw error;
     }
-  }, 60000);
+  }, 180000);
 
   it('M8 devuelve el mismo QR ante generación repetida y valida single-use', async () => {
     const tripId = `idempotency-${Date.now()}`;
@@ -91,6 +118,10 @@ describe('E2E Tests - Docker Container', () => {
       } catch (error) {
         console.error('Error al detener el contenedor:', error);
       }
+    }
+
+    if (mockM8Process && mockM8Process.exitCode === null) {
+      mockM8Process.kill();
     }
   });
 
@@ -179,7 +210,9 @@ describe('E2E Tests - Docker Container', () => {
     });
 
     // Registrar arribo
-    const arribo = await axios.put(`${API_URL}/viajes/${viaje.data.id}/arribo`, {});
+    const arribo = await axios.put(`${API_URL}/viajes/${viaje.data.id}/arribo`, {}).catch((error: any) => {
+      throw new Error(`Arribo devolvió ${error.response?.status}: ${JSON.stringify(error.response?.data)}`);
+    });
     expect(arribo.data.viaje.estado).toBe('ARRIBADO');
     const codigoVerificacion = arribo.data.qr.token;
 
