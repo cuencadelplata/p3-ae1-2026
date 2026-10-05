@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS customers.AccountStatus (
         )
     ),
     reason TEXT NOT NULL DEFAULT 'Perfil verificado y sin infracciones operativas',
+    -- Origen del bloqueo: AUTOMATICO (por penalizaciones) o MANUAL (por el usuario/admin).
+    -- Solo los bloqueos AUTOMATICOS pueden revertirse automáticamente al consultar el estado.
+    block_origin VARCHAR(20) CHECK (block_origin IN ('AUTOMATICO', 'MANUAL')),
     updated_at TIMESTAMP
     WITH
         TIME ZONE DEFAULT CURRENT_TIMESTAMP

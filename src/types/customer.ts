@@ -51,6 +51,21 @@ export const UpdateAccountStatusSchema = z.object({
 });
 export type UpdateAccountStatusDTO = z.infer<typeof UpdateAccountStatusSchema>;
 
+/**
+ * Origen del bloqueo: 'AUTOMATICO' cuando lo aplicaron las penalizaciones de soporte,
+ * 'MANUAL' cuando lo aplicó el propio usuario (o un admin). Solo los bloqueos
+ * automáticos pueden revertirse automáticamente al bajar las penalizaciones.
+ */
+export type BlockOrigin = 'AUTOMATICO' | 'MANUAL';
+
+/**
+ * DTO interno usado al persistir un cambio de estado.
+ * Extiende UpdateAccountStatusDTO con el campo de origen.
+ */
+export interface UpdateAccountStatusInternalDTO extends UpdateAccountStatusDTO {
+  blockOrigin?: BlockOrigin;
+}
+
 // Interfaces del Dominio
 export interface CustomerProfile {
   customerId: string;
@@ -68,6 +83,8 @@ export interface AccountStatusResponse {
   status: AccountStatusEnum;
   reason: string;
   updatedAt: string;
+  /** Origen del bloqueo activo. Solo presente cuando status indica un bloqueo. */
+  blockOrigin?: BlockOrigin;
 }
 
 export interface TripSummary {

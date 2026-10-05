@@ -13,7 +13,17 @@ services:
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_NAME: profiles
-      M6_SERVICE_URL: http://localhost:8080
+      # Stubs internos: los módulos externos se simulan dentro del mismo contenedor
+      STUBS_ENABLED: "true"
+      M1_SERVICE_URL: http://localhost:3000/__stubs/m1
+      SOPORTE_SERVICE_URL: http://localhost:3000/__stubs/soporte
+      M6_SERVICE_URL: http://localhost:3000/__stubs/m6
+      # Claves de servicio a servicio
+      SOPORTE_SECRET_KEY: "secret-m2"
+      STATUS_SECRET_KEY: "secret-status"
+      # Umbrales de bloqueo automático por penalizaciones (RF-2.5)
+      PENALIZACIONES_TEMPORAL: "2"
+      PENALIZACIONES_PERMANENTE: "3"
     depends_on:
       db-profiles:
         condition: service_healthy

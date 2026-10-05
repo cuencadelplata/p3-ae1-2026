@@ -38,59 +38,32 @@ describe('Endpoints REST - Módulo 2 Clientes (Supertest)', () => {
     expect(res.body.error).toBe('CustomerNotFound');
   });
 
-  it('GET /v1/customers/:id/trips debe retornar historial de viajes', async () => {
-    vi.spyOn(customerRepository, 'findById').mockResolvedValueOnce({
-      customerId: 'cust_823a7b9c',
-      name: 'Juan Pérez',
-      email: 'juan.perez@example.com',
-      phone: '+5493512345678',
-      preferences: { preferredVehicleType: 'auto', notificationChannel: 'email' },
-      status: 'ACTIVO',
-      createdAt: '2026-08-30T23:00:00Z'
-    });
+  // GET /trips y PUT /status ahora requieren Authorization: Bearer <token>
+  // Los tests completos de esos endpoints están en tests/unit/account-status.test.ts
+  // y tests/unit/trips.test.ts. Acá solo verificamos el 401 sin token.
 
+  it('GET /v1/customers/:id/trips sin token debe retornar 401', async () => {
     const res = await request(app).get('/v1/customers/cust_823a7b9c/trips');
-    expect(res.status).toBe(200);
-    expect(res.body.customerId).toBe('cust_823a7b9c');
-    expect(res.body.trips).toBeInstanceOf(Array);
-    expect(res.body.tripsCount).toBeGreaterThanOrEqual(1);
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('Unauthorized');
   });
 
-  it('PUT /v1/customers/:id/status debe dar de baja al cliente con estado INACTIVO', async () => {
-    vi.spyOn(customerRepository, 'updateAccountStatus').mockResolvedValueOnce({
-      customerId: 'cust_823a7b9c',
-      status: 'INACTIVO',
-      reason: 'Baja solicitada por el cliente',
-      updatedAt: '2026-10-03T12:00:00Z'
-    });
-
+  it('PUT /v1/customers/:id/status sin token debe retornar 401', async () => {
     const res = await request(app)
       .put('/v1/customers/cust_823a7b9c/status')
       .send({ status: 'INACTIVO', reason: 'Baja solicitada por el cliente' });
-
-    expect(res.status).toBe(200);
-    expect(res.body.status).toBe('INACTIVO');
-    expect(res.body.reason).toBe('Baja solicitada por el cliente');
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('Unauthorized');
   });
 
-  it('PUT /v1/customers/:id/status debe rechazar un estado inválido con 400', async () => {
+  it('PUT /v1/customers/:id/status debe rechazar un estado inválido con 400 (con token)', async () => {
     const res = await request(app)
       .put('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', 'Bearer tok-test')
       .send({ status: 'ELIMINADO', reason: 'Borrado' });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('ValidationError');
-  });
-
-  it('PUT /v1/customers/:id/status debe retornar 404 si el cliente no existe', async () => {
-    vi.spyOn(customerRepository, 'updateAccountStatus').mockResolvedValueOnce(null);
-
-    const res = await request(app)
-      .put('/v1/customers/cust_inexistente/status')
-      .send({ status: 'INACTIVO', reason: 'Baja solicitada por el cliente' });
-
-    expect(res.status).toBe(404);
-    expect(res.body.error).toBe('CustomerNotFound');
   });
 
   it('DELETE /v1/customers/:id no debe existir (los clientes no se borran)', async () => {

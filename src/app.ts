@@ -3,8 +3,11 @@ import cors from 'cors';
 import { apiReference } from '@scalar/express-api-reference';
 import { openApiSpec } from './docs/openapi.js';
 import { customerController } from './controllers/customer.controller.js';
+import { accountStatusController } from './controllers/account-status.controller.js';
+import { tripsController } from './controllers/trips.controller.js';
 import { asyncHandler } from './middlewares/async-handler.js';
 import { errorHandler } from './middlewares/error-handler.js';
+import { mountStubs } from './stubs/index.js';
 
 export const app = express();
 
@@ -47,15 +50,22 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// 3. Rutas de la API REST (/v1/customers...)
+// 3a. Stubs de módulos externos (solo si STUBS_ENABLED=true)
+mountStubs(app);
+
+// 3b. Rutas de la API REST (/v1/customers...)
 // RF-2.1: asyncHandler envía los errores async al middleware central (Express 4 no lo hace solo)
 app.post('/v1/customers', asyncHandler(customerController.createCustomer));
 app.get('/v1/customers', asyncHandler(customerController.listCustomers));
 app.get('/v1/customers/:id', asyncHandler(customerController.getCustomerById));
 app.put('/v1/customers/:id', asyncHandler(customerController.updateCustomerPreferences));
-app.get('/v1/customers/:id/status', customerController.getAccountStatus);
-app.put('/v1/customers/:id/status', customerController.updateAccountStatus);
-app.get('/v1/customers/:id/trips', customerController.getCustomerTrips);
+
+// RF-2.5: Estado de cuenta (Leandro) — asyncHandler evita que un error async cuelgue el request
+app.get('/v1/customers/:id/status', asyncHandler(accountStatusController.getAccountStatus));
+app.put('/v1/customers/:id/status', asyncHandler(accountStatusController.updateAccountStatus));
+
+// RF-2.3: Historial de viajes (Leandro) — asyncHandler igual
+app.get('/v1/customers/:id/trips', asyncHandler(tripsController.getCustomerTrips));
 
 // 4. Manejador 404 para rutas no reconocidas
 app.use((_req, res) => {
