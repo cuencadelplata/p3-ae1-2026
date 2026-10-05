@@ -8,7 +8,7 @@ import type { QrGenerationResponse, QrRecord, QrValidationResponse } from "./qr.
 
 export interface QrServiceDeps {
   readonly store: QrStore;
-  readonly config: QrConfig;
+  readonly config: Pick<QrConfig, "ttlSeconds">;
   readonly generateQrToken: () => GeneratedQrToken;
   readonly generateQrDataUrl: (token: string) => Promise<string>;
   readonly now: () => Date;

@@ -1,0 +1,64 @@
+import { createClient } from "redis";
+
+import { qrRedisScripts } from "./qr.redis-scripts";
+
+export type RedisClientLog = (
+  level: "info" | "error",
+  message: string,
+  fields?: Record<string, unknown>,
+) => void;
+
+export interface QrRedisClientOptions {
+  readonly url: string;
+  readonly connectTimeoutMs?: number;
+  // Tiempo máximo de cada comando. Al vencer, la promesa se rechaza, pero si el comando ya
+  // se había enviado Redis puede ejecutarlo igual: el resultado queda indeterminado.
+  readonly commandTimeoutMs?: number;
+  readonly log?: RedisClientLog;
+}
+
+const DEFAULT_CONNECT_TIMEOUT_MS = 2000;
+const DEFAULT_COMMAND_TIMEOUT_MS = 2000;
+const RECONNECT_STEP_MS = 200;
+const RECONNECT_MAX_DELAY_MS = 5000;
+
+const defaultLog: RedisClientLog = (level, message, fields = {}) => {
+  console[level](JSON.stringify({ level, component: "redis", message, ...fields }));
+};
+
+// Crea el cliente sin conectarlo: quien lo use decide cuándo llamar a connect() y close().
+//
+// Con disableOfflineQueue, un comando sin conexión falla en el momento en lugar de esperar
+// la reconexión. Mientras tanto el cliente se reconecta solo, con espera creciente acotada.
+export function createQrRedisClient(options: QrRedisClientOptions) {
+  const log = options.log ?? defaultLog;
+
+  const client = createClient({
+    url: options.url,
+    disableOfflineQueue: true,
+    commandOptions: { timeout: options.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS },
+    socket: {
+      connectTimeout: options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS,
+      reconnectStrategy: (retries) => Math.min(RECONNECT_STEP_MS * (retries + 1), RECONNECT_MAX_DELAY_MS),
+    },
+    scripts: qrRedisScripts,
+  });
+
+  // El cliente emite un error por cada intento fallido: se informa sólo el primero hasta que
+  // vuelve a estar listo. El mensaje no incluye la URL, que puede contener credenciales.
+  let disconnected = false;
+  client.on("error", (error: Error) => {
+    if (!disconnected) {
+      disconnected = true;
+      log("error", "sin conexión con Redis, reintentando", { reason: error.message });
+    }
+  });
+  client.on("ready", () => {
+    disconnected = false;
+    log("info", "conectado a Redis");
+  });
+
+  return client;
+}
+
+export type QrRedisClient = ReturnType<typeof createQrRedisClient>;
