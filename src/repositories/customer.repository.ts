@@ -98,9 +98,11 @@ export class CustomerRepository {
   async findById(customerId: string): Promise<CustomerProfile | null> {
     return postgresPolicy.execute(async () => {
       const query = `
-        SELECT customer_id, user_id, preferred_vehicle_type, notification_channel, status, created_at, updated_at
-        FROM customers.CustomerProfile
-        WHERE customer_id = $1;
+        SELECT p.customer_id, p.user_id, p.preferred_vehicle_type, p.notification_channel,
+               a.status, p.created_at, p.updated_at
+        FROM customers.CustomerProfile AS p
+        JOIN customers.AccountStatus AS a ON a.customer_id = p.customer_id
+        WHERE p.customer_id = $1;
       `;
       const { rows } = await pool.query<CustomerProfileRow>(query, [customerId]);
       const row = rows[0];
@@ -111,9 +113,11 @@ export class CustomerRepository {
   async findByUserId(userId: UserId): Promise<CustomerProfile | null> {
     return postgresPolicy.execute(async () => {
       const query = `
-        SELECT customer_id, user_id, preferred_vehicle_type, notification_channel, status, created_at, updated_at
-        FROM customers.CustomerProfile
-        WHERE user_id = $1;
+        SELECT p.customer_id, p.user_id, p.preferred_vehicle_type, p.notification_channel,
+               a.status, p.created_at, p.updated_at
+        FROM customers.CustomerProfile AS p
+        JOIN customers.AccountStatus AS a ON a.customer_id = p.customer_id
+        WHERE p.user_id = $1;
       `;
       const { rows } = await pool.query<CustomerProfileRow>(query, [userId]);
       const row = rows[0];
@@ -127,12 +131,18 @@ export class CustomerRepository {
   async updatePreferences(customerId: string, preferences: Preferences): Promise<CustomerProfile | null> {
     return postgresPolicy.execute(async () => {
       const query = `
-        UPDATE customers.CustomerProfile
-        SET preferred_vehicle_type = $1,
-            notification_channel = $2,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE customer_id = $3
-        RETURNING customer_id, user_id, preferred_vehicle_type, notification_channel, status, created_at, updated_at;
+        WITH updated AS (
+          UPDATE customers.CustomerProfile
+          SET preferred_vehicle_type = $1,
+              notification_channel = $2,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE customer_id = $3
+          RETURNING customer_id, user_id, preferred_vehicle_type, notification_channel, created_at, updated_at
+        )
+        SELECT updated.customer_id, updated.user_id, updated.preferred_vehicle_type,
+               updated.notification_channel, a.status, updated.created_at, updated.updated_at
+        FROM updated
+        JOIN customers.AccountStatus AS a ON a.customer_id = updated.customer_id;
       `;
       const values = [preferences.preferredVehicleType, preferences.notificationChannel, customerId];
       const { rows } = await pool.query<CustomerProfileRow>(query, values);
@@ -147,9 +157,11 @@ export class CustomerRepository {
   async findAll(): Promise<CustomerProfile[]> {
     return postgresPolicy.execute(async () => {
       const query = `
-        SELECT customer_id, user_id, preferred_vehicle_type, notification_channel, status, created_at, updated_at
-        FROM customers.CustomerProfile
-        ORDER BY created_at DESC;
+        SELECT p.customer_id, p.user_id, p.preferred_vehicle_type, p.notification_channel,
+               a.status, p.created_at, p.updated_at
+        FROM customers.CustomerProfile AS p
+        JOIN customers.AccountStatus AS a ON a.customer_id = p.customer_id
+        ORDER BY p.created_at DESC;
       `;
       const { rows } = await pool.query<CustomerProfileRow>(query);
       return rows.map(customerFromRow);
