@@ -15,16 +15,23 @@ vi.mock('../../src/services/conductor.service', () => ({
 
 vi.mock('../../src/services/qr.service.js', () => {
   const codigos = new Map<string, string>();
+  class M8ApiError extends Error {
+    constructor(readonly status: number, readonly code: string, readonly retryAfter?: string) {
+      super(code);
+    }
+  }
+
   return {
+    M8ApiError,
     generarQR: vi.fn(async (tripId: string) => {
-      const codigo = `TEST-${tripId}`;
-      codigos.set(tripId, codigo);
-      return { codigo };
+      const token = `TEST-${tripId}`;
+      codigos.set(tripId, token);
+      return { token, qrDataUrl: 'data:image/png;base64,test', expiresAt: new Date().toISOString() };
     }),
-    validarQR: vi.fn(async (tripId: string, codigo: string) => {
-      return codigos.get(tripId) === codigo
-        ? { valido: true }
-        : { valido: false, motivo: 'QR inválido' };
+    validarQR: vi.fn(async (tripId: string, token: string) => {
+      return codigos.get(tripId) === token
+        ? { valid: true }
+        : { valid: false };
     }),
   };
 });
@@ -160,7 +167,9 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
 
     // 2. Importamos el servicio mockeado y forzamos el error de caída SOLO para este test
     const qrService = await import('../../src/services/qr.service.js');
-    vi.mocked(qrService.validarQR).mockRejectedValueOnce(new Error('503_SERVICE_UNAVAILABLE'));
+    vi.mocked(qrService.validarQR).mockRejectedValueOnce(
+      new qrService.M8ApiError(503, 'M8_UNAVAILABLE', '3')
+    );
 
     // 3. El conductor intenta iniciar el viaje con su app
     const req4 = mockRequest({ codigoVerificacion: codigoValido }, { id: viajeId });
@@ -171,7 +180,49 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
 
     // 5. Validamos que el controlador capture el error y responda 503 de forma resiliente
     expect(res4.statusCode).toBe(503);
-    expect(res4.data.error).toContain('temporalmente no disponible');
+    expect(res4.data.viaje).toBeUndefined();
+    expect(res4.headers['Retry-After']).toBe('3');
+  });
+
+  it('no inicia el viaje si M8 devuelve una validación negativa', async () => {
+    const req1 = mockRequest({ clienteId: 'cliente-1', origen: 'A', destino: 'B' });
+    const res1 = mockResponse();
+    await solicitarViaje(req1 as any, res1 as any);
+    const viajeId = res1.data.id;
+    const token = res1.data.codigoVerificacion;
+    await asignarConductor(mockRequest({ conductorId: 'conductor-1' }, { id: viajeId }) as any, mockResponse() as any);
+    await registrarArribo(mockRequest({}, { id: viajeId }) as any, mockResponse() as any);
+
+    const qrService = await import('../../src/services/qr.service.js');
+    vi.mocked(qrService.validarQR).mockResolvedValueOnce({ valid: false });
+    const response = mockResponse();
+    await iniciarViaje(mockRequest({ token }, { id: viajeId }) as any, response as any);
+
+    expect(response.statusCode).toBe(401);
+    const { rows } = await pool.query('SELECT estado FROM viajes WHERE id = $1', [viajeId]);
+    expect(rows[0].estado).toBe('ARRIBADO');
+  });
+
+  it('propaga los rechazos de M8 sin cambiar el estado del viaje', async () => {
+    const req1 = mockRequest({ clienteId: 'cliente-1', origen: 'A', destino: 'B' });
+    const res1 = mockResponse();
+    await solicitarViaje(req1 as any, res1 as any);
+    const viajeId = res1.data.id;
+    const token = res1.data.codigoVerificacion;
+    await asignarConductor(mockRequest({ conductorId: 'conductor-1' }, { id: viajeId }) as any, mockResponse() as any);
+    await registrarArribo(mockRequest({}, { id: viajeId }) as any, mockResponse() as any);
+
+    const qrService = await import('../../src/services/qr.service.js');
+    vi.mocked(qrService.validarQR).mockRejectedValueOnce(
+      new qrService.M8ApiError(410, 'QR_EXPIRED')
+    );
+    const response = mockResponse();
+    await iniciarViaje(mockRequest({ token }, { id: viajeId }) as any, response as any);
+
+    expect(response.statusCode).toBe(410);
+    expect(response.data.error.code).toBe('QR_EXPIRED');
+    const { rows } = await pool.query('SELECT estado FROM viajes WHERE id = $1', [viajeId]);
+    expect(rows[0].estado).toBe('ARRIBADO');
   });
 
 });

@@ -4,6 +4,7 @@ import { execSync } from 'child_process';
 import { resolve } from 'path';
 
 const API_URL = 'http://localhost:3000/api';
+const M8_URL = process.env.M8_URL ?? 'http://host.docker.internal:3103';
 const PROJECT_ROOT = resolve(__dirname, '../../');
 let containerId: string | null = null;
 
@@ -23,7 +24,7 @@ describe('E2E Tests - Docker Container', () => {
 
     console.log('Iniciando contenedor de Docker...');
     try {
-      const result = execSync('docker run -d --network m6_viajes_default --add-host host.docker.internal:host-gateway --env-file .env -e DB_HOST=tripdb -e M8_URL=http://host.docker.internal:4001 -p 3000:3000 m6-viajes:e2e', {
+      const result = execSync(`docker run -d --network m6_viajes_default --add-host host.docker.internal:host-gateway -e DB_HOST=tripdb -e DB_PORT=5432 -e DB_USER=m6 -e DB_PASSWORD=m6pass -e DB_NAME=tripdb -e REDIS_URL=redis://redis:6379 -e RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672 -e M8_URL=${M8_URL} -p 3000:3000 m6-viajes:e2e`, {
         cwd: PROJECT_ROOT,
         encoding: 'utf-8',
       }).trim();

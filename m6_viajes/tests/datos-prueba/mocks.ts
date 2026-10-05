@@ -7,6 +7,11 @@ export const mockRequest = (body = {}, params = {}) => ({
 export const mockResponse = () => {
   const res: any = {};
   res.statusCode = 200;
+  res.headers = {};
+  res.setHeader = function(name: string, value: string) {
+    this.headers[name] = value;
+    return this;
+  };
   res.status = function(code: number) {
     this.statusCode = code;
     return this;

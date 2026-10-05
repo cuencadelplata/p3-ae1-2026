@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import type { Viaje } from '../models/viaje.model.js';
 import { EstadoViaje } from '../models/viaje.model.js';
-import { generarQR, validarQR } from '../services/qr.service.js';
+import { generarQR, M8ApiError, validarQR } from '../services/qr.service.js';
 import * as viajeRepo from '../repositories/viaje.repository.js';
 import { randomUUID } from 'node:crypto';
 import { consultarEstadoConductor } from '../services/conductor.service.js';
@@ -14,9 +14,12 @@ export const solicitarViaje = async (req: Request, res: Response): Promise<any> 
     let codigoVerificacion: string;
     try {
         const respuesta = await generarQR(id);
-        codigoVerificacion = respuesta.token || respuesta.codigo || `TEST-TOKEN-${id}`;
+        codigoVerificacion = respuesta.token;
     } catch (error) {
         console.error('ERROR EN generarQR:', error);
+        if (error instanceof M8ApiError && error.retryAfter) {
+            res.setHeader('Retry-After', error.retryAfter);
+        }
         return res.status(503).json({ error: 'Servicio de QR no disponible, intente más tarde' });
     }
 
@@ -174,17 +177,21 @@ export const iniciarViaje = async (req: Request, res: Response): Promise<any> =>
     }
 
     if (!codigoVerificacion || codigoVerificacion !== viaje.codigoVerificacion) {
-        return res.status(401).json({ error: 'Código de verificación inválido' });
+        return res.status(401).json({ error: { code: 'QR_INVALID' } });
     }
 
     try {
-        await validarQR(id, codigoVerificacion);
-    } catch (error: any) {
-        if (error.message && error.message.includes('503_SERVICE_UNAVAILABLE')) {
-            return res.status(503).json({ 
-                error: 'Servicio de validación temporalmente no disponible. Intente nuevamente.' 
-            });
+        const resultado = await validarQR(id, codigoVerificacion);
+        if (resultado.valid !== true) {
+            return res.status(401).json({ error: { code: 'QR_INVALID' } });
         }
+    } catch (error) {
+        if (error instanceof M8ApiError) {
+            if (error.retryAfter) res.setHeader('Retry-After', error.retryAfter);
+            const status = error.status >= 500 ? 503 : error.status;
+            return res.status(status).json({ error: { code: error.code } });
+        }
+        return res.status(503).json({ error: { code: 'M8_UNAVAILABLE' } });
     }
 
     try {

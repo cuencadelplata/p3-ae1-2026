@@ -154,8 +154,10 @@ paths:
         - Viajes
       summary: "RF-6.3: Iniciar viaje con validación de QR"
       description: |
-        Requiere estado ARRIBADO. Envía el código a M8 (POST /qr/validate); M8 lo consume (un solo uso, con expiración).
-        Si es válido pasa a EN_CURSO y publica el evento viaje.iniciado.
+        Requiere estado ARRIBADO. M6 envía {tripId, token} a M8 (POST /qr/validate).
+        Solo ante 200 {valid:true} cambia a EN_CURSO y publica viaje.iniciado. Los rechazos de M8
+        conservan el estado ARRIBADO; los errores 503/timeout también conservan el estado e incluyen
+        Retry-After cuando M8 lo informa.
       operationId: iniciarViaje
       parameters:
         - $ref: '#/components/parameters/ViajeId'
@@ -188,16 +190,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Código inválido, inexistente, ya usado, expirado o de otro viaje (motivo informado por M8).
+          description: Código de verificación local inválido o M8 devolvió valid:false.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                usado: { value: { error: "QR ya utilizado" } }
-                expirado: { value: { error: "QR expirado" } }
+              example: { error: { code: QR_INVALID } }
         '404':
-          $ref: '#/components/responses/NotFound'
+          description: El viaje o el QR no existe.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ErrorResponse'
+                  - $ref: '#/components/schemas/M8ErrorResponse'
+              example: { error: { code: QR_NOT_FOUND } }
+        '409':
+          description: M8 informa que el QR ya fue utilizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/M8ErrorResponse'
+              example: { error: { code: QR_ALREADY_USED } }
+        '410':
+          description: M8 informa que el QR expiró.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/M8ErrorResponse'
+              example: { error: { code: QR_EXPIRED } }
         '500':
           description: Error inesperado de M8 al validar.
           content:
@@ -206,10 +227,16 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
           description: M8 no disponible o timeout, o TripDB no disponible.
+          headers:
+            Retry-After:
+              description: Tiempo sugerido antes de reintentar, cuando lo informa M8.
+              schema: { type: string }
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/ErrorResponse'
+                  - $ref: '#/components/schemas/M8ErrorResponse'
               example: { error: "Servicio de validación temporalmente no disponible. Intente nuevamente." }
 
 components:
@@ -338,6 +365,18 @@ components:
           type: string
           description: Mensaje de error descriptivo
           example: "Viaje no encontrado"
+
+    M8ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code]
+          properties:
+            code:
+              type: string
+              example: QR_EXPIRED
 
   parameters:
     ViajeId:
