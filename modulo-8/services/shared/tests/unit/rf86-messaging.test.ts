@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   adaptExternalEvent,
+  EVENT_TYPE_TO_ROUTING_KEY,
   EventConsumer,
   InMemoryTechnicalInbox,
   NonRetryableMessagingError,
@@ -86,6 +87,38 @@ describe('RF8.6 - Adaptadores de Eventos Externos y Contratos (M5/M6/M7)', () =>
     const payload = { trip_id: '500' };
     const envelope = adaptExternalEvent(JSON.stringify(payload), 'driver.arrived');
     expect(envelope.eventType).toBe('DriverArrived');
+  });
+
+  it('debe adaptar ride.requested real de M5 sin fabricar tripId', () => {
+    const payload = {
+      messageId: 'a1b2c3d4-e5f6-4a8b-9c0d-1e2f3a4b5c6d',
+      eventType: 'ride.requested',
+      version: 1,
+      occurredAt: '2026-10-04T12:00:00Z',
+      correlationId: 'req_2026_000123',
+      producer: 'm5',
+      data: {
+        rideRequestId: 'req_2026_000123',
+        clientUserId: 91,
+        origin: { latitude: -34.6037, longitude: -58.3816, address: 'Origen' },
+        destination: { latitude: -34.6083, longitude: -58.3712, address: 'Destino' },
+        vehicleType: 'AUTO',
+        estimatedFare: { amount: 1250, currency: 'ARS' },
+        createdAt: '2026-10-04T11:59:59Z',
+      },
+    };
+
+    const envelope = adaptExternalEvent(JSON.stringify(payload), 'ride.requested');
+
+    expect(envelope.eventType).toBe('TripRequested');
+    expect(envelope.correlationId).toBe('req_2026_000123');
+    expect(envelope.data['rideRequestId']).toBe('req_2026_000123');
+    expect(envelope.data['clientUserId']).toBe(91);
+    expect(envelope.data).not.toHaveProperty('tripId');
+  });
+
+  it('define ride.requested como routing key canonica de TripRequested', () => {
+    expect(EVENT_TYPE_TO_ROUTING_KEY['TripRequested']).toBe('ride.requested');
   });
 
   it('debe generar messageId deterministico y estable cuando el evento no trae UUID', () => {
@@ -242,6 +275,103 @@ describe('RF8.6 - EventConsumer AMQP (ACK, Concurrencia, Retry, DLQ, Publisher C
 
     expect(executionCount).toBe(1);
     expect(channel.ack).toHaveBeenCalledTimes(2);
+  });
+
+  it('debe prevenir ejecucion duplicada para redelivery de ride.requested con mismo messageId', async () => {
+    const inbox = new InMemoryTechnicalInbox();
+    const channel = createMockConfirmChannel();
+    const consumer = new EventConsumer({
+      consumerId: 'm8.notifications',
+      topology: { queue: 'm8.notifications.trip-events', routingKey: 'ride.requested' },
+      inboxStore: inbox,
+    });
+
+    const handler = vi.fn().mockResolvedValue(undefined);
+    consumer.registerHandler('TripRequested', handler);
+
+    const payload = {
+      messageId: 'a1b2c3d4-e5f6-4a8b-9c0d-1e2f3a4b5c6d',
+      eventType: 'ride.requested',
+      version: 1,
+      occurredAt: '2026-10-04T12:00:00Z',
+      correlationId: 'req_2026_000123',
+      producer: 'm5',
+      data: {
+        rideRequestId: 'req_2026_000123',
+        clientUserId: 91,
+        origin: { latitude: -34.6037, longitude: -58.3816, address: 'Origen' },
+        destination: { latitude: -34.6083, longitude: -58.3712, address: 'Destino' },
+        vehicleType: 'AUTO',
+        estimatedFare: { amount: 1250, currency: 'ARS' },
+        createdAt: '2026-10-04T11:59:59Z',
+      },
+    };
+    const msg1 = {
+      content: Buffer.from(JSON.stringify(payload)),
+      fields: { routingKey: 'ride.requested' },
+      properties: { headers: {} },
+    } as any;
+    const msg2 = {
+      content: Buffer.from(JSON.stringify(payload)),
+      fields: { routingKey: 'ride.requested' },
+      properties: { headers: {} },
+    } as any;
+
+    await consumer.processMessage(channel, msg1);
+    await consumer.processMessage(channel, msg2);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(channel.ack).toHaveBeenCalledTimes(2);
+  });
+
+  it('debe enviar a DLQ un ride.requested rechazado por validacion de negocio', async () => {
+    const inbox = new InMemoryTechnicalInbox();
+    const channel = createMockConfirmChannel();
+    const consumer = new EventConsumer({
+      consumerId: 'm8.notifications',
+      topology: { queue: 'm8.notifications.trip-events', routingKey: 'ride.requested' },
+      inboxStore: inbox,
+    });
+
+    consumer.registerHandler('TripRequested', async (event) => {
+      if (typeof event.data['clientUserId'] !== 'number') {
+        throw new NonRetryableMessagingError('data.clientUserId debe ser numerico');
+      }
+    });
+
+    const payload = {
+      messageId: 'a1b2c3d4-e5f6-4a8b-9c0d-1e2f3a4b5c6e',
+      eventType: 'ride.requested',
+      version: 1,
+      occurredAt: '2026-10-04T12:00:00Z',
+      correlationId: 'req_2026_000124',
+      producer: 'm5',
+      data: {
+        rideRequestId: 'req_2026_000124',
+        clientUserId: '91',
+      },
+    };
+    const msg = {
+      content: Buffer.from(JSON.stringify(payload)),
+      fields: { routingKey: 'ride.requested' },
+      properties: { headers: {} },
+    } as any;
+
+    await consumer.processMessage(channel, msg);
+
+    expect(channel.publish).toHaveBeenCalledWith(
+      'mobility.events.dlx',
+      'm8.notifications.trip-events',
+      msg.content,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'x-dlq-reason': 'data.clientUserId debe ser numerico',
+        }),
+      }),
+      expect.any(Function),
+    );
+    expect(channel.ack).toHaveBeenCalledWith(msg);
+    expect(await inbox.hasBeenProcessed('m8.notifications', payload.messageId)).toBe(false);
   });
 
   it('debe incrementar retryCount y programar reintento si falla la consulta al Inbox', async () => {

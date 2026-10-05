@@ -24,8 +24,9 @@ export interface NotificationOutboxIntent {
 export interface NotificationDeliveryIntent {
   outboxMessageId: string;
   notificationId: string;
-  recipientId: string;
-  tripId: string;
+  recipientId: string | number;
+  tripId: string | null;
+  rideRequestId: string | null;
   sourceMessageId: string;
   notificationEventType: LogicalNotification["eventType"];
   title: string;
