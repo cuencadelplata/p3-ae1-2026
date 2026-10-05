@@ -27,9 +27,20 @@ app.use('/openapi', express.static(path.join(__dirname, '../openapi')));
 const rideRequestService = new RideRequestService();
 const rideRequestController = new RideRequestController(rideRequestService);
 
-// Health check (RNF-16)
+// Health check con diagnóstico de backing services (RNF-16 / AE2)
 app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'UP', service: 'm5-dispatch-service', timestamp: new Date() });
+  const redisReady = rideRequestService.getRedisService().isReady();
+  const rabbitmqReady = rideRequestService.getRabbitMQService().isReady();
+  res.status(200).json({
+    status: 'UP',
+    service: 'm5-dispatch-service',
+    version: '2.0.0',
+    backingServices: {
+      redis: redisReady ? 'CONNECTED' : 'FALLBACK_MEMORY',
+      rabbitmq: rabbitmqReady ? 'CONNECTED' : 'FALLBACK_MEMORY'
+    },
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Documentación de la API interactiva con Scalar
@@ -67,6 +78,8 @@ app.get(['/docs', '/reference'], (_req, res) => {
 app.post('/api/v1/ride-requests', rideRequestController.create);
 app.get('/api/v1/ride-requests/:requestId', rideRequestController.getById);
 app.post('/api/v1/ride-requests/:requestId/cancel', rideRequestController.cancel);
+app.delete('/api/v1/ride-requests/:requestId', rideRequestController.cancel);
+app.get('/api/v1/ride-requests/:requestId/audit', rideRequestController.getAuditLogs);
 app.post('/api/v1/ride-requests/:requestId/candidates', rideRequestController.searchCandidates);
 app.post('/api/v1/ride-requests/:requestId/offers', rideRequestController.sendOffers);
 app.get('/api/v1/ride-requests/:requestId/offers', rideRequestController.getOffers);

@@ -84,6 +84,20 @@ export class RideRequestController {
   };
 
   /**
+   * GET /api/v1/ride-requests/:requestId/audit
+   * Consulta auditoría inmutable de eventos de la solicitud (RNF-04)
+   */
+  public getAuditLogs = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { requestId } = req.params;
+      const logs = this.rideRequestService.getAuditEvents(requestId);
+      res.status(200).json({ requestId, count: logs.length, events: logs });
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  /**
    * POST /api/v1/ride-requests/:requestId/candidates
    * Búsqueda de candidatos para la solicitud (RF-5.2)
    */
