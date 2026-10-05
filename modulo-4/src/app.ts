@@ -6,6 +6,8 @@ import { LocationController } from './controllers/location.controller.js';
 import { LocationService } from './services/location.service.js';
 import { MemoryLocationRepository } from './repositories/memory-location.repository.js';
 import { MemoryLocationHistoryRepository } from './repositories/memory-location-history.repository.js';
+import type { IdentityValidator } from './auth/identity.types.js';
+import { requireConductor } from './auth/require-conductor.middleware.js';
 
 const ttlSeconds = Number(process.env.LOCATION_TTL_SECONDS ?? 60);
 export const locationService = new LocationService(
@@ -19,7 +21,8 @@ const projectDirectory = path.resolve(moduleDirectory, '..');
 
 export const createApp = (
   service: LocationService,
-  checkStorage: () => Promise<void> = async () => undefined
+  checkStorage: () => Promise<void> = async () => undefined,
+  identityValidator?: IdentityValidator
 ) => {
 const controller = new LocationController(service);
 const application = express();
@@ -58,10 +61,13 @@ application.get('/health', async (_req, res) => {
   }
 });
 
-application.put('/api/v1/drivers/:driverId/location', controller.updateLocation);
-application.get('/api/v1/drivers/:driverId/location', controller.getLocation);
-application.get('/api/v1/drivers/:driverId/location-history', controller.getLocationHistory);
-application.delete('/api/v1/drivers/:driverId/location', controller.removeLocation);
+const conductorAuth = identityValidator
+  ? requireConductor(identityValidator)
+  : (_req: express.Request, _res: express.Response, next: express.NextFunction) => next();
+application.put('/api/v1/drivers/:driverId/location', conductorAuth, controller.updateLocation);
+application.get('/api/v1/drivers/:driverId/location', conductorAuth, controller.getLocation);
+application.get('/api/v1/drivers/:driverId/location-history', conductorAuth, controller.getLocationHistory);
+application.delete('/api/v1/drivers/:driverId/location', conductorAuth, controller.removeLocation);
 application.patch('/api/v1/drivers/:driverId/availability', controller.updateAvailability);
 application.get('/api/v1/drivers/nearby', controller.findNearby);
 application.post('/api/v1/geocode', controller.geocode);

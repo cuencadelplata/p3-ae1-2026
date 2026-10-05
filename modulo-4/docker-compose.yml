@@ -37,6 +37,9 @@ services:
       LOCATION_TTL_SECONDS: 60
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgresql://m4_user:m4_password@postgres:5432/m4_locations
+      M1_URL: http://host.docker.internal:3001
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       redis:
         condition: service_healthy
