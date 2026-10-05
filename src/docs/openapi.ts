@@ -1,10 +1,10 @@
 /**
- * OpenAPI 3.1 Specification for Module 2 (Customers)
+ * OpenAPI 3.0.3 Specification for Module 2 (Customers)
  * Generated according to SPECM5 requirements
  */
 // allow: SIZE_OK — declarative OpenAPI document; keeping one contract preserves Scalar's single source.
 export const openApiSpec = {
-  openapi: '3.1.0',
+  openapi: '3.0.3',
   info: {
     title: 'Módulo 2 - Servicio de Clientes (API)',
     version: '1.0.0',
@@ -46,6 +46,7 @@ export const openApiSpec = {
           '401': { $ref: '#/components/responses/Unauthorized' },
           '403': { $ref: '#/components/responses/Forbidden' },
           '409': { $ref: '#/components/responses/ProfileAlreadyExists' },
+          '500': { $ref: '#/components/responses/InternalServerError' },
           '503': { $ref: '#/components/responses/ServiceUnavailable' }
         }
       },
@@ -74,6 +75,7 @@ export const openApiSpec = {
           },
           '400': { $ref: '#/components/responses/BadRequest' },
           '401': { $ref: '#/components/responses/Unauthorized' },
+          '500': { $ref: '#/components/responses/InternalServerError' },
           '503': { $ref: '#/components/responses/ServiceUnavailable' }
         }
       }
@@ -90,6 +92,8 @@ export const openApiSpec = {
             content: { 'application/json': { schema: { $ref: '#/components/schemas/CustomerProfile' } } }
           },
           '401': { $ref: '#/components/responses/Unauthorized' },
+          '404': { $ref: '#/components/responses/NotFound' },
+          '500': { $ref: '#/components/responses/InternalServerError' },
           '503': { $ref: '#/components/responses/ServiceUnavailable' }
         }
       }
@@ -106,11 +110,14 @@ export const openApiSpec = {
         responses: {
           '200': {
             description: 'Perfil encontrado',
+            headers: {
+              'X-Data-Source': { description: 'Origen del perfil devuelto', schema: { type: 'string', enum: ['cache', 'database'] } }
+            },
             content: { 'application/json': { schema: { $ref: '#/components/schemas/CustomerProfile' } } }
           },
           '401': { $ref: '#/components/responses/Unauthorized' },
-          '403': { $ref: '#/components/responses/Forbidden' },
           '404': { $ref: '#/components/responses/NotFound' },
+          '500': { $ref: '#/components/responses/InternalServerError' },
           '503': { $ref: '#/components/responses/ServiceUnavailable' }
         }
       },
@@ -158,6 +165,7 @@ export const openApiSpec = {
           '401': { $ref: '#/components/responses/Unauthorized' },
           '403': { $ref: '#/components/responses/Forbidden' },
           '404': { $ref: '#/components/responses/NotFound' },
+          '500': { $ref: '#/components/responses/InternalServerError' },
           '503': { $ref: '#/components/responses/ServiceUnavailable' }
         }
       }
@@ -336,11 +344,15 @@ export const openApiSpec = {
       },
       HealthResponse: {
         type: 'object',
-        required: ['status', 'service'],
+        required: ['status', 'service', 'checks', 'circuits', 'criticalHealthy'],
         properties: {
-          status: { type: 'string', enum: ['UP', 'DEGRADED', 'DOWN'] },
+          status: { type: 'string', enum: ['UP', 'DEGRADED'] },
           service: { type: 'string', example: 'm2-clientes-api' },
-          checks: { type: 'object', additionalProperties: { type: 'string' } }
+          checks: { type: 'object', additionalProperties: { type: 'object', properties: {
+            status: { type: 'string', enum: ['UP', 'DOWN'] }, responseTimeMs: { type: 'number' }
+          } } },
+          circuits: { type: 'object', additionalProperties: { type: 'string', enum: ['closed', 'open', 'half_open', 'isolated'] } },
+          criticalHealthy: { type: 'boolean' }
         }
       },
       AccountStatusResponse: {
@@ -402,8 +414,12 @@ export const openApiSpec = {
         description: 'No se encontró el perfil solicitado.',
         content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
       },
+      InternalServerError: {
+        description: 'Error inesperado. La respuesta no incluye detalles internos.',
+        content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+      },
       ServiceUnavailable: {
-        description: 'PostgreSQL, Redis o M1 no está disponible. El servidor incluye Retry-After.',
+        description: 'PostgreSQL o un servicio externo no está disponible. El servidor incluye Retry-After.',
         headers: {
           'Retry-After': {
             description: 'Segundos que conviene esperar antes de reintentar.',

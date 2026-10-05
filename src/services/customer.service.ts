@@ -1,21 +1,16 @@
 import { customerRepository, CustomerRepository } from '../repositories/customer.repository.js';
+import { customerCache, CustomerCache } from '../cache/customer.cache.js';
 import type {
   CreateCustomerDTO,
   CustomerProfile,
   UpdatePreferencesDTO,
-  UpdateAccountStatusDTO,
-  AccountStatusResponse,
-  CustomerTripsResponse,
   UserId
 } from '../types/customer.js';
 
 export class CustomerService {
   private repository: CustomerRepository;
-  private m6ServiceUrl: string;
-
-  constructor(repository: CustomerRepository = customerRepository) {
+  constructor(repository: CustomerRepository = customerRepository, private readonly cache: CustomerCache = customerCache) {
     this.repository = repository;
-    this.m6ServiceUrl = process.env.M6_SERVICE_URL || 'http://localhost:8080';
   }
 
   /**
@@ -38,7 +33,18 @@ export class CustomerService {
    * RF-2.1: Obtener perfil por ID
    */
   async getCustomerById(customerId: string): Promise<CustomerProfile | null> {
-    return await this.repository.findById(customerId);
+    return (await this.getCustomerByIdWithSource(customerId)).customer;
+  }
+
+  async getCustomerByIdWithSource(customerId: string): Promise<{
+    readonly customer: CustomerProfile | null;
+    readonly source: 'cache' | 'database';
+  }> {
+    const cached = await this.cache.get(customerId);
+    if (cached) return { customer: cached, source: 'cache' };
+    const customer = await this.repository.findById(customerId);
+    if (customer) await this.cache.set(customerId, customer);
+    return { customer, source: 'database' };
   }
 
   /**
@@ -55,65 +61,9 @@ export class CustomerService {
     const exists = await this.repository.findById(customerId);
     if (!exists) return null;
 
-    return await this.repository.updatePreferences(customerId, dto.preferences);
-  }
-
-  /**
-   * RF-2.5: Consultar estado de cuenta y bloqueos
-   */
-  async getAccountStatus(customerId: string): Promise<AccountStatusResponse | null> {
-    const exists = await this.repository.findById(customerId);
-    if (!exists) return null;
-
-    return await this.repository.findAccountStatus(customerId);
-  }
-
-  /**
-   * RF-2.5: Cambiar estado de cuenta (bajas y bloqueos). Los clientes nunca se borran.
-   */
-  async updateAccountStatus(customerId: string, dto: UpdateAccountStatusDTO): Promise<AccountStatusResponse | null> {
-    return await this.repository.updateAccountStatus(customerId, dto);
-  }
-
-  /**
-   * RF-2.3: Historial de Viajes (Consumo síncrono HTTP a M6 o Stub)
-   */
-  async getCustomerTrips(customerId: string): Promise<CustomerTripsResponse | null> {
-    const customer = await this.repository.findById(customerId);
-    if (!customer) return null;
-
-    try {
-      const response = await fetch(`${this.m6ServiceUrl}/v1/trips?customerId=${encodeURIComponent(customerId)}`);
-      if (response.ok) {
-        return (await response.json()) as CustomerTripsResponse;
-      }
-    } catch (error: any) {
-      console.warn(`[CustomerService] Fallback al Stub M6: No se pudo contactar a ${this.m6ServiceUrl} (${error.message})`);
-    }
-
-    // Fallback de demostración si M6 no está disponible
-    return {
-      customerId,
-      tripsCount: 2,
-      trips: [
-        {
-          tripId: 'trip_99217c2f',
-          origin: 'Av. Colón 1200, Córdoba',
-          destination: 'Av. General Paz 250, Córdoba',
-          fare: 1850.0,
-          status: 'COMPLETADO',
-          createdAt: '2026-08-29T14:20:00Z'
-        },
-        {
-          tripId: 'trip_88201a4e',
-          origin: 'Plaza España, Córdoba',
-          destination: 'Aeropuerto Córdoba',
-          fare: 5200.0,
-          status: 'COMPLETADO',
-          createdAt: '2026-08-28T09:15:00Z'
-        }
-      ]
-    };
+    const updated = await this.repository.updatePreferences(customerId, dto.preferences);
+    if (updated) await this.cache.invalidate(customerId);
+    return updated;
   }
 
   /**

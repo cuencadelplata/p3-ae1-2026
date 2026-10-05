@@ -44,6 +44,7 @@ const UNAVAILABLE_MESSAGES = [
   'timeout exceeded when trying to connect',
   'Connection terminated due to connection timeout',
   'Connection terminated unexpectedly',
+  'Connection is closed.',
   'Query read timeout'
 ];
 

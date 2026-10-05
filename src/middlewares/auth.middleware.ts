@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
 import { m1AuthClient } from '../clients/m1-auth.client.js';
@@ -48,5 +49,24 @@ export function requireAuth(options: RequireAuthOptions = {}): RequestHandler {
     } catch (error: unknown) {
       next(error);
     }
+  };
+}
+
+function isValidServiceKey(provided: string | undefined): boolean {
+  const expected = process.env.STATUS_SECRET_KEY;
+  if (!expected || provided === undefined) return false;
+  const actualBytes = Buffer.from(provided);
+  const expectedBytes = Buffer.from(expected);
+  return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
+}
+
+export function requireAuthOrServiceKey(): RequestHandler {
+  const userAuth = requireAuth();
+  return (req, res, next) => {
+    if (isValidServiceKey(req.header('X-Secret-Key'))) {
+      next();
+      return;
+    }
+    userAuth(req, res, next);
   };
 }

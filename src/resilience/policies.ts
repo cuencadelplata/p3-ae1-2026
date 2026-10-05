@@ -87,8 +87,8 @@ function circuitStatus(policy: CircuitBreakerPolicy): CircuitStatus {
   return CIRCUIT_STATUS[policy.state];
 }
 
-function unavailable(name: DependencyName): ServiceUnavailableError {
-  return new ServiceUnavailableError(`La dependencia ${name} no está disponible temporalmente`);
+function unavailable(name: DependencyName, retryAfter?: number): ServiceUnavailableError {
+  return new ServiceUnavailableError(`La dependencia ${name} no está disponible temporalmente`, retryAfter);
 }
 
 function buildPolicy(name: DependencyName): BuiltPolicy {
@@ -97,10 +97,12 @@ function buildPolicy(name: DependencyName): BuiltPolicy {
     maxAttempts: nonNegativeIntFromEnv('RESILIENCE_RETRY_ATTEMPTS', 2),
     backoff: new ConstantBackoff(nonNegativeIntFromEnv('RESILIENCE_RETRY_DELAY_MS', 50))
   });
+  const resetMs = positiveIntFromEnv('CIRCUIT_BREAKER_RESET_MS', 30_000);
   const circuit = circuitBreaker(transientFailures, {
     breaker: new ConsecutiveBreaker(positiveIntFromEnv('CIRCUIT_BREAKER_THRESHOLD', 3)),
-    halfOpenAfter: positiveIntFromEnv('CIRCUIT_BREAKER_RESET_MS', 30_000)
+    halfOpenAfter: resetMs
   });
+  let openedAt: number | undefined;
   const timeoutMs = policyTimeout(name);
   const deadline = timeout(timeoutMs, TimeoutStrategy.Aggressive);
 
@@ -113,6 +115,7 @@ function buildPolicy(name: DependencyName): BuiltPolicy {
   });
   circuit.onStateChange((state) => {
     const current = CIRCUIT_STATUS[state];
+    openedAt = current === 'open' ? Date.now() : undefined;
     recordCircuitState(name, current);
     const fields = { dependency: name, circuitState: current };
     if (current === 'closed') {
@@ -136,7 +139,10 @@ function buildPolicy(name: DependencyName): BuiltPolicy {
           || isIsolatedCircuitError(error)
           || isTaskCancelledError(error)
         ) {
-          throw unavailable(name);
+          const retryAfter = openedAt === undefined
+            ? undefined
+            : Math.max(1, Math.ceil((resetMs - (Date.now() - openedAt)) / 1000));
+          throw unavailable(name, retryAfter);
         }
         throw error;
       }

@@ -21,6 +21,10 @@ describe('Clasificación de errores de infraestructura (RF-2.1)', () => {
     expect(isServiceUnavailableError(new Error('Query read timeout'))).toBe(true);
   });
 
+  it('reconoce un cliente Redis cerrado como dependencia no disponible', () => {
+    expect(isServiceUnavailableError(new Error('Connection is closed.'))).toBe(true);
+  });
+
   it('debe reconocer los SQLSTATE de caída y de statement_timeout de PostgreSQL', () => {
     expect(isServiceUnavailableError(errorWithCode('terminating connection due to administrator command', '57P01'))).toBe(true);
     expect(isServiceUnavailableError(errorWithCode('canceling statement due to statement timeout', '57014'))).toBe(true);

@@ -11,27 +11,34 @@ type CheckResult = {
   readonly responseTimeMs: number;
 };
 
+type RegisteredCheck = {
+  readonly check: HealthCheck;
+  readonly critical: boolean;
+};
+
 export type HealthSnapshot = {
   readonly status: HealthStatus;
   readonly service: 'm2-clientes-api';
   readonly checks: Readonly<Record<string, CheckResult>>;
   readonly circuits: CircuitStates;
+  readonly criticalHealthy: boolean;
 };
 
 export class HealthRegistry {
-  private readonly checks = new Map<string, HealthCheck>();
+  private readonly checks = new Map<string, RegisteredCheck>();
 
   constructor(private readonly circuitStates: () => CircuitStates = getCircuitStates) {}
 
-  register(name: string, check: HealthCheck): () => void {
-    this.checks.set(name, check);
+  register(name: string, check: HealthCheck, options: { critical?: boolean } = {}): () => void {
+    const registered = { check, critical: options.critical ?? true };
+    this.checks.set(name, registered);
     return () => {
-      if (this.checks.get(name) === check) this.checks.delete(name);
+      if (this.checks.get(name) === registered) this.checks.delete(name);
     };
   }
 
   async snapshot(): Promise<HealthSnapshot> {
-    const entries = await Promise.all([...this.checks.entries()].map(async ([name, check]) => {
+    const entries = await Promise.all([...this.checks.entries()].map(async ([name, { check }]) => {
       const startedAt = performance.now();
       try {
         const healthy = await check();
@@ -52,18 +59,23 @@ export class HealthRegistry {
     const circuits = this.circuitStates();
     const checksHealthy = Object.values(checks).every((result) => result.status === 'UP');
     const circuitsHealthy = Object.values(circuits).every((state) => state === 'closed');
+    const criticalChecksHealthy = [...this.checks.entries()].every(([name, registration]) =>
+      !registration.critical || checks[name]?.status === 'UP'
+    );
+    const criticalCircuitsHealthy = circuits.postgres === 'closed';
 
     return {
       status: checksHealthy && circuitsHealthy ? 'UP' : 'DEGRADED',
       service: 'm2-clientes-api',
       checks,
-      circuits
+      circuits,
+      criticalHealthy: criticalChecksHealthy && criticalCircuitsHealthy
     };
   }
 
   readonly handler: RequestHandler = (_req, res, next) => {
     this.snapshot().then((snapshot) => {
-      res.status(snapshot.status === 'UP' ? 200 : 503).json(snapshot);
+      res.status(snapshot.criticalHealthy ? 200 : 503).json(snapshot);
     }).catch(next);
   };
 }
@@ -74,10 +86,10 @@ healthRegistry.register('postgres', async () => {
   await pool.query('SELECT 1');
   return true;
 });
-healthRegistry.register('redis', testRedisConnection);
+healthRegistry.register('redis', testRedisConnection, { critical: false });
 
-export function registerHealthCheck(name: string, check: HealthCheck): () => void {
-  return healthRegistry.register(name, check);
+export function registerHealthCheck(name: string, check: HealthCheck, options?: { critical?: boolean }): () => void {
+  return healthRegistry.register(name, check, options);
 }
 
 export function getHealthSnapshot(): Promise<HealthSnapshot> {

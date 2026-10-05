@@ -72,6 +72,7 @@ Los valores siguientes son los defaults de desarrollo; las credenciales reales d
 | `DB_QUERY_TIMEOUT_MS` / `DB_STATEMENT_TIMEOUT_MS` | `3000` / `3000` | Límite de consultas y sentencias. |
 | `DB_IDLE_TIMEOUT_MS` | `30000` | Tiempo de inactividad del pool. |
 | `REDIS_URL` | `redis://localhost:6379` | Redis para caché de perfiles y validación de tokens. |
+| `CUSTOMER_CACHE_TTL_SECONDS` | `300` | TTL de la caché del perfil consultado por ID. |
 | `M1_SERVICE_URL` | `http://localhost:3000/__stubs/m1` (con stubs) | URL del validador de identidad de M1. |
 | `SOPORTE_SERVICE_URL` | `http://localhost:3000/__stubs/soporte` (con stubs) | URL de penalizaciones de soporte. |
 | `M6_SERVICE_URL` | `http://localhost:3000/__stubs/m6` (con stubs) | URL del servicio de viajes. |
@@ -85,7 +86,7 @@ Los valores siguientes son los defaults de desarrollo; las credenciales reales d
 
 Cuando `STUBS_ENABLED=false`, M2 usa las URLs de los módulos reales. Con `STUBS_ENABLED=true`, los stubs se montan bajo `/__stubs/{m1,soporte,m6}` para pruebas locales; sus endpoints de diagnóstico y caos son operativos y no forman parte de `/openapi.json`.
 
-La validación de identidad usa el bearer JWT de M1 (HS256, duración de una hora, payload `{ userId, role, iat, exp }`). M2 conserva en Redis la respuesta de validación en `auth:token:{sha256}` durante el menor de cinco minutos y el tiempo restante del token. Un token ausente o inválido responde `401`; un rol distinto de `CLIENTE` o un perfil ajeno responde `403`; un userId que ya tiene perfil responde `409 ProfileAlreadyExists`; si M1, PostgreSQL o Redis no están disponibles responde `503` con el header `Retry-After`. Una caída de M1 no se interpreta como token inválido.
+La validación de identidad usa el bearer JWT de M1 (HS256, duración de una hora, payload `{ userId, role, iat, exp }`). M2 conserva en Redis la respuesta de validación en `auth:token:{sha256}` durante el menor de cinco minutos y el tiempo restante del token. Un token ausente o inválido responde `401`; un rol distinto de `CLIENTE` o un perfil ajeno responde `403`; un userId que ya tiene perfil responde `409 ProfileAlreadyExists`; si M1 o PostgreSQL no están disponibles responde `503` con el header `Retry-After`. Redis caído degrada las cachés y M2 continúa consultando M1 o PostgreSQL. Una caída de M1 no se interpreta como token inválido.
 
 ---
 
@@ -104,7 +105,7 @@ El token es emitido por M1 (Auth). M2 lo valida llamando a `GET /auth/validar-id
 | `POST` | `/v1/customers` | 🔒 CLIENTE | RF-2.1 | Crear perfil (body: preferencias opcionales) |
 | `GET` | `/v1/customers/me` | 🔒 | RF-2.1 | Perfil del usuario autenticado; 404 si no existe |
 | `GET` | `/v1/customers` | Abierto (🔒 con `?userId=`) | — | Listar clientes |
-| `GET` | `/v1/customers/:id` | 🔒 | RF-2.1 | Perfil por ID interno |
+| `GET` | `/v1/customers/:id` | 🔒 | RF-2.1 | Perfil por ID interno; `X-Data-Source: database` o `cache` |
 | `PUT` | `/v1/customers/:id` | 🔒 dueño | RF-2.1 | Actualizar preferencias |
 | `GET` | `/v1/customers/:id/status` | 🔒 o `X-Secret-Key` | RF-2.5 | Estado de cuenta (recalcula con Soporte) |
 | `PUT` | `/v1/customers/:id/status` | 🔒 dueño | RF-2.5 | Cambiar estado (baja, bloqueo, etc.) |
@@ -130,13 +131,14 @@ El `POST` acepta body vacío o solo `preferences`; sin preferencias aplica `auto
 | `403` | Rol incorrecto o el token no pertenece al dueño del recurso |
 | `404` | Recurso no encontrado |
 | `409` | Ya existe un perfil para ese usuario (`ProfileAlreadyExists`) |
-| `503` | PostgreSQL, Redis o M1 no disponible. Header `Retry-After` indica cuántos segundos esperar. **M1 caído nunca devuelve 401.** |
+| `503` | PostgreSQL o M1 no disponible. Header `Retry-After` indica cuántos segundos esperar; si el circuito está abierto, indica el tiempo hasta volver a probar. **M1 caído nunca devuelve 401.** |
+| `500` | Error inesperado con respuesta genérica; los detalles internos quedan solo en los logs. |
 
 Las respuestas de error siguen `{ "error": "...", "message": "..." }`; los errores de validación pueden incluir `details`.
 
 ### Salud y métricas
 
-`GET /health` es público y expone el estado de PostgreSQL, Redis y las dependencias registradas (soporte y M6 incluidos), más los circuit breakers. `GET /metrics` es público y devuelve métricas Prometheus de HTTP, circuit breakers y caché. Los logs estructurados incluyen `requestId` para correlacionar cada solicitud y sus errores.
+`GET /health` es público y expone PostgreSQL, Redis y las dependencias registradas, además de los circuit breakers. PostgreSQL es crítico: su caída devuelve `503 DEGRADED`. Redis es no crítico: su caída devuelve `200 DEGRADED`. El registro permite agregar los módulos externos como dependencias no críticas. `GET /metrics` es público y devuelve métricas Prometheus de HTTP, circuit breakers y caché. Los logs estructurados incluyen `requestId` para correlacionar cada solicitud y sus errores.
 
 ---
 

@@ -1,5 +1,6 @@
 import Redis, { type RedisOptions } from 'ioredis';
 import { logger } from '../observability/logging.js';
+import { createPolicy } from '../resilience/policies.js';
 
 function positiveIntFromEnv(name: string, fallback: number): number {
   const parsed = Number.parseInt(process.env[name] ?? '', 10);
@@ -16,6 +17,7 @@ const redisOptions = {
 } satisfies RedisOptions;
 
 export const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', redisOptions);
+const redisPolicy = createPolicy('redis');
 
 let connectionAttempt: Promise<void> | undefined;
 
@@ -33,8 +35,10 @@ async function ensureRedisConnected(): Promise<void> {
 }
 
 export async function runRedisCommand<T>(command: (client: Redis) => Promise<T>): Promise<T> {
-  await ensureRedisConnected();
-  return command(redis);
+  return redisPolicy.execute(async () => {
+    await ensureRedisConnected();
+    return command(redis);
+  }, { idempotent: true });
 }
 
 export async function testRedisConnection(): Promise<boolean> {

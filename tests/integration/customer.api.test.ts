@@ -15,10 +15,10 @@ describe('Endpoints REST - Módulo 2 Clientes (Supertest)', () => {
     expect(['UP', 'DEGRADED', 'DOWN']).toContain(res.body.status);
   });
 
-  it('GET /openapi.json debe retornar la especificación OpenAPI 3.1', async () => {
+  it('GET /openapi.json debe retornar la especificación OpenAPI 3.0.3', async () => {
     const res = await request(app).get('/openapi.json');
     expect(res.status).toBe(200);
-    expect(res.body.openapi).toBe('3.1.0');
+    expect(res.body.openapi).toBe('3.0.3');
     expect(res.body.info.title).toContain('Módulo 2');
   });
 

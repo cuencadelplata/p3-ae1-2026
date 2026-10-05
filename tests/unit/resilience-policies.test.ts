@@ -115,6 +115,20 @@ describe('Políticas compartidas de resiliencia', () => {
     expect(getCircuitStates().soporte).toBe('open');
   });
 
+  it('calcula Retry-After hasta la próxima prueba del circuito', async () => {
+    const policy = createPolicy('redis');
+    const operation = async (): Promise<never> => { throw networkError(); };
+
+    await expect(policy.execute(operation, { idempotent: false })).rejects.toBeInstanceOf(ServiceUnavailableError);
+    await expect(policy.execute(operation, { idempotent: false })).rejects.toBeInstanceOf(ServiceUnavailableError);
+    await expect(policy.execute(operation, { idempotent: false })).rejects.toMatchObject({ retryAfter: 30 });
+    await expect(policy.execute(operation, { idempotent: false })).rejects.toMatchObject({ retryAfter: 30 });
+    const currentTime = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(currentTime + 25_000);
+    await expect(policy.execute(operation, { idempotent: false })).rejects.toMatchObject({ retryAfter: 5 });
+    vi.restoreAllMocks();
+  });
+
   it('expone el estado de todos los circuitos compartidos', () => {
     // Given / When
     const states = getCircuitStates();
