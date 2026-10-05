@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
 
 import { createApp } from '../../src/app';
+import { closeRedis, connectRedis } from '../../src/cache/redis';
 import { runMigrations } from '../../src/db/migrations';
 
 describe('Receipt API (Integration HTTP)', () => {
@@ -13,6 +14,7 @@ describe('Receipt API (Integration HTTP)', () => {
 
   before(async () => {
     await runMigrations();
+    await connectRedis();
     const app = createApp();
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => {
@@ -27,6 +29,7 @@ describe('Receipt API (Integration HTTP)', () => {
     await new Promise<void>((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()));
     });
+      await closeRedis();
   });
 
   it('GET /health debe responder 200 e informar la base de datos disponible', async () => {
