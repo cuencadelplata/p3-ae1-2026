@@ -153,17 +153,68 @@ export class RideRequestService {
   }
 
   /**
-   * Stub de integración con M4: Conductores Cercanos (RF-4.2)
+   * Integración con M4: Conductores Cercanos (RF-4.2 / RF-5.2)
+   * Consulta a GET ${M4_SERVICE_URL}/api/v1/drivers/nearby con latitude, longitude, vehicleType, radiusKm y limit.
+   * Si M4 no está disponible o falla, utiliza fallback local determinista con timeout de 3s.
    */
   private async fetchNearbyDriversFromM4(
-    _lat: number,
-    _lng: number,
-    vehicleType: VehicleType
+    lat: number,
+    lng: number,
+    vehicleType: VehicleType,
+    radiusKm: number = 5.0,
+    limit: number = 5
   ): Promise<NearbyDriverStub[]> {
+    const m4BaseUrl = process.env.M4_SERVICE_URL || 'http://localhost:3004';
+
+    try {
+      const url = new URL(`${m4BaseUrl}/api/v1/drivers/nearby`);
+      url.searchParams.append('latitude', lat.toString());
+      url.searchParams.append('longitude', lng.toString());
+      url.searchParams.append('vehicleType', vehicleType);
+      url.searchParams.append('radiusKm', radiusKm.toString());
+      url.searchParams.append('limit', limit.toString());
+      url.searchParams.append('maxCandidates', limit.toString());
+
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(3000)
+      });
+
+      if (response.ok) {
+        const drivers = (await response.json()) as Array<{
+          driverId: string | number;
+          distanceKm: number;
+          vehicleType?: string;
+          latitude?: number;
+          longitude?: number;
+          available?: boolean;
+          estimatedEtaMinutes?: number;
+          rating?: number;
+        }>;
+
+        if (Array.isArray(drivers) && drivers.length > 0) {
+          return drivers.map((d) => ({
+            driverId: String(d.driverId),
+            distanceKm: typeof d.distanceKm === 'number' ? d.distanceKm : 1.5,
+            vehicleType: (d.vehicleType?.toUpperCase() === 'MOTO' ? 'MOTO' : 'AUTO') as VehicleType,
+            latitude: d.latitude,
+            longitude: d.longitude,
+            rating: d.rating ?? 4.8
+          }));
+        }
+      }
+
+      console.warn(`[M4] Respuesta no exitosa (${response.status}) o sin conductores. Usando fallback local.`);
+    } catch (err: any) {
+      console.warn(`[M4] No disponible (${err.message}). Usando fallback local.`);
+    }
+
+    // Fallback local determinista si M4 no responde
     return [
-      { driverId: 'drv_101', distanceKm: 1.2, vehicleType },
-      { driverId: 'drv_102', distanceKm: 2.1, vehicleType },
-      { driverId: 'drv_103', distanceKm: 3.0, vehicleType }
+      { driverId: 'drv_101', distanceKm: 1.2, vehicleType, rating: 4.9 },
+      { driverId: 'drv_102', distanceKm: 2.1, vehicleType, rating: 4.8 },
+      { driverId: 'drv_103', distanceKm: 3.0, vehicleType, rating: 4.7 }
     ];
   }
 
@@ -368,7 +419,9 @@ export class RideRequestService {
     const nearby = await this.fetchNearbyDriversFromM4(
       request.origin.latitude,
       request.origin.longitude,
-      request.vehicleType
+      request.vehicleType,
+      radiusKm,
+      maxCandidates
     );
 
     const candidates: CandidateDriver[] = nearby

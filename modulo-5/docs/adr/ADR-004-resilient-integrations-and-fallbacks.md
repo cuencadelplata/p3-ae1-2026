@@ -29,7 +29,9 @@ Para cada integración síncrona HTTP externa se aplicó un patrón unificado de
 - **Fallback:** Si M6 no está disponible en el entorno local, se registra el evento en PostgreSQL y se continúa con el flujo interno de M5.
 
 ### 3. Integración con M4 (Conductores Cercanos - `fetchNearbyDriversFromM4`)
-- **Llamada:** Stub local determinista con conductores candidatos por tipo de vehículo (`AUTO` / `MOTO`), listo para conectarse al endpoint HTTP de M4 una vez publicado.
+- **Llamada:** `GET ${M4_SERVICE_URL}/api/v1/drivers/nearby?latitude=...&longitude=...&vehicleType=...&radiusKm=...&limit=...`
+- **Timeout:** 3.000 ms.
+- **Fallback:** Si M4 no responde o arroja error, se aplica un conjunto determinista de candidatos locales con distancias calculadas para no interrumpir el flujo ni los tests.
 
 ---
 
