@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { RideRequestService } from './services/ride-request.service';
 import { RideRequestController } from './controllers/ride-request.controller';
+import { RedisService } from './services/redis.service';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -24,12 +25,25 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.use('/openapi', express.static(path.join(__dirname, '../openapi')));
 
 // Inyección de dependencias
-const rideRequestService = new RideRequestService();
+const redisService = new RedisService();
+const rideRequestService = new RideRequestService(redisService);
 const rideRequestController = new RideRequestController(rideRequestService);
 
-// Health check (RNF-16)
-app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'UP', service: 'm5-dispatch-service', timestamp: new Date() });
+if (process.env.NODE_ENV !== 'test') {
+  redisService.init().catch(() => {});
+}
+
+// Health check con diagnóstico de dependencias (RNF-16)
+app.get('/health', async (_req, res) => {
+  const redisOk = await redisService.isHealthy();
+  res.status(200).json({
+    status: 'UP',
+    service: 'm5-dispatch-service',
+    timestamp: new Date().toISOString(),
+    dependencies: {
+      redis: redisOk ? 'CONNECTED' : 'DEGRADED_FALLBACK'
+    }
+  });
 });
 
 // Documentación de la API interactiva con Scalar

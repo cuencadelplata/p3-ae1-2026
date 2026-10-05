@@ -17,6 +17,7 @@ import {
   VehicleType
 } from '../types/ride-request.types';
 import { RideRequestValidator } from '../schemas/ride-request.schema';
+import { RedisService } from './redis.service';
 import { randomUUID } from 'node:crypto';
 
 export class ConflictError extends Error {
@@ -56,15 +57,68 @@ export class RideRequestService {
   private requests: Map<string, RideRequest> = new Map();
   private idempotencyStore: Map<string, RideRequest> = new Map();
   private offers: Map<string, RideOffer> = new Map();
+  private redisService: RedisService;
 
+  constructor(redisService?: RedisService) {
+    this.redisService = redisService || new RedisService();
+  }
+
+  public getRedisService(): RedisService {
+    return this.redisService;
+  }
 
   /**
-   * Stub de integración con M7: Estimación de Tarifa (RF-7.1)
+   * Integración con M7: Estimación de Tarifa (RF-7.1)
+   * Realiza consulta síncrona HTTP al endpoint oficial /tarifa/estimacion si M7 está disponible,
+   * o utiliza cálculo local resiliente como fallback (RNF-14).
    */
   private async fetchEstimatedFareFromM7(
     distanceKm: number,
-    vehicleType: VehicleType
+    vehicleType: VehicleType,
+    origin?: { latitude: number; longitude: number; address: string },
+    destination?: { latitude: number; longitude: number; address: string }
   ): Promise<EstimatedFare> {
+    const m7Url = process.env.M7_URL || process.env.M7_SERVICE_URL;
+    if (m7Url && origin && destination) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 2000);
+        const response = await fetch(`${m7Url.replace(/\/$/, '')}/tarifa/estimacion`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            origen: {
+              lat: origin.latitude,
+              lng: origin.longitude,
+              direccion: origin.address
+            },
+            destino: {
+              lat: destination.latitude,
+              lng: destination.longitude,
+              direccion: destination.address
+            },
+            distanciaKm: Math.round(distanceKm * 10) / 10,
+            tiempoEstimadoMin: Math.max(5, Math.round(distanceKm * 2.5)),
+            vehicleType: vehicleType.toLowerCase()
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        if (response.ok) {
+          const data = (await response.json()) as any;
+          return {
+            amount: Number(data.estimatedFare || data.amount),
+            currency: data.currency || 'ARS',
+            estimatedDistanceKm: Number(data.distanciaKm || distanceKm),
+            estimatedDurationMin: Number(data.tiempoEstimadoMin || Math.max(5, Math.round(distanceKm * 2.5))),
+            fareToken: data.estimacionId || `ft_${randomUUID()}`
+          };
+        }
+      } catch (err) {
+        console.warn('[M5] Fallo consulta síncrona a M7 (/tarifa/estimacion). Utilizando estimación local resiliente.');
+      }
+    }
+
     const baseFare = vehicleType === 'AUTO' ? 1500 : 900;
     const perKmRate = vehicleType === 'AUTO' ? 500 : 300;
     const estimatedAmount = baseFare + distanceKm * perKmRate;
@@ -96,13 +150,21 @@ export class RideRequestService {
 
   /**
    * Crea una nueva solicitud de viaje (RF-5.1)
+   * Integra Redis para:
+   * 1. Idempotencia distribuida con TTL (RNF-08)
+   * 2. Candado atómico de cliente activo (RNF-09) con expiración (Criterio 6)
+   * 3. Caché efímero de estimación de tarifas M7 (Criterio 6)
    */
   public async createRideRequest(
     clientId: string,
     idempotencyKey: string,
     dto: CreateRideRequestDTO
   ): Promise<RideRequest> {
-    // 1. Verificar idempotencia (RNF-08)
+    // 1. Verificar idempotencia distribuida en Redis (RNF-08)
+    const cachedIdempotency = await this.redisService.getIdempotentRequest(idempotencyKey);
+    if (cachedIdempotency) {
+      return cachedIdempotency;
+    }
     if (this.idempotencyStore.has(idempotencyKey)) {
       return this.idempotencyStore.get(idempotencyKey)!;
     }
@@ -122,10 +184,21 @@ export class RideRequestService {
       ) {
         r.status = 'EXPIRED';
         r.updatedAt = new Date().toISOString();
+        await this.redisService.releaseClientActiveLock(r.clientId);
       }
     }
 
-    // 3. Verificar que el cliente no tenga otra solicitud activa pendiente/en búsqueda
+    // 3. Control de Concurrencia y Consistencia con Candado Atómico en Redis (RNF-09 - Criterios 6 y 7)
+    // El comando SET NX EX previene condiciones de carrera si el cliente dispara solicitudes concurrentes
+    const lockAcquired = await this.redisService.acquireClientActiveLock(clientId, 'PENDING_INIT', 180);
+    if (!lockAcquired) {
+      throw new ConflictError(
+        'El cliente ya posee una solicitud de viaje en curso',
+        'ACTIVE_REQUEST_EXISTS'
+      );
+    }
+
+    // Verificar además solicitudes en memoria local que sigan activas
     const existingActive = Array.from(this.requests.values()).find(
       (r) =>
         r.clientId === clientId &&
@@ -138,10 +211,17 @@ export class RideRequestService {
       );
     }
 
-    // 4. Calcular distancia estimada y consultar tarifa a M7
+    // 4. Calcular distancia estimada y consultar tarifa a M7 con soporte de caché en Redis
     const distanceMeters = RideRequestValidator.calculateDistanceMeters(dto.origin, dto.destination);
     const distanceKm = distanceMeters / 1000;
-    const estimatedFare = await this.fetchEstimatedFareFromM7(distanceKm, dto.vehicleType);
+
+    // Caché efímero de cotización en Redis (RNF-06 / Criterio 6)
+    const fareCacheKey = `${dto.origin.latitude}_${dto.origin.longitude}_${dto.destination.latitude}_${dto.destination.longitude}_${dto.vehicleType}`;
+    let estimatedFare = await this.redisService.getCachedEstimatedFare(fareCacheKey);
+    if (!estimatedFare) {
+      estimatedFare = await this.fetchEstimatedFareFromM7(distanceKm, dto.vehicleType, dto.origin, dto.destination);
+      await this.redisService.cacheEstimatedFare(fareCacheKey, estimatedFare, 60);
+    }
 
     // 5. Instanciar nueva solicitud
     const now = new Date();
@@ -173,12 +253,16 @@ export class RideRequestService {
       newRequest.status = 'NO_DRIVERS_AVAILABLE';
     }
 
-    // 7. Persistir en almacenamiento
+    // 7. Persistir en almacenamiento y actualizar estado efímero en Redis
     this.requests.set(newRequest.id, newRequest);
     this.idempotencyStore.set(idempotencyKey, newRequest);
 
+    // Actualizar candado con el ID de solicitud generado y guardar idempotencia en Redis con TTL de 24h
+    await this.redisService.updateClientActiveLock(clientId, newRequest.id, 180);
+    await this.redisService.saveIdempotentRequest(idempotencyKey, newRequest, 86400);
+
     console.log(
-      `[RF-5.1] Solicitud de viaje creada: ID=${newRequest.id} | Cliente=${clientId} | Vehículo=${newRequest.vehicleType} | Tarifa=$${estimatedFare.amount} ARS | Origen="${dto.origin.address}" ➔ Destino="${dto.destination.address}"`
+      `[RF-5.1] Solicitud de viaje creada con Redis: ID=${newRequest.id} | Cliente=${clientId} | Vehículo=${newRequest.vehicleType} | Tarifa=$${estimatedFare.amount} ARS | Origen="${dto.origin.address}" ➔ Destino="${dto.destination.address}"`
     );
 
     return newRequest;
@@ -521,6 +605,9 @@ export class RideRequestService {
     request.updatedAt = now.toISOString();
     this.requests.set(request.id, request);
 
+    // Liberar candado de solicitud activa del cliente en Redis al quedar asignado (Criterio 6)
+    await this.redisService.releaseClientActiveLock(request.clientId);
+
     // 9. Cancelar / expirar automáticamente las demás ofertas pendientes para esta misma solicitud
     Array.from(this.offers.values())
       .filter((o) => o.requestId === request.id && o.id !== offer.id && o.status === 'PENDING')
@@ -595,6 +682,9 @@ export class RideRequestService {
       request.cancellationReason = dto.reason.trim();
     }
     this.requests.set(request.id, request);
+
+    // Invalidar y liberar explícitamente el candado en Redis (Criterio 6: Invalidación explícita)
+    await this.redisService.releaseClientActiveLock(request.clientId);
 
     // 5. Invalidar/expirar inmediatamente todas las ofertas asociadas que sigan pendientes
     Array.from(this.offers.values())
