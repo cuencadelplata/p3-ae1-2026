@@ -1,0 +1,108 @@
+name: ae2-rf22
+x-app: &app
+  build: .
+  image: ae2-rf22:local
+  restart: unless-stopped
+x-env: &env
+  DATABASE_URL: postgresql://m2:${POSTGRES_PASSWORD:?Ejecutar node scripts/setup.cjs}@postgres:5432/customerdb?connection_limit=10&connect_timeout=3&pool_timeout=5
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  RABBITMQ_URL: amqp://ae2:${RABBITMQ_PASSWORD:?Falta clave}@rabbitmq:5672
+  AUTH_SECRET: ${AUTH_SECRET:?Falta AUTH_SECRET}
+  INTEGRATION_SECRET: ${INTEGRATION_SECRET:?Falta INTEGRATION_SECRET}
+  M4_BASE_URL: http://m4:4004
+  M6_BASE_URL: ${M6_DOCKER_BASE_URL:-http://m6:4000}
+  CHECKPOINT_DISABLE: "1"
+  PRISMA_HIDE_UPDATE_MESSAGE: "1"
+  CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-60}
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: m2
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta clave}
+      POSTGRES_DB: customerdb
+    ports: ["127.0.0.1:55432:5432"]
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U m2 -d customerdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  redis:
+    image: redis:7-alpine
+    ports: ["127.0.0.1:56379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ae2
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Falta clave}
+    ports: ["127.0.0.1:56729:5672", "127.0.0.1:15679:15672"]
+    volumes: ["rabbitmq_data:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  migrate:
+    <<: *app
+    restart: "no"
+    environment: *env
+    command: ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
+    depends_on:
+      postgres: {condition: service_healthy}
+  api:
+    <<: *app
+    environment: *env
+    ports: ["127.0.0.1:${API_PORT:-3000}:3000"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  worker:
+    <<: *app
+    environment: *env
+    command: ["node", "dist/worker.js"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      rabbitmq: {condition: service_healthy}
+      redis: {condition: service_healthy}
+  m4:
+    <<: *app
+    environment:
+      INTEGRATION_SECRET: ${INTEGRATION_SECRET:?Falta clave}
+    command: ["node", "dist/mocks/modulo4.mock.js"]
+    ports: ["127.0.0.1:4004:4004"]
+  m6:
+    <<: *app
+    environment:
+      INTEGRATION_SECRET: ${INTEGRATION_SECRET:?Falta clave}
+      RABBITMQ_URL: amqp://ae2:${RABBITMQ_PASSWORD:?Falta clave}@rabbitmq:5672
+    command: ["node", "dist/mocks/modulo6.demo.js"]
+    ports: ["127.0.0.1:4000:4000"]
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+  m8:
+    <<: *app
+    environment:
+      INTEGRATION_SECRET: ${INTEGRATION_SECRET:?Falta clave}
+      RABBITMQ_URL: amqp://ae2:${RABBITMQ_PASSWORD:?Falta clave}@rabbitmq:5672
+      NOTIFICATIONS_DIR: /tmp/m8-notifications
+    command: ["node", "dist/mocks/modulo8.demo.js"]
+    ports: ["127.0.0.1:4008:4008"]
+    volumes: ["notifications:/tmp/m8-notifications"]
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  notifications:
