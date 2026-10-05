@@ -23,8 +23,6 @@ export interface ExternalApisClient {
   }): Promise<number>;
   registerPayment(input: { clienteId: string; viajeId: string; metodoPago: string }): Promise<string>;
   authorizePayment(viajeId: string): Promise<string>;
-  cancellationCharge(input: { viajeId: string; estado: string }): Promise<number>;
-  returnClientToDispatch(input: { viajeId: string; conductorId: string }): Promise<{ reabrirDespacho: boolean; clienteRetornado: boolean }>;
 }
 
 export class HttpExternalApisClient implements ExternalApisClient {
@@ -148,19 +146,6 @@ export class HttpExternalApisClient implements ExternalApisClient {
     return result.pagoId;
   }
 
-  async cancellationCharge(input: { viajeId: string; estado: string }): Promise<number> {
-    const result = await this.post<{ cargo: number }>(this.m7BaseUrl, '/api/tarifas/cargo-cancelacion', input);
-    return result.cargo;
-  }
-
-  async returnClientToDispatch(input: { viajeId: string; conductorId: string }): Promise<{ reabrirDespacho: boolean; clienteRetornado: boolean }> {
-    const result = await this.post<{ reabrirDespacho: boolean; clienteRetornado: boolean }>(
-      this.m7BaseUrl,
-      '/api/despacho/reabrir',
-      input,
-    );
-    return result;
-  }
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -192,7 +177,7 @@ export function createViajeApi(options: ViajeApiOptions): Server {
         return send(response, 201, { viaje });
       }
 
-      const match = request.url?.match(/^\/api\/viajes\/([^/]+)\/(finalizacion|cancelacion-cliente|cancelacion-conductor|historial-transiciones)$/);
+      const match = request.url?.match(/^\/api\/viajes\/([^/]+)\/(finalizacion|historial-transiciones)$/);
       if (!match) return send(response, 404, { error: 'Ruta no encontrada' });
 
       const viaje = await repository.get(match[1]);
@@ -246,23 +231,6 @@ export function createViajeApi(options: ViajeApiOptions): Server {
         });
       }
 
-      if (match[2] === 'cancelacion-cliente') {
-        const motivo = String((input as { motivo?: string }).motivo ?? '');
-        const cargo = await options.externalApis.cancellationCharge({ viajeId: viaje.id, estado: viaje.estado });
-        viaje.cancelarPorCliente({ motivo, cargo });
-        await repository.save(viaje);
-        return send(response, 200, { viaje });
-      }
-
-      const motivo = String((input as { motivo?: string }).motivo ?? '');
-      const retornoDespacho = await options.externalApis.returnClientToDispatch({
-        viajeId: viaje.id,
-        conductorId: viaje.conductorId,
-      });
-      viaje.cancelarPorConductor({ motivo });
-      viaje.retornoDespacho = retornoDespacho;
-      await repository.save(viaje);
-      return send(response, 200, { viaje, retornoDespacho });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Solicitud inválida';
       const status = error instanceof ServiceUnavailableError ? 503 : error instanceof BadGatewayError ? 502 : 400;

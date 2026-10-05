@@ -109,15 +109,6 @@ export function createSimulator(): Server {
 
     if (request.url === '/api/tarifas/estimacion') {
     result = { total: 150 + Number(input.distanciaKm) * 80 + Number(input.tiempoMinutos) * 25 };
-    } else if (request.url === '/api/tarifas/cargo-cancelacion') {
-    result = { cargo: input.estado === 'asignado' ? 200 : 0 };
-    } else if (request.url === '/api/despacho/reabrir') {
-    result = {
-      reabrirDespacho: true,
-      clienteRetornado: true,
-      viajeId: String(input.viajeId ?? ''),
-      conductorId: String(input.conductorId ?? ''),
-    };
     } else {
       response.writeHead(404).end();
       return;

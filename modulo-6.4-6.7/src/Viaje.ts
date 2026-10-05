@@ -42,27 +42,11 @@ export interface CrearViajeInput {
   distanciaKm?: number;
   metodoPago?: string;
   total?: number;
-  motivoCancelacion?: string;
-  cargoCancelacion?: number;
   origen?: CoordenadasViaje;
   destino?: CoordenadasViaje;
   tipoVehiculo?: TipoVehiculoViaje;
   fuenteMetrica?: 'M4';
   metricasEstimadas?: boolean;
-}
-
-export interface CancelarPorClienteInput {
-  motivo: string;
-  cargo?: number;
-}
-
-export interface CancelarPorConductorInput {
-  motivo: string;
-}
-
-export interface RetornoDespacho {
-  reabrirDespacho: boolean;
-  clienteRetornado: boolean;
 }
 
 export class Viaje {
@@ -79,10 +63,6 @@ export class Viaje {
   distanciaKm?: number;
   metodoPago?: string;
   total?: number;
-  motivoCancelacion?: string;
-  cargoCancelacion?: number;
-  motivoCancelacionConductor?: string;
-  retornoDespacho?: RetornoDespacho;
   origen?: CoordenadasViaje;
   destino?: CoordenadasViaje;
   tipoVehiculo?: TipoVehiculoViaje;
@@ -104,8 +84,6 @@ export class Viaje {
     this.distanciaKm = data.distanciaKm;
     this.metodoPago = data.metodoPago;
     this.total = data.total;
-    this.motivoCancelacion = data.motivoCancelacion;
-    this.cargoCancelacion = data.cargoCancelacion;
     this.origen = data.origen;
     this.destino = data.destino;
     this.tipoVehiculo = data.tipoVehiculo;
@@ -155,53 +133,4 @@ export class Viaje {
     this.registrarTransicion(estadoAnterior, this.estado, 'Finalización del viaje');
   }
 
-  cancelarPorCliente(data: CancelarPorClienteInput): void {
-    if (this.estado === 'cancelado') {
-      throw new Error('No se puede cancelar un viaje ya cancelado');
-    }
-
-    if (this.estado === 'completado') {
-      throw new Error('No se puede cancelar un viaje ya finalizado');
-    }
-
-    if (!data.motivo || data.motivo.trim().length === 0) {
-      throw new Error('El motivo de cancelación es obligatorio');
-    }
-
-    const motivo = data.motivo.trim();
-    const estadoAnterior = this.estado;
-    this.estado = 'cancelado';
-    this.motivoCancelacion = motivo;
-    this.cargoCancelacion = data.cargo ?? 0;
-    this.registrarTransicion(
-      estadoAnterior,
-      this.estado,
-      `Cancelación por cliente: ${motivo}`,
-    );
-  }
-
-  cancelarPorConductor(data: CancelarPorConductorInput): void {
-    if (this.estado === 'cancelado') {
-      throw new Error('No se puede cancelar un viaje ya cancelado');
-    }
-
-    if (this.estado === 'completado') {
-      throw new Error('No se puede cancelar un viaje ya finalizado');
-    }
-
-    if (!data.motivo || data.motivo.trim().length === 0) {
-      throw new Error('El motivo de cancelación es obligatorio');
-    }
-
-    const motivo = data.motivo.trim();
-    const estadoAnterior = this.estado;
-    this.estado = 'cancelado';
-    this.motivoCancelacionConductor = motivo;
-    this.retornoDespacho = { reabrirDespacho: true, clienteRetornado: true };
-    this.registrarTransicion(
-      estadoAnterior,
-      this.estado,
-      `Cancelación por conductor: ${motivo}`,
-    );
-  }
 }

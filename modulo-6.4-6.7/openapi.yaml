@@ -39,34 +39,6 @@ paths:
         '400': { description: Transición inválida }
         '502': { description: Respuesta inválida de una dependencia externa }
         '503': { description: Dependencia externa o base de datos no disponible }
-  /api/viajes/{viajeId}/cancelacion-cliente:
-    post:
-      summary: Cancela un viaje por solicitud del cliente
-      parameters:
-        - { name: viajeId, in: path, required: true, schema: { type: string } }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/CancelarCliente' }
-      responses:
-        '200': { description: Viaje cancelado }
-        '400': { description: Cancelación inválida }
-        '503': { description: Dependencia externa o base de datos no disponible }
-  /api/viajes/{viajeId}/cancelacion-conductor:
-    post:
-      summary: Cancela un viaje por solicitud del conductor
-      parameters:
-        - { name: viajeId, in: path, required: true, schema: { type: string } }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/CancelarConductor' }
-      responses:
-        '200': { description: Viaje cancelado y cliente retornado al despacho }
-        '400': { description: Cancelación inválida }
-        '503': { description: Dependencia externa o base de datos no disponible }
   /api/viajes/{viajeId}/historial-transiciones:
     get:
       summary: Obtiene el historial de transiciones de un viaje
@@ -152,16 +124,6 @@ components:
         tipoVehiculo: { type: string, enum: [auto, moto] }
         fuenteMetrica: { type: string, enum: [M4] }
         metricasEstimadas: { type: boolean, enum: [true] }
-    CancelarCliente:
-      type: object
-      required: [motivo]
-      properties:
-        motivo: { type: string, minLength: 1 }
-    CancelarConductor:
-      type: object
-      required: [motivo]
-      properties:
-        motivo: { type: string, minLength: 1 }
     TransicionViaje:
       type: object
       required: [from, to, timestamp]

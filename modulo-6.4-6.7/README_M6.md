@@ -3,14 +3,12 @@ Paradigmas 3 AE1 2026 - Grupo 10 - M6
 
 # M6: Viajes
 
-Implementación del módulo M6 para los requisitos RF-6.4 a RF-6.7:
+Implementación del módulo M6 para los requisitos RF-6.4 y RF-6.7:
 
  - Finalización de viajes.
- - Cancelación por cliente.
- - Cancelación por conductor.
  - Historial de transiciones.
 
-La API principal delega las operaciones de tarifa, pagos y despacho en APIs externas. Esas APIs se ejecutan en la imagen de dependencias y no forman parte de los endpoints provistos por M6. Para finalizar, M6 consulta a M4 `POST /api/v1/estimate` usando las coordenadas de origen y destino, y envía su distancia y ETA estimados a M7 para cotizar la tarifa. Estas métricas son estimaciones, no mediciones reales del viaje. M6 registra el método de pago y solicita su autorización a M7.
+La API principal delega las operaciones de tarifa y pagos en APIs externas. Esas APIs se ejecutan en la imagen de dependencias y no forman parte de los endpoints provistos por M6. Para finalizar, M6 consulta a M4 `POST /api/v1/estimate` usando las coordenadas de origen y destino, y envía su distancia y ETA estimados a M7 para cotizar la tarifa. Estas métricas son estimaciones, no mediciones reales del viaje. M6 registra el método de pago y solicita su autorización a M7.
 
 En Docker Compose, `M4_URL` y `M7_URL` permiten configurar las URL base de esos módulos. Por defecto apuntan al simulador local; para M4 la URL base incluye `/api/v1`.
 
@@ -98,22 +96,6 @@ Implementa RF-6.4. Recibe origen, destino, tipo de vehículo, hora de finalizaci
 
 Respuesta exitosa: `200 OK`, con el viaje actualizado y el identificador del pago.
 
-### Cancelar por cliente
-
-`POST /api/viajes/{viajeId}/cancelacion-cliente`
-
-Implementa RF-6.5. Cancela el viaje por solicitud del cliente, registra el motivo y consulta a la API externa el eventual cargo de cancelación.
-
-Respuesta exitosa: `200 OK`, con el viaje cancelado.
-
-### Cancelar por conductor
-
-`POST /api/viajes/{viajeId}/cancelacion-conductor`
-
-Implementa RF-6.6. Registra el motivo de la cancelación por parte del conductor y solicita a la API de despacho que retorne el cliente al proceso de búsqueda.
-
-Respuesta exitosa: `200 OK`, con el viaje cancelado y el resultado del retorno al despacho.
-
 ### Consultar historial de transiciones
 
 `GET /api/viajes/{viajeId}/historial-transiciones`
@@ -130,7 +112,3 @@ Estos endpoints son consumidos por M6 para simular dependencias de otros módulo
  - M7: `POST /tarifa/estimacion`
  - M7: `POST /metodo-pago`
  - M7: `POST /metodo-pago/{viajeId}/autorizar`
-
-Los flujos RF-6.5 y RF-6.6 todavía usan rutas históricas del simulador (`/api/tarifas/cargo-cancelacion` y `/api/despacho/reabrir`). No se consideran validadas contra los contratos actuales de los módulos externos.
- - `POST /api/tarifas/cargo-cancelacion`
- - `POST /api/despacho/reabrir`
