@@ -11,7 +11,7 @@ import {
     oauth2Callback,
     oauth2LinkAccount
 } from "../controllers/recovery.controller";
-import { authenticateToken } from "../middleware/auth.middleware";
+import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware";
 import { loginRateLimit } from "../middleware/login-rate-limit.middleware";
 import { obtenerMiPerfil } from "../controllers/me.controller";
 
@@ -69,6 +69,21 @@ router.post(
     "/oauth2/link",
     authenticateToken,
     oauth2LinkAccount
+);
+
+// ============ Demostración RF-1.3 (Roles) ============
+router.get(
+    "/admin-panel",
+    authenticateToken,
+    authorizeRoles("OPERADOR"),
+    (req, res) => { res.json({ message: "Bienvenido al panel de Operadores" }); }
+);
+
+router.get(
+    "/portal-conductor",
+    authenticateToken,
+    authorizeRoles("CONDUCTOR"),
+    (req, res) => { res.json({ message: "Bienvenido al portal de Conductores" }); }
 );
 
 export default router;
