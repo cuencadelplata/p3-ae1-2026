@@ -3,6 +3,8 @@ import {
     solicitarViaje,
     obtenerViaje,
     cancelarViaje,
+    finalizarViaje,
+    obtenerHistorialTransiciones,
     registrarArribo,
     asignarConductor,
     iniciarViaje,
@@ -16,6 +18,8 @@ router.post('/', solicitarViaje);
 //endpoints de compatibilidad para RF-6.5 y RF-6.6
 router.get('/:id', obtenerViaje);
 router.patch('/:id/cancelacion', cancelarViaje);
+router.post('/:id/finalizacion', finalizarViaje);
+router.get('/:id/historial-transiciones', obtenerHistorialTransiciones);
 
 //endpoint para asignar conductor (RF-6.2)
 router.post('/:id/asignar', asignarConductor);

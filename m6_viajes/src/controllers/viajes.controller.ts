@@ -6,6 +6,14 @@ import * as viajeRepo from '../repositories/viaje.repository.js';
 import { randomUUID } from 'node:crypto';
 import { consultarEstadoConductor } from '../services/conductor.service.js';
 import { publicarEvento } from '../services/rabbitmq.service.js';
+import {
+    ejecutarServiciosFinalizacion,
+    ErrorServicioFinalizacion,
+    type CoordenadasFinalizacion,
+    type DatosFinalizacion,
+} from '../services/finalizacion.service.js';
+
+class ErrorValidacionFinalizacion extends Error {}
 
 function qrVigente(viaje: Viaje): boolean {
     return Boolean(
@@ -108,7 +116,7 @@ export const cancelarViaje = async (req: Request, res: Response): Promise<any> =
 
     let viaje: Viaje | null;
     try {
-        viaje = await viajeRepo.cancelarSiCancelable(id);
+        viaje = await viajeRepo.cancelarSiCancelable(id, actor, motivo.trim());
     } catch (error) {
         console.error('ERROR EN viajeRepo.cancelarSiCancelable:', error);
         return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
@@ -130,6 +138,150 @@ export const cancelarViaje = async (req: Request, res: Response): Promise<any> =
 
     return res.json(viajeParaIntegracion(viaje));
 };
+
+function validarCoordenadasFinalizacion(value: unknown, nombre: string): CoordenadasFinalizacion {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new ErrorValidacionFinalizacion(`${nombre} es obligatorio y debe contener coordenadas`);
+    }
+    const coordinates = value as Record<string, unknown>;
+    const { latitude, longitude, address } = coordinates;
+    if (
+        typeof latitude !== 'number' ||
+        !Number.isFinite(latitude) ||
+        latitude < -90 ||
+        latitude > 90 ||
+        typeof longitude !== 'number' ||
+        !Number.isFinite(longitude) ||
+        longitude < -180 ||
+        longitude > 180
+    ) {
+        throw new ErrorValidacionFinalizacion(`${nombre} debe tener latitud y longitud válidas`);
+    }
+    if (address !== undefined && typeof address !== 'string') {
+        throw new ErrorValidacionFinalizacion(`${nombre}.address debe ser texto`);
+    }
+    return {
+        latitude,
+        longitude,
+        ...(typeof address === 'string' ? { address } : {}),
+    };
+}
+
+function validarDatosFinalizacion(input: unknown, inicio: Date): DatosFinalizacion {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+        throw new ErrorValidacionFinalizacion('El cuerpo de la solicitud debe ser un objeto JSON');
+    }
+    const body = input as Record<string, unknown>;
+    const origen = validarCoordenadasFinalizacion(body.origen, 'origen');
+    const destino = validarCoordenadasFinalizacion(body.destino, 'destino');
+    if (origen.latitude === destino.latitude && origen.longitude === destino.longitude) {
+        throw new ErrorValidacionFinalizacion('El origen y el destino no pueden ser iguales');
+    }
+    if (body.tipoVehiculo !== 'auto' && body.tipoVehiculo !== 'moto') {
+        throw new ErrorValidacionFinalizacion('tipoVehiculo debe ser auto o moto');
+    }
+    if (
+        body.metodoPago !== 'efectivo' &&
+        body.metodoPago !== 'tarjeta' &&
+        body.metodoPago !== 'transferencia'
+    ) {
+        throw new ErrorValidacionFinalizacion('metodoPago debe ser efectivo, tarjeta o transferencia');
+    }
+    const horaFin = new Date(String(body.horaFin));
+    if (Number.isNaN(horaFin.getTime()) || horaFin < inicio) {
+        throw new ErrorValidacionFinalizacion('horaFin debe ser una fecha válida posterior al inicio del viaje');
+    }
+    return {
+        origen,
+        destino,
+        tipoVehiculo: body.tipoVehiculo,
+        horaFin,
+        metodoPago: body.metodoPago,
+    };
+}
+
+export const finalizarViaje = async (req: Request, res: Response): Promise<any> => {
+    const { id } = req.params;
+    if (typeof id !== 'string') {
+        return res.status(400).json({ error: 'Falta el id del viaje en la URL' });
+    }
+
+    try {
+        const result = await viajeRepo.finalizarSiEnCurso(id, async (viaje, inicio) => {
+            const data = validarDatosFinalizacion(req.body, inicio);
+            return ejecutarServiciosFinalizacion(viaje, data);
+        });
+        if (result.kind === 'not-found') return res.status(404).json({ error: 'Viaje no encontrado' });
+        if (result.kind === 'invalid-state') {
+            return res.status(400).json({
+                error: `No se puede finalizar un viaje en estado ${result.estado}`,
+            });
+        }
+
+        const { viaje, finalizacion } = result;
+        const { paymentId, ...datosFinalizacion } = finalizacion;
+        return res.json({
+            viaje: {
+                ...viaje,
+                estado: 'completado',
+                ...datosFinalizacion,
+            },
+            paymentId,
+            metricasEstimadas: true,
+            fuenteMetrica: 'M4',
+        });
+    } catch (error) {
+        if (error instanceof ErrorServicioFinalizacion) {
+            return res.status(error.status).json({ error: error.message });
+        }
+        if (error instanceof ErrorValidacionFinalizacion) {
+            return res.status(400).json({ error: error.message });
+        }
+        console.error('ERROR EN finalizarViaje:', error);
+        return res.status(503).json({ error: 'No se pudo finalizar el viaje' });
+    }
+};
+
+export const obtenerHistorialTransiciones = async (req: Request, res: Response): Promise<any> => {
+    const { id } = req.params;
+    if (typeof id !== 'string') {
+        return res.status(400).json({ error: 'Falta el id del viaje en la URL' });
+    }
+
+    try {
+        const result = await viajeRepo.buscarHistorialTransiciones(id);
+        if (!result.exists) return res.status(404).json({ error: 'Viaje no encontrado' });
+        return res.json({
+            historial: result.historial.map((transicion) => ({
+                from: estadoHistorial(transicion.from),
+                to: estadoHistorial(transicion.to),
+                timestamp: transicion.timestamp,
+                ...(transicion.detalle ? { detalle: transicion.detalle } : {}),
+            })),
+        });
+    } catch (error) {
+        console.error('ERROR EN viajeRepo.buscarHistorialTransiciones:', error);
+        return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
+    }
+};
+
+function estadoHistorial(estado: string): string {
+    switch (estado) {
+        case EstadoViaje.SOLICITADO:
+            return 'solicitado';
+        case EstadoViaje.CONDUCTOR_EN_CAMINO:
+        case EstadoViaje.ARRIBADO:
+            return 'asignado';
+        case EstadoViaje.EN_CURSO:
+            return 'en curso';
+        case EstadoViaje.COMPLETADO:
+            return 'completado';
+        case EstadoViaje.CANCELADO:
+            return 'cancelado';
+        default:
+            return estado.toLowerCase();
+    }
+}
 
 export const asignarConductor = async (req: Request, res: Response): Promise<any> => {
     const { id } = req.params;

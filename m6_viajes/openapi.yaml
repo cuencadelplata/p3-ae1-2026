@@ -2,7 +2,8 @@ openapi: 3.0.0
 info:
   title: M6 - Viajes y Ciclo de Vida
   description: |
-    API de M6 (Viajes y Ciclo de Vida). AE2: RF-6.1 (estados), RF-6.2 (arribo validado con M3, caché Redis) y RF-6.3 (inicio validado con QR de M8).
+    API de M6 (Viajes y Ciclo de Vida). AE2: RF-6.1 (estados), RF-6.2 (arribo validado con M3, caché Redis),
+    RF-6.3 (inicio validado con QR de M8), RF-6.4 (finalización con estimación M4 y pago M7) y RF-6.7 (historial).
     Eventos asíncronos (RabbitMQ) documentados en AE2-M6-documentacion.md.
   version: 2.0.0
   contact:
@@ -127,6 +128,90 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El viaje no existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: TripDB no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/viajes/{id}/finalizacion:
+    post:
+      tags:
+        - Viajes
+      summary: "RF-6.4: Finalizar un viaje y autorizar el pago"
+      description: |
+        Requiere estado EN_CURSO. Consulta distancia y ETA a M4, calcula la tarifa y autoriza el pago en M7.
+        El cambio de estado y el registro de finalización/historial se confirman atómicamente en TripDB.
+      operationId: finalizarViaje
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FinalizarViajeRequest'
+            example:
+              origen: { latitude: -34.6037, longitude: -58.3816, address: "Calle A" }
+              destino: { latitude: -34.6118, longitude: -58.396, address: "Calle B" }
+              tipoVehiculo: auto
+              horaFin: "2026-10-05T18:00:00Z"
+              metodoPago: tarjeta
+      responses:
+        '200':
+          description: Viaje finalizado y pago autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinalizarViajeResponse'
+        '400':
+          description: Datos inválidos o el viaje no está en estado EN_CURSO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El viaje no existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: M4 o M7 devolvió una respuesta inválida o rechazó la solicitud
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: TripDB, M4 o M7 no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/viajes/{id}/historial-transiciones:
+    get:
+      tags:
+        - Viajes
+      summary: "RF-6.7: Consultar historial de transiciones"
+      description: Devuelve las transiciones registradas en orden cronológico, incluida la finalización del viaje.
+      operationId: obtenerHistorialTransiciones
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Historial del viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistorialTransicionesResponse'
         '404':
           description: El viaje no existe
           content:
@@ -414,6 +499,75 @@ components:
         motivo:
           type: string
           minLength: 1
+
+    CoordenadasFinalizacion:
+      type: object
+      required: [latitude, longitude]
+      properties:
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        address: { type: string }
+
+    FinalizarViajeRequest:
+      type: object
+      required: [origen, destino, tipoVehiculo, horaFin, metodoPago]
+      properties:
+        origen:
+          $ref: '#/components/schemas/CoordenadasFinalizacion'
+        destino:
+          $ref: '#/components/schemas/CoordenadasFinalizacion'
+        tipoVehiculo:
+          type: string
+          enum: [auto, moto]
+        horaFin:
+          type: string
+          format: date-time
+        metodoPago:
+          type: string
+          enum: [efectivo, tarjeta, transferencia]
+
+    FinalizarViajeResponse:
+      type: object
+      required: [viaje, paymentId, metricasEstimadas, fuenteMetrica]
+      properties:
+        viaje:
+          type: object
+          required: [id, clienteId, estado, horaFin, total, distanciaKm, tiempoMinutos]
+          properties:
+            id: { type: string }
+            clienteId: { type: string }
+            conductorId: { type: string, nullable: true }
+            estado: { type: string, enum: [completado] }
+            horaFin: { type: string, format: date-time }
+            tiempoMinutos: { type: number }
+            distanciaKm: { type: number }
+            metodoPago: { type: string }
+            total: { type: number }
+            origen:
+              $ref: '#/components/schemas/CoordenadasFinalizacion'
+            destino:
+              $ref: '#/components/schemas/CoordenadasFinalizacion'
+            tipoVehiculo: { type: string, enum: [auto, moto] }
+            fuenteMetrica: { type: string, enum: [M4] }
+            metricasEstimadas: { type: boolean, enum: [true] }
+        paymentId: { type: string }
+        metricasEstimadas: { type: boolean, enum: [true] }
+        fuenteMetrica: { type: string, enum: [M4] }
+
+    HistorialTransicionesResponse:
+      type: object
+      required: [historial]
+      properties:
+        historial:
+          type: array
+          items:
+            type: object
+            required: [from, to, timestamp]
+            properties:
+              from: { type: string }
+              to: { type: string }
+              timestamp: { type: string, format: date-time }
+              detalle: { type: string }
 
     AsignarConductorRequest:
       type: object
