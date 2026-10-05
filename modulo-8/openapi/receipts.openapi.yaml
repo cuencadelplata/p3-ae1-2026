@@ -5,7 +5,7 @@ info:
     Microservicio de la **Plataforma Distribuida de Movilidad Urbana (ISI - Paradigmas 3)**.
     Responsable de la **emisión, consulta, descarga y reenvío de comprobantes de viaje en PDF**.
 
-    **Versión 2.2.0: evolución individual AE2 (Juan Gualtieri) sobre la versión 1.0.0 del Grupo 14 (AE1).**
+    **Versión 2.3.0: evolución individual AE2 (Juan Gualtieri) sobre la versión 1.0.0 del Grupo 14 (AE1).**
     - **RF-8.3:** Comprobante PDF. Además de `POST /receipts`, se emite de forma asincrónica al consumir
       `payment.confirmed` (RabbitMQ). Persistencia en PostgreSQL (esquema `receipts`).
     - **RF-8.4:** Reenvío de comprobante (entrega simulada) y descarga mediante enlace temporal (Redis).
@@ -15,11 +15,12 @@ info:
       (simulado), con timeout de 2 s y circuit breaker. El código queda en `fiscal` e impreso en el PDF.
     - **Pago verificado en M7 (2.2.0):** antes de emitir se consulta `GET /metodo-pago/{viajeId}` de M7.
       Solo un pago `autorizado` genera comprobante, y el medio de pago se toma de M7.
+    - **Importe de M7 (2.3.0):** el total y la moneda del comprobante se toman de M7 cuando los informa.
     - **Dependencias caídas:** responden `503` con `Retry-After` (nunca `500`); el servicio sigue atendiendo.
 
     Los contratos asincrónicos (`payment.confirmed`, `receipt.issued`) y el contrato interno con Receipts
     Delivery están en `contracts/events/catalogo-eventos-v1.md`; no forman parte de esta API pública.
-  version: 2.2.0
+  version: 2.3.0
   contact:
     name: Grupo 14 - M8 Comprobantes
 servers:
@@ -59,7 +60,8 @@ paths:
         `GET /metodo-pago/{viajeId}` de M7 (timeout de 2 s):
         - `autorizado`: se emite; `payment.status` queda `APROBADO` y `payment.method` se toma de M7
           (`efectivo`, `tarjeta`, `transferencia` → `EFECTIVO`, `TARJETA`, `TRANSFERENCIA`), aunque la entrada
-          informe otro valor.
+          informe otro valor. Si M7 informa `total` y `moneda` (2.3.0), `fare.total` y `fare.currency` se toman
+          de M7; el desglose de `fare` se conserva solo si suma ese total, y si no queda solo el total.
         - `pendiente` o sin pago registrado: `409 PAYMENT_PENDING` / `409 PAYMENT_NOT_FOUND` con `Retry-After`.
           No se persiste nada y el pedido se puede repetir cuando M7 autorice el pago.
         - `rechazado`: `422 PAYMENT_REJECTED`. Ese pago no genera comprobante.
@@ -496,7 +498,7 @@ paths:
               example:
                 status: unavailable
                 service: m8-documentos
-                version: 2.2.0
+                version: 2.3.0
                 uptimeSeconds: 42
                 dependencies:
                   postgres: { status: unavailable, critical: true }
@@ -571,7 +573,7 @@ components:
           example: m8-documentos
         version:
           type: string
-          example: 2.2.0
+          example: 2.3.0
         uptimeSeconds:
           type: integer
           example: 42
@@ -600,7 +602,7 @@ components:
           example: m8-documentos
         version:
           type: string
-          example: 2.2.0
+          example: 2.3.0
         uptimeSeconds:
           type: integer
           example: 42

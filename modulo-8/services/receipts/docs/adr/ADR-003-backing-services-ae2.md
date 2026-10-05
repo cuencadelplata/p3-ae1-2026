@@ -139,8 +139,10 @@ en `/health/ready`.
   del viaje, que no alcanza para emitir el comprobante. Se mantiene la alternativa 1 del
   catálogo de forma provisoria y el cierre queda para la integración de AE4 (catálogo,
   sección 5.1). El 2026-10-04 M7 informó que se integra por REST (ver la
-  actualización de la decisión 1); su respuesta no incluye importe ni moneda, que se
-  consultaron a M7 y mientras tanto se conservan desde la entrada actual. Los datos
+  actualización de la decisión 1). A pedido de este servicio, el 2026-10-05 M7 agregó
+  `total` y `moneda` a esa respuesta, y desde la versión 2.3.0 el importe del
+  comprobante se toma de M7; el desglose de la entrada se muestra solo si suma ese
+  total, para no imprimir un detalle que no cierra con lo cobrado. Los datos
   del cliente, el conductor y el recorrido no son de M7 y siguen como están hasta
   cerrar los contratos con M1, M2, M3 y M6.
 * **Nueva dependencia:** la API de pagos de M7, no crítica en `/health/ready` (sin ella

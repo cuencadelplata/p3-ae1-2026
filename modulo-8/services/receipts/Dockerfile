@@ -40,7 +40,7 @@ USER node
 
 ENV NODE_ENV=production \
     PORT=3008 \
-    SERVICE_VERSION=2.1.0
+    SERVICE_VERSION=2.3.0
 
 EXPOSE 3008
 

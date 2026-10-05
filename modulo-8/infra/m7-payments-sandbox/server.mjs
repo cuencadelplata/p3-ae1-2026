@@ -8,9 +8,13 @@
  * Contrato (igual al de M7):
  *   POST /metodo-pago                      { clienteId, viajeId, tipo } -> 201 en estado "pendiente"
  *   GET  /metodo-pago/{viajeId}            200 MetodoPago | 404 { mensaje }
- *   POST /metodo-pago/{viajeId}/autorizar  "pendiente" -> "autorizado" | 400 | 404
+ *   POST /metodo-pago/{viajeId}/autorizar  { idOrden, total, moneda? } "pendiente" -> "autorizado" | 400 | 404
  *   POST /metodo-pago/{viajeId}/rechazar   "pendiente" -> "rechazado"  | 400 | 404
- *   MetodoPago: { pagoId, clienteId, viajeId, tipo, detalle, fecha, estado }
+ *   MetodoPago: { pagoId, clienteId, viajeId, tipo, detalle, fecha, estado, total?, moneda? }
+ *
+ * Como en M7, total y moneda (por defecto "ARS") se guardan al autorizar. M7
+ * exige idOrden y total; el sandbox los acepta opcionales para que las pruebas
+ * puedan autorizar un pago sin importe.
  *
  * Agregados del sandbox:
  *   GET  /health
@@ -105,7 +109,7 @@ function find(res, viajeId) {
   return sendMessage(res, 404, `No se encontro un pago para el viaje ${viajeId}`);
 }
 
-function transition(res, viajeId, estado) {
+function transition(res, viajeId, estado, body) {
   const payment = payments.get(viajeId);
   if (!payment) {
     return sendMessage(res, 404, `No se encontro un pago para el viaje ${viajeId}`);
@@ -113,8 +117,15 @@ function transition(res, viajeId, estado) {
   if (payment.estado !== 'pendiente') {
     return sendMessage(res, 400, `El pago esta ${payment.estado}; solo se puede cambiar un pago pendiente`);
   }
+  if (estado === 'autorizado' && body?.total !== undefined) {
+    if (typeof body.total !== 'number' || body.total < 0) {
+      return sendMessage(res, 400, 'total debe ser un numero mayor o igual a 0');
+    }
+    payment.total = body.total;
+    payment.moneda = typeof body.moneda === 'string' ? body.moneda : 'ARS';
+  }
   payment.estado = estado;
-  log('info', 'estado del pago cambiado', { viajeId, estado });
+  log('info', 'estado del pago cambiado', { viajeId, estado, total: payment.total });
   return send(res, 200, payment);
 }
 
@@ -161,7 +172,8 @@ const server = createServer((req, res) => {
         return find(res, viajeId);
       }
       if (req.method === 'POST' && match[2]) {
-        return transition(res, viajeId, match[2] === 'autorizar' ? 'autorizado' : 'rechazado');
+        const body = await readJson(req);
+        return transition(res, viajeId, match[2] === 'autorizar' ? 'autorizado' : 'rechazado', body);
       }
     }
     return sendMessage(res, 404, `La ruta ${req.method} ${path} no existe`);
