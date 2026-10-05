@@ -11,6 +11,22 @@ services:
       - m4-redis-data:/data
     restart: unless-stopped
 
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: m4_locations
+      POSTGRES_USER: m4_user
+      POSTGRES_PASSWORD: m4_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U m4_user -d m4_locations"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - m4-postgres-data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    restart: unless-stopped
+
   m4-api:
     build: .
     image: segocodee/p3-m4-ubicacion:2.0.0
@@ -20,8 +36,11 @@ services:
       PORT: 3004
       LOCATION_TTL_SECONDS: 60
       REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://m4_user:m4_password@postgres:5432/m4_locations
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     restart: unless-stopped
 
@@ -37,3 +56,4 @@ services:
 
 volumes:
   m4-redis-data:
+  m4-postgres-data:
