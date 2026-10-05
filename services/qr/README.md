@@ -7,6 +7,7 @@ el QR; decidir el inicio del viaje y cambiar su estado corresponde a M6.
 - Alcance, evidencias y pruebas de AE2: [`docs/ae2-rf82.md`](docs/ae2-rf82.md)
 - Decisiones: [`docs/adr/ADR-001-qr-consumo-atomico-redis.md`](docs/adr/ADR-001-qr-consumo-atomico-redis.md)
 - Nota para M6: [`docs/contrato-m6.md`](docs/contrato-m6.md)
+- Bitácora de AE2: [`docs/bitacora-ae2.md`](docs/bitacora-ae2.md)
 
 ## Endpoints
 
