@@ -3,7 +3,7 @@ import { generateQrDataUrl, generateQrToken } from "./qr-generator";
 import { loadQrConfig, type QrConfig } from "./qr.config";
 import { createRedisQrStore } from "./qr.redis-store";
 import { createQrService } from "./qr.service";
-import { createQrRedisClient } from "./redis-client";
+import { createQrRedisClient, isRedisReady } from "./redis-client";
 import { createGracefulShutdown, type ShutdownLog } from "./shutdown";
 
 // Punto de arranque del servicio QR: arma las dependencias, atiende HTTP y cierra en orden.
@@ -60,7 +60,7 @@ const qrService = createQrService({
   now: () => new Date(),
 });
 
-const server = createApp({ qrService }).listen(port, () => {
+const server = createApp({ qrService, checkRedis: () => isRedisReady(redisClient) }).listen(port, () => {
   log("info", "servicio QR escuchando", { port });
 });
 
