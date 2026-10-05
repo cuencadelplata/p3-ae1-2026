@@ -1,9 +1,9 @@
 # Contrato de Integración: NotificationRequested (RF8.1 → RF8.7)
 
-**Responsable RF8.7 (Entrega de Notificaciones):** Santiago Meza  
-**Responsable RF8.1 (Notificaciones de Viaje):** Juan Invaldi  
-**Estado:** CONTRATO INTERNO CONGELADO Y CONFIRMADO  
-**Versión:** 1.0.0 (AE2)  
+**Responsable RF8.7 (Entrega de Notificaciones):** Santiago Meza<br />
+**Responsable RF8.1 (Notificaciones de Viaje):** Juan Invaldi<br />
+**Estado:** CONTRATO INTERNO CONGELADO Y CONFIRMADO<br />
+**Versión:** 1.0.0 (AE2)
 **Esquema JSON asociado:** [`schemas/notification-requested.v1.schema.json`](./schemas/notification-requested.v1.schema.json)
 
 ---
