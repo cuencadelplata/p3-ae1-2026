@@ -11,6 +11,7 @@ export interface AuthenticatedRequest
     usuarioAutenticado?: {
         userId: number;
         role: UserRole;
+        authMethod?: string;
     };
 }
 
@@ -69,9 +70,11 @@ export function authenticateToken(
             return;
         }
 
+        const payload = decoded as jwt.JwtPayload;
         req.usuarioAutenticado = {
-            userId: decoded.userId,
-            role: decoded.role as UserRole
+            userId: payload.userId,
+            role: payload.role as UserRole,
+            authMethod: typeof payload.authMethod === "string" ? payload.authMethod : "password"
         };
 
         next();

@@ -71,20 +71,32 @@ export function validateToken(
 ): void {
     const userId = req.usuarioAutenticado?.userId;
     const role = req.usuarioAutenticado?.role;
+    const authMethod = req.usuarioAutenticado?.authMethod || "password";
     const user = userId ? findUserById(userId) : undefined;
 
+    if (!user) {
+        res.status(200).json({
+            valid: false,
+            userId,
+            role,
+            authMethod,
+            error: "Usuario no encontrado"
+        });
+        return;
+    }
+
     res.status(200).json({
-        valid: user ? user.estado === "ACTIVO" : true,
+        valid: user.estado === "ACTIVO",
         userId,
         role,
-        authMethod: "oauth2",
+        authMethod,
         usuario: {
-            id: userId,
-            rol: role,
-            email: user?.email || "",
-            nombre: user?.nombre || "",
-            apellido: user?.apellido || "",
-            estado: user?.estado || "ACTIVO"
+            id: user.id,
+            rol: user.rol,
+            email: user.email,
+            nombre: user.nombre,
+            apellido: user.apellido,
+            estado: user.estado
         }
     });
 }

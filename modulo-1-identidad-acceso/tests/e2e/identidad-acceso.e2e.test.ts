@@ -408,14 +408,14 @@ describe.sequential(
                 const response = await request(app)
                     .get("/auth/oauth2/authorize")
                     .query({
-                        provider: "GOOGLE",
+                        provider: "MOCK",
                         redirect_uri: "http://localhost:3000/callback"
                     });
 
                 expect(response.status).toBe(200);
                 expect(response.body.authorizationUrl).toBeDefined();
                 expect(response.body.state).toBeDefined();
-                expect(response.body.provider).toBe("GOOGLE");
+                expect(response.body.provider).toBe("MOCK");
             });
 
             it("E2E-6.2: Validar que provider sea obligatorio", async () => {
@@ -452,8 +452,8 @@ describe.sequential(
                 const response = await request(app)
                     .post("/auth/oauth2/link")
                     .send({
-                        provider: "GOOGLE",
-                        provider_id: "google-123"
+                        provider: "MOCK",
+                        provider_id: "mock-123"
                     });
 
                 expect(response.status).toBe(401);
@@ -464,8 +464,8 @@ describe.sequential(
                     .post("/auth/oauth2/link")
                     .set("Authorization", `Bearer ${token}`)
                     .send({
-                        provider: "GOOGLE",
-                        provider_id: "google-123"
+                        provider: "MOCK",
+                        provider_id: "mock-123"
                     });
 
                 expect(response.status).toBe(200);
