@@ -100,6 +100,59 @@ describe('API M4', () => {
     expect(response.body.provider).toBe('SIMULATED');
   });
 
+  it('conserva y consulta el historial de ubicaciones del conductor', async () => {
+    const firstTimestamp = new Date(Date.now() - 10_000).toISOString();
+    const secondTimestamp = new Date(Date.now() - 5_000).toISOString();
+
+    await request(app).put('/api/v1/drivers/driver-history/location').send({
+      latitude: -27.4692,
+      longitude: -58.8306,
+      vehicleType: 'AUTO',
+      available: true,
+      timestamp: firstTimestamp
+    }).expect(200);
+
+    await request(app).put('/api/v1/drivers/driver-history/location').send({
+      latitude: -27.47,
+      longitude: -58.831,
+      vehicleType: 'AUTO',
+      available: true,
+      timestamp: secondTimestamp
+    }).expect(200);
+
+    const response = await request(app)
+      .get('/api/v1/drivers/driver-history/location-history')
+      .query({ limit: 10 })
+      .expect(200);
+
+    expect(response.body.count).toBe(2);
+    expect(response.body.entries[0]).toMatchObject({
+      driverId: 'driver-history',
+      latitude: -27.47,
+      recordedAt: secondTimestamp
+    });
+  });
+
+  it('no duplica el historial cuando se repite la misma actualizacion', async () => {
+    const timestamp = new Date(Date.now() - 5_000).toISOString();
+    const update = {
+      latitude: -27.4692,
+      longitude: -58.8306,
+      vehicleType: 'AUTO',
+      available: true,
+      timestamp
+    };
+
+    await request(app).put('/api/v1/drivers/driver-idempotent/location').send(update).expect(200);
+    await request(app).put('/api/v1/drivers/driver-idempotent/location').send(update).expect(200);
+
+    const response = await request(app)
+      .get('/api/v1/drivers/driver-idempotent/location-history')
+      .expect(200);
+
+    expect(response.body.count).toBe(1);
+  });
+
   it('responde 409 y conserva el dato nuevo ante una actualizacion atrasada', async () => {
     const recent = new Date(Date.now() - 5_000).toISOString();
     const stale = new Date(Date.now() - 10_000).toISOString();

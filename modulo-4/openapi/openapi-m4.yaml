@@ -79,6 +79,24 @@ paths:
               schema: { $ref: '#/components/schemas/DriverLocation' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /drivers/{driverId}/location-history:
+    get:
+      tags: [Ubicaciones]
+      summary: Consultar el historial permanente de ubicaciones
+      description: Devuelve los registros almacenados en PostgreSQL, del mas reciente al mas antiguo.
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+          description: Cantidad maxima de registros que se desea consultar
+      responses:
+        '200':
+          description: Historial del conductor, incluso si su ubicacion activa ya vencio en Redis
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LocationHistoryResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
   /drivers/nearby:
     get:
       tags: [Busqueda]
@@ -189,6 +207,27 @@ components:
             available: { type: boolean }
             updatedAt: { type: string, format: date-time }
             expiresAt: { type: string, format: date-time }
+    LocationHistoryEntry:
+      allOf:
+        - $ref: '#/components/schemas/Coordinates'
+        - type: object
+          required: [id, driverId, vehicleType, available, updatedAt, recordedAt, createdAt]
+          properties:
+            id: { type: integer }
+            driverId: { type: string }
+            vehicleType: { type: string, enum: [AUTO, MOTO] }
+            available: { type: boolean }
+            updatedAt: { type: string, format: date-time }
+            recordedAt: { type: string, format: date-time }
+            createdAt: { type: string, format: date-time }
+    LocationHistoryResponse:
+      type: object
+      required: [count, entries]
+      properties:
+        count: { type: integer }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/LocationHistoryEntry' }
     NearbyDriver:
       allOf:
         - $ref: '#/components/schemas/DriverLocation'
