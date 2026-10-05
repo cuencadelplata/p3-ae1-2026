@@ -160,7 +160,10 @@ paths:
     post:
       tags: [Recuperacion]
       summary: Solicitar recuperacion de contraseña
-      description: Genera un token temporal y lo envía al email del usuario mediante el servicio SMTP configurado.
+      description: >-
+        Genera un token temporal y lo guarda en Redis con un tiempo de vida de 15 minutos.
+        Luego publica el evento auth.recuperacion_solicitada en RabbitMQ para que el
+        servicio de notificaciones envíe el correo. La respuesta no espera el envío.
       requestBody:
         required: true
         content:
@@ -180,13 +183,22 @@ paths:
                 properties:
                   message: { type: string }
                   email: { type: string, format: email }
-                  expiresInMinutes: { type: integer, example: 30 }
+                  expiresInMinutes: { type: integer, example: 15 }
         '400':
           $ref: '#/components/responses/BadRequest'
+        '503':
+          description: Redis no disponible, no se puede generar el token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /auth/resetear-contrasena:
     post:
       tags: [Recuperacion]
       summary: Restablecer contraseña
+      description: >-
+        Cambia la contraseña con un token vigente. El token se elimina de Redis al usarlo
+        y se revocan los JWT que el usuario tenía emitidos.
       requestBody:
         required: true
         content:
@@ -207,8 +219,47 @@ paths:
                 properties:
                   message: { type: string, example: Contraseña actualizada exitosamente }
                   email: { type: string, format: email }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Token de recuperacion inexistente, vencido o ya utilizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Redis no disponible, no se puede validar el token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/revocar-credenciales:
+    post:
+      tags: [Recuperacion]
+      summary: Revocar las credenciales del usuario autenticado
+      description: >-
+        Deja sin efecto todos los JWT emitidos hasta el momento para el usuario. La marca
+        se guarda en Redis y se publica el evento auth.credenciales_revocadas en RabbitMQ.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Credenciales revocadas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  userId: { type: integer, example: 1 }
+                  revocadasDesde: { type: integer, description: Momento de la revocacion en segundos (epoch), example: 1791157356 }
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '503':
+          description: Redis no disponible, no se pudo guardar la revocacion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /auth/oauth2/authorize:
     get:
       tags: [OAuth2]

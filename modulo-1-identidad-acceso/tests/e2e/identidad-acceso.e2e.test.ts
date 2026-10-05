@@ -4,7 +4,8 @@ import {
     expect,
     it,
     beforeAll,
-    afterAll
+    afterAll,
+    vi
 } from "vitest";
 
 import app from "../../src/app";
@@ -286,6 +287,10 @@ describe.sequential(
 
         // ============ FLUJO 5: RECUPERACIÓN DE CONTRASEÑA ============
         describe("Flujo 5: Recuperación de Contraseña", () => {
+            // El token ya no se guarda en la base: viaja en el evento que M1 publica
+            // en RabbitMQ (simulado en tests/setup.ts) para el servicio de notificaciones.
+            let recoveryToken = "";
+
             it("E2E-5.1: Solicitar recuperación de contraseña", async () => {
                 const response = await request(app)
                     .post("/auth/solicitar-recuperacion")
@@ -294,7 +299,7 @@ describe.sequential(
                 expect(response.status).toBe(200);
                 expect(response.body.message).toContain("recuperación");
                 expect(response.body.email).toBe(email);
-                expect(response.body.expiresInMinutes).toBe(30);
+                expect(response.body.expiresInMinutes).toBe(15);
             });
 
             it("E2E-5.2: No revelar existencia de email", async () => {
@@ -306,33 +311,28 @@ describe.sequential(
                 expect(response.body.message).toContain("recuperación");
             });
 
-            it("E2E-5.3: Obtener token de recuperación desde BD", async () => {
-                const tokenRow = db
-                    .prepare(`
-                        SELECT token FROM password_recovery_tokens
-                        WHERE usuario_id = ? AND used = FALSE
-                        ORDER BY created_at DESC LIMIT 1
-                    `)
-                    .get(userId) as { token: string } | undefined;
+            it("E2E-5.3: Obtener token de recuperación desde el evento publicado", async () => {
+                await vi.waitFor(() => {
+                    const evento = (globalThis as any).__mensajesRabbit.find(
+                        (mensaje: any) =>
+                            mensaje.routingKey === "auth.recuperacion_solicitada" &&
+                            mensaje.contenido.datos.userId === userId
+                    );
 
-                expect(tokenRow).toBeDefined();
+                    expect(evento).toBeDefined();
+                    recoveryToken = evento.contenido.datos.token;
+                });
+
+                expect(recoveryToken).toHaveLength(64);
             });
 
             it("E2E-5.4: Resetear contraseña con token válido", async () => {
-                const tokenRow = db
-                    .prepare(`
-                        SELECT token FROM password_recovery_tokens
-                        WHERE usuario_id = ? AND used = FALSE
-                        ORDER BY created_at DESC LIMIT 1
-                    `)
-                    .get(userId) as { token: string } | undefined;
-
                 const newPassword = "NuevaPassword123";
 
                 const response = await request(app)
                     .post("/auth/resetear-contrasena")
                     .send({
-                        token: tokenRow!.token,
+                        token: recoveryToken,
                         newPassword
                     });
 
@@ -351,28 +351,22 @@ describe.sequential(
 
                 expect(loginResponse.status).toBe(200);
                 expect(loginResponse.body.token).toBeDefined();
+
+                // Al cambiar la contraseña se revocan las sesiones anteriores,
+                // así que los flujos siguientes usan el token del nuevo login.
+                token = loginResponse.body.token;
             });
 
             it("E2E-5.5: Token no puede reutilizarse", async () => {
-                const tokenRow = db
-                    .prepare(`
-                        SELECT token FROM password_recovery_tokens
-                        WHERE usuario_id = ? AND used = TRUE
-                        ORDER BY created_at DESC LIMIT 1
-                    `)
-                    .get(userId) as { token: string } | undefined;
+                const response = await request(app)
+                    .post("/auth/resetear-contrasena")
+                    .send({
+                        token: recoveryToken,
+                        newPassword: "OtraPassword456"
+                    });
 
-                if (tokenRow) {
-                    const response = await request(app)
-                        .post("/auth/resetear-contrasena")
-                        .send({
-                            token: tokenRow.token,
-                            newPassword: "OtraPassword456"
-                        });
-
-                    expect(response.status).toBe(401);
-                    expect(response.body.error).toContain("inválido");
-                }
+                expect(response.status).toBe(401);
+                expect(response.body.error).toContain("inválido");
             });
 
             it("E2E-5.6: Rechazar contraseña corta", async () => {
@@ -380,25 +374,30 @@ describe.sequential(
                     .post("/auth/solicitar-recuperacion")
                     .send({ email });
 
-                const tokenRow = db
-                    .prepare(`
-                        SELECT token FROM password_recovery_tokens
-                        WHERE usuario_id = ? AND used = FALSE
-                        ORDER BY created_at DESC LIMIT 1
-                    `)
-                    .get(userId) as { token: string } | undefined;
+                expect(response.status).toBe(200);
 
-                if (tokenRow) {
-                    const resetResponse = await request(app)
-                        .post("/auth/resetear-contrasena")
-                        .send({
-                            token: tokenRow.token,
-                            newPassword: "123"
-                        });
+                let nuevoToken = "";
 
-                    expect(resetResponse.status).toBe(400);
-                    expect(resetResponse.body.error).toContain("6 caracteres");
-                }
+                await vi.waitFor(() => {
+                    const eventos = (globalThis as any).__mensajesRabbit.filter(
+                        (mensaje: any) =>
+                            mensaje.routingKey === "auth.recuperacion_solicitada" &&
+                            mensaje.contenido.datos.userId === userId
+                    );
+
+                    expect(eventos.length).toBe(2);
+                    nuevoToken = eventos[1].contenido.datos.token;
+                });
+
+                const resetResponse = await request(app)
+                    .post("/auth/resetear-contrasena")
+                    .send({
+                        token: nuevoToken,
+                        newPassword: "123"
+                    });
+
+                expect(resetResponse.status).toBe(400);
+                expect(resetResponse.body.error).toContain("6 caracteres");
             });
         });
 
