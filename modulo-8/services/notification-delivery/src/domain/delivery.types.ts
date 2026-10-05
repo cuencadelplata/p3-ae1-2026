@@ -10,16 +10,28 @@ export type DeliveryChannel = 'PUSH';
 
 export type DeliveryPriority = 'HIGH' | 'NORMAL';
 
-export type DeliveryStatus = 'PENDING' | 'DELIVERED' | 'FAILED';
+export type DeliveryStatus =
+  | 'PENDING'
+  | 'DELIVERED'
+  | 'FAILED'
+  | 'SKIPPED_PREFERENCE_OFF'
+  | 'FAILED_NO_DEVICE_TOKEN';
 
 export type AttemptStatus = 'SUCCESS' | 'FAILED';
 
-export type InboxStatus = 'RECEIVED' | 'PROCESSED' | 'DUPLICATE_IGNORED' | 'FAILED';
+export type InboxStatus = 'PENDING' | 'PROCESSED' | 'FAILED';
+
+export type InboxClaimAction = 'CLAIMED' | 'ALREADY_PROCESSED' | 'LEASE_ACTIVE';
+
+export interface InboxClaimResult {
+  action: InboxClaimAction;
+  leaseUntil?: string;
+}
 
 export interface NotificationRequestedData {
   notificationId: string;
   tripId: string;
-  recipientId: string;
+  recipientId: string; // Corresponde al userId canónico de M1
   eventType: DeliveryEventType;
   channel: DeliveryChannel;
   title?: string;
@@ -39,18 +51,29 @@ export interface NotificationRequestedEnvelope {
   data: NotificationRequestedData;
 }
 
+export interface DeviceTokenRecord {
+  tokenId: string;
+  userId: string;
+  token: string;
+  platform: 'ANDROID' | 'IOS' | 'WEB';
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DeliveryRequest {
   deliveryId: string;
   notificationId: string;
   messageId: string;
   tripId: string;
-  recipientId: string;
+  userId: string;
   eventType: DeliveryEventType;
   channel: DeliveryChannel;
   status: DeliveryStatus;
   title?: string;
   message: string;
-  targetDestination?: string;
+  deviceToken?: string;
+  skipReason?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -70,20 +93,11 @@ export interface DeliveryWithAttempts extends DeliveryRequest {
   attempts: DeliveryAttempt[];
 }
 
-export interface InboxRecord {
-  messageId: string;
-  consumerId: string;
-  eventType: string;
-  receivedAt: string;
-  processedAt?: string;
-  status: InboxStatus;
-}
-
 export interface PushSendRequest {
   notificationId: string;
   tripId: string;
   recipientId: string;
-  targetDestination: string;
+  deviceToken: string;
   title: string;
   body: string;
   priority: DeliveryPriority;
@@ -96,14 +110,22 @@ export interface PushSendResult {
   statusCode: number;
   latencyMs: number;
   error?: string;
+  isTransient?: boolean;
+}
+
+export interface UserPreferences {
+  userId: string;
+  notificationsEnabled: boolean;
+  pushEnabled: boolean;
 }
 
 export interface DeliveryProcessingResult {
   messageId: string;
   notificationId: string;
-  duplicate: boolean;
-  status: DeliveryStatus | 'DUPLICATE_IGNORED';
+  actionTaken: 'DELIVERED' | 'SKIPPED_PREFERENCE_OFF' | 'FAILED' | 'ACK_DUPLICATE' | 'IGNORED_LEASE_ACTIVE';
+  status: DeliveryStatus | 'ALREADY_PROCESSED';
   attemptsCount: number;
   deliveredAt?: string;
   error?: string;
+  skipReason?: string;
 }

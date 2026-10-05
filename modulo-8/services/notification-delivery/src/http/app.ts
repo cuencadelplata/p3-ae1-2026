@@ -1,8 +1,11 @@
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { NotificationDeliveryService } from '../services/notification-delivery.service.js';
-import { InMemoryInboxRepository } from '../infrastructure/database/inbox.repository.js';
+import { InMemoryMessagingInboxRepository } from '../infrastructure/database/inbox.repository.js';
 import { InMemoryDeliveryRepository } from '../infrastructure/database/delivery.repository.js';
+import { InMemoryDeviceTokenRepository } from '../infrastructure/database/device-token.repository.js';
+import { MockM2PreferencesClient } from '../infrastructure/clients/m2-preferences.client.js';
 import { SandboxPushProvider } from '../infrastructure/provider/sandbox-push-provider.js';
+import { extractAuthenticatedUser } from './auth/m1-auth.middleware.js';
 import {
   validateNotificationRequestedEnvelope,
   ContractValidationError,
@@ -10,16 +13,27 @@ import {
 
 export interface AppDependencies {
   deliveryService?: NotificationDeliveryService;
+  tokenRepo?: InMemoryDeviceTokenRepository;
+  m2Client?: MockM2PreferencesClient;
   sandboxProvider?: SandboxPushProvider;
+  inboxRepo?: InMemoryMessagingInboxRepository;
+  deliveryRepo?: InMemoryDeliveryRepository;
 }
 
 export function createApp(deps: AppDependencies = {}): http.RequestListener {
+  const tokenRepo = deps.tokenRepo ?? new InMemoryDeviceTokenRepository();
+  const m2Client = deps.m2Client ?? new MockM2PreferencesClient();
   const sandboxProvider = deps.sandboxProvider ?? new SandboxPushProvider();
+  const inboxRepo = deps.inboxRepo ?? new InMemoryMessagingInboxRepository();
+  const deliveryRepo = deps.deliveryRepo ?? new InMemoryDeliveryRepository();
+
   const deliveryService =
     deps.deliveryService ??
     new NotificationDeliveryService(
-      new InMemoryInboxRepository(),
-      new InMemoryDeliveryRepository(),
+      inboxRepo,
+      deliveryRepo,
+      tokenRepo,
+      m2Client,
       sandboxProvider
     );
 
@@ -33,40 +47,119 @@ export function createApp(deps: AppDependencies = {}): http.RequestListener {
       res.end(JSON.stringify(data));
     };
 
-    // Health live
+    // 1. Health checks estándar de M8
     if (method === 'GET' && pathname === '/health/live') {
       sendJson(200, { status: 'ok', service: 'notification-delivery' });
       return;
     }
 
-    // Health ready y alias /health
     if (method === 'GET' && (pathname === '/health/ready' || pathname === '/health')) {
       sendJson(200, {
         status: 'ok',
         service: 'notification-delivery',
         checks: {
           inbox: 'ok',
+          tokens: 'ok',
           provider: 'ok',
         },
       });
       return;
     }
 
-    // GET /internal/deliveries/:notificationId
-    const deliveryMatch = pathname.match(/^\/internal\/deliveries\/([^/]+)$/);
-    if (method === 'GET' && deliveryMatch) {
-      const notificationId = decodeURIComponent(deliveryMatch[1] ?? '');
-      if (!notificationId) {
-        sendJson(400, {
+    // 2. Endpoints de Device Tokens (Protegidos con JWT de M1)
+    if (pathname === '/devices/tokens' || pathname.startsWith('/devices/tokens/')) {
+      const user = extractAuthenticatedUser(req.headers.authorization);
+      if (!user) {
+        sendJson(401, {
           error: {
-            code: 'INVALID_PARAM',
-            message: 'notificationId es obligatorio.',
+            code: 'UNAUTHORIZED',
+            message: 'Se requiere token JWT de M1 válido en el header Authorization: Bearer <token>.',
           },
         });
         return;
       }
 
+      // POST /devices/tokens: Registrar / actualizar token
+      if (method === 'POST' && pathname === '/devices/tokens') {
+        let bodyRaw = '';
+        req.on('data', (chunk) => {
+          bodyRaw += chunk;
+        });
+
+        req.on('end', async () => {
+          try {
+            const body = bodyRaw ? JSON.parse(bodyRaw) : {};
+            const { token, platform = 'ANDROID' } = body;
+
+            if (!token || typeof token !== 'string' || token.trim() === '') {
+              sendJson(400, {
+                error: {
+                  code: 'INVALID_TOKEN',
+                  message: 'El campo token es obligatorio.',
+                },
+              });
+              return;
+            }
+
+            const validPlatform = ['ANDROID', 'IOS', 'WEB'].includes(platform)
+              ? platform
+              : 'ANDROID';
+
+            // El userId se deriva SIEMPRE del JWT autenticado
+            const record = await tokenRepo.upsertToken(user.userId, token.trim(), validPlatform);
+
+            sendJson(201, {
+              message: 'Device token registrado con éxito.',
+              data: record,
+            });
+          } catch {
+            sendJson(400, {
+              error: {
+                code: 'INVALID_JSON',
+                message: 'El cuerpo de la solicitud debe ser JSON válido.',
+              },
+            });
+          }
+        });
+        return;
+      }
+
+      // GET /devices/tokens: Listar tokens activos del usuario
+      if (method === 'GET' && pathname === '/devices/tokens') {
+        const tokens = await tokenRepo.getActiveTokensByUserId(user.userId);
+        sendJson(200, { data: tokens });
+        return;
+      }
+
+      // DELETE /devices/tokens/:token: Desactivar token
+      const deleteMatch = pathname.match(/^\/devices\/tokens\/([^/]+)$/);
+      if (method === 'DELETE' && deleteMatch) {
+        const tokenToDelete = decodeURIComponent(deleteMatch[1] ?? '');
+        const deactivated = await tokenRepo.deactivateToken(user.userId, tokenToDelete);
+
+        if (!deactivated) {
+          sendJson(404, {
+            error: {
+              code: 'TOKEN_NOT_FOUND',
+              message: 'El token no fue encontrado o no pertenece al usuario autenticado.',
+            },
+          });
+          return;
+        }
+
+        sendJson(200, {
+          message: 'Device token desactivado con éxito.',
+        });
+        return;
+      }
+    }
+
+    // 3. GET /internal/deliveries/:notificationId (Auditoría)
+    const deliveryMatch = pathname.match(/^\/internal\/deliveries\/([^/]+)$/);
+    if (method === 'GET' && deliveryMatch) {
+      const notificationId = decodeURIComponent(deliveryMatch[1] ?? '');
       const delivery = await deliveryService.getDeliveryByNotificationId(notificationId);
+
       if (!delivery) {
         sendJson(404, {
           error: {
@@ -81,7 +174,7 @@ export function createApp(deps: AppDependencies = {}): http.RequestListener {
       return;
     }
 
-    // POST /internal/deliveries/simulate
+    // 4. POST /internal/deliveries/simulate (Simulación y testing E2E)
     if (method === 'POST' && pathname === '/internal/deliveries/simulate') {
       let bodyRaw = '';
       req.on('data', (chunk) => {
@@ -94,15 +187,23 @@ export function createApp(deps: AppDependencies = {}): http.RequestListener {
           const validatedEnvelope = validateNotificationRequestedEnvelope(parsedBody);
           const result = await deliveryService.processNotificationRequest(validatedEnvelope);
 
-          if (result.duplicate) {
+          if (result.actionTaken === 'ACK_DUPLICATE') {
             sendJson(200, {
-              message: 'Evento duplicado ignorado de forma idempotente.',
+              message: 'Evento duplicado ignorado de forma idempotente en Inbox.',
               data: result,
             });
             return;
           }
 
-          if (result.status === 'FAILED') {
+          if (result.actionTaken === 'SKIPPED_PREFERENCE_OFF') {
+            sendJson(200, {
+              message: 'Entrega omitida por preferencia de usuario en M2 desactivada.',
+              data: result,
+            });
+            return;
+          }
+
+          if (result.actionTaken === 'FAILED') {
             sendJson(502, {
               error: {
                 code: 'DELIVERY_FAILED',
@@ -140,7 +241,6 @@ export function createApp(deps: AppDependencies = {}): http.RequestListener {
       return;
     }
 
-    // Ruta no encontrada
     sendJson(404, {
       error: {
         code: 'NOT_FOUND',

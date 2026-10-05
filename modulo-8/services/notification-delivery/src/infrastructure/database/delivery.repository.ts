@@ -11,12 +11,12 @@ export interface CreateDeliveryParams {
   notificationId: string;
   messageId: string;
   tripId: string;
-  recipientId: string;
+  userId: string;
   eventType: DeliveryRequest['eventType'];
   channel: 'PUSH';
   title?: string;
   message: string;
-  targetDestination?: string;
+  deviceToken?: string;
 }
 
 export interface RecordAttemptParams {
@@ -31,7 +31,7 @@ export interface RecordAttemptParams {
 export interface DeliveryRepository {
   createDelivery(params: CreateDeliveryParams): Promise<DeliveryRequest>;
   recordAttempt(params: RecordAttemptParams): Promise<DeliveryAttempt>;
-  updateStatus(deliveryId: string, status: DeliveryStatus): Promise<void>;
+  updateStatus(deliveryId: string, status: DeliveryStatus, skipReason?: string): Promise<void>;
   getByNotificationId(notificationId: string): Promise<DeliveryWithAttempts | null>;
   getByMessageId(messageId: string): Promise<DeliveryWithAttempts | null>;
 }
@@ -49,13 +49,13 @@ export class InMemoryDeliveryRepository implements DeliveryRepository {
       notificationId: params.notificationId,
       messageId: params.messageId,
       tripId: params.tripId,
-      recipientId: params.recipientId,
+      userId: params.userId,
       eventType: params.eventType,
       channel: params.channel,
       status: 'PENDING',
       title: params.title,
       message: params.message,
-      targetDestination: params.targetDestination,
+      deviceToken: params.deviceToken,
       createdAt: now,
       updatedAt: now,
     };
@@ -84,10 +84,17 @@ export class InMemoryDeliveryRepository implements DeliveryRepository {
     return attempt;
   }
 
-  async updateStatus(deliveryId: string, status: DeliveryStatus): Promise<void> {
+  async updateStatus(
+    deliveryId: string,
+    status: DeliveryStatus,
+    skipReason?: string
+  ): Promise<void> {
     const delivery = this.deliveries.get(deliveryId);
     if (delivery) {
       delivery.status = status;
+      if (skipReason) {
+        delivery.skipReason = skipReason;
+      }
       delivery.updatedAt = new Date().toISOString();
     }
   }

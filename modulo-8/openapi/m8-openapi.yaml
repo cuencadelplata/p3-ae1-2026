@@ -10,10 +10,11 @@ tags:
   - name: QR
   - name: Receipts
   - name: Support
+  - name: NotificationDelivery
 paths:
   /health:
     get:
-      tags: [Notifications, QR, Receipts, Support]
+      tags: [Notifications, QR, Receipts, Support, NotificationDelivery]
       summary: Health check de cada servicio M8
       description: Consultar este path en uno de los cuatro servidores declarados.
       servers:
@@ -25,6 +26,8 @@ paths:
           description: Receipts
         - url: http://localhost:3000
           description: Support
+        - url: http://localhost:3107
+          description: NotificationDelivery
       responses:
         '200':
           description: Servicio disponible.
