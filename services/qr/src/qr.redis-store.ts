@@ -7,6 +7,19 @@ import type { QrRedisClient } from "./redis-client";
 
 export const DEFAULT_QR_KEY_PREFIX = "m8:qr:";
 
+// Tope de cada operación contra Redis, incluida la espera de la respuesta. Es necesario porque
+// el timeout por comando de node-redis sólo cubre la espera en la cola de escritura: una vez
+// enviado el comando, el cliente espera la respuesta sin límite.
+export const DEFAULT_OPERATION_TIMEOUT_MS = 2000;
+
+// Redis no respondió dentro del tope. El comando pudo haberse ejecutado igual.
+export class QrStoreTimeoutError extends Error {
+  constructor(readonly timeoutMs: number) {
+    super(`Redis no respondió dentro de ${timeoutMs} ms.`);
+    this.name = "QrStoreTimeoutError";
+  }
+}
+
 export interface RedisQrStoreOptions {
   readonly client: QrRedisClient;
   readonly keyPrefix?: string;
@@ -14,6 +27,8 @@ export interface RedisQrStoreOptions {
   // EXPIRED; después Redis borra la clave y la validación responde NOT_FOUND. Admite
   // fracciones de segundo.
   readonly expiredGraceSeconds: number;
+  // Tope de cada operación, en milisegundos (por defecto, DEFAULT_OPERATION_TIMEOUT_MS).
+  readonly operationTimeoutMs?: number;
 }
 
 // Errores en los que se sabe que el comando no se aplicó: el cliente no lo envió (cerrado o
@@ -23,16 +38,33 @@ function commandWasNotApplied(error: unknown): boolean {
   return error instanceof ClientClosedError || error instanceof ClientOfflineError || error instanceof ErrorReply;
 }
 
-// Traduce cualquier falla del cliente Redis a QrStoreUnavailableError. Una respuesta
-// inesperada de un script es un defecto del servicio y se propaga sin traducir.
-async function translateRedisFailure<T>(operation: QrStoreOperation, call: () => Promise<T>): Promise<T> {
+// Ejecuta una operación con tope de tiempo y traduce cualquier falla del cliente Redis (o el
+// vencimiento del tope) a QrStoreUnavailableError. Una respuesta inesperada de un script es un
+// defecto del servicio y se propaga sin traducir.
+//
+// Si vence el tope, la operación sigue pendiente en el cliente. Su resultado o su error
+// posterior no tienen efecto: Promise.race ya está suscripta a ella, así que un rechazo tardío
+// no queda sin manejar.
+async function runWithTimeout<T>(
+  operation: QrStoreOperation,
+  timeoutMs: number,
+  call: () => Promise<T>,
+): Promise<T> {
+  const pending = call();
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new QrStoreTimeoutError(timeoutMs)), timeoutMs);
+  });
+
   try {
-    return await call();
+    return await Promise.race([pending, timeout]);
   } catch (error) {
     if (error instanceof QrScriptReplyError) {
       throw error;
     }
     throw new QrStoreUnavailableError(operation, !commandWasNotApplied(error), { cause: error });
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -53,6 +85,7 @@ export function createRedisQrStore(options: RedisQrStoreOptions): QrStore {
   const { client } = options;
   const keyPrefix = options.keyPrefix ?? DEFAULT_QR_KEY_PREFIX;
   const graceMs = Math.ceil(options.expiredGraceSeconds * 1000);
+  const operationTimeoutMs = options.operationTimeoutMs ?? DEFAULT_OPERATION_TIMEOUT_MS;
 
   const keyFor = (tokenHash: string): string => `${keyPrefix}${tokenHash}`;
 
@@ -66,12 +99,12 @@ export function createRedisQrStore(options: RedisQrStoreOptions): QrStore {
       usedAtMs: record.usedAt === null ? null : record.usedAt.getTime(),
       graceMs,
     };
-    await translateRedisFailure("save", () => client.qrSave(args));
+    await runWithTimeout("save", operationTimeoutMs, () => client.qrSave(args));
   }
 
   async function consumeIfValid(tokenHash: string, tripId: string, _now: Date): Promise<ConsumeOutcome> {
     const key = keyFor(tokenHash);
-    return translateRedisFailure("consume", () => client.qrConsume(key, tripId));
+    return runWithTimeout("consume", operationTimeoutMs, () => client.qrConsume(key, tripId));
   }
 
   return { save, consumeIfValid };
