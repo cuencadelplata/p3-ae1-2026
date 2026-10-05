@@ -17,6 +17,10 @@ const stringWithDefault = (defaultValue: string) =>
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().max(65_535).default(3000),
+  DATABASE_URL: z
+    .string()
+    .url()
+    .default('postgresql://reservas:reservas_dev@localhost:5432/reservas?schema=public'),
   M5_URL: urlWithDefault('http://localhost:3001'),
   M7_URL: urlWithDefault('http://localhost:3002'),
   RESERVATION_JOB_INTERVAL: stringWithDefault('*/30 * * * * *'),
