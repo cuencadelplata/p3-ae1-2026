@@ -1,4 +1,5 @@
 import type { DespachoClient } from '../clients/despacho.client.js';
+import { AppError } from '../errors/app.error.js';
 import type { ReservaRepository } from '../repositories/reserva.repository.js';
 import { conReservaExclusiva } from './reserva-lock.js';
 
@@ -22,11 +23,15 @@ export class ActivacionReservaService {
     if (
       actual === null ||
       actual.asignacion === null ||
+      (actual.estado !== 'PROGRAMADA' && actual.estado !== 'ACTIVANDO') ||
       Date.parse(actual.fechaHoraProgramada) > Date.now()
     ) {
       return { reservaId, activada: false };
     }
-    const reclamada = await this.repository.cambiarEstado(reservaId, 'PROGRAMADA', 'ACTIVANDO');
+    const reclamada =
+      actual.estado === 'ACTIVANDO'
+        ? actual
+        : await this.repository.cambiarEstado(reservaId, 'PROGRAMADA', 'ACTIVANDO');
     if (reclamada === null) {
       return { reservaId, activada: false };
     }
@@ -38,7 +43,9 @@ export class ActivacionReservaService {
       });
       return { reservaId, activada: activada !== null };
     } catch (error) {
-      await this.repository.cambiarEstado(reservaId, 'ACTIVANDO', 'FALLIDA');
+      const estadoError =
+        error instanceof AppError && error.statusCode === 503 ? 'PROGRAMADA' : 'FALLIDA';
+      await this.repository.cambiarEstado(reservaId, 'ACTIVANDO', estadoError);
       throw error;
     }
   }

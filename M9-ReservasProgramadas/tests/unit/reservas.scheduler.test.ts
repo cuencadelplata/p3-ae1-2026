@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DespachoClient } from '../../src/clients/despacho.client.js';
+import { AppError } from '../../src/errors/app.error.js';
 import { ReservasScheduler } from '../../src/jobs/reservas.scheduler.js';
 import { InMemoryReservaRepository } from '../../src/repositories/in-memory-reserva.repository.js';
 import { ActivacionReservaService } from '../../src/services/activacion-reserva.service.js';
@@ -41,6 +42,30 @@ describe('activación programada', () => {
     expect(actualizada).toMatchObject({ estado: 'ACTIVADA', idSolicitud: solicitudId });
   });
 
+  it('recupera una activación que quedó en curso antes del reinicio de M9', async () => {
+    const repository = new InMemoryReservaRepository();
+    const reserva = await crearVencida(repository);
+    await repository.cambiarEstado(reserva.id, 'PROGRAMADA', 'ACTIVANDO');
+    const solicitudId = randomUUID();
+    const despacho: DespachoClient = {
+      crearSolicitud: vi.fn(async () => ({ solicitudId, estado: 'CREADA' })),
+    };
+    const scheduler = new ReservasScheduler(
+      repository,
+      new ActivacionReservaService(repository, despacho),
+      '* * * * * *',
+    );
+
+    const resultado = await scheduler.ejecutar();
+
+    expect(resultado).toEqual({ encontradas: 1, activadas: 1, fallidas: 0 });
+    expect(despacho.crearSolicitud).toHaveBeenCalledTimes(1);
+    expect(await repository.obtenerPorId(reserva.id)).toMatchObject({
+      estado: 'ACTIVADA',
+      idSolicitud: solicitudId,
+    });
+  });
+
   it('permite un solo ganador ante dos activaciones concurrentes', async () => {
     const repository = new InMemoryReservaRepository();
     const reserva = await crearVencida(repository);
@@ -66,6 +91,18 @@ describe('activación programada', () => {
 
     await expect(service.activar(reserva.id)).rejects.toThrow('M5 caído');
     expect((await repository.obtenerPorId(reserva.id))?.estado).toBe('FALLIDA');
+  });
+
+  it('reprograma la activación si M5 está temporalmente no disponible', async () => {
+    const repository = new InMemoryReservaRepository();
+    const reserva = await crearVencida(repository);
+    const service = new ActivacionReservaService(repository, {
+      crearSolicitud: async () =>
+        Promise.reject(new AppError(503, 'SERVICIO_EXTERNO_NO_DISPONIBLE', 'M5 no disponible.')),
+    });
+
+    await expect(service.activar(reserva.id)).rejects.toThrow('M5 no disponible.');
+    expect((await repository.obtenerPorId(reserva.id))?.estado).toBe('PROGRAMADA');
   });
 
   it('rechaza expresiones cron inválidas y evita programar dos jobs', () => {
