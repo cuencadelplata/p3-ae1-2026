@@ -72,7 +72,7 @@ export function createViajeApi(options: ViajeApiOptions): Server {
         clienteId: viajeCancelado.clienteId,
         conductorId: viajeCancelado.conductorId,
         motivo,
-        evento: routingKey,
+        evento: actor === 'conductor' ? 'cancelacion_conductor' : routingKey,
         timestamp: new Date().toISOString(),
       });
       return send(response, 200, { viaje: viajeCancelado });

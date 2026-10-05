@@ -8,6 +8,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "simulator:rf6": "npm run build && node dist/simulator/m6-rf6.5-rf6.6/rf6-server.js",
+    "simulator:m5": "npm run build && node dist/simulator/m6-rf6.5-rf6.6/m5-dispatch-simulator.js",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down"
   },

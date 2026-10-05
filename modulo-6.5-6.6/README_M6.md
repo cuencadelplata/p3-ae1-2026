@@ -48,6 +48,37 @@ npm run docker:down
 
 La suite unitaria usa dobles inyectables para RF-6 y RabbitMQ. No requiere Docker.
 
+Para ejecutar el simulador HTTP RF-6 local, desde esta carpeta:
+
+```sh
+npm run simulator:rf6
+```
+
+El simulador escucha en el puerto `3000` (configurable con `PORT`) y soporta crear,
+consultar, asignar y cancelar viajes usando los contratos documentados en
+`simulator/m6-rf6.5-rf6.6/rf-6-apis.yaml`. En la cancelación por conductor, M6
+publica el evento `cancelacion_conductor` en la cola `despacho.reabrir`, que es la
+cola consumida por la rama `ae2/lautaro-romero`.
+
+Para simular también el consumidor M5 de esa rama, con RabbitMQ disponible:
+
+```sh
+npm run simulator:m5
+```
+
+El simulador M5 escucha en el puerto `3002` (`M5_SIMULATOR_PORT`) y en la cola
+`despacho.reabrir`. Antes de cancelar, se puede registrar una solicitud asignada:
+
+```sh
+curl -X POST http://localhost:3002/simulator/requests \
+	-H 'content-type: application/json' \
+	-d '{"viajeId":"viaje-123","clienteId":"cliente-123","conductorId":"conductor-123"}'
+```
+
+Luego de cancelar ese viaje desde M6, `GET
+http://localhost:3002/simulator/requests/viaje-123` permite verificar que volvió a
+`SEARCHING`, se limpió el conductor asignado y se excluyó al conductor que canceló.
+
 Para ejecutar los tests e2e se necesita tener disponible el servicio RF-6 en
 `RF6_API_URL` y RabbitMQ en `RABBITMQ_URL`. Por defecto usan `http://127.0.0.1:3000`
 y `amqp://127.0.0.1:5672`; la API M6 se espera en `E2E_API_URL`, por defecto

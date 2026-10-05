@@ -23,7 +23,15 @@ describe('RF-6.6 - Cancelación por conductor', () => {
 
     expect(response.status).toBe(200);
     expect(body.viaje.estado).toBe('CANCELADO');
-    expect(running.events.messages[0]).toMatchObject({ routingKey: 'despacho.reabrir' });
+    expect(running.events.messages[0]).toMatchObject({
+      routingKey: 'despacho.reabrir',
+      payload: {
+        viajeId: 'V-300',
+        clienteId: 'C-30',
+        conductorId: 'D-30',
+        evento: 'cancelacion_conductor',
+      },
+    });
   });
 
   it('rechaza cancelar un viaje ya finalizado', async () => {
