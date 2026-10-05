@@ -63,7 +63,7 @@ async function waitUntilKeyIsGone(key: string): Promise<boolean> {
   return false;
 }
 
-describeQrStoreContract("createRedisQrStore", () => createStore());
+describeQrStoreContract("createRedisQrStore", () => createStore(), async () => new Date(await redisNowMs(client)));
 
 describe("createRedisQrStore — TTL y vencimiento en Redis", () => {
   it("tras save la clave tiene un TTL positivo y no mayor que ttl + margen", async () => {
