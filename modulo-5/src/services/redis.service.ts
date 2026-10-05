@@ -2,23 +2,32 @@ import Redis from 'ioredis';
 import { M4DriverLocation, NearbyDriverStub, RideOffer, VehicleType, RideRequest, EstimatedFare } from '../types/ride-request.types';
 import { RideRequestValidator } from '../schemas/ride-request.schema';
 
+export interface LockResult {
+  acquired: boolean;
+  holder?: string;
+}
+
 /**
  * Servicio unificado de Gestión de Estado Efímero y Caché con Redis (RNF-06, RNF-08, RNF-09)
  * Maneja:
- * 1. Idempotencia distribuida con TTL (RNF-08 - Agustín Quetglas)
- * 2. Candado atómico contra concurrencia de cliente (RNF-09 - Agustín Quetglas)
- * 3. Caché de estimación de tarifas del Módulo 7 (Agustín Quetglas)
- * 4. Ofertas con TTL automático y consulta de tiempo restante (RF-5.3 - Lautaro Romero)
- * 5. Búsqueda y filtrado geoespacial de conductores M4 en Redis (RF-5.2 - Lautaro Romero)
- * 6. Modo resiliente con fallback en memoria (no bloquea el servicio si Redis no está disponible)
+ * 1. Ofertas efímeras con TTL automático y consulta de tiempo restante (RF-5.3, RF-5.4)
+ * 2. Distributed Locking atómico para asignación única (RF-5.5 / RNF-09)
+ * 3. Candado atómico de cliente activo (RNF-09)
+ * 4. Idempotencia distribuida con TTL (RNF-08)
+ * 5. Caché de estimación de tarifas del Módulo 7 (RNF-06)
+ * 6. Búsqueda y filtrado geoespacial de conductores M4 en Redis (RF-5.2)
+ * 7. Modo resiliente con fallback en memoria (no bloquea el servicio si Redis no está disponible)
  */
 export class RedisService {
   private client: Redis | null = null;
   private isConnected = false;
   private connectionAttempted = false;
 
-  // Almacenamiento en memoria para fallback resiliente y tests
-  private memoryFallback: Map<string, { data: string; expiresAt?: number }> = new Map();
+  // Almacén en memoria para fallback resiliente y tests
+  private memoryOffers = new Map<string, { offer: RideOffer; expiresAt: number }>();
+  private memoryLocks = new Map<string, { driverId: string; expiresAt: number }>();
+  private memoryFallback = new Map<string, { data: string; expiresAt?: number }>();
+  private m4Drivers = new Map<string, { data: M4DriverLocation; expiresAt: number }>();
 
   constructor(redisUrl?: string) {
     const url = redisUrl || process.env.REDIS_URL;
@@ -26,12 +35,10 @@ export class RedisService {
     const port = Number(process.env.REDIS_PORT || 6379);
 
     if (process.env.DISABLE_REDIS === 'true') {
-      console.log('[RedisService] Modo fallback en memoria activo (DISABLE_REDIS=true)');
       return;
     }
 
-    // Si estamos en testing sin REDIS_HOST explícito ni REDIS_URL, operamos en memoria sin warnings
-    if (process.env.NODE_ENV === 'test' && !process.env.REDIS_HOST && !process.env.REDIS_URL) {
+    if (process.env.NODE_ENV === 'test' && !process.env.REDIS_HOST && !process.env.REDIS_URL && !redisUrl) {
       this.client = null;
       return;
     }
@@ -57,32 +64,31 @@ export class RedisService {
 
       this.client.on('connect', () => {
         this.isConnected = true;
-        console.log(`[RedisService] Conectado exitosamente a Redis`);
+        if (process.env.NODE_ENV !== 'test') {
+          console.log(`[RedisService] Conectado exitosamente a Redis`);
+        }
       });
 
       this.client.on('error', (err) => {
-        if (this.isConnected) {
+        if (this.isConnected && process.env.NODE_ENV !== 'test') {
           console.warn(`[RedisService] Error de conexión con Redis: ${err.message}`);
         }
         this.isConnected = false;
       });
+
+      this.client.on('close', () => {
+        this.isConnected = false;
+      });
     } catch {
       this.isConnected = false;
-      this.client = null;
     }
   }
 
-  /**
-   * Intenta conectar al cliente Redis
-   */
   public async init(): Promise<boolean> {
-    if (this.connectionAttempted) return this.isConnected;
+    if (this.connectionAttempted && this.isConnected) return true;
     this.connectionAttempted = true;
 
-    if (!this.client) {
-      return false;
-    }
-
+    if (!this.client) return false;
     try {
       await this.client.connect();
       this.isConnected = true;
@@ -93,97 +99,153 @@ export class RedisService {
     }
   }
 
-  /**
-   * Verifica la salud de la conexión a Redis (RNF-16)
-   */
-  public async isHealthy(): Promise<boolean> {
-    if (!this.client || !this.isConnected) {
-      return false;
-    }
-    try {
-      const pong = await this.client.ping();
-      return pong === 'PONG';
-    } catch {
-      this.isConnected = false;
-      return false;
-    }
-  }
+  // ---------------------------------------------------------------------------
+  // 1. Gestión de Ofertas Efímeras con TTL (RF-5.3, RF-5.4, RNF-06)
+  // ---------------------------------------------------------------------------
 
-  public isReady(): boolean {
-    return this.isConnected;
-  }
-
-  // ==========================================================================
-  // IDEMPOTENCIA DISTRIBUIDA (RNF-08 - Agustín Quetglas)
-  // ==========================================================================
-
-  public async getIdempotentRequest(idempotencyKey: string): Promise<RideRequest | null> {
-    const key = `m5:idempotency:${idempotencyKey}`;
+  public async saveOffer(offer: RideOffer, ttlSeconds: number): Promise<void> {
+    const key = `dispatch:offer:${offer.id}`;
     if (this.isConnected && this.client) {
       try {
-        const data = await this.client.get(key);
-        if (data) return JSON.parse(data) as RideRequest;
-        return null;
-      } catch {
-        // Fallback
+        await this.client.set(key, JSON.stringify(offer), 'EX', ttlSeconds);
+        return;
+      } catch (err: any) {
+        console.warn(`[RedisService] Fallo al guardar oferta ${offer.id} en Redis: ${err.message}`);
       }
     }
 
-    const item = this.memoryFallback.get(key);
-    if (!item) return null;
-    if (item.expiresAt && Date.now() > item.expiresAt) {
-      this.memoryFallback.delete(key);
+    const expiresAt = Date.now() + ttlSeconds * 1000;
+    this.memoryOffers.set(offer.id, { offer, expiresAt });
+  }
+
+  public async saveOfferWithTtl(offer: RideOffer, ttlSeconds: number): Promise<void> {
+    return this.saveOffer(offer, ttlSeconds);
+  }
+
+  public async getOffer(offerId: string): Promise<RideOffer | null> {
+    const key = `dispatch:offer:${offerId}`;
+    if (this.isConnected && this.client) {
+      try {
+        const raw = await this.client.get(key);
+        if (!raw) return null;
+        return JSON.parse(raw) as RideOffer;
+      } catch (err: any) {
+        console.warn(`[RedisService] Fallo al recuperar oferta ${offerId} de Redis: ${err.message}`);
+      }
+    }
+
+    const entry = this.memoryOffers.get(offerId);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.memoryOffers.delete(offerId);
       return null;
     }
-    return JSON.parse(item.data) as RideRequest;
+    return entry.offer;
   }
 
-  public async saveIdempotentRequest(
-    idempotencyKey: string,
-    request: RideRequest,
-    ttlSeconds = 86400
-  ): Promise<void> {
-    const key = `m5:idempotency:${idempotencyKey}`;
-    const serialized = JSON.stringify(request);
-
+  public async deleteOffer(offerId: string): Promise<void> {
+    const key = `dispatch:offer:${offerId}`;
     if (this.isConnected && this.client) {
       try {
-        await this.client.set(key, serialized, 'EX', ttlSeconds);
-        return;
-      } catch {
-        // Fallback
+        await this.client.del(key);
+      } catch (err: any) {
+        console.warn(`[RedisService] Fallo al eliminar oferta ${offerId} de Redis: ${err.message}`);
+      }
+    }
+    this.memoryOffers.delete(offerId);
+  }
+
+  public async getRemainingTtl(offerId: string): Promise<number> {
+    const key = `dispatch:offer:${offerId}`;
+    if (this.isConnected && this.client) {
+      try {
+        return await this.client.ttl(key);
+      } catch (err: any) {
+        console.warn(`[RedisService] Fallo al consultar TTL de ${offerId} en Redis: ${err.message}`);
       }
     }
 
-    this.memoryFallback.set(key, {
-      data: serialized,
-      expiresAt: Date.now() + ttlSeconds * 1000
-    });
+    const entry = this.memoryOffers.get(offerId);
+    if (!entry) return -2;
+    const remainingMs = entry.expiresAt - Date.now();
+    if (remainingMs <= 0) {
+      this.memoryOffers.delete(offerId);
+      return -2;
+    }
+    return Math.ceil(remainingMs / 1000);
   }
 
-  // ==========================================================================
-  // CANDADO ATÓMICO DE CLIENTE ACTIVO (RNF-09 - Agustín Quetglas)
-  // ==========================================================================
+  // ---------------------------------------------------------------------------
+  // 2. Distributed Locking Atómico (RF-5.5 / RNF-09)
+  // ---------------------------------------------------------------------------
+
+  public async acquireAssignmentLock(
+    requestId: string,
+    driverId: string,
+    ttlSeconds = 30
+  ): Promise<LockResult> {
+    const lockKey = `dispatch:lock:request:${requestId}`;
+    if (this.isConnected && this.client) {
+      try {
+        const result = await this.client.set(lockKey, driverId, 'EX', ttlSeconds, 'NX');
+        if (result === 'OK') {
+          return { acquired: true, holder: driverId };
+        }
+        const currentHolder = await this.client.get(lockKey);
+        return { acquired: false, holder: currentHolder || undefined };
+      } catch (err: any) {
+        console.warn(`[RedisService] Error al adquirir lock para ${requestId}: ${err.message}`);
+      }
+    }
+
+    const now = Date.now();
+    const existing = this.memoryLocks.get(requestId);
+    if (existing && existing.expiresAt > now) {
+      return { acquired: false, holder: existing.driverId };
+    }
+
+    this.memoryLocks.set(requestId, {
+      driverId,
+      expiresAt: now + ttlSeconds * 1000
+    });
+    return { acquired: true, holder: driverId };
+  }
+
+  public async acquireLock(key: string, ttlSeconds = 30): Promise<boolean> {
+    const res = await this.acquireAssignmentLock(key, 'generic_holder', ttlSeconds);
+    return res.acquired;
+  }
+
+  public async releaseLock(key: string): Promise<void> {
+    const lockKey = key.startsWith('dispatch:lock:') ? key : `dispatch:lock:request:${key}`;
+    if (this.isConnected && this.client) {
+      try {
+        await this.client.del(lockKey);
+      } catch {}
+    }
+    this.memoryLocks.delete(key);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 3. Candado Atómico de Cliente Activo (RNF-09)
+  // ---------------------------------------------------------------------------
 
   public async acquireClientActiveLock(
     clientId: string,
     requestId: string,
     ttlSeconds = 180
   ): Promise<boolean> {
-    const key = `m5:active_client:${clientId}`;
-
+    const key = `active_client:${clientId}`;
     if (this.isConnected && this.client) {
       try {
         const result = await this.client.set(key, requestId, 'EX', ttlSeconds, 'NX');
         return result === 'OK';
-      } catch {
-        // Fallback
-      }
+      } catch {}
     }
 
-    const item = this.memoryFallback.get(key);
     const now = Date.now();
-    if (item && (!item.expiresAt || item.expiresAt > now)) {
+    const existing = this.memoryFallback.get(key);
+    if (existing && (!existing.expiresAt || existing.expiresAt > now)) {
       return false;
     }
 
@@ -194,281 +256,191 @@ export class RedisService {
     return true;
   }
 
-  public async updateClientActiveLock(
-    clientId: string,
-    requestId: string,
-    ttlSeconds = 180
-  ): Promise<void> {
-    const key = `m5:active_client:${clientId}`;
+  public async getActiveRequestIdForClient(clientId: string): Promise<string | null> {
+    const key = `active_client:${clientId}`;
     if (this.isConnected && this.client) {
       try {
-        await this.client.set(key, requestId, 'EX', ttlSeconds);
-        return;
-      } catch {
-        // Fallback
-      }
+        return await this.client.get(key);
+      } catch {}
     }
-    this.memoryFallback.set(key, {
-      data: requestId,
-      expiresAt: Date.now() + ttlSeconds * 1000
-    });
+
+    const entry = this.memoryFallback.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt && Date.now() > entry.expiresAt) {
+      this.memoryFallback.delete(key);
+      return null;
+    }
+    return entry.data;
   }
 
   public async releaseClientActiveLock(clientId: string): Promise<void> {
-    const key = `m5:active_client:${clientId}`;
+    const key = `active_client:${clientId}`;
     if (this.isConnected && this.client) {
       try {
         await this.client.del(key);
-        return;
-      } catch {
-        // Fallback
-      }
+      } catch {}
     }
     this.memoryFallback.delete(key);
   }
 
-  public async getActiveRequestIdForClient(clientId: string): Promise<string | null> {
-    const key = `m5:active_client:${clientId}`;
+  // ---------------------------------------------------------------------------
+  // 4. Idempotencia Distribuida (RNF-08)
+  // ---------------------------------------------------------------------------
+
+  public async saveIdempotentRequest(
+    idempotencyKey: string,
+    request: RideRequest,
+    ttlSeconds = 3600
+  ): Promise<void> {
+    const key = `idempotency:request:${idempotencyKey}`;
+    const payload = JSON.stringify(request);
+
     if (this.isConnected && this.client) {
       try {
-        return await this.client.get(key);
-      } catch {
-        // Fallback
-      }
+        await this.client.set(key, payload, 'EX', ttlSeconds);
+        return;
+      } catch {}
     }
 
-    const item = this.memoryFallback.get(key);
-    if (!item) return null;
-    if (item.expiresAt && Date.now() > item.expiresAt) {
+    this.memoryFallback.set(key, {
+      data: payload,
+      expiresAt: Date.now() + ttlSeconds * 1000
+    });
+  }
+
+  public async getIdempotentRequest(idempotencyKey: string): Promise<RideRequest | null> {
+    const key = `idempotency:request:${idempotencyKey}`;
+
+    if (this.isConnected && this.client) {
+      try {
+        const raw = await this.client.get(key);
+        if (!raw) return null;
+        return JSON.parse(raw) as RideRequest;
+      } catch {}
+    }
+
+    const entry = this.memoryFallback.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt && Date.now() > entry.expiresAt) {
       this.memoryFallback.delete(key);
       return null;
     }
-    return item.data;
+    return JSON.parse(entry.data) as RideRequest;
   }
 
-  // ==========================================================================
-  // CACHÉ DE ESTIMACIÓN DE TARIFA CON M7 (Agustín Quetglas)
-  // ==========================================================================
+  // ---------------------------------------------------------------------------
+  // 5. Caché de Estimación de Tarifas M7 (RNF-06)
+  // ---------------------------------------------------------------------------
 
   public async cacheEstimatedFare(
     cacheKey: string,
     fare: EstimatedFare,
     ttlSeconds = 60
   ): Promise<void> {
-    const key = `m5:fare_cache:${cacheKey}`;
-    const serialized = JSON.stringify(fare);
+    const key = `fare:estimate:${cacheKey}`;
+    const payload = JSON.stringify(fare);
 
     if (this.isConnected && this.client) {
       try {
-        await this.client.set(key, serialized, 'EX', ttlSeconds);
+        await this.client.set(key, payload, 'EX', ttlSeconds);
         return;
-      } catch {
-        // Fallback
-      }
+      } catch {}
     }
 
     this.memoryFallback.set(key, {
-      data: serialized,
+      data: payload,
       expiresAt: Date.now() + ttlSeconds * 1000
     });
   }
 
   public async getCachedEstimatedFare(cacheKey: string): Promise<EstimatedFare | null> {
-    const key = `m5:fare_cache:${cacheKey}`;
-    if (this.isConnected && this.client) {
-      try {
-        const data = await this.client.get(key);
-        if (data) return JSON.parse(data) as EstimatedFare;
-        return null;
-      } catch {
-        // Fallback
-      }
-    }
-
-    const item = this.memoryFallback.get(key);
-    if (!item) return null;
-    if (item.expiresAt && Date.now() > item.expiresAt) {
-      this.memoryFallback.delete(key);
-      return null;
-    }
-    return JSON.parse(item.data) as EstimatedFare;
-  }
-
-  // ==========================================================================
-  // GESTIÓN DE OFERTAS CON TTL (RF-5.3 - Lautaro Romero)
-  // ==========================================================================
-
-  public async saveOfferWithTtl(offer: RideOffer, ttlSeconds: number): Promise<void> {
-    const key = `dispatch:offer:${offer.id}`;
-    const payload = JSON.stringify(offer);
-
-    if (this.isConnected && this.client) {
-      try {
-        await this.client.set(key, payload, 'EX', ttlSeconds);
-        return;
-      } catch (err) {
-        console.warn(`[RedisService] Error al escribir en Redis: ${(err as Error).message}`);
-      }
-    }
-
-    const expiresAt = Date.now() + ttlSeconds * 1000;
-    this.memoryFallback.set(key, { data: payload, expiresAt });
-  }
-
-  public async getOffer(offerId: string): Promise<RideOffer | null> {
-    const key = `dispatch:offer:${offerId}`;
+    const key = `fare:estimate:${cacheKey}`;
 
     if (this.isConnected && this.client) {
       try {
         const raw = await this.client.get(key);
         if (!raw) return null;
-        return JSON.parse(raw) as RideOffer;
-      } catch (err) {
-        console.warn(`[RedisService] Error al leer de Redis: ${(err as Error).message}`);
-      }
+        return JSON.parse(raw) as EstimatedFare;
+      } catch {}
     }
 
-    const item = this.memoryFallback.get(key);
-    if (!item) return null;
-
-    if (item.expiresAt && Date.now() > item.expiresAt) {
+    const entry = this.memoryFallback.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt && Date.now() > entry.expiresAt) {
       this.memoryFallback.delete(key);
       return null;
     }
-
-    return JSON.parse(item.data) as RideOffer;
+    return JSON.parse(entry.data) as EstimatedFare;
   }
 
-  public async getRemainingTtl(offerId: string): Promise<number> {
-    const key = `dispatch:offer:${offerId}`;
+  // ---------------------------------------------------------------------------
+  // 6. Integración Geoespacial con Módulo 4 en Redis (RF-5.2)
+  // ---------------------------------------------------------------------------
 
-    if (this.isConnected && this.client) {
-      try {
-        return await this.client.ttl(key);
-      } catch {
-        // Fallback
-      }
-    }
-
-    const item = this.memoryFallback.get(key);
-    if (!item) return -2;
-    if (!item.expiresAt) return -1;
-    const remainingMs = item.expiresAt - Date.now();
-    if (remainingMs <= 0) {
-      this.memoryFallback.delete(key);
-      return -2;
-    }
-    return Math.ceil(remainingMs / 1000);
-  }
-
-  public async deleteOffer(offerId: string): Promise<void> {
-    const key = `dispatch:offer:${offerId}`;
-    if (this.isConnected && this.client) {
-      try {
-        await this.client.del(key);
-      } catch {
-        // Fallback
-      }
-    }
-    this.memoryFallback.delete(key);
-  }
-
-  // ==========================================================================
-  // GESTIÓN DE CONDUCTORES M4 (RF-4.2 / RF-5.2 - Lautaro Romero)
-  // ==========================================================================
-
-  public async saveM4DriverLocation(
-    location: M4DriverLocation,
-    ttlSeconds: number = 60
-  ): Promise<void> {
-    const key = `driver:${location.driverId}:location`;
-    const payload = JSON.stringify(location);
+  public async saveM4DriverLocation(driver: M4DriverLocation, ttlSeconds = 60): Promise<void> {
+    const key = `driver:${driver.driverId}:location`;
+    const payload = JSON.stringify(driver);
 
     if (this.isConnected && this.client) {
       try {
         await this.client.set(key, payload, 'EX', ttlSeconds);
-      } catch (err) {
-        console.warn(`[RedisService] Error al escribir ubicación M4 en Redis: ${(err as Error).message}`);
-      }
+        return;
+      } catch {}
     }
 
-    const expiresAt = Date.now() + ttlSeconds * 1000;
-    this.memoryFallback.set(key, { data: payload, expiresAt });
+    this.m4Drivers.set(driver.driverId, {
+      data: driver,
+      expiresAt: Date.now() + ttlSeconds * 1000
+    });
   }
 
   public async findNearbyDriversFromM4(
     originLat: number,
     originLng: number,
     vehicleType: VehicleType,
-    radiusKm: number = 5.0
+    radiusKm = 5.0
   ): Promise<NearbyDriverStub[]> {
-    const driversMap: Map<string, M4DriverLocation> = new Map();
+    const driversList: M4DriverLocation[] = [];
 
     if (this.isConnected && this.client) {
       try {
         const keys = await this.client.keys('driver:*:location');
-        if (keys.length > 0) {
-          const values = await this.client.mget(...keys);
-          for (const raw of values) {
-            if (!raw) continue;
+        for (const key of keys) {
+          const raw = await this.client.get(key);
+          if (raw) {
             try {
-              const parsed = JSON.parse(raw) as M4DriverLocation;
-              if (parsed && parsed.driverId) {
-                driversMap.set(parsed.driverId, parsed);
-              }
-            } catch {
-              // Ignorar JSON corrupto
-            }
+              driversList.push(JSON.parse(raw));
+            } catch {}
           }
         }
-      } catch (err) {
-        console.warn(`[RedisService] Error al buscar claves de M4 en Redis: ${(err as Error).message}`);
-      }
-    }
-
-    if (driversMap.size === 0) {
+      } catch {}
+    } else {
       const now = Date.now();
-      for (const [key, item] of this.memoryFallback.entries()) {
-        if (key.startsWith('driver:') && key.endsWith(':location')) {
-          if (!item.expiresAt || now <= item.expiresAt) {
-            try {
-              const parsed = JSON.parse(item.data) as M4DriverLocation;
-              if (parsed && parsed.driverId) {
-                driversMap.set(parsed.driverId, parsed);
-              }
-            } catch {
-              // Ignorar
-            }
-          } else {
-            this.memoryFallback.delete(key);
-          }
+      for (const [driverId, entry] of this.m4Drivers.entries()) {
+        if (entry.expiresAt > now) {
+          driversList.push(entry.data);
+        } else {
+          this.m4Drivers.delete(driverId);
         }
       }
     }
 
-    if (driversMap.size === 0) {
-      return [
-        { driverId: 'drv_101', distanceKm: 1.2, vehicleType, rating: 4.8 },
-        { driverId: 'drv_102', distanceKm: 2.1, vehicleType, rating: 4.7 }
-      ];
-    }
-
-    const originGeo = { latitude: originLat, longitude: originLng, address: '' };
     const candidates: NearbyDriverStub[] = [];
+    for (const driver of driversList) {
+      if (driver.available === false) continue;
+      if (driver.vehicleType && driver.vehicleType.toUpperCase() !== vehicleType.toUpperCase()) continue;
 
-    for (const driver of driversMap.values()) {
-      if (driver.available !== true) continue;
-      if (driver.vehicleType !== vehicleType) continue;
-
-      const driverGeo = { latitude: driver.latitude, longitude: driver.longitude, address: '' };
-      const distanceMeters = RideRequestValidator.calculateDistanceMeters(originGeo, driverGeo);
-      const distanceKm = Math.round((distanceMeters / 1000) * 100) / 100;
+      const distanceMeters = RideRequestValidator.calculateDistanceMeters(
+        { latitude: originLat, longitude: originLng, address: '' },
+        { latitude: driver.latitude, longitude: driver.longitude, address: '' }
+      );
+      const distanceKm = distanceMeters / 1000;
 
       if (distanceKm <= radiusKm) {
         candidates.push({
           driverId: driver.driverId,
-          distanceKm,
-          vehicleType: driver.vehicleType,
+          distanceKm: Math.round(distanceKm * 100) / 100,
+          vehicleType: (driver.vehicleType?.toUpperCase() === 'MOTO' ? 'MOTO' : 'AUTO') as VehicleType,
           latitude: driver.latitude,
           longitude: driver.longitude,
           rating: 4.8
@@ -486,20 +458,28 @@ export class RedisService {
         if (keys.length > 0) {
           await this.client.del(...keys);
         }
-      } catch {
-        // Ignorar
-      }
+      } catch {}
     }
-
-    for (const key of Array.from(this.memoryFallback.keys())) {
-      if (key.startsWith('driver:') && key.endsWith(':location')) {
-        this.memoryFallback.delete(key);
-      }
-    }
+    this.m4Drivers.clear();
   }
 
+  // ---------------------------------------------------------------------------
+  // Utilidades y Limpieza
+  // ---------------------------------------------------------------------------
+
   public clearFallback(): void {
+    this.memoryOffers.clear();
+    this.memoryLocks.clear();
     this.memoryFallback.clear();
+    this.m4Drivers.clear();
+  }
+
+  public async isHealthy(): Promise<boolean> {
+    return this.isConnected;
+  }
+
+  public async close(): Promise<void> {
+    await this.disconnect();
   }
 
   public async disconnect(): Promise<void> {
@@ -508,8 +488,10 @@ export class RedisService {
         await this.client.quit();
       } catch {
         this.client.disconnect();
+      } finally {
+        this.client = null;
+        this.isConnected = false;
       }
     }
-    this.isConnected = false;
   }
 }

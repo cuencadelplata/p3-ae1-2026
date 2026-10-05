@@ -1,5 +1,7 @@
 services:
-  # 1. PostgreSQL (DispatchDB)
+  # ----------------------------------------------------
+  # 1. Backing Service: PostgreSQL (DispatchDB de M5)
+  # ----------------------------------------------------
   postgres-db:
     image: postgres:16-alpine
     container_name: m5-postgres-db
@@ -18,7 +20,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # 2. Redis (TTL y Locks Atómicos)
+  # ----------------------------------------------------
+  # 2. Backing Service: Redis (Caché, TTL y Locks)
+  # ----------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: m5-redis
@@ -34,13 +38,15 @@ services:
       timeout: 5s
       retries: 5
 
-  # 3. RabbitMQ (Exchange mobility.events y colas duraderas)
+  # ----------------------------------------------------
+  # 3. Backing Service: RabbitMQ (Broker de Mensajería)
+  # ----------------------------------------------------
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: m5-rabbitmq
     ports:
-      - '5672:5672'    # AMQP
-      - '15672:15672'  # Panel Web (user: guest / pass: guest)
+      - '5672:5672'    # Protocolo AMQP
+      - '15672:15672'  # Panel Web de Administración
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     environment:
@@ -53,7 +59,9 @@ services:
       timeout: 10s
       retries: 5
 
-  # 4. Microservicio M5 (Solicitud y Despacho)
+  # ----------------------------------------------------
+  # 4. Microservicio M5: Solicitud y Despacho
+  # ----------------------------------------------------
   dispatch-service:
     build:
       context: .
@@ -68,7 +76,10 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@postgres-db:5432/dispatch_db?schema=public
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - M1_AUTH_URL=http://m1-auth:3001
       - M4_SERVICE_URL=http://m4-service:3004
+      - M6_SERVICE_URL=http://m6-service:3000
+      - M7_SERVICE_URL=http://m7-service:3007
     depends_on:
       postgres-db:
         condition: service_healthy
@@ -87,7 +98,9 @@ services:
       retries: 3
       start_period: 10s
 
-  # 5. Documentación Interactiva Scalar
+  # ----------------------------------------------------
+  # 5. Documentación Interactiva Scalar (Nginx)
+  # ----------------------------------------------------
   scalar-docs:
     build:
       context: .

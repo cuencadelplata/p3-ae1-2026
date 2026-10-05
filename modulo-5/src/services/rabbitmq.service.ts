@@ -2,6 +2,18 @@ import amqp, { Channel, ChannelModel } from 'amqplib';
 import { randomUUID } from 'node:crypto';
 import { GeoLocation, EstimatedFare, VehicleType, RideRequest } from '../types/ride-request.types';
 
+export interface TripAssignedEventPayload {
+  requestId: string;
+  offerId: string;
+  driverId: string | number;
+  clientId: string | number;
+  origin: GeoLocation;
+  destination: GeoLocation;
+  vehicleType: VehicleType;
+  estimatedFare: EstimatedFare;
+  assignedAt: string;
+}
+
 export interface OfferCreatedEvent {
   eventType: 'OFFER_CREATED';
   offerId: string;
@@ -28,7 +40,7 @@ export interface DriverCancellationEvent {
 /**
  * Sobre estándar de evento de dominio acordado con Módulo 8 (RNF-07, Criterio 5)
  */
-export interface DomainEventEnvelope<T> {
+export interface StandardEventEnvelope<T = any> {
   messageId: string;
   eventType: string;
   version: number;
@@ -37,6 +49,8 @@ export interface DomainEventEnvelope<T> {
   producer: string;
   data: T;
 }
+
+export type DomainEventEnvelope<T> = StandardEventEnvelope<T>;
 
 export interface RideRequestCreatedPayload {
   rideRequestId: string;
@@ -56,8 +70,8 @@ export type RideRequestCreatedEvent = DomainEventEnvelope<RideRequestCreatedPayl
 /**
  * Servicio unificado de Mensajería Asíncrona con RabbitMQ (RNF-07 / AE2)
  * Maneja:
- * 1. Publicación de eventos de dominio `ride.requested` en exchange `mobility.events` (M5 -> M8)
- * 2. Publicación de ofertas `dispatch.offers` con TTL a conductores (M5 -> Conductor)
+ * 1. Publicación de eventos de dominio `driver.offer.accepted` y `ride.requested` en exchange `mobility.events`
+ * 2. Publicación de ofertas `dispatch.offers` con TTL a conductores
  * 3. Consumo de cancelaciones en `despacho.reabrir` para reapertura automática de despacho
  * 4. Modo resiliente / buffer en memoria cuando RabbitMQ no está disponible o en tests
  */
@@ -76,15 +90,20 @@ export class RabbitMQService {
   private reopenDispatchSubscriber: ((event: DriverCancellationEvent) => Promise<void>) | null = null;
 
   // Buffer de eventos emitidos en memoria para auditoría, tests y modo degradado
-  private publishedEventsBuffer: RideRequestCreatedEvent[] = [];
+  private publishedEventsBuffer: any[] = [];
+  public publishedMessages: Array<{
+    exchange?: string;
+    routingKey?: string;
+    queue?: string;
+    message: any;
+    publishedAt: string;
+  }> = [];
 
   constructor(rabbitmqUrl?: string) {
     if (process.env.DISABLE_RABBITMQ === 'true') {
-      console.log('[RabbitMQService] Modo simulación activo (DISABLE_RABBITMQ=true)');
       return;
     }
 
-    // Si estamos en entorno de testing sin configuración explícita, no conectamos automáticamente
     if (process.env.NODE_ENV === 'test' && !process.env.RABBITMQ_HOST && !process.env.RABBITMQ_URL && !rabbitmqUrl) {
       return;
     }
@@ -92,6 +111,16 @@ export class RabbitMQService {
     this.init(rabbitmqUrl).catch(() => {
       this.isConnected = false;
     });
+  }
+
+  /**
+   * Helper para convertir identificadores a formato canónico numérico de M1 o string
+   */
+  public parseCanonicalUserId(id: string | number): number | string {
+    if (typeof id === 'number') return id;
+    const cleanId = id.replace(/^(client_|drv_|usr_)/, '');
+    const num = parseInt(cleanId, 10);
+    return isNaN(num) ? id : num;
   }
 
   /**
@@ -113,49 +142,44 @@ export class RabbitMQService {
       this.channel = await this.connection.createChannel();
 
       // Asegurar cola de ofertas para conductores
-      await this.channel.assertQueue(RabbitMQService.QUEUE_OFFERS, {
-        durable: true
-      });
+      await this.channel.assertQueue(RabbitMQService.QUEUE_OFFERS, { durable: true });
 
       // Asegurar cola de eventos de reapertura de despacho
-      await this.channel.assertQueue(RabbitMQService.QUEUE_REOPEN_DISPATCH, {
-        durable: true
-      });
+      await this.channel.assertQueue(RabbitMQService.QUEUE_REOPEN_DISPATCH, { durable: true });
 
       // Declarar Exchange durable de eventos de movilidad
-      await this.channel.assertExchange(this.exchangeName, this.exchangeType, {
-        durable: true
-      });
+      await this.channel.assertExchange(this.exchangeName, this.exchangeType, { durable: true });
 
       this.isConnected = true;
-      console.log(`[RabbitMQService] Conectado exitosamente a RabbitMQ (${url}) - Exchange: ${this.exchangeName}`);
+      if (process.env.NODE_ENV !== 'test') {
+        console.log(`[RabbitMQService] Conectado exitosamente a RabbitMQ (${url}) - Exchange: ${this.exchangeName}`);
+      }
 
-      // Si se había registrado un listener de reapertura antes de conectar el canal, activarlo ahora
       if (this.reopenDispatchSubscriber) {
         await this.attachReopenDispatchConsumer();
       }
 
       this.connection.on('error', (err: any) => {
-        console.warn(`[RabbitMQService] Error en conexión: ${err?.message || err}`);
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn(`[RabbitMQService] Error en conexión: ${err?.message || err}`);
+        }
         this.isConnected = false;
       });
 
       this.connection.on('close', () => {
-        console.warn('[RabbitMQService] Conexión RabbitMQ cerrada. Activando modo buffer.');
         this.isConnected = false;
       });
 
       return true;
     } catch (err: any) {
       this.isConnected = false;
-      console.warn(`[RabbitMQService] RabbitMQ no disponible en ${url}. Activando modo degradado resiliente.`);
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn(`[RabbitMQService] RabbitMQ no disponible en ${url}. Activando modo degradado.`);
+      }
       return false;
     }
   }
 
-  /**
-   * Adjunta el consumidor a la cola despacho.reabrir en el canal activo de RabbitMQ
-   */
   private async attachReopenDispatchConsumer(): Promise<void> {
     if (!this.channel || !this.reopenDispatchSubscriber) return;
 
@@ -170,19 +194,14 @@ export class RabbitMQService {
           this.channel?.ack(msg);
         } catch (err) {
           console.warn(`[RabbitMQService] Error procesando mensaje de ${RabbitMQService.QUEUE_REOPEN_DISPATCH}:`, err);
-          // Si el mensaje está corrupto, lo descartamos para no generar loops infinitos
           this.channel?.nack(msg, false, false);
         }
       });
-      console.log(`[RabbitMQService] Consumidor activo escuchando cola '${RabbitMQService.QUEUE_REOPEN_DISPATCH}'`);
     } catch (err) {
-      console.warn(`[RabbitMQService] Error registrando consumidor en RabbitMQ: ${(err as Error).message}`);
+      console.warn(`[RabbitMQService] Error registrando consumidor: ${(err as Error).message}`);
     }
   }
 
-  /**
-   * Registra un callback para procesar cancelaciones de chofer y reabrir despacho
-   */
   public async subscribeToReopenDispatch(
     callback: (event: DriverCancellationEvent) => Promise<void>
   ): Promise<void> {
@@ -193,9 +212,6 @@ export class RabbitMQService {
     }
   }
 
-  /**
-   * Publica un evento de cancelación de conductor en la cola despacho.reabrir
-   */
   public async publishDriverCancellation(event: DriverCancellationEvent): Promise<boolean> {
     const content = Buffer.from(JSON.stringify(event));
 
@@ -206,171 +222,181 @@ export class RabbitMQService {
           contentType: 'application/json',
           timestamp: Date.now()
         });
-
-        console.log(
-          `[RabbitMQ] Evento de cancelación publicado a cola '${RabbitMQService.QUEUE_REOPEN_DISPATCH}': Viaje=${event.viajeId} | Conductor=${event.conductorId}`
-        );
         return sent;
       } catch (err) {
-        console.warn(`[RabbitMQService] Error publicando mensaje en ${RabbitMQService.QUEUE_REOPEN_DISPATCH}: ${(err as Error).message}`);
+        console.warn(`[RabbitMQService] Error publicando a ${RabbitMQService.QUEUE_REOPEN_DISPATCH}:`, err);
       }
     }
 
-    // Modo simulación/fallback (memoria): invocar directamente al suscriptor si existe
-    console.log(
-      `[RabbitMQ-Simulado] Evento ${event.evento} despachado en memoria para viaje ${event.viajeId} (Conductor: ${event.conductorId})`
-    );
+    // Modo simulación en memoria / tests
     if (this.reopenDispatchSubscriber) {
       await this.reopenDispatchSubscriber(event);
     }
     return true;
   }
 
-  /**
-   * Publica el evento asíncrono de oferta despachada (RF-5.3 / RNF-07)
-   */
-  public async publishOfferCreated(event: OfferCreatedEvent): Promise<boolean> {
-    const content = Buffer.from(JSON.stringify(event));
+  public async publishToExchange(routingKey: string, message: any): Promise<boolean> {
+    const serialized = Buffer.from(JSON.stringify(message));
 
     if (this.isConnected && this.channel) {
       try {
-        const sent = this.channel.sendToQueue(RabbitMQService.QUEUE_OFFERS, content, {
+        await this.channel.assertExchange(this.exchangeName, 'topic', { durable: true });
+        return this.channel.publish(this.exchangeName, routingKey, serialized, {
           persistent: true,
           contentType: 'application/json',
           timestamp: Date.now()
         });
-
-        console.log(
-          `[RabbitMQ] Evento publicado: ${event.eventType} | Oferta=${event.offerId} | Conductor=${event.driverId} | Cola=${RabbitMQService.QUEUE_OFFERS}`
-        );
-        return sent;
-      } catch (err) {
-        console.warn(`[RabbitMQService] Error publicando mensaje: ${(err as Error).message}`);
+      } catch (err: any) {
+        console.warn(`[RabbitMQService] Fallo al publicar a exchange "${this.exchangeName}": ${err.message}`);
       }
     }
 
-    // Registro en log cuando corre sin el contenedor encendido (modo degradado/fallback)
-    console.log(
-      `[RabbitMQ-Simulado] Evento ${event.eventType} despachado en memoria para oferta ${event.offerId} (Destinatario: ${event.driverId})`
-    );
+    this.publishedMessages.push({
+      exchange: this.exchangeName,
+      routingKey,
+      message,
+      publishedAt: new Date().toISOString()
+    });
+    this.publishedEventsBuffer.push(message);
+
     return true;
   }
 
-  /**
-   * Extrae el ID numérico canónico de M1 para clientUserId
-   */
-  private parseClientUserId(clientId: string): number {
-    const numericOnly = clientId.replace(/\D/g, '');
-    if (numericOnly.length > 0) {
-      const parsed = parseInt(numericOnly, 10);
-      if (!isNaN(parsed) && parsed > 0) return parsed;
+  public async publishToQueue(queueName: string, message: any): Promise<boolean> {
+    const serialized = Buffer.from(JSON.stringify(message));
+
+    if (this.isConnected && this.channel) {
+      try {
+        await this.channel.assertQueue(queueName, { durable: true });
+        return this.channel.sendToQueue(queueName, serialized, {
+          persistent: true,
+          contentType: 'application/json',
+          timestamp: Date.now()
+        });
+      } catch (err: any) {
+        console.warn(`[RabbitMQService] Fallo al enviar a cola "${queueName}": ${err.message}`);
+      }
     }
-    return 42; // ID canónico por defecto si no es numérico puro
+
+    this.publishedMessages.push({
+      queue: queueName,
+      message,
+      publishedAt: new Date().toISOString()
+    });
+
+    return true;
   }
 
-  /**
-   * Publica el evento de dominio RideRequestCreated (RF-5.1) hacia 'mobility.events'
-   */
-  public async publishRideRequestCreated(request: RideRequest): Promise<boolean> {
-    const routingKey = 'ride.requested';
-    const clientUserId = this.parseClientUserId(request.clientId);
+  public async publishOfferCreated(event: OfferCreatedEvent): Promise<boolean> {
+    return this.publishToQueue(RabbitMQService.QUEUE_OFFERS, event);
+  }
+
+  public async publishTripAssigned(payload: TripAssignedEventPayload): Promise<boolean> {
+    const clientUserId = this.parseCanonicalUserId(payload.clientId);
+    const driverUserId = this.parseCanonicalUserId(payload.driverId);
+
+    const eventEnvelope: StandardEventEnvelope = {
+      messageId: randomUUID(),
+      eventType: 'driver.offer.accepted',
+      version: 1,
+      occurredAt: new Date().toISOString(),
+      correlationId: payload.requestId,
+      producer: 'm5',
+      data: {
+        rideRequestId: payload.requestId,
+        offerId: payload.offerId,
+        clientUserId,
+        driverUserId,
+        origin: payload.origin,
+        destination: payload.destination,
+        vehicleType: payload.vehicleType,
+        fare: payload.estimatedFare
+      }
+    };
+
+    return this.publishToExchange('driver.offer.accepted', eventEnvelope);
+  }
+
+  public async publishRideRequestCreated(rideRequest: RideRequest): Promise<boolean> {
+    const clientNum = this.parseCanonicalUserId(rideRequest.clientId);
+    const clientUserId = typeof clientNum === 'number' ? clientNum : 1;
 
     const event: RideRequestCreatedEvent = {
       messageId: randomUUID(),
       eventType: 'ride.requested',
       version: 1,
       occurredAt: new Date().toISOString(),
-      correlationId: request.id,
+      correlationId: rideRequest.id,
       producer: 'm5',
       data: {
-        rideRequestId: request.id,
+        rideRequestId: rideRequest.id,
         clientUserId,
-        origin: request.origin,
-        destination: request.destination,
-        vehicleType: request.vehicleType,
+        origin: rideRequest.origin,
+        destination: rideRequest.destination,
+        vehicleType: rideRequest.vehicleType,
         estimatedFare: {
-          amount: request.estimatedFare.amount,
-          currency: request.estimatedFare.currency
+          amount: rideRequest.estimatedFare.amount,
+          currency: rideRequest.estimatedFare.currency
         },
-        createdAt: request.createdAt
+        createdAt: rideRequest.createdAt
       }
     };
 
-    // Guardar en buffer en memoria para auditoría, tests y modo offline
-    this.publishedEventsBuffer.push(event);
+    return this.publishToExchange('ride.requested', event);
+  }
 
-    try {
-      if (this.isConnected && this.channel) {
-        const payloadBuffer = Buffer.from(JSON.stringify(event));
-        const published = this.channel.publish(this.exchangeName, routingKey, payloadBuffer, {
-          persistent: true,
-          contentType: 'application/json',
-          messageId: event.messageId,
-          correlationId: event.correlationId,
-          timestamp: Date.now()
-        });
-
-        console.log(
-          `[RabbitMQ RF-5.1] Evento '${event.eventType}' publicado exitosamente: ID=${event.messageId} | RoutingKey=${routingKey} | RideRequestId=${request.id} | ClientUserId=${clientUserId}`
-        );
-        return published;
+  public async publishRequestCancelled(requestId: string, clientId: string, reason?: string): Promise<boolean> {
+    const eventEnvelope: StandardEventEnvelope = {
+      messageId: randomUUID(),
+      eventType: 'ride_request.cancelled',
+      version: 1,
+      occurredAt: new Date().toISOString(),
+      correlationId: requestId,
+      producer: 'm5',
+      data: {
+        rideRequestId: requestId,
+        clientId,
+        reason: reason || 'Cancelado por el cliente'
       }
-    } catch (err: any) {
-      console.warn('[RabbitMQService] Error publicando mensaje en RabbitMQ:', err?.message || err);
-    }
+    };
 
-    console.log(
-      `[RabbitMQ RF-5.1 - Buffer Local] Evento '${event.eventType}' registrado en buffer: ID=${event.messageId} | RideRequestId=${request.id} | ClientUserId=${clientUserId}`
-    );
-    return true;
+    return this.publishToExchange('ride_request.cancelled', eventEnvelope);
   }
 
-  /**
-   * Health check para RabbitMQ (RNF-16)
-   */
-  public async isHealthy(): Promise<boolean> {
-    return this.isConnected && this.channel !== null;
-  }
-
-  public isReady(): boolean {
-    return this.isConnected;
-  }
-
-  /**
-   * Retorna los eventos emitidos (útil para tests y verificación)
-   */
-  public getPublishedEvents(): RideRequestCreatedEvent[] {
+  public getPublishedEvents(): any[] {
     return [...this.publishedEventsBuffer];
   }
 
-  /**
-   * Limpia el buffer de eventos
-   */
   public clearBuffer(): void {
     this.publishedEventsBuffer = [];
+    this.publishedMessages = [];
   }
 
-  /**
-   * Cierra las conexiones activas al apagar el servicio
-   */
+  public async isHealthy(): Promise<boolean> {
+    return this.isConnected;
+  }
+
+  public async close(): Promise<void> {
+    await this.disconnect();
+  }
+
   public async disconnect(): Promise<void> {
     try {
       if (this.channel) {
         await this.channel.close();
+        this.channel = null;
       }
       if (this.connection) {
         await this.connection.close();
+        this.connection = null;
       }
     } catch {
-      // Ignorar errores al cerrar
+      // Ignorar errores de cierre
     } finally {
-      this.channel = null;
-      this.connection = null;
       this.isConnected = false;
     }
   }
-
-  public async close(): Promise<void> {
-    return this.disconnect();
-  }
 }
+
+export const RabbitMqService = RabbitMQService;
+export type RabbitMqService = RabbitMQService;
