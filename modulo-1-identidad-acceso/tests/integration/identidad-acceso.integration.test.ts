@@ -8,7 +8,7 @@ import {
 import app from "../../src/app";
 import db from "../../src/config/database";
 
-const email = `usuario-${Date.now()}@test.com`;
+const email = `usuario-int-${Date.now()}-${Math.random().toString(16).slice(2)}@test.com`;
 const password = "123456";
 
 function registrationData(
