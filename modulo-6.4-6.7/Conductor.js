@@ -1,34 +1,27 @@
-class Conductor {
-    constructor(usuarioID,ciudad, tipovehiculo, licenciaId, vehiculoId) {
-        //se trae de la API de M1
+export default class Conductor {
+    constructor(usuarioID, ciudad, tipovehiculo, licenciaId, vehiculoId) {
         this.usuarioID = usuarioID;
         this.ciudad = ciudad;
         this.tipovehiculo = tipovehiculo;
-
-        //Se trae de la API de licencias y vehiculos
         this.licenciaId = licenciaId;
         this.vehiculoId = vehiculoId;
         this.habilitado = "pendiente";
-        this.estado_conexion= "desconectado";
+        this.estado_conexion = "desconectado";
     }
 
-    // Getters
-    getusuarioID() { return this._usuarioID; }
-    getciudad() { return this._ciudad; }
-    gettipovehiculo() { return this._tipovehiculo; }
-    getlicenciaId() { return this._licenciaId; }
-    getvehiculoId() { return this._vehiculoId; }
-    gethabilitado() { return this._habilitado; }
-    getestado_conexion() { return this._estado_conexion; }
+    getusuarioID() { return this.usuarioID; }
+    getciudad() { return this.ciudad; }
+    gettipovehiculo() { return this.tipovehiculo; }
+    getlicenciaId() { return this.licenciaId; }
+    getvehiculoId() { return this.vehiculoId; }
+    gethabilitado() { return this.habilitado; }
+    getestado_conexion() { return this.estado_conexion; }
 
-    // Setters
-    setusuarioID(usuarioID) { this._usuarioID = usuarioID; }
-    setciudad(ciudad) { this._ciudad = ciudad; }
-    settipovehiculo(tipovehiculo) { this._tipovehiculo = tipovehiculo; }
-    setlicenciaId(licenciaId) { this._licenciaId = licenciaId; }
-    setvehiculoId(vehiculoId) { this._vehiculoId = vehiculoId; }
-    sethabilitado(habilitado) { this._habilitado = habilitado; }
-    setestado_conexion(estado_conexion) { this._estado_conexion = estado_conexion; }
+    setusuarioID(usuarioID) { this.usuarioID = usuarioID; }
+    setciudad(ciudad) { this.ciudad = ciudad; }
+    settipovehiculo(tipovehiculo) { this.tipovehiculo = tipovehiculo; }
+    setlicenciaId(licenciaId) { this.licenciaId = licenciaId; }
+    setvehiculoId(vehiculoId) { this.vehiculoId = vehiculoId; }
+    sethabilitado(habilitado) { this.habilitado = habilitado; }
+    setestado_conexion(estado_conexion) { this.estado_conexion = estado_conexion; }
 }
-
-module.exports = Conductor;

@@ -1,7 +1,7 @@
 import type { Server } from 'node:http';
-import { createViajeApi, HttpExternalApisClient } from '../src/api.js';
-import { createSimulator } from '../simulator/server.js';
-import type { Viaje } from '../src/Viaje.js';
+import { createViajeApi, HttpExternalApisClient } from '../../src/m6-rf-6.4-rf6.7/api.js';
+import { createSimulator } from '../../simulator/m6-rf-6.4-rf6.7/server.js';
+import type { Viaje } from '../../src/m6-rf-6.4-rf6.7/Viaje.js';
 
 export async function startServices(viajes: Map<string, Viaje>): Promise<{
   api: Server;

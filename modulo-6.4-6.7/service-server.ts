@@ -1,6 +1,6 @@
-import { createViajeApi, HttpExternalApisClient } from './src/api.js';
+import { createViajeApi, HttpExternalApisClient } from './src/m6-rf-6.4-rf6.7/api.js';
 import { Pool } from 'pg';
-import { PostgresViajeRepository } from './src/ViajeRepository.js';
+import { PostgresViajeRepository } from './src/m6-rf-6.4-rf6.7/ViajeRepository.js';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,

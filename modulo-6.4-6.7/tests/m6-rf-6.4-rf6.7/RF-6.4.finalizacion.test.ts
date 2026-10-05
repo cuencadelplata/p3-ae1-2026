@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Server } from 'node:http';
-import { Viaje } from '../src/Viaje.js';
+import { Viaje } from '../../src/m6-rf-6.4-rf6.7/Viaje.js';
 import { startServices, stopServices } from './helpers.js';
 
 describe('RF-6.4 - Finalización del viaje', () => {
