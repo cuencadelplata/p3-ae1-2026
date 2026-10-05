@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { tripsService, TripsService } from '../services/trips.service.js';
+import { findOwnedCustomer } from './ownership.js';
 
 /**
  * Controller de RF-2.3 (Historial de Viajes).
@@ -10,37 +11,14 @@ export class TripsController {
 
   /**
    * GET /v1/customers/:id/trips
-   * RF-2.3: Consultar historial de viajes del cliente.
-   *
-   * Requiere token válido. requireAuth (E7 de Erwin) inyecta req.auth = { userId, role, token }.
-   * Fallback temporal: leer Authorization header directo.
+   * RF-2.3: Consultar historial de viajes del cliente. Requiere token (requireAuth)
+   * y solo lo ve el dueño del perfil: M6 se consulta con el userId del perfil.
    */
   getCustomerTrips = async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const customer = await findOwnedCustomer(req, res, req.params.id);
+    if (!customer) return;
 
-    const auth = (req as any).auth as { userId: number; token: string } | undefined;
-    const token = auth?.token ?? req.headers.authorization?.replace('Bearer ', '') ?? '';
-    const userId = auth?.userId ?? 0;
-
-    if (!token) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Token requerido'
-      });
-      return;
-    }
-
-    const trips = await this.service.getTrips(id, userId, token);
-
-    if (!trips) {
-      res.status(404).json({
-        error: 'CustomerNotFound',
-        message: 'No se encontró un cliente con el ID proporcionado'
-      });
-      return;
-    }
-
-    res.status(200).json(trips);
+    res.status(200).json(await this.service.getTrips(customer, req.auth!.token));
   };
 }
 

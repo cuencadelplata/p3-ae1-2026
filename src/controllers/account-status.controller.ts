@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { accountStatusService, AccountStatusService } from '../services/account-status.service.js';
 import { UpdateAccountStatusSchema } from '../types/customer.js';
+import { findOwnedCustomer } from './ownership.js';
 
 /**
  * Controller de RF-2.5 (Estado de Cuenta).
@@ -13,9 +14,9 @@ export class AccountStatusController {
    * GET /v1/customers/:id/status
    * RF-2.5: Consultar estado de cuenta (recalcula con penalizaciones de Soporte).
    *
-   * Autenticación: acepta DOS mecanismos (uno es suficiente):
-   *   1. Authorization: Bearer <token>  — viene del front o de cualquier módulo autenticado
-   *   2. X-Secret-Key: <key>            — viene de módulos internos (M5, cron, etc.)
+   * La autenticación la resuelve requireAuthOrServiceKey en la ruta:
+   *   1. Bearer <token> validado por M1 → solo el dueño del perfil (req.auth definido).
+   *   2. X-Secret-Key válida (otro módulo) → cualquier cliente (req.auth sin definir).
    *
    * La llamada a Soporte usa su propia secretKey (SOPORTE_SECRET_KEY),
    * no el token del solicitante.
@@ -23,17 +24,8 @@ export class AccountStatusController {
   getAccountStatus = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
 
-    const hasToken     = !!req.headers.authorization?.startsWith('Bearer ');
-    const secretKey    = process.env.STATUS_SECRET_KEY;
-    const hasSecretKey = !!secretKey && req.headers['x-secret-key'] === secretKey;
-
-    if (!hasToken && !hasSecretKey) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Se requiere Authorization: Bearer <token> o X-Secret-Key'
-      });
-      return;
-    }
+    // Con token de usuario, solo el dueño; con X-Secret-Key, cualquier cliente
+    if (req.auth && !(await findOwnedCustomer(req, res, id))) return;
 
     // El service obtiene el userId desde el perfil (customerId → userId),
     // así funciona igual con token de usuario o con X-Secret-Key.
@@ -52,28 +44,12 @@ export class AccountStatusController {
 
   /**
    * PUT /v1/customers/:id/status
-   * RF-2.5: Cambiar estado de cuenta — solo el dueño, con token de usuario.
+   * RF-2.5: Cambiar estado de cuenta — solo el dueño, con token de usuario (requireAuth).
    */
   updateAccountStatus = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
 
-    const token = req.headers.authorization?.replace('Bearer ', '') ?? '';
-    if (!token) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Token requerido'
-      });
-      return;
-    }
-
-    // TODO (E6): verificar que req.auth.userId corresponde al customer con id = :id
-    // Cuando findByUserId esté disponible:
-    //   const profile = await customerRepository.findById(id);
-    //   if (!profile || profile.userId !== auth.userId) {
-    //     res.status(403).json({ error: 'Forbidden', message: 'Solo el dueño puede modificar su estado' });
-    //     return;
-    //   }
-
+    // El body se valida antes que el dueño: un estado inválido es 400 sin consultar la base
     const parseResult = UpdateAccountStatusSchema.safeParse(req.body);
     if (!parseResult.success) {
       res.status(400).json({
@@ -83,6 +59,8 @@ export class AccountStatusController {
       });
       return;
     }
+
+    if (!(await findOwnedCustomer(req, res, id))) return;
 
     const updated = await this.service.updateAccountStatus(id, parseResult.data);
     if (!updated) {

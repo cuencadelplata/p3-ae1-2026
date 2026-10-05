@@ -7,7 +7,7 @@ import { accountStatusController } from './controllers/account-status.controller
 import { tripsController } from './controllers/trips.controller.js';
 import { asyncHandler } from './middlewares/async-handler.js';
 import { errorHandler } from './middlewares/error-handler.js';
-import { requireAuth } from './middlewares/auth.middleware.js';
+import { requireAuth, requireAuthOrServiceKey } from './middlewares/auth.middleware.js';
 import { metricsHandler, httpMetricsMiddleware } from './observability/metrics.js';
 import { healthHandler } from './health/registry.js';
 import { mountStubs } from './stubs/index.js';
@@ -76,9 +76,9 @@ app.get('/v1/customers/:id', requireAuth(), asyncHandler(customerController.getC
 app.put('/v1/customers/:id', requireAuth(), asyncHandler(customerController.updateCustomerPreferences));
 
 // RF-2.5: Estado de cuenta (Leandro)
-// GET /status acepta token de usuario O X-Secret-Key (lo valida el propio controller),
-// por eso no lleva requireAuth. PUT /status sí exige token de usuario (solo el dueño).
-app.get('/v1/customers/:id/status', asyncHandler(accountStatusController.getAccountStatus));
+// GET /status acepta token de usuario (solo el dueño) o X-Secret-Key (otros módulos).
+// PUT /status exige token de usuario y solo lo permite el dueño.
+app.get('/v1/customers/:id/status', requireAuthOrServiceKey(), asyncHandler(accountStatusController.getAccountStatus));
 app.put('/v1/customers/:id/status', requireAuth(), asyncHandler(accountStatusController.updateAccountStatus));
 
 // RF-2.3: Historial de viajes (Leandro) — requiere token de usuario (se reenvía a M6)

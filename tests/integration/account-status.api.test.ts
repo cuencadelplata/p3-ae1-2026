@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../../src/app.js';
+import { customerService } from '../../src/services/customer.service.js';
 import { customerRepository } from '../../src/repositories/customer.repository.js';
 import { soporteClient } from '../../src/clients/soporte.client.js';
 import { m6Client } from '../../src/clients/m6.client.js';
@@ -18,6 +19,19 @@ function mockAuthOk() {
     userId: UserIdSchema.parse(12),
     role: 'CLIENTE'
   });
+}
+
+/** Mockea requireAuth para un userId concreto (por defecto el dueño del perfil, userId 12). */
+function mockAuthAs(userId: number) {
+  vi.spyOn(m1AuthClient, 'validateToken').mockResolvedValue({
+    userId: UserIdSchema.parse(userId),
+    role: 'CLIENTE'
+  });
+}
+
+/** El perfil cust_823a7b9c existe y pertenece al userId 12 (lo que consulta findOwnedCustomer). */
+function mockOwnedProfile() {
+  vi.spyOn(customerService, 'getCustomerById').mockResolvedValue(activeCustomer());
 }
 
 function savedStatus(overrides: Partial<AccountStatusResponse> = {}): AccountStatusResponse {
@@ -41,12 +55,13 @@ function activeCustomer(): CustomerProfile {
 }
 
 // ─── GET /v1/customers/:id/status ─────────────────────────────────────────────
-// GET /status NO pasa por requireAuth (acepta token O X-Secret-Key en el controller),
-// por eso estos tests no necesitan mockear m1AuthClient.
+// GET /status pasa por requireAuthOrServiceKey: con token solo el dueño; con X-Secret-Key, cualquiera.
 
 describe('GET /v1/customers/:id/status (RF-2.5)', () => {
   beforeEach(() => {
     delete process.env.STATUS_SECRET_KEY;
+    mockAuthOk();
+    mockOwnedProfile();
     // El service lee el userId del perfil para consultar Soporte
     vi.spyOn(customerRepository, 'findById').mockResolvedValue(activeCustomer());
   });
@@ -61,6 +76,37 @@ describe('GET /v1/customers/:id/status (RF-2.5)', () => {
     expect(res.body.error).toBe('Unauthorized');
   });
 
+  it('Bearer inválido (M1 lo rechaza) → 401', async () => {
+    vi.spyOn(m1AuthClient, 'validateToken').mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', 'Bearer basura');
+    expect(res.status).toBe(401);
+  });
+
+  it('otro usuario sobre un perfil ajeno → 403 y no consulta el estado', async () => {
+    mockAuthAs(99);
+    const find = vi.spyOn(customerRepository, 'findAccountStatus');
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', TOKEN);
+    expect(res.status).toBe(403);
+    expect(find).not.toHaveBeenCalled();
+  });
+
+  it('X-Secret-Key inválida → 401', async () => {
+    process.env.STATUS_SECRET_KEY = 'secret-status';
+    mockAuthOk();
+    vi.spyOn(m1AuthClient, 'validateToken').mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/status')
+      .set('X-Secret-Key', 'otra-clave');
+    expect(res.status).toBe(401);
+  });
+
   it('con X-Secret-Key válida → 200 (acceso de módulo interno)', async () => {
     process.env.STATUS_SECRET_KEY = 'secret-status';
     vi.spyOn(customerRepository, 'findAccountStatus').mockResolvedValueOnce(savedStatus());
@@ -73,8 +119,7 @@ describe('GET /v1/customers/:id/status (RF-2.5)', () => {
   });
 
   it('cliente inexistente → 404', async () => {
-    vi.spyOn(customerRepository, 'findAccountStatus').mockResolvedValueOnce(null);
-    vi.spyOn(soporteClient, 'getPenalizaciones').mockResolvedValueOnce({ userId: 12, total: 0, penalizaciones: [] });
+    vi.spyOn(customerService, 'getCustomerById').mockResolvedValue(null);
 
     const res = await request(app)
       .get('/v1/customers/cust_inexistente/status')
@@ -155,10 +200,13 @@ describe('GET /v1/customers/:id/status (RF-2.5)', () => {
 });
 
 // ─── PUT /v1/customers/:id/status ─────────────────────────────────────────────
-// PUT /status pasa por requireAuth → hay que mockear m1AuthClient.validateToken.
+// PUT /status pasa por requireAuth y solo lo permite el dueño del perfil.
 
 describe('PUT /v1/customers/:id/status (RF-2.5)', () => {
-  beforeEach(() => mockAuthOk());
+  beforeEach(() => {
+    mockAuthOk();
+    mockOwnedProfile();
+  });
   afterEach(() => vi.restoreAllMocks());
 
   it('sin token → 401', async () => {
@@ -175,6 +223,18 @@ describe('PUT /v1/customers/:id/status (RF-2.5)', () => {
       .send({ status: 'ELIMINADO', reason: 'Borrado' });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('ValidationError');
+  });
+
+  it('otro usuario sobre un perfil ajeno → 403 y no cambia el estado', async () => {
+    mockAuthAs(99);
+    const update = vi.spyOn(customerRepository, 'updateAccountStatus');
+
+    const res = await request(app)
+      .put('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', TOKEN)
+      .send({ status: 'INACTIVO', reason: 'Baja solicitada' });
+    expect(res.status).toBe(403);
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('dar de baja → 200, status INACTIVO, sin blockOrigin', async () => {
@@ -205,7 +265,7 @@ describe('PUT /v1/customers/:id/status (RF-2.5)', () => {
   });
 
   it('cliente inexistente → 404 CustomerNotFound', async () => {
-    vi.spyOn(customerRepository, 'updateAccountStatus').mockResolvedValueOnce(null);
+    vi.spyOn(customerService, 'getCustomerById').mockResolvedValue(null);
 
     const res = await request(app)
       .put('/v1/customers/cust_inexistente/status')
@@ -230,10 +290,13 @@ describe('PUT /v1/customers/:id/status (RF-2.5)', () => {
 });
 
 // ─── GET /v1/customers/:id/trips ──────────────────────────────────────────────
-// GET /trips pasa por requireAuth → hay que mockear m1AuthClient.validateToken.
+// GET /trips pasa por requireAuth y solo lo ve el dueño del perfil.
 
 describe('GET /v1/customers/:id/trips (RF-2.3)', () => {
-  beforeEach(() => mockAuthOk());
+  beforeEach(() => {
+    mockAuthOk();
+    mockOwnedProfile();
+  });
   afterEach(() => vi.restoreAllMocks());
 
   it('sin token → 401', async () => {
@@ -242,7 +305,7 @@ describe('GET /v1/customers/:id/trips (RF-2.3)', () => {
   });
 
   it('cliente inexistente → 404', async () => {
-    vi.spyOn(customerRepository, 'findById').mockResolvedValueOnce(null);
+    vi.spyOn(customerService, 'getCustomerById').mockResolvedValue(null);
 
     const res = await request(app)
       .get('/v1/customers/cust_inexistente/trips')
@@ -251,12 +314,23 @@ describe('GET /v1/customers/:id/trips (RF-2.3)', () => {
     expect(res.body.error).toBe('CustomerNotFound');
   });
 
-  it('M6 disponible → 200 con historial de viajes', async () => {
-    vi.spyOn(customerRepository, 'findById').mockResolvedValueOnce(activeCustomer());
-    vi.spyOn(m6Client, 'getTrips').mockResolvedValueOnce({
+  it('otro usuario sobre un perfil ajeno → 403 y no consulta M6', async () => {
+    mockAuthAs(99);
+    const getTrips = vi.spyOn(m6Client, 'getTrips');
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/trips')
+      .set('Authorization', TOKEN);
+    expect(res.status).toBe(403);
+    expect(getTrips).not.toHaveBeenCalled();
+  });
+
+  it('M6 disponible → 200 y consulta M6 con el userId del perfil', async () => {
+    const getTrips = vi.spyOn(m6Client, 'getTrips').mockResolvedValueOnce({
       customerId: '12',
       tripsCount: 1,
-      trips: [{ tripId: 'trip_1', origin: 'A', destination: 'B', fare: 1500, status: 'COMPLETADO', createdAt: '2026-09-01T00:00:00Z' }]
+      trips: [{ tripId: 'trip_1', origin: 'A', destination: 'B', fare: 1500, status: 'COMPLETADO', createdAt: '2026-09-01T00:00:00Z' }],
+      degraded: false
     });
 
     const res = await request(app)
@@ -265,10 +339,10 @@ describe('GET /v1/customers/:id/trips (RF-2.3)', () => {
     expect(res.status).toBe(200);
     expect(res.body.customerId).toBe('cust_823a7b9c');
     expect(res.body.trips).toHaveLength(1);
+    expect(getTrips).toHaveBeenCalledWith(12, 'tok-test');
   });
 
   it('M6 caído → 200 con lista vacía (respuesta degradada, no 503)', async () => {
-    vi.spyOn(customerRepository, 'findById').mockResolvedValueOnce(activeCustomer());
     vi.spyOn(m6Client, 'getTrips').mockRejectedValueOnce(new ServiceUnavailableError('M6 caído'));
 
     const res = await request(app)
@@ -281,7 +355,7 @@ describe('GET /v1/customers/:id/trips (RF-2.3)', () => {
   });
 
   it('DB caída → 503', async () => {
-    vi.spyOn(customerRepository, 'findById').mockRejectedValueOnce(
+    vi.spyOn(customerService, 'getCustomerById').mockRejectedValue(
       Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
     );
 
