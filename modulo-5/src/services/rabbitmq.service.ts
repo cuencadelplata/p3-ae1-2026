@@ -168,7 +168,7 @@ export class RabbitMqService {
     const driverUserId = this.parseCanonicalUserId(payload.driverId);
 
     const eventEnvelope: StandardEventEnvelope = {
-      messageId: `msg_${randomUUID()}`,
+      messageId: randomUUID(),
       eventType: 'driver.offer.accepted',
       version: 1,
       occurredAt: new Date().toISOString(),
@@ -194,7 +194,7 @@ export class RabbitMqService {
    */
   public async publishRequestCancelled(requestId: string, clientId: string, reason?: string): Promise<boolean> {
     const eventEnvelope: StandardEventEnvelope = {
-      messageId: `msg_${randomUUID()}`,
+      messageId: randomUUID(),
       eventType: 'ride_request.cancelled',
       version: 1,
       occurredAt: new Date().toISOString(),

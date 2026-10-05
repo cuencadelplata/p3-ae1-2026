@@ -27,7 +27,7 @@ Este documento describe formalmente los eventos asíncronos producidos y consumi
 #### Estructura del Mensaje (Envelope Estándar):
 ```json
 {
-  "messageId": "msg_f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "messageId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "eventType": "driver.offer.accepted",
   "version": "1.0",
   "occurredAt": "2026-10-05T10:30:00.000Z",
