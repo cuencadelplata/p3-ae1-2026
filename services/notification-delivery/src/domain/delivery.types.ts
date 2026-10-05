@@ -31,7 +31,7 @@ export interface InboxClaimResult {
 export interface NotificationRequestedData {
   notificationId: string;
   tripId: string;
-  recipientId: string; // Corresponde al userId canónico de M1
+  recipientId: number; // Corresponde al userId canónico numérico de M1 (BIGINT >= 1)
   eventType: DeliveryEventType;
   channel: DeliveryChannel;
   title?: string;
@@ -53,7 +53,7 @@ export interface NotificationRequestedEnvelope {
 
 export interface DeviceTokenRecord {
   tokenId: string;
-  userId: string;
+  userId: number;
   token: string;
   platform: 'ANDROID' | 'IOS' | 'WEB';
   isActive: boolean;
@@ -66,7 +66,7 @@ export interface DeliveryRequest {
   notificationId: string;
   messageId: string;
   tripId: string;
-  userId: string;
+  userId: number;
   eventType: DeliveryEventType;
   channel: DeliveryChannel;
   status: DeliveryStatus;
@@ -96,7 +96,7 @@ export interface DeliveryWithAttempts extends DeliveryRequest {
 export interface PushSendRequest {
   notificationId: string;
   tripId: string;
-  recipientId: string;
+  recipientId: number;
   deviceToken: string;
   title: string;
   body: string;
@@ -114,7 +114,7 @@ export interface PushSendResult {
 }
 
 export interface UserPreferences {
-  userId: string;
+  userId: number;
   notificationsEnabled: boolean;
   pushEnabled: boolean;
 }

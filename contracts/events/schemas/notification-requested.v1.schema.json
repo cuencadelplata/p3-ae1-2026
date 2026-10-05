@@ -70,9 +70,9 @@
           "description": "Identificador del viaje de M6 asociado a la notificación."
         },
         "recipientId": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Identificador del destinatario (cliente o conductor)."
+          "type": "integer",
+          "minimum": 1,
+          "description": "Identificador numérico canónico de M1 del destinatario (cliente o conductor)."
         },
         "eventType": {
           "type": "string",

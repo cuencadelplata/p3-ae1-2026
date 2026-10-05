@@ -1,7 +1,7 @@
 import type { UserPreferences } from '../../domain/delivery.types.js';
 
 export interface M2PreferencesClient {
-  getPreferences(userId: string, correlationId: string): Promise<UserPreferences>;
+  getPreferences(userId: number, correlationId: string): Promise<UserPreferences>;
 }
 
 export class HttpM2PreferencesClient implements M2PreferencesClient {
@@ -10,8 +10,8 @@ export class HttpM2PreferencesClient implements M2PreferencesClient {
     private readonly apiKey: string
   ) {}
 
-  async getPreferences(userId: string, correlationId: string): Promise<UserPreferences> {
-    const url = `${this.baseUrl}/internal/preferences/${encodeURIComponent(userId)}`;
+  async getPreferences(userId: number, correlationId: string): Promise<UserPreferences> {
+    const url = `${this.baseUrl}/internal/preferences/${userId}`;
     try {
       const response = await fetch(url, {
         method: 'GET',
@@ -50,10 +50,10 @@ export class HttpM2PreferencesClient implements M2PreferencesClient {
 }
 
 export class MockM2PreferencesClient implements M2PreferencesClient {
-  private preferences = new Map<string, UserPreferences>();
+  private preferences = new Map<number, UserPreferences>();
   private shouldFail: boolean = false;
 
-  setPreferences(userId: string, preferences: Partial<UserPreferences>): void {
+  setPreferences(userId: number, preferences: Partial<UserPreferences>): void {
     const existing = this.preferences.get(userId) ?? {
       userId,
       notificationsEnabled: true,
@@ -66,7 +66,7 @@ export class MockM2PreferencesClient implements M2PreferencesClient {
     this.shouldFail = shouldFail;
   }
 
-  async getPreferences(userId: string): Promise<UserPreferences> {
+  async getPreferences(userId: number): Promise<UserPreferences> {
     if (this.shouldFail) {
       throw new Error('[M2_CLIENT_ERROR] M2 Service Unavailable (503)');
     }

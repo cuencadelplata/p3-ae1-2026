@@ -44,7 +44,7 @@ Este contrato formaliza la frontera asíncrona entre el procesamiento lógico de
   "data": {
     "notificationId": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
     "tripId": "trip-2026-000123",
-    "recipientId": "usr-0091",
+    "recipientId": 91,
     "eventType": "TRIP_STARTED",
     "channel": "PUSH",
     "title": "Viaje iniciado",
@@ -78,7 +78,7 @@ Este contrato formaliza la frontera asíncrona entre el procesamiento lógico de
 | :--- | :--- | :---: | :--- | :--- |
 | `notificationId` | `string` | **Sí** | UUID v4 | ID unívoco de la notificación lógica persistida en la DB de RF8.1. Permite vincular el registro de delivery al registro lógico. |
 | `tripId` | `string` | **Sí** | No vacío | ID del viaje de M6 asociado a la notificación. |
-| `recipientId` | `string` | **Sí** | No vacío | ID del destinatario (`usr-XXXX` para pasajeros o `drv-XXXX` para conductores). |
+| `recipientId` | `integer`| **Sí** | Entero $\ge 1$ | Identificador numérico canónico de M1 del destinatario (cliente o conductor). |
 | `eventType` | `enum` | **Sí** | Uno de:<br>• `TRIP_REQUESTED`<br>• `DRIVER_ASSIGNED`<br>• `DRIVER_ARRIVED`<br>• `TRIP_STARTED`<br>• `TRIP_CANCELLED`<br>• `TRIP_COMPLETED` | Hecho de viaje que originó la notificación. Sirve a RF8.7 para categorización y fallback de título. |
 | `channel` | `enum` | **Sí** | Literal `"PUSH"` | Canal de entrega solicitado. Para AE2 el canal normativo es exclusivamente `PUSH`. |
 | `title` | `string` | No | Texto descriptivo corto | Título de la notificación PUSH. Si RF8.1 no lo envía, RF8.7 infiere un título adecuado a partir del `eventType`. |

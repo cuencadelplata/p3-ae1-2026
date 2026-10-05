@@ -23,7 +23,7 @@ test('API HTTP de Device Tokens (Protegida con JWT de M1)', async (t) => {
     server.close();
   });
 
-  const validTokenHeader = 'Bearer test-token-usr-0091'; // Token que resuelve userId = usr-0091
+  const validTokenHeader = 'Bearer test-token-91'; // Token que resuelve userId numérico = 91
 
   await t.test('POST /devices/tokens sin JWT debe responder 401 Unauthorized', async () => {
     const res = await fetch(`${baseUrl}/devices/tokens`, {
@@ -48,8 +48,8 @@ test('API HTTP de Device Tokens (Protegida con JWT de M1)', async (t) => {
     });
 
     assert.equal(res.status, 201);
-    const body = (await res.json()) as { data: { userId: string; token: string; platform: string; isActive: boolean } };
-    assert.equal(body.data.userId, 'usr-0091', 'El userId debe derivarse del JWT y no del body');
+    const body = (await res.json()) as { data: { userId: number; token: string; platform: string; isActive: boolean } };
+    assert.equal(body.data.userId, 91, 'El userId debe derivarse del JWT y no del body');
     assert.equal(body.data.token, 'fcm_phone_token_123');
     assert.equal(body.data.platform, 'ANDROID');
     assert.equal(body.data.isActive, true);

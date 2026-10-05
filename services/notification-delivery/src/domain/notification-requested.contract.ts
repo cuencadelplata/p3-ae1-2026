@@ -73,8 +73,14 @@ export function validateNotificationRequestedEnvelope(
     throw new ContractValidationError('data.tripId es obligatorio.');
   }
 
-  if (typeof data.recipientId !== 'string' || data.recipientId.trim() === '') {
-    throw new ContractValidationError('data.recipientId es obligatorio.');
+  if (
+    typeof data.recipientId !== 'number' ||
+    !Number.isInteger(data.recipientId) ||
+    data.recipientId < 1
+  ) {
+    throw new ContractValidationError(
+      'data.recipientId es obligatorio y debe ser un número entero positivo (canónico M1).'
+    );
   }
 
   if (!VALID_EVENT_TYPES.has(data.eventType as DeliveryEventType)) {

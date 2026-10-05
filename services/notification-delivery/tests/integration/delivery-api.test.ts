@@ -16,8 +16,8 @@ test('API HTTP de Entrega de Notificaciones', async (t) => {
   const tokenRepo = new InMemoryDeviceTokenRepository();
   const m2Client = new MockM2PreferencesClient();
 
-  // Asegurar token activo para el usuario de test
-  await tokenRepo.upsertToken('usr-api-1', 'token-fcm-api-1', 'ANDROID');
+  // Asegurar token activo para el usuario de test con ID numérico canónico
+  await tokenRepo.upsertToken(101, 'token-fcm-api-1', 'ANDROID');
 
   const service = new NotificationDeliveryService(
     inbox,
@@ -77,7 +77,7 @@ test('API HTTP de Entrega de Notificaciones', async (t) => {
       data: {
         notificationId: 'notif-api-001',
         tripId: 'trip-api-01',
-        recipientId: 'usr-api-1',
+        recipientId: 101,
         eventType: 'TRIP_STARTED',
         channel: 'PUSH',
         message: 'Tu viaje ha comenzado.',
@@ -107,7 +107,7 @@ test('API HTTP de Entrega de Notificaciones', async (t) => {
       data: {
         notificationId: 'notif-api-001',
         tripId: 'trip-api-01',
-        recipientId: 'usr-api-1',
+        recipientId: 101,
         eventType: 'TRIP_STARTED',
         channel: 'PUSH',
         message: 'Tu viaje ha comenzado.',
