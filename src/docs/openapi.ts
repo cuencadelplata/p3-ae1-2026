@@ -174,7 +174,7 @@ export const openApiSpec = {
       get: {
         summary: 'Consultar estado de cuenta — recalcula con penalizaciones de Soporte (RF-2.5)',
         description:
-          'Acepta JWT de usuario (Authorization: Bearer) o X-Secret-Key para módulos internos. ' +
+          'Acepta JWT de usuario (Authorization: Bearer), que solo permite consultar el estado del propio perfil, o X-Secret-Key para que módulos internos consulten cualquier cliente. ' +
           'Consulta las penalizaciones vigentes de Soporte y recalcula el estado: 2+ penalizaciones → BLOQUEADO_TEMPORAL, 3+ → BLOQUEADO_PERMANENTE (configurable). ' +
           'Si Soporte está caído, devuelve el último estado guardado sin falla.',
         operationId: 'getAccountStatus',
@@ -188,6 +188,7 @@ export const openApiSpec = {
             content: { 'application/json': { schema: { $ref: '#/components/schemas/AccountStatusResponse' } } }
           },
           '401': { $ref: '#/components/responses/Unauthorized' },
+          '403': { $ref: '#/components/responses/Forbidden' },
           '404': { $ref: '#/components/responses/NotFound' },
           '503': { $ref: '#/components/responses/ServiceUnavailable' }
         }
@@ -234,8 +235,8 @@ export const openApiSpec = {
       get: {
         summary: 'Consultar historial de viajes consumiendo síncronamente M6 (RF-2.3)',
         description:
-          'Requiere JWT de usuario. Consulta M6 por userId reenviando el token. ' +
-          'Si M6 está caído devuelve una lista vacía (respuesta degradada, no 503).',
+          'Requiere JWT de usuario y solo lo permite el dueño del perfil. Consulta M6 con el userId del perfil reenviando el token. ' +
+          'Si M6 está caído devuelve una lista vacía con degraded: true (respuesta degradada, no 503).',
         operationId: 'getCustomerTrips',
         security: [{ bearerAuth: [] }],
         parameters: [
@@ -243,10 +244,11 @@ export const openApiSpec = {
         ],
         responses: {
           '200': {
-            description: 'Historial consolidado de viajes del cliente (puede ser lista vacía si M6 está caído)',
+            description: 'Historial consolidado de viajes del cliente. Con degraded: true la lista vacía no significa "sin viajes": M6 no respondió.',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/CustomerTripsResponse' } } }
           },
           '401': { $ref: '#/components/responses/Unauthorized' },
+          '403': { $ref: '#/components/responses/Forbidden' },
           '404': { $ref: '#/components/responses/NotFound' },
           '503': { $ref: '#/components/responses/ServiceUnavailable' }
         }
@@ -385,11 +387,15 @@ export const openApiSpec = {
       },
       CustomerTripsResponse: {
         type: 'object',
-        required: ['customerId', 'tripsCount', 'trips'],
+        required: ['customerId', 'tripsCount', 'trips', 'degraded'],
         properties: {
           customerId: { type: 'string', pattern: '^cust_[A-Za-z0-9]+$', example: 'cust_823a7b9c' },
           tripsCount: { type: 'integer', example: 2 },
-          trips: { type: 'array', items: { $ref: '#/components/schemas/TripSummary' } }
+          trips: { type: 'array', items: { $ref: '#/components/schemas/TripSummary' } },
+          degraded: {
+            type: 'boolean',
+            description: 'true cuando M6 no respondió y la lista vacía es una respuesta degradada; false cuando los datos vienen de M6.'
+          }
         }
       }
     },
