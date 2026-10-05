@@ -49,13 +49,13 @@ npm run build
 ### Paso 3 — Tests E2E (requiere Docker)
 
 ```bash
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
 npx playwright install chromium
 npm run test:e2e
 docker compose down
 ```
 
-La suite unitaria e integración no requiere Docker. Los tests E2E requieren que la API, PostgreSQL, Redis y el cliente estén disponibles. La definición actual de Compose descarga las imágenes publicadas; `npm run build` valida el código local.
+La suite unitaria e integración no requiere Docker. Los tests E2E requieren que la API, PostgreSQL, Redis y el cliente estén disponibles. El override `docker-compose.e2e.yml` construye la API y el cliente con el código local; sin él, Compose descarga las imágenes publicadas en Docker Hub, que pueden estar desactualizadas.
 
 ---
 
