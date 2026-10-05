@@ -13,7 +13,7 @@ COPY services/support/package.json services/support/package.json
 RUN pnpm install --frozen-lockfile
 
 COPY services/support/tsconfig.json services/support/tsconfig.json
-COPY openapi/support.openapi.yaml services/support/openapi.yaml
+COPY openapi/rf85-support.yaml services/support/openapi.yaml
 COPY services/support/src services/support/src
 
 RUN pnpm --filter m8-soporte run build
@@ -31,5 +31,8 @@ ENV NODE_ENV=production \
     PORT=3000
 
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["node", "dist/index.js"]
