@@ -65,15 +65,39 @@ describe('AccountStatusRepository (C6 - circuit breaker de PostgreSQL)', () => {
     expect(client.release).toHaveBeenCalled();
   });
 
-  it('cliente inexistente → null y hace ROLLBACK', async () => {
+  it('cliente inexistente (FK 23503 en el INSERT) → null, hace ROLLBACK y no abre el circuito', async () => {
+    const fkViolation = Object.assign(new Error('violates foreign key constraint'), { code: '23503' });
     const client = {
-      query: vi.fn(async (sql: string) => (sql.startsWith('UPDATE') ? { rowCount: 0, rows: [] } : {})),
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes('INSERT INTO customers.AccountStatus')) throw fkViolation;
+        return {};
+      }),
+      release: vi.fn()
+    };
+    connect.mockResolvedValue(client);
+    const { repository } = await freshRepository();
+    const dto = { status: 'INACTIVO', reason: 'Baja solicitada' } as const;
+
+    for (let i = 0; i < 4; i++) expect(await repository.updateAccountStatus('cust_x', dto)).toBeNull();
+
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+    expect(connect).toHaveBeenCalledTimes(4); // un cliente inexistente no es una falla de la base
+  });
+
+  it('ya no escribe CustomerProfile.status: solo AccountStatus', async () => {
+    const row = { customer_id: 'cust_a', status: 'INACTIVO', reason: 'Baja', block_origin: null, updated_at: '2026-10-05T00:00:00Z' };
+    const client = {
+      query: vi.fn(async (sql: string) => (sql.includes('RETURNING') ? { rows: [row] } : {})),
       release: vi.fn()
     };
     connect.mockResolvedValue(client);
     const { repository } = await freshRepository();
 
-    expect(await repository.updateAccountStatus('cust_x', { status: 'INACTIVO', reason: 'Baja solicitada' })).toBeNull();
-    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+    const result = await repository.updateAccountStatus('cust_a', { status: 'INACTIVO', reason: 'Baja' });
+
+    expect(result?.status).toBe('INACTIVO');
+    const statements = client.query.mock.calls.map(([sql]) => String(sql));
+    expect(statements.some((sql) => sql.includes('UPDATE customers.CustomerProfile'))).toBe(false);
+    expect(statements).toContain('COMMIT');
   });
 });

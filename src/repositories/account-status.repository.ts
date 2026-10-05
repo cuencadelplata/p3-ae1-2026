@@ -14,6 +14,12 @@ type AccountStatusRow = {
   readonly updated_at: string;
 };
 
+const FOREIGN_KEY_VIOLATION = '23503';
+
+function isForeignKeyViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === FOREIGN_KEY_VIOLATION;
+}
+
 function statusFromRow(row: AccountStatusRow): AccountStatusResponse {
   return {
     customerId: row.customer_id,
@@ -47,7 +53,8 @@ export class AccountStatusRepository {
 
   /**
    * Actualiza el estado de cuenta (Soft Delete: la baja es status = INACTIVO).
-   * Mantiene sincronizados CustomerProfile y AccountStatus en una única transacción.
+   * El estado vive solo en AccountStatus (el perfil lo lee con un JOIN). Si el cliente no
+   * existe, la FK a CustomerProfile rechaza el INSERT (23503) y se devuelve null.
    * Acepta blockOrigin para registrar si el bloqueo fue automático o manual.
    * No se reintenta (idempotent: false): una escritura no debe repetirse sola.
    */
@@ -56,17 +63,6 @@ export class AccountStatusRepository {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-
-        const profileResult = await client.query(
-          `UPDATE customers.CustomerProfile
-           SET status = $1, updated_at = CURRENT_TIMESTAMP
-           WHERE customer_id = $2;`,
-          [dto.status, customerId]
-        );
-        if (profileResult.rowCount === 0) {
-          await client.query('ROLLBACK');
-          return null;
-        }
 
         const { rows } = await client.query<AccountStatusRow>(
           `INSERT INTO customers.AccountStatus (customer_id, status, reason, block_origin, updated_at)
@@ -84,6 +80,10 @@ export class AccountStatusRepository {
         const row = rows[0];
         return row === undefined ? null : statusFromRow(row);
       } catch (error) {
+        if (isForeignKeyViolation(error)) {
+          await client.query('ROLLBACK').catch(() => undefined);
+          return null;
+        }
         // Si la conexión se cayó, el ROLLBACK también falla: no debe tapar el error original
         await client.query('ROLLBACK').catch(() => undefined);
         throw error;
