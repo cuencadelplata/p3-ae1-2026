@@ -17,6 +17,31 @@ El requerimiento tiene una parte de cada una.
 
 **Asincrónico: los eventos hacia otros módulos.** M1 publica el evento en RabbitMQ y responde al usuario sin esperar a que alguien lo procese. Cada módulo interesado (por ejemplo M8 Notificaciones, para avisar de un bloqueo por seguridad) lee la cola cuando quiere. Así M1 no depende de que el otro módulo esté funcionando.
 
+## Datos del usuario autenticado: `GET /auth/me`
+
+Otros módulos (por ejemplo M2 Perfiles) necesitan datos de contacto del usuario, como el email o el teléfono. Como esos datos pertenecen a M1, no pueden leerlos de nuestra base: los piden por API.
+
+`GET /auth/me` recibe el token en `Authorization: Bearer <token>` y devuelve los datos del dueño del token:
+
+```json
+{
+  "userId": 12,
+  "nombre": "Franco",
+  "apellido": "Perez",
+  "dni": "12345678",
+  "telefono": "11 1234 5678",
+  "email": "cliente@example.com",
+  "rol": "CLIENTE",
+  "estado": "ACTIVO",
+  "creadoEn": "2026-10-04 20:35:00"
+}
+```
+
+- **Por qué es seguro:** el `userId` sale del token firmado por M1, no de un parámetro que manda el cliente. Así cada usuario solo puede ver sus propios datos.
+- **Nunca devuelve la contraseña** (ni su hash).
+- **401** si no hay token o es inválido, **403** si el usuario fue bloqueado después de iniciar sesión, **404** si el usuario del token ya no existe.
+- **Alternativa descartada:** un endpoint `GET /usuarios/:id` para pedir los datos de cualquier usuario. Necesitaría autenticación entre servicios para que un usuario común no pueda ver el DNI y el teléfono de otros, y eso queda para una próxima iteración.
+
 ## Eventos que publica M1
 
 Exchange: `m1.eventos` (tipo `topic`, durable). Los mensajes son persistentes y en formato JSON.
@@ -74,8 +99,8 @@ Archivos de RF-1.2:
 |---|---|
 | Rutas | `src/routes/auth.routes.ts` |
 | Middleware | `src/middleware/login-rate-limit.middleware.ts` |
-| Controller | `src/controllers/auth.controller.ts` |
-| Servicios | `src/services/auth.service.ts`, `src/services/login-attempts.service.ts` |
+| Controller | `src/controllers/auth.controller.ts`, `src/controllers/me.controller.ts` |
+| Servicios | `src/services/auth.service.ts`, `src/services/login-attempts.service.ts`, `src/services/user-profile.service.ts` |
 | Repositorio | `src/repositories/user.repository.ts` |
 | Mensajería | `src/messaging/auth.publisher.ts` |
 | Configuración | `src/config/redis.ts`, `src/config/rabbitmq.ts` |
@@ -123,3 +148,4 @@ npm test
 
 - `tests/integration/login-rate-limit.integration.test.ts`: límite de intentos y respuesta 429.
 - `tests/integration/auth-events.integration.test.ts`: publicación de eventos en RabbitMQ.
+- `tests/integration/auth-me.integration.test.ts`: datos del usuario autenticado con `GET /auth/me`.

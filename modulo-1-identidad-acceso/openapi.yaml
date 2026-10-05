@@ -117,6 +117,45 @@ paths:
                   role: { $ref: '#/components/schemas/UserRole' }
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /auth/me:
+    get:
+      tags: [Identidad y acceso]
+      summary: Obtener los datos del usuario autenticado
+      description: >-
+        Devuelve los datos del usuario dueño del token. El userId se toma del token,
+        por lo que cada usuario solo puede consultar sus propios datos. Nunca se devuelve la contraseña.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Datos del usuario
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  userId: { type: integer, example: 12 }
+                  nombre: { type: string, example: Franco }
+                  apellido: { type: string, example: Perez }
+                  dni: { type: string, example: '12345678' }
+                  telefono: { type: string, example: 11 1234 5678 }
+                  email: { type: string, format: email, example: cliente@example.com }
+                  rol: { $ref: '#/components/schemas/UserRole' }
+                  estado: { type: string, example: ACTIVO }
+                  creadoEn: { type: string, example: '2026-10-04 20:35:00' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Usuario bloqueado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El usuario del token ya no existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /auth/solicitar-recuperacion:
     post:
       tags: [Recuperacion]
