@@ -74,7 +74,7 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
     vi.unstubAllGlobals();
   });
 
-  it("autoriza un pago pendiente y devuelve 200 con el paymentId de Mercado Pago", async () => {
+    it("autoriza un pago pendiente y devuelve 200 con el paymentId, total y moneda", async () => {
     await request(app)
       .post("/metodo-pago")
       .send({ clienteId: "cliente1", viajeId: "viaje-http-3", tipo: "efectivo" });
@@ -86,11 +86,31 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
 
     const respuesta = await request(app)
       .post("/metodo-pago/viaje-http-3/autorizar")
-      .send({ idOrden: "orden-http-3", total: 1500 });
+      .send({ idOrden: "orden-http-3", total: 1500, moneda: "USD" });
 
     expect(respuesta.status).toBe(200);
     expect(respuesta.body.estado).toBe("autorizado");
     expect(respuesta.body.paymentId).toBe("mp-mock-123");
+    expect(respuesta.body.total).toBe(1500);
+    expect(respuesta.body.moneda).toBe("USD");
+  });
+
+  it("si no mandan moneda, usa 'ARS' por defecto", async () => {
+    await request(app)
+      .post("/metodo-pago")
+      .send({ clienteId: "cliente1", viajeId: "viaje-sin-moneda", tipo: "efectivo" });
+
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: "mp-mock-456", status: "approved", transaction_amount: 800 }),
+    });
+
+    const respuesta = await request(app)
+      .post("/metodo-pago/viaje-sin-moneda/autorizar")
+      .send({ idOrden: "orden-sin-moneda", total: 800 });
+
+    expect(respuesta.status).toBe(200);
+    expect(respuesta.body.moneda).toBe("ARS");
   });
 
   it("devuelve 400 si falta el total", async () => {
