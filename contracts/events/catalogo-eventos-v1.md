@@ -19,6 +19,8 @@ evidencia del estado heredado de AE1.
 | 2026-09-29 | Referencia de descarga temporal para reenvíos | Lucas Cremaschi (RF-8.4) | Acordado |
 | 2026-09-30 | Contenido de `payment.confirmed` | Grupo M7 | Respondido sin cubrir los datos del comprobante; se mantiene la alternativa 1 de forma provisoria (ver 5.1) |
 | 2026-10-04 | Congelar contrato de entrada RF8.6 → RF8.1 (6 eventos de viaje, sobre, deduplicación, queue/bindings) y Outbox RF8.1 → RF8.7 | Damián Caminos (RF-8.6) / Invaldi (M8) | **CONGELADO Y CONFIRMADO** |
+| 2026-10-04 | Forma de integración de M7 con Comprobantes | M7 (RF-7.3) | M7 se integra solo por API y no publicará `payment.confirmed`; su pedido incluirá medio de pago y tarifa (ver 5.1) |
+| 2026-10-04 | El reenvío devuelve el enlace temporal de la sección 6 | Lucas Cremaschi (RF-8.4) | Acordado sin cambios en el contrato |
 
 
 ## 2. Topología
@@ -133,7 +135,7 @@ como estado heredado que se integrará sin degradar sus decisiones funcionales.
 | Versión | 1 |
 | Productor | M7 — Tarifas, Pagos y Liquidaciones |
 | Consumidores | M8 — Comprobantes (`m8.receipts.payment-confirmed`) |
-| Estado | **Provisorio**: M7 respondió el 2026-09-30 sin cubrir estos datos (ver "Respuesta de M7") |
+| Estado | **Provisorio, sin productor real**: M7 informó el 2026-10-04 que se integra por API (ver "Actualización de M7") |
 
 Efecto en M8: emite el comprobante del viaje y genera su PDF (RF-8.3).
 
@@ -223,6 +225,20 @@ queda para la integración de AE4, por alguno de estos caminos: que M7 agregue
 importes y sobre al evento, o la alternativa 2 (consumir además `trip.completed`
 de M6). En ambos casos solo cambia la traducción del evento
 (`src/messaging/payment-confirmed.ts`), no la emisión.
+
+**Actualización de M7 (2026-10-04).** M7 (RF-7.3) informó que no publicará este
+evento: se integra solo por API, porque en AE4 debe usar la API de Mercado Pago (en
+AE2 la simula) y no quiere cambiar la forma de integración dos veces. Su pedido
+incluirá el medio de pago y la tarifa (total, moneda y detalle), que le provee
+RF-7.1. En consecuencia:
+
+- M7 emite el comprobante con `POST /api/v1/receipts`, que ya existe y comparte la
+  lógica de emisión con este evento. Es idempotente por `tripId`: un reintento
+  responde `200` con el comprobante ya emitido, en lugar de `201`.
+- Este evento se conserva como entrada asíncrona, con productor simulado en AE2
+  (`scripts/publicar-pago-confirmado.mjs`).
+- Siguen pendientes para AE4 la representación del importe y los datos del cliente,
+  el conductor y el recorrido, que no son propiedad de M7.
 
 ### 5.2 `receipt.issued`
 
@@ -427,6 +443,10 @@ El enlace usa un token opaco (32 bytes aleatorios en base64url) que no
 contiene ni deriva del `tripId`. Vence según `RECEIPT_LINK_TTL_SECONDS` (por
 defecto 900 s). Cada llamada genera un enlace nuevo; los anteriores siguen
 vigentes hasta su vencimiento.
+
+Receipts Delivery devuelve `url` y `expiresAt` sin modificarlos en la respuesta
+del reenvío (acordado el 2026-10-04). No arma la URL por su cuenta: su base sale
+de `PUBLIC_BASE_URL` y cambia según el despliegue.
 
 Al descargar, `GET /api/v1/receipts/downloads/{token}` responde el PDF o
 `410 DOWNLOAD_LINK_EXPIRED` si el enlace no existe o ya venció. Redis no
