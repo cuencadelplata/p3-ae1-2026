@@ -8,7 +8,10 @@ import {
 } from '../../domain/notification-requested.contract.js';
 
 export class DeliveryController {
-  constructor(private readonly deliveryService: NotificationDeliveryService) {}
+  constructor(
+    private readonly deliveryService: NotificationDeliveryService,
+    private readonly readinessCheck?: () => Promise<{ ok: boolean; checks: Record<string, string> }>
+  ) {}
 
   getDeliveryByNotificationId = async (req: Request, res: Response): Promise<void> => {
     const { notificationId } = req.params;
@@ -45,7 +48,7 @@ export class DeliveryController {
       const validatedEnvelope = validateNotificationRequestedEnvelope(req.body);
       const result = await this.deliveryService.processNotificationRequest(validatedEnvelope);
 
-      if (result.duplicate) {
+      if (result.actionTaken === 'ACK_DUPLICATE') {
         res.status(200).json({
           message: 'Evento duplicado ignorado de forma idempotente.',
           data: result,
@@ -93,7 +96,19 @@ export class DeliveryController {
     res.status(200).json({ status: 'ok', service: 'notification-delivery' });
   };
 
-  healthReady = (_req: Request, res: Response): void => {
+  healthReady = async (_req: Request, res: Response): Promise<void> => {
+    if (this.readinessCheck) {
+      const result = await this.readinessCheck();
+      const status = result.ok ? 'ok' : 'unavailable';
+      const statusCode = result.ok ? 200 : 503;
+      res.status(statusCode).json({
+        status,
+        service: 'notification-delivery',
+        checks: result.checks,
+      });
+      return;
+    }
+
     res.status(200).json({
       status: 'ok',
       service: 'notification-delivery',

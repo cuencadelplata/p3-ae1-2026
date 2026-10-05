@@ -46,57 +46,60 @@ export class NotificationDeliveryService {
   }
 
   async processNotificationRequest(
-    envelope: NotificationRequestedEnvelope
+    envelope: NotificationRequestedEnvelope,
+    options: { skipInboxClaim?: boolean } = {}
   ): Promise<DeliveryProcessingResult> {
     const { messageId, correlationId, data } = envelope;
     const userId = data.recipientId;
 
-    // 1. Reclamo en messaging.inbox_events de RF8.6 (Lease / Idempotencia)
-    const claim = await this.inboxRepo.claimMessage(
-      CONSUMER_ID,
-      messageId,
-      envelope.eventType,
-      this.leaseSeconds
-    );
-
-    if (claim.action === 'ALREADY_PROCESSED') {
-      StructuredLogger.info({
-        event: 'MESSAGE_ALREADY_PROCESSED_IDEMPOTENT',
+    if (!options.skipInboxClaim) {
+      // 1. Reclamo en messaging.inbox_events de RF8.6 (Lease / Idempotencia)
+      const claim = await this.inboxRepo.claimMessage(
+        CONSUMER_ID,
         messageId,
-        notificationId: data.notificationId,
-        userId,
-        correlationId,
-        tripId: data.tripId,
-        result: 'ACK_DUPLICATE_NO_PUSH',
-      });
+        envelope.eventType,
+        this.leaseSeconds
+      );
 
-      return {
-        messageId,
-        notificationId: data.notificationId,
-        actionTaken: 'ACK_DUPLICATE',
-        status: 'ALREADY_PROCESSED',
-        attemptsCount: 0,
-      };
-    }
+      if (claim.action === 'ALREADY_PROCESSED') {
+        StructuredLogger.info({
+          event: 'MESSAGE_ALREADY_PROCESSED_IDEMPOTENT',
+          messageId,
+          notificationId: data.notificationId,
+          userId: String(userId),
+          correlationId,
+          tripId: data.tripId,
+          result: 'ACK_DUPLICATE_NO_PUSH',
+        });
 
-    if (claim.action === 'LEASE_ACTIVE') {
-      StructuredLogger.warn({
-        event: 'LEASE_ACTIVE_ANOTHER_CONSUMER',
-        messageId,
-        notificationId: data.notificationId,
-        userId,
-        correlationId,
-        tripId: data.tripId,
-        result: 'SKIPPED_IN_FLIGHT',
-      });
+        return {
+          messageId,
+          notificationId: data.notificationId,
+          actionTaken: 'ACK_DUPLICATE',
+          status: 'ALREADY_PROCESSED',
+          attemptsCount: 0,
+        };
+      }
 
-      return {
-        messageId,
-        notificationId: data.notificationId,
-        actionTaken: 'IGNORED_LEASE_ACTIVE',
-        status: 'PENDING',
-        attemptsCount: 0,
-      };
+      if (claim.action === 'LEASE_ACTIVE') {
+        StructuredLogger.warn({
+          event: 'LEASE_ACTIVE_ANOTHER_CONSUMER',
+          messageId,
+          notificationId: data.notificationId,
+          userId: String(userId),
+          correlationId,
+          tripId: data.tripId,
+          result: 'SKIPPED_IN_FLIGHT',
+        });
+
+        return {
+          messageId,
+          notificationId: data.notificationId,
+          actionTaken: 'IGNORED_LEASE_ACTIVE',
+          status: 'PENDING',
+          attemptsCount: 0,
+        };
+      }
     }
 
     // 2. Consulta de preferencias en M2
@@ -128,7 +131,9 @@ export class NotificationDeliveryService {
           'SKIPPED_PREFERENCE_OFF',
           'M2_PREFERENCE_DISABLED'
         );
-        await this.inboxRepo.markProcessed(CONSUMER_ID, messageId);
+        if (!options.skipInboxClaim) {
+          await this.inboxRepo.markProcessed(CONSUMER_ID, messageId);
+        }
 
         return {
           messageId,
@@ -184,7 +189,9 @@ export class NotificationDeliveryService {
         'FAILED_NO_DEVICE_TOKEN',
         'NO_ACTIVE_DEVICE_TOKEN'
       );
-      await this.inboxRepo.markProcessed(CONSUMER_ID, messageId);
+      if (!options.skipInboxClaim) {
+        await this.inboxRepo.markProcessed(CONSUMER_ID, messageId);
+      }
 
       return {
         messageId,
@@ -240,13 +247,15 @@ export class NotificationDeliveryService {
         });
 
         await this.deliveryRepo.updateStatus(deliveryRecord.deliveryId, 'DELIVERED');
-        await this.inboxRepo.markProcessed(CONSUMER_ID, messageId);
+        if (!options.skipInboxClaim) {
+          await this.inboxRepo.markProcessed(CONSUMER_ID, messageId);
+        }
 
         StructuredLogger.info({
           event: 'PUSH_DELIVERY_SUCCESS',
           messageId,
           notificationId: data.notificationId,
-          userId,
+          userId: String(userId),
           correlationId,
           tripId: data.tripId,
           attempt: currentAttempt,
@@ -278,7 +287,7 @@ export class NotificationDeliveryService {
         event: 'PUSH_ATTEMPT_FAILED',
         messageId,
         notificationId: data.notificationId,
-        userId,
+        userId: String(userId),
         correlationId,
         tripId: data.tripId,
         attempt: currentAttempt,
@@ -294,13 +303,15 @@ export class NotificationDeliveryService {
 
     // 6. Si se agotaron los 3 reintentos del proveedor, marcar FAILED para desvío a DLQ
     await this.deliveryRepo.updateStatus(deliveryRecord.deliveryId, 'FAILED');
-    await this.inboxRepo.markFailed(CONSUMER_ID, messageId);
+    if (!options.skipInboxClaim) {
+      await this.inboxRepo.markFailed(CONSUMER_ID, messageId);
+    }
 
     StructuredLogger.error({
       event: 'PUSH_DELIVERY_PERMANENT_FAILURE_DLQ',
       messageId,
       notificationId: data.notificationId,
-      userId,
+      userId: String(userId),
       correlationId,
       tripId: data.tripId,
       attempt: currentAttempt,

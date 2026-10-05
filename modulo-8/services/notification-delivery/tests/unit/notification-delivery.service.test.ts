@@ -11,7 +11,7 @@ import type { NotificationRequestedEnvelope } from '../../src/domain/delivery.ty
 function createMockEnvelope(
   messageId: string = 'msg-001',
   notificationId: string = 'notif-001',
-  recipientId: string = 'usr-0091'
+  recipientId: number = 91
 ): NotificationRequestedEnvelope {
   return {
     messageId,
@@ -42,11 +42,11 @@ test('NotificationDeliveryService - Suite de Casos Obligatorios RF8.7', async (t
     const provider = new SandboxPushProvider({ mode: 'NORMAL', simulatedDelayMs: 0 });
 
     // Preconfigurar preferencia ON y token registrado
-    m2Client.setPreferences('usr-0091', { notificationsEnabled: true, pushEnabled: true });
-    await tokenRepo.upsertToken('usr-0091', 'fcm_token_valid_123', 'ANDROID');
+    m2Client.setPreferences(91, { notificationsEnabled: true, pushEnabled: true });
+    await tokenRepo.upsertToken(91, 'fcm_token_valid_123', 'ANDROID');
 
     const service = new NotificationDeliveryService(inbox, deliveryRepo, tokenRepo, m2Client, provider);
-    const envelope = createMockEnvelope('msg-on-1', 'notif-on-1', 'usr-0091');
+    const envelope = createMockEnvelope('msg-on-1', 'notif-on-1', 91);
 
     const result = await service.processNotificationRequest(envelope);
 
@@ -66,11 +66,11 @@ test('NotificationDeliveryService - Suite de Casos Obligatorios RF8.7', async (t
     const provider = new SandboxPushProvider({ mode: 'NORMAL', simulatedDelayMs: 0 });
 
     // Usuario desactivo notificaciones en M2
-    m2Client.setPreferences('usr-silent', { notificationsEnabled: false, pushEnabled: false });
-    await tokenRepo.upsertToken('usr-silent', 'token-silent', 'IOS');
+    m2Client.setPreferences(92, { notificationsEnabled: false, pushEnabled: false });
+    await tokenRepo.upsertToken(92, 'token-silent', 'IOS');
 
     const service = new NotificationDeliveryService(inbox, deliveryRepo, tokenRepo, m2Client, provider);
-    const envelope = createMockEnvelope('msg-off-1', 'notif-off-1', 'usr-silent');
+    const envelope = createMockEnvelope('msg-off-1', 'notif-off-1', 92);
 
     const result = await service.processNotificationRequest(envelope);
 
@@ -92,11 +92,11 @@ test('NotificationDeliveryService - Suite de Casos Obligatorios RF8.7', async (t
     const m2Client = new MockM2PreferencesClient();
     const provider = new SandboxPushProvider({ mode: 'NORMAL', simulatedDelayMs: 0 });
 
-    m2Client.setPreferences('usr-no-token', { notificationsEnabled: true, pushEnabled: true });
-    // No registramos token para usr-no-token
+    m2Client.setPreferences(93, { notificationsEnabled: true, pushEnabled: true });
+    // No registramos token para 93
 
     const service = new NotificationDeliveryService(inbox, deliveryRepo, tokenRepo, m2Client, provider);
-    const envelope = createMockEnvelope('msg-notoken-1', 'notif-notoken-1', 'usr-no-token');
+    const envelope = createMockEnvelope('msg-notoken-1', 'notif-notoken-1', 93);
 
     const result = await service.processNotificationRequest(envelope);
 
@@ -117,13 +117,13 @@ test('NotificationDeliveryService - Suite de Casos Obligatorios RF8.7', async (t
     const m2Client = new MockM2PreferencesClient();
     const provider = new SandboxPushProvider({ mode: 'NORMAL', simulatedDelayMs: 0 });
 
-    m2Client.setPreferences('usr-update', { notificationsEnabled: true, pushEnabled: true });
-    await tokenRepo.upsertToken('usr-update', 'token-antiguo', 'ANDROID');
+    m2Client.setPreferences(94, { notificationsEnabled: true, pushEnabled: true });
+    await tokenRepo.upsertToken(94, 'token-antiguo', 'ANDROID');
     // Usuario actualiza token (ej. reinstalo la app)
-    await tokenRepo.upsertToken('usr-update', 'token-nuevo-actualizado', 'ANDROID');
+    await tokenRepo.upsertToken(94, 'token-nuevo-actualizado', 'ANDROID');
 
     const service = new NotificationDeliveryService(inbox, deliveryRepo, tokenRepo, m2Client, provider);
-    const envelope = createMockEnvelope('msg-upd-1', 'notif-upd-1', 'usr-update');
+    const envelope = createMockEnvelope('msg-upd-1', 'notif-upd-1', 94);
 
     await service.processNotificationRequest(envelope);
 
@@ -139,13 +139,13 @@ test('NotificationDeliveryService - Suite de Casos Obligatorios RF8.7', async (t
     const m2Client = new MockM2PreferencesClient();
     const provider = new SandboxPushProvider({ mode: 'FAIL_ALWAYS', simulatedDelayMs: 0 });
 
-    await tokenRepo.upsertToken('usr-provider-fail', 'token-pf', 'ANDROID');
+    await tokenRepo.upsertToken(95, 'token-pf', 'ANDROID');
 
     const service = new NotificationDeliveryService(inbox, deliveryRepo, tokenRepo, m2Client, provider, {
       maxAttempts: 3,
       initialBackoffMs: 1,
     });
-    const envelope = createMockEnvelope('msg-pf-1', 'notif-pf-1', 'usr-provider-fail');
+    const envelope = createMockEnvelope('msg-pf-1', 'notif-pf-1', 95);
 
     const result = await service.processNotificationRequest(envelope);
 
@@ -169,7 +169,7 @@ test('NotificationDeliveryService - Suite de Casos Obligatorios RF8.7', async (t
     m2Client.setShouldFail(true); // Simular M2 caido
 
     const service = new NotificationDeliveryService(inbox, deliveryRepo, tokenRepo, m2Client, provider);
-    const envelope = createMockEnvelope('msg-m2-fail', 'notif-m2-fail', 'usr-m2');
+    const envelope = createMockEnvelope('msg-m2-fail', 'notif-m2-fail', 96);
 
     await assert.rejects(async () => {
       await service.processNotificationRequest(envelope);
@@ -190,13 +190,13 @@ test('NotificationDeliveryService - Suite de Casos Obligatorios RF8.7', async (t
       simulatedDelayMs: 0,
     });
 
-    await tokenRepo.upsertToken('usr-recover', 'token-rec', 'ANDROID');
+    await tokenRepo.upsertToken(97, 'token-rec', 'ANDROID');
 
     const service = new NotificationDeliveryService(inbox, deliveryRepo, tokenRepo, m2Client, provider, {
       maxAttempts: 3,
       initialBackoffMs: 1,
     });
-    const envelope = createMockEnvelope('msg-rec-1', 'notif-rec-1', 'usr-recover');
+    const envelope = createMockEnvelope('msg-rec-1', 'notif-rec-1', 97);
 
     const result = await service.processNotificationRequest(envelope);
 
@@ -219,10 +219,10 @@ test('NotificationDeliveryService - Suite de Casos Obligatorios RF8.7', async (t
     const m2Client = new MockM2PreferencesClient();
     const provider = new SandboxPushProvider({ mode: 'NORMAL', simulatedDelayMs: 0 });
 
-    await tokenRepo.upsertToken('usr-dup', 'token-dup', 'ANDROID');
+    await tokenRepo.upsertToken(98, 'token-dup', 'ANDROID');
 
     const service = new NotificationDeliveryService(inbox, deliveryRepo, tokenRepo, m2Client, provider);
-    const envelope = createMockEnvelope('msg-dup-1', 'notif-dup-1', 'usr-dup');
+    const envelope = createMockEnvelope('msg-dup-1', 'notif-dup-1', 98);
 
     // Primer procesamiento exitoso
     const res1 = await service.processNotificationRequest(envelope);
@@ -244,10 +244,10 @@ test('NotificationDeliveryService - Suite de Casos Obligatorios RF8.7', async (t
     const m2Client = new MockM2PreferencesClient();
     const provider = new SandboxPushProvider({ mode: 'NORMAL', simulatedDelayMs: 15 });
 
-    await tokenRepo.upsertToken('usr-race', 'token-race', 'ANDROID');
+    await tokenRepo.upsertToken(99, 'token-race', 'ANDROID');
 
     const service = new NotificationDeliveryService(inbox, deliveryRepo, tokenRepo, m2Client, provider);
-    const envelope = createMockEnvelope('msg-race-1', 'notif-race-1', 'usr-race');
+    const envelope = createMockEnvelope('msg-race-1', 'notif-race-1', 99);
 
     // Disparar dos consumidores concurrentemente en paralelo
     const [c1, c2] = await Promise.all([
@@ -275,13 +275,13 @@ test('NotificationDeliveryService - Suite de Casos Obligatorios RF8.7', async (t
     const m2Client = new MockM2PreferencesClient();
     const provider = new SandboxPushProvider({ mode: 'NORMAL', simulatedDelayMs: 0 });
 
-    await tokenRepo.upsertToken('usr-orphan', 'token-orph', 'ANDROID');
+    await tokenRepo.upsertToken(100, 'token-orph', 'ANDROID');
 
     // Simular que un consumidor tomo el mensaje pero expiro su lease (leaseSeconds = -1)
     await inbox.claimMessage('m8.delivery.notification-requested', 'msg-orph-1', 'NotificationRequested', -1);
 
     const service = new NotificationDeliveryService(inbox, deliveryRepo, tokenRepo, m2Client, provider);
-    const envelope = createMockEnvelope('msg-orph-1', 'notif-orph-1', 'usr-orphan');
+    const envelope = createMockEnvelope('msg-orph-1', 'notif-orph-1', 100);
 
     const result = await service.processNotificationRequest(envelope);
 

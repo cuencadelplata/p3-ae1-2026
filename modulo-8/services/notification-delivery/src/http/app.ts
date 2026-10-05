@@ -1,9 +1,24 @@
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { NotificationDeliveryService } from '../services/notification-delivery.service.js';
-import { InMemoryMessagingInboxRepository } from '../infrastructure/database/inbox.repository.js';
-import { InMemoryDeliveryRepository } from '../infrastructure/database/delivery.repository.js';
-import { InMemoryDeviceTokenRepository } from '../infrastructure/database/device-token.repository.js';
-import { MockM2PreferencesClient } from '../infrastructure/clients/m2-preferences.client.js';
+import {
+  type MessagingInboxRepository,
+  InMemoryMessagingInboxRepository,
+} from '../infrastructure/database/inbox.repository.js';
+import {
+  type DeliveryRepository,
+  InMemoryDeliveryRepository,
+} from '../infrastructure/database/delivery.repository.js';
+import {
+  type DeviceTokenRepository,
+  InMemoryDeviceTokenRepository,
+} from '../infrastructure/database/device-token.repository.js';
+import {
+  type M2PreferencesClient,
+  MockM2PreferencesClient,
+} from '../infrastructure/clients/m2-preferences.client.js';
+import {
+  type PushDeliveryProvider,
+} from '../infrastructure/provider/push-delivery-provider.js';
 import { SandboxPushProvider } from '../infrastructure/provider/sandbox-push-provider.js';
 import { extractAuthenticatedUser } from './auth/m1-auth.middleware.js';
 import {
@@ -13,11 +28,12 @@ import {
 
 export interface AppDependencies {
   deliveryService?: NotificationDeliveryService;
-  tokenRepo?: InMemoryDeviceTokenRepository;
-  m2Client?: MockM2PreferencesClient;
-  sandboxProvider?: SandboxPushProvider;
-  inboxRepo?: InMemoryMessagingInboxRepository;
-  deliveryRepo?: InMemoryDeliveryRepository;
+  tokenRepo?: DeviceTokenRepository;
+  m2Client?: M2PreferencesClient;
+  sandboxProvider?: PushDeliveryProvider;
+  inboxRepo?: MessagingInboxRepository;
+  deliveryRepo?: DeliveryRepository;
+  isReady?: () => Promise<{ ok: boolean; checks: Record<string, string> }>;
 }
 
 export function createApp(deps: AppDependencies = {}): http.RequestListener {
@@ -54,6 +70,17 @@ export function createApp(deps: AppDependencies = {}): http.RequestListener {
     }
 
     if (method === 'GET' && (pathname === '/health/ready' || pathname === '/health')) {
+      if (deps.isReady) {
+        const result = await deps.isReady();
+        const statusCode = result.ok ? 200 : 503;
+        sendJson(statusCode, {
+          status: result.ok ? 'ok' : 'unavailable',
+          service: 'notification-delivery',
+          checks: result.checks,
+        });
+        return;
+      }
+
       sendJson(200, {
         status: 'ok',
         service: 'notification-delivery',
@@ -105,7 +132,7 @@ export function createApp(deps: AppDependencies = {}): http.RequestListener {
               ? platform
               : 'ANDROID';
 
-            // El userId se deriva SIEMPRE del JWT autenticado
+            // El userId se deriva SIEMPRE del JWT autenticado (numérico canónico)
             const record = await tokenRepo.upsertToken(user.userId, token.trim(), validPlatform);
 
             sendJson(201, {

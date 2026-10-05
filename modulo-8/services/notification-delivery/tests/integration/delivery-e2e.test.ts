@@ -53,7 +53,7 @@ test('Prueba E2E: Flujo completo NotificationRequested -> M2 -> Device Token -> 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer test-token-usr-e2e-1',
+        'Authorization': 'Bearer test-token-1001',
       },
       body: JSON.stringify({
         token: 'fcm_phone_token_e2e_999',
@@ -65,7 +65,7 @@ test('Prueba E2E: Flujo completo NotificationRequested -> M2 -> Device Token -> 
   });
 
   await t.test('Paso 2: Se configura preferencia activa en M2', async () => {
-    m2Client.setPreferences('usr-e2e-1', { notificationsEnabled: true, pushEnabled: true });
+    m2Client.setPreferences(1001, { notificationsEnabled: true, pushEnabled: true });
   });
 
   await t.test('Paso 3: Llega evento NotificationRequested desde RabbitMQ (simulado) y se entrega con éxito', async () => {
@@ -79,7 +79,7 @@ test('Prueba E2E: Flujo completo NotificationRequested -> M2 -> Device Token -> 
       data: {
         notificationId: 'notif-e2e-001',
         tripId: 'trip-e2e-100',
-        recipientId: 'usr-e2e-1',
+        recipientId: 1001,
         eventType: 'DRIVER_ARRIVED',
         channel: 'PUSH',
         message: 'Tu conductor ha llegado al punto de encuentro.',
@@ -134,7 +134,7 @@ test('Prueba E2E: Flujo completo NotificationRequested -> M2 -> Device Token -> 
       data: {
         notificationId: 'notif-e2e-001',
         tripId: 'trip-e2e-100',
-        recipientId: 'usr-e2e-1',
+        recipientId: 1001,
         eventType: 'DRIVER_ARRIVED',
         channel: 'PUSH',
         message: 'Tu conductor ha llegado al punto de encuentro.',

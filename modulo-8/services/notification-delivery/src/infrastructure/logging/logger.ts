@@ -3,7 +3,7 @@ export interface DeliveryLogPayload {
   event: string;
   messageId: string;
   notificationId?: string;
-  userId?: string;
+  userId?: string | number;
   correlationId?: string;
   tripId?: string;
   attempt?: number;
