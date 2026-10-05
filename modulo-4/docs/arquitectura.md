@@ -4,6 +4,7 @@
 
 ```mermaid
 flowchart LR
+  M1[M1 Identidad y Acceso] -->|validar Bearer / userId| API[M4 API REST]
   M3[M3 Conductores] -. contrato / driverId .-> API
   M5[M5 Solicitud y Despacho] -->|buscar candidatos y cambiar disponibilidad| API[M4 API REST]
   M6[M6 Ciclo del viaje] -. inicio y fin del viaje .-> API
@@ -42,3 +43,7 @@ Dos actualizaciones del mismo conductor pueden llegar fuera de orden por latenci
 ## Persistencia
 
 Redis mantiene solamente el estado operativo vigente y elimina las ubicaciones al vencer el TTL. PostgreSQL guarda una fila por actualizacion aceptada en `driver_location_history`. La combinacion `driver_id` y `recorded_at` es unica para que repetir el mismo mensaje no duplique el historial.
+
+## Identidad
+
+`driverId` es el mismo `userId` entero de M1. En las operaciones propias del conductor, M4 reenvia el token Bearer a `GET /auth/validar-identidad-y-rol` de M1. Solo continua si la identidad es valida, el rol es `CONDUCTOR` y el identificador coincide con la URL.

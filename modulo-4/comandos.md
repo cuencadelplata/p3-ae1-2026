@@ -25,8 +25,8 @@ La opcion `--no-cache` obliga a Docker a ejecutar nuevamente todos los pasos, au
 Antes de continuar, comprobar que aparezca un resultado similar a este:
 
 ```text
-Test Files  2 passed (2)
-Tests       23 passed (23)
+Test Files  4 passed (4)
+Tests       31 passed (31)
 ```
 
 Este es el mejor momento para sacar la captura de los tests aprobados.
@@ -94,15 +94,15 @@ Abrir en el navegador:
 http://localhost:8084
 ```
 
-La interfaz se ejecuta en un contenedor independiente y consume los endpoints reales de la API por HTTP. Para hacer una demostracion rapida:
+La interfaz se ejecuta en un contenedor independiente y consume los endpoints reales de la API por HTTP. Primero se debe iniciar sesion en M1 y copiar el token de un usuario `CONDUCTOR`. Para hacer una demostracion rapida:
 
-1. Presionar **Cargar 2 demos** para registrar un auto y una moto.
-2. Presionar **Buscar candidatos** para buscar autos cercanos.
-3. Mostrar que aparece `driver-auto`, junto con su distancia y ETA.
-4. Presionar **Marcar no disponible**.
-5. Buscar nuevamente y mostrar que el conductor deja de ser candidato.
+1. Pegar el JWT de M1 y escribir su `userId` numerico.
+2. Presionar **Publicar ubicacion autenticada**.
+3. Presionar **Buscar candidatos**.
+4. Mostrar que aparece el `userId`, junto con su distancia y ETA.
+5. Presionar **Marcar no disponible** y repetir la busqueda.
 
-Las ubicaciones son temporales y vencen despues de 60 segundos. Si vencen durante la demostracion, volver a presionar **Cargar 2 demos**.
+Las ubicaciones son temporales y vencen despues de 60 segundos. Si vencen durante la demostracion, volver a publicar la ubicacion.
 
 ## 6. Mostrar Scalar y el contrato OpenAPI
 
@@ -122,21 +122,29 @@ http://localhost:3004/openapi/openapi-m4.yaml
 
 ## 7. Probar los endpoints desde PowerShell
 
+Primero pegar el token y el `userId` obtenidos al iniciar sesion en M1:
+
+```powershell
+$token = Read-Host "Token JWT de M1"
+$userId = 13
+$headers = @{ Authorization = "Bearer $token" }
+```
+
 ### Publicar la ubicacion de un conductor
 
 ```powershell
-Invoke-RestMethod -Method Put -Uri "http://localhost:3004/api/v1/drivers/profe-demo/location" -ContentType "application/json" -Body '{"latitude":-27.4692,"longitude":-58.8306,"vehicleType":"AUTO"}'
+Invoke-RestMethod -Method Put -Uri "http://localhost:3004/api/v1/drivers/$userId/location" -Headers $headers -ContentType "application/json" -Body '{"latitude":-27.4692,"longitude":-58.8306,"vehicleType":"AUTO"}'
 ```
 
-Llama al endpoint `PUT /drivers/{driverId}/location`. Registra a `profe-demo` como conductor disponible, con vehiculo tipo auto y una ubicacion cercana a la facultad.
+Llama al endpoint `PUT /drivers/{driverId}/location`. M4 valida el token con M1, comprueba que el `userId` coincida y registra al conductor.
 
 ### Consultar su ubicacion
 
 ```powershell
-Invoke-RestMethod http://localhost:3004/api/v1/drivers/profe-demo/location
+Invoke-RestMethod "http://localhost:3004/api/v1/drivers/$userId/location" -Headers $headers
 ```
 
-Llama al endpoint `GET /drivers/{driverId}/location` y devuelve la ubicacion temporal que se acaba de guardar.
+Llama al endpoint `GET /drivers/{driverId}/location` y devuelve la ubicacion temporal autenticada.
 
 ### Buscar conductores cercanos
 
@@ -144,12 +152,12 @@ Llama al endpoint `GET /drivers/{driverId}/location` y devuelve la ubicacion tem
 Invoke-RestMethod "http://localhost:3004/api/v1/drivers/nearby?latitude=-27.4692&longitude=-58.8306&vehicleType=AUTO&radiusKm=5" | ConvertTo-Json -Depth 5
 ```
 
-Llama al endpoint `GET /drivers/nearby`. Busca autos disponibles dentro de un radio de 5 km, los ordena por distancia y calcula su ETA. En la respuesta debe aparecer `profe-demo`.
+Llama al endpoint `GET /drivers/nearby`. Busca autos disponibles dentro de un radio de 5 km, los ordena por distancia y calcula su ETA. En la respuesta debe aparecer el `userId` numerico.
 
 ### Consultar el historial permanente
 
 ```powershell
-Invoke-RestMethod "http://localhost:3004/api/v1/drivers/profe-demo/location-history?limit=20" | ConvertTo-Json -Depth 5
+Invoke-RestMethod "http://localhost:3004/api/v1/drivers/$userId/location-history?limit=20" -Headers $headers | ConvertTo-Json -Depth 5
 ```
 
 Llama al endpoint `GET /drivers/{driverId}/location-history`. La informacion proviene de PostgreSQL y continua disponible aunque la ubicacion temporal desaparezca de Redis por TTL.
@@ -157,7 +165,7 @@ Llama al endpoint `GET /drivers/{driverId}/location-history`. La informacion pro
 ### Cambiar su disponibilidad
 
 ```powershell
-Invoke-RestMethod -Method Patch -Uri "http://localhost:3004/api/v1/drivers/profe-demo/availability" -ContentType "application/json" -Body '{"available":false}'
+Invoke-RestMethod -Method Patch -Uri "http://localhost:3004/api/v1/drivers/$userId/availability" -ContentType "application/json" -Body '{"available":false}'
 ```
 
 Llama al endpoint `PATCH /drivers/{driverId}/availability`. El conductor conserva su ubicacion, pero ya no debe aparecer en una nueva busqueda de candidatos.

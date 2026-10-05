@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Modulo 4 - Ubicacion y Disponibilidad
   version: 2.0.0
-  description: API REST para ubicaciones temporales, disponibilidad, cercania, geocodificacion simulada y ETA.
+  description: API REST para ubicaciones temporales, disponibilidad, cercania, geocodificacion simulada y ETA. Utiliza el userId canonico y la validacion Bearer de M1.
 servers:
   - url: http://localhost:3004/api/v1
     description: API local directa
@@ -18,6 +18,7 @@ paths:
       - $ref: '#/components/parameters/DriverId'
     put:
       tags: [Ubicaciones]
+      security: [{ bearerAuth: [] }]
       summary: Actualizar ubicacion del conductor (RF-4.1)
       description: Rechaza con 409 una marca temporal anterior a la ultima registrada.
       requestBody:
@@ -33,6 +34,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/DriverLocation' }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/IdentityUnavailable' }
         '409':
           description: La actualizacion es anterior a la ubicacion vigente
           content:
@@ -41,6 +45,7 @@ paths:
               example: { code: STALE_LOCATION_UPDATE, message: La ubicacion recibida es anterior a la ultima ubicacion registrada }
     get:
       tags: [Ubicaciones]
+      security: [{ bearerAuth: [] }]
       summary: Consultar ubicacion activa
       responses:
         '200':
@@ -49,12 +54,19 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/DriverLocation' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/IdentityUnavailable' }
     delete:
       tags: [Ubicaciones]
+      security: [{ bearerAuth: [] }]
       summary: Eliminar ubicacion del conductor
       responses:
         '204': { description: Ubicacion eliminada }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/IdentityUnavailable' }
   /drivers/{driverId}/availability:
     patch:
       tags: [Ubicaciones]
@@ -82,6 +94,7 @@ paths:
   /drivers/{driverId}/location-history:
     get:
       tags: [Ubicaciones]
+      security: [{ bearerAuth: [] }]
       summary: Consultar el historial permanente de ubicaciones
       description: Devuelve los registros almacenados en PostgreSQL, del mas reciente al mas antiguo.
       parameters:
@@ -97,6 +110,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/LocationHistoryResponse' }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/IdentityUnavailable' }
   /drivers/nearby:
     get:
       tags: [Busqueda]
@@ -162,13 +178,20 @@ paths:
               schema: { $ref: '#/components/schemas/DistanceEstimate' }
         '400': { $ref: '#/components/responses/BadRequest' }
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token emitido por M1. M4 lo valida mediante GET /auth/validar-identidad-y-rol.
   parameters:
     DriverId:
       in: path
       name: driverId
       required: true
-      schema: { type: string, minLength: 1 }
-      example: driver-1
+      description: Es el mismo userId entero y canonico de M1.
+      schema: { type: integer, minimum: 1 }
+      example: 13
   responses:
     BadRequest:
       description: Datos invalidos
@@ -177,6 +200,21 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
     NotFound:
       description: Recurso inexistente o vencido por TTL
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Token ausente, invalido, vencido, revocado o identidad no valida
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: El usuario no es CONDUCTOR o intenta operar sobre otro userId
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    IdentityUnavailable:
+      description: M1 no se encuentra disponible para validar la identidad
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -202,7 +240,7 @@ components:
         - type: object
           required: [driverId, vehicleType, available, updatedAt, expiresAt]
           properties:
-            driverId: { type: string }
+            driverId: { type: integer, description: userId canonico de M1 }
             vehicleType: { type: string, enum: [AUTO, MOTO] }
             available: { type: boolean }
             updatedAt: { type: string, format: date-time }
@@ -214,7 +252,7 @@ components:
           required: [id, driverId, vehicleType, available, updatedAt, recordedAt, createdAt]
           properties:
             id: { type: integer }
-            driverId: { type: string }
+            driverId: { type: integer, description: userId canonico de M1 }
             vehicleType: { type: string, enum: [AUTO, MOTO] }
             available: { type: boolean }
             updatedAt: { type: string, format: date-time }

@@ -12,6 +12,7 @@ Version actual de la API: `2.0.0`.
 - Idempotencia: repetir la misma actualizacion conserva un unico estado consistente.
 - El healthcheck comprueba tambien que Redis se encuentre disponible.
 - PostgreSQL conserva el historial permanente de ubicaciones y cambios de disponibilidad.
+- M1 valida los tokens Bearer y aporta el `userId` canonico del conductor.
 
 ## Alcance AE1
 
@@ -44,6 +45,15 @@ El valor contiene las coordenadas, tipo de vehiculo, disponibilidad, `updatedAt`
 Los diagramas se encuentran en [docs/arquitectura.md](docs/arquitectura.md).
 
 Cada actualizacion aceptada tambien se registra en la tabla `driver_location_history`. El historial se puede consultar mediante `GET /api/v1/drivers/{driverId}/location-history`, aun cuando la ubicacion activa ya haya vencido en Redis.
+
+## Contrato con M1
+
+M4 no genera identificadores propios de conductor. `driverId` es el mismo `userId` entero de M1. Para publicar, consultar o eliminar la ubicacion propia, el cliente envia `Authorization: Bearer <token>`. M4 reenvia el token a `GET /auth/validar-identidad-y-rol`, exige `valid: true`, rol `CONDUCTOR` y que el `userId` coincida con el `driverId` de la URL.
+
+- Token ausente o identidad invalida: `401`.
+- Rol distinto de `CONDUCTOR` o ID ajeno: `403`.
+- M1 no disponible: `503`.
+- Contrato de referencia de M1: `modulo-1-identidad-acceso/openapi.yaml` en la rama de integracion de M1.
 
 ## Ejecutar con Docker Compose
 
@@ -101,6 +111,7 @@ El Dockerfile tambien ejecuta todos los tests durante la construccion y cancela 
 - `LOCATION_TTL_SECONDS`: vigencia de una ubicacion, valor predeterminado `60`.
 - `REDIS_URL`: conexion a Redis, valor local predeterminado `redis://127.0.0.1:6379`.
 - `DATABASE_URL`: conexion a PostgreSQL, valor local predeterminado `postgresql://m4_user:m4_password@127.0.0.1:5432/m4_locations`.
+- `M1_URL`: URL base de Identidad y Acceso. En Docker Desktop se configura como `http://host.docker.internal:3001`.
 
 ## Limitaciones conocidas
 
