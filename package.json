@@ -10,6 +10,7 @@
     "test:qr": "pnpm --filter @m8/qr run test",
     "test:receipts": "pnpm --filter m8-documentos run test",
     "test:support": "pnpm --filter m8-soporte run test",
+    "test:delivery": "pnpm --filter @m8/notification-delivery run test",
     "test:e2e": "node --test --test-concurrency=1 tests/e2e/receipts-ae2.e2e.test.mjs tests/e2e/workspace-api.e2e.test.mjs && pnpm run test:resiliencia",
     "test:resiliencia": "node --test tests/e2e/resiliencia-ae2.e2e.test.mjs",
     "compose:build": "docker compose build",

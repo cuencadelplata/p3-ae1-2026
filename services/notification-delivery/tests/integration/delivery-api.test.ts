@@ -4,15 +4,36 @@ import http from 'node:http';
 import { createApp } from '../../src/http/app.js';
 import { SandboxPushProvider } from '../../src/infrastructure/provider/sandbox-push-provider.js';
 import { NotificationDeliveryService } from '../../src/services/notification-delivery.service.js';
-import { InMemoryInboxRepository } from '../../src/infrastructure/database/inbox.repository.js';
+import { InMemoryMessagingInboxRepository } from '../../src/infrastructure/database/inbox.repository.js';
 import { InMemoryDeliveryRepository } from '../../src/infrastructure/database/delivery.repository.js';
+import { InMemoryDeviceTokenRepository } from '../../src/infrastructure/database/device-token.repository.js';
+import { MockM2PreferencesClient } from '../../src/infrastructure/clients/m2-preferences.client.js';
 
 test('API HTTP de Entrega de Notificaciones', async (t) => {
   const sandbox = new SandboxPushProvider({ mode: 'NORMAL', simulatedDelayMs: 0 });
-  const inbox = new InMemoryInboxRepository();
+  const inbox = new InMemoryMessagingInboxRepository();
   const repo = new InMemoryDeliveryRepository();
-  const service = new NotificationDeliveryService(inbox, repo, sandbox);
-  const handler = createApp({ deliveryService: service, sandboxProvider: sandbox });
+  const tokenRepo = new InMemoryDeviceTokenRepository();
+  const m2Client = new MockM2PreferencesClient();
+
+  // Asegurar token activo para el usuario de test
+  await tokenRepo.upsertToken('usr-api-1', 'token-fcm-api-1', 'ANDROID');
+
+  const service = new NotificationDeliveryService(
+    inbox,
+    repo,
+    tokenRepo,
+    m2Client,
+    sandbox
+  );
+  const handler = createApp({
+    deliveryService: service,
+    sandboxProvider: sandbox,
+    tokenRepo,
+    m2Client,
+    inboxRepo: inbox,
+    deliveryRepo: repo,
+  });
 
   let server: http.Server;
   let baseUrl: string;
@@ -42,6 +63,7 @@ test('API HTTP de Entrega de Notificaciones', async (t) => {
     const body = (await res.json()) as { status: string; checks: Record<string, string> };
     assert.equal(body.status, 'ok');
     assert.equal(body.checks.inbox, 'ok');
+    assert.equal(body.checks.tokens, 'ok');
   });
 
   await t.test('POST /internal/deliveries/simulate debe procesar entrega exitosa', async () => {
@@ -74,7 +96,7 @@ test('API HTTP de Entrega de Notificaciones', async (t) => {
     assert.equal(body.data.status, 'DELIVERED');
   });
 
-  await t.test('IDEMPOTENCIA HTTP: segundo envio con mismo messageId debe retornar DUPLICATE_IGNORED', async () => {
+  await t.test('IDEMPOTENCIA HTTP: segundo envio con mismo messageId debe retornar ACK_DUPLICATE', async () => {
     const payload = {
       messageId: 'api-msg-001', // Mismo messageId
       eventType: 'NotificationRequested',
@@ -100,9 +122,8 @@ test('API HTTP de Entrega de Notificaciones', async (t) => {
     });
 
     assert.equal(res.status, 200);
-    const body = (await res.json()) as { message: string; data: { duplicate: boolean; status: string } };
-    assert.equal(body.data.duplicate, true);
-    assert.equal(body.data.status, 'DUPLICATE_IGNORED');
+    const body = (await res.json()) as { message: string; data: { actionTaken: string } };
+    assert.equal(body.data.actionTaken, 'ACK_DUPLICATE');
   });
 
   await t.test('GET /internal/deliveries/:notificationId debe auditar la entrega y sus intentos', async () => {

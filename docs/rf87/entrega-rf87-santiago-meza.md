@@ -7,52 +7,40 @@
 
 ---
 
-## 1. Cumplimiento de los Puntos Asignados
+## 1. Cumplimiento de Requerimientos y Acuerdos de Integración
 
-| # | Consigna Asignada | Estado | Evidencia y Ubicación en el Repositorio |
+| # | Requerimiento / Acuerdo | Estado | Evidencia y Ubicación en el Repositorio |
 | :-: | :--- | :-: | :--- |
-| **1** | **Definir y congelar el schema exacto de `NotificationRequested.data`** | **COMPLETADO** | [`contracts/events/rf87-notification-requested.contract.md`](../../contracts/events/rf87-notification-requested.contract.md)<br>[`contracts/events/schemas/notification-requested.v1.schema.json`](../../contracts/events/schemas/notification-requested.v1.schema.json) |
-| **2** | **Especificar nombres, tipos y obligatoriedad de cada campo** | **COMPLETADO** | Sección 4 del contrato formal y validador de tipos en [`services/notification-delivery/src/domain/notification-requested.contract.ts`](../../services/notification-delivery/src/domain/notification-requested.contract.ts). |
-| **3** | **Confirmar qué información necesita RF8.7 para efectuar delivery real** | **COMPLETADO** | Sección 5 del contrato: Destino físico (`targetDestination` / fallback token), cuerpo (`message`), título inferido (`title`), prioridad (`priority`) y metadatos de correlación (`tripId`, `notificationId`). |
-| **4** | **Confirmar idempotencia usando `messageId`** | **COMPLETADO** | [`docs/rf87/adr/ADR-001-rf87-idempotencia-y-resiliencia.md`](./adr/ADR-001-rf87-idempotencia-y-resiliencia.md). Implementado con Inbox Pattern (`UNIQUE message_id`) y validado con tests unitarios y de integración (mensaje duplicado se confirma con ACK sin reenviar PUSH). |
-| **5** | **Definir cómo registra o comunica éxito/fallo del delivery** | **COMPLETADO** | [`docs/rf87/adr/ADR-002-rf87-persistencia-y-ciclo-vida-delivery.md`](./adr/ADR-002-rf87-persistencia-y-ciclo-vida-delivery.md), esquema PostgreSQL `delivery`, rol `m8_delivery` en [`infra/postgres/init/02-notification-delivery.sh`](../../infra/postgres/init/02-notification-delivery.sh), y endpoint interno `GET /internal/deliveries/:notificationId`. |
-| **6** | **Pasar branch + commits o archivos de contrato cuando quede estable** | **COMPLETADO** | Rama `ae2/santiago-meza`, contrato formal en [`rf87-notification-requested.contract.md`](../../contracts/events/rf87-notification-requested.contract.md) e historial de commits por etapa detallado en este documento. |
+| **1** | **Consumo de `NotificationRequested` sin alterar texto** | **COMPLETADO** | [`contracts/events/rf87-notification-requested.contract.md`](../../contracts/events/rf87-notification-requested.contract.md)<br>[`contracts/events/schemas/notification-requested.v1.schema.json`](../../contracts/events/schemas/notification-requested.v1.schema.json). Consume texto exacto generado por RF8.1. |
+| **2** | **Reutilización de `messaging.inbox_events` (RF8.6) y Lease** | **COMPLETADO** | [`docs/rf87/adr/ADR-001-rf87-idempotencia-y-resiliencia.md`](./adr/ADR-001-rf87-idempotencia-y-resiliencia.md). Consumer ID `m8.delivery.notification-requested`, reclamo atómico, control de lease de 30s para evitar colisiones concurrentes y recuperación de workers caídos. ACK inmediato solo si está PROCESSED. |
+| **3** | **Reutilización de DLQ y reintentos (RF8.6)** | **COMPLETADO** | Reutiliza topología `mobility.events` y `mobility.events.dlx`. Documentados 3 reintentos internos con backoff ante fallos transitorios antes de desvío terminal a DLQ vía `NACK(requeue=false)`. |
+| **4** | **Device Tokens asociados a userId de M1 con JWT** | **COMPLETADO** | Endpoints `POST /devices/tokens`, `GET /devices/tokens`, `DELETE /devices/tokens/:token` protegidos con JWT de M1. El `userId` se deriva estrictamente del token. Documentado en OpenAPI [`openapi/notification-delivery.openapi.yaml`](../../openapi/notification-delivery.openapi.yaml). |
+| **5** | **Preferencia M2 antes del envío** | **COMPLETADO** | Cliente desacoplado `M2PreferencesClient` con header `x-api-key: ${M2_INTERNAL_API_KEY}`. Si preferencia está en OFF, omite el PUSH (`SKIPPED_PREFERENCE_OFF`) y emite ACK. Propuesta formal de contrato documentada en ADR-002. |
+| **6** | **Persistencia en esquema `notification_delivery`** | **COMPLETADO** | [`infra/postgres/init/04-notification-delivery.sh`](../../infra/postgres/init/04-notification-delivery.sh) con rol `m8_notification_delivery` y tablas `device_tokens`, `delivery_requests` y `delivery_attempts`. |
+| **7** | **Sanitización de Logs (RNF-13)** | **COMPLETADO** | Logger estructurado en JSON (`src/infrastructure/logging/logger.ts`) que jamás imprime device tokens, JWT ni API keys. |
+| **8** | **Integración mínima y reproducible en Compose y .env** | **COMPLETADO** | Registrado en `compose.yaml` (puerto 3107), `.env.example` con variables de M2 y delivery, y `m8-openapi.yaml`. |
 
 ---
 
-## 2. Historial de Commits por Etapas (Trazabilidad Individual)
-
-Cada etapa del desarrollo fue implementada de forma aislada sin modificar archivos de otros requerimientos ni integrantes:
-
-1. **Etapa 1 — Contrato formal y JSON Schema:**  
-   `docs(rf8.7): congelar contrato y schema formal de NotificationRequested (Etapa 1)`  
-   *Artefactos:* `rf87-notification-requested.contract.md` y `notification-requested.v1.schema.json`.
-2. **Etapa 2 — Idempotencia y Resiliencia:**  
-   `docs(rf8.7): documentar estrategia de idempotencia con messageId y resiliencia (Etapa 2)`  
-   *Artefactos:* `ADR-001-rf87-idempotencia-y-resiliencia.md`.
-3. **Etapa 3 — Persistencia, Rol PostgreSQL y Ciclo de Vida:**  
-   `feat(rf8.7): definir esquema de persistencia, rol postgres y ciclo de vida de delivery (Etapa 3)`  
-   *Artefactos:* `ADR-002-rf87-persistencia-y-ciclo-vida-delivery.md` y `02-notification-delivery.sh`.
-4. **Etapa 4 — Servicio de Entrega, Sandbox Provider y Suite de Pruebas:**  
-   `feat(rf8.7): implementar servicio de entrega de notificaciones con sandbox, inbox y pruebas (Etapa 4)`  
-   *Artefactos:* Código fuente en `services/notification-delivery/` y 21 pruebas automatizadas pasando.
-5. **Etapa 5 — Documentación de Cierre y Trazabilidad:**  
-   `docs(rf8.7): documentar informe de entrega y cierre de integracion (Etapa 5)`  
-   *Artefactos:* Este documento de informe final.
-
----
-
-## 3. Verificación y Resultados de Pruebas
-
-Para reproducir la verificación completa de RF8.7:
+## 2. Resultados de Pruebas Automatizadas (38 Tests en Verde)
 
 ```bash
 npx tsx --test modulo-8/services/notification-delivery/tests/unit/*.test.ts modulo-8/services/notification-delivery/tests/integration/*.test.ts
 ```
 
-### Resumen de ejecución:
-- **Pruebas de validación de contrato:** 5 pass (detección de tipos inválidos, campos obligatorios y formato ISO 8601).
-- **Pruebas de Sandbox PUSH:** 4 pass (modos normal, latencia, fallo transitorio y fallo permanente).
-- **Pruebas de servicio:** 5 pass (entrega exitosa, deduplicación e idempotencia por `messageId`, reintentos exponenciales y desvío a estado FAILED).
-- **Pruebas de API HTTP:** 6 pass (liveness, readiness con health checks estandarizados, simulación HTTP y auditoría por `notificationId`).
-- **Total:** **21 tests ejecutados, 21 exitosos, 0 fallos.**
+### Matriz de cobertura:
+1. **Preferencia ON en M2:** Envío PUSH exitoso.
+2. **Preferencia OFF en M2:** Omisión limpia (`SKIPPED_PREFERENCE_OFF`) y ACK sin PUSH.
+3. **Usuario sin device token:** Falla de negocio controlada (`FAILED_NO_DEVICE_TOKEN`) sin bucles infinitos.
+4. **Token actualizado:** Envío automático dirigido al último token activo del usuario autenticado.
+5. **Provider caído / lento:** 3 reintentos con backoff exponencial y desvío a DLQ.
+6. **M2 caído:** Manejo de resiliencia service-to-service.
+7. **Retry y recuperación:** Éxito en 3er intento tras fallos transitorios en 1 y 2.
+8. **Mensaje duplicado:** Detección en Inbox con `ACK_DUPLICATE` inmediato sin redisparo.
+9. **Dos consumidores concurrentes:** Concurrencia atómica con un único PUSH despachado.
+10. **Recuperación de lease huérfano:** Consumidor recupera mensaje PENDING cuyo lease expiró.
+11. **Mensaje inválido / DLQ:** Validador detecta esquema corrupto para desvío a DLQ.
+12. **Device Tokens API (M1 JWT):** Rechazo 401 sin JWT, registro con extracción de userId, listado y desactivación.
+13. **Prueba E2E Completa:** Ciclo completo `notification.requested` $\rightarrow$ M2 $\rightarrow$ Device Token $\rightarrow$ Provider $\rightarrow$ Auditoría.
+
+**Total ejecutado:** **38 tests ejecutados, 38 exitosos, 0 fallos.**
