@@ -3,7 +3,7 @@ info:
   title: M8 - API aggregate
   version: 1.0.0
   description: |
-    Índice de los contratos HTTP reales de los cuatro servicios M8. No existe
+    Índice de los contratos HTTP reales de los servicios M8. No existe
     un gateway único: cada operación declara el servidor que la expone.
 tags:
   - name: Notifications
@@ -11,12 +11,13 @@ tags:
   - name: Receipts
   - name: Support
     description: RF8.5. Contrato completo en rf85-support.yaml.
+  - name: NotificationDelivery
 paths:
   /health:
     get:
-      tags: [Notifications, QR, Receipts, Support]
+      tags: [Notifications, QR, Receipts, Support, NotificationDelivery]
       summary: Health check de cada servicio M8
-      description: Consultar este path en uno de los cuatro servidores declarados.
+      description: Consultar este path en uno de los servidores declarados.
       servers:
         - url: http://localhost:3101
           description: Notifications
@@ -26,28 +27,94 @@ paths:
           description: Receipts
         - url: http://localhost:3000
           description: Support
+        - url: http://localhost:3107
+          description: NotificationDelivery
       responses:
         '200':
           description: Servicio disponible.
         '503':
-          description: Una dependencia crítica del servicio no está disponible (QR - Redis).
+          description: Una dependencia crítica del servicio no está disponible.
   /health/live:
     get:
-      tags: [QR]
-      summary: Vitalidad del proceso QR, sin consultar dependencias
+      tags: [QR, NotificationDelivery]
+      summary: Vitalidad del proceso, sin consultar dependencias
       servers:
         - url: http://localhost:3103
+          description: QR
+        - url: http://localhost:3107
+          description: NotificationDelivery
       responses:
         '200': { description: Proceso vivo. }
   /health/ready:
     get:
-      tags: [QR]
-      summary: Disponibilidad del servicio QR (Redis crítico)
+      tags: [QR, NotificationDelivery]
+      summary: Disponibilidad del servicio y sus dependencias críticas
       servers:
         - url: http://localhost:3103
+          description: QR
+        - url: http://localhost:3107
+          description: NotificationDelivery
       responses:
         '200': { description: Servicio disponible. }
-        '503': { description: Redis no disponible. }
+        '503': { description: Una dependencia crítica del servicio no está disponible. }
+  /devices/tokens:
+    post:
+      tags: [NotificationDelivery]
+      summary: Registrar o actualizar un device token del usuario autenticado
+      security:
+        - BearerAuth: []
+      servers:
+        - url: http://localhost:3107
+      responses:
+        '201': { description: Device token registrado. }
+        '400': { description: Solicitud inválida. }
+        '401': { description: JWT de M1 ausente o inválido. }
+    get:
+      tags: [NotificationDelivery]
+      summary: Listar los device tokens activos del usuario autenticado
+      security:
+        - BearerAuth: []
+      servers:
+        - url: http://localhost:3107
+      responses:
+        '200': { description: Tokens activos del usuario. }
+        '401': { description: JWT de M1 ausente o inválido. }
+  /devices/tokens/{token}:
+    delete:
+      tags: [NotificationDelivery]
+      summary: Desactivar un device token del usuario autenticado
+      security:
+        - BearerAuth: []
+      servers:
+        - url: http://localhost:3107
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Token desactivado. }
+        '401': { description: JWT de M1 ausente o inválido. }
+        '404': { description: Token inexistente o no perteneciente al usuario. }
+  /internal/deliveries/{notificationId}:
+    get:
+      tags: [NotificationDelivery]
+      summary: Consultar el estado de una entrega
+      description: Solo el destinatario de la entrega o un operador autenticado puede consultarla. La respuesta no expone el device token.
+      security:
+        - BearerAuth: []
+      servers:
+        - url: http://localhost:3107
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Estado e historial de intentos de la entrega, sin device token. }
+        '401': { description: JWT de M1 ausente o inválido. }
+        '403': { description: El usuario autenticado no puede consultar la entrega. }
+        '404': { description: Entrega no encontrada. }
   /notifications:
     post:
       tags: [Notifications]
@@ -213,3 +280,10 @@ paths:
       responses:
         '200': { description: Evento publicado. }
         '400': { description: Solicitud inválida. }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT emitido por M1.
