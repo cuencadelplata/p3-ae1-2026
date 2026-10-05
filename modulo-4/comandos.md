@@ -64,7 +64,7 @@ Para comprobar Redis directamente:
 
 ```powershell
 docker compose exec redis redis-cli ping
-docker compose exec redis redis-cli KEYS "m4:driver:*:location"
+docker compose exec redis redis-cli KEYS "driver:*:location"
 ```
 
 El primer comando debe responder `PONG`. El segundo muestra las claves de los conductores que todavia no vencieron.

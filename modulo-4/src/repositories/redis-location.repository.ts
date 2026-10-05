@@ -16,7 +16,7 @@ export class RedisLocationRepository implements LocationRepository {
   private readonly database: number;
   private readonly keyPrefix: string;
 
-  public constructor(redisUrl: string, keyPrefix = 'm4:driver:') {
+  public constructor(redisUrl: string, keyPrefix = 'driver:') {
     const url = new URL(redisUrl);
     if (url.protocol !== 'redis:') throw new Error('REDIS_URL debe comenzar con redis://');
     this.host = url.hostname || '127.0.0.1';

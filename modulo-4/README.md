@@ -35,7 +35,7 @@ En AE2 Redis es la fuente de verdad para las ubicaciones temporales. La API no c
 Cada conductor se guarda con una clave de este formato:
 
 ```text
-m4:driver:{driverId}:location
+driver:{driverId}:location
 ```
 
 El valor contiene las coordenadas, tipo de vehiculo, disponibilidad, `updatedAt` y `expiresAt`. La comparacion de `updatedAt` y el guardado se realizan en una unica operacion atomica de Redis.
