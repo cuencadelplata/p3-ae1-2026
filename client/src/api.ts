@@ -164,7 +164,9 @@ export async function prepararPerfilDePrueba(userId: number): Promise<CustomerPr
 
   try {
     return await api.getMe();
-  } catch {
+  } catch (err) {
+    // Solo el 404 significa "todavía no tiene perfil"; cualquier otro error se propaga
+    if (!(err instanceof ApiError && err.status === 404)) throw err;
     return await api.createCustomer({
       preferences: { preferredVehicleType: 'auto', notificationChannel: 'email' },
     });
