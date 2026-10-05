@@ -1,0 +1,24 @@
+{
+  "name": "@m8/notification-delivery",
+  "version": "1.0.0",
+  "description": "M8 - Subsistema de Entrega de Notificaciones (RF8.7)",
+  "type": "module",
+  "private": true,
+  "main": "dist/http/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/http/server.js",
+    "test": "tsx --test tests/**/*.test.ts",
+    "test:unit": "tsx --test tests/unit/*.test.ts",
+    "test:integration": "tsx --test tests/integration/*.test.ts"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.13.3",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  }
+}
