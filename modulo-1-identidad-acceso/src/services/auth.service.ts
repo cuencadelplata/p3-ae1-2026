@@ -2,15 +2,12 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import {
     createUser,
+    findUserByDni,
     findUserByEmail
 } from "../repositories/user.repository";
-import { UserRole } from "../types/user.types";
-
-const ROLES_VALIDOS: UserRole[] = [
-    "CLIENTE",
-    "CONDUCTOR",
-    "OPERADOR"
-];
+import { normalizarEmail } from "../utils/auth.validators";
+import { RegisterUserRequestDTO, RegisterUserResponseDTO } from "../types/auth.dto";
+import { validateRegisterRequest } from "../utils/validators";
 
 export class AuthError extends Error {
     constructor(
@@ -21,108 +18,59 @@ export class AuthError extends Error {
     }
 }
 
-interface RegisterInput {
-    nombre: unknown;
-    apellido: unknown;
-    dni: unknown;
-    telefono: unknown;
-    email: unknown;
-    password: unknown;
-    rol: unknown;
+
+export async function registerUser(
+    input: RegisterUserRequestDTO
+): Promise<RegisterUserResponseDTO> {
+    const { isValid, errors } = validateRegisterRequest(input);
+
+    if (!isValid) {
+        throw new AuthError(400, errors.join(", "));
+    }
+
+    const { nombre, apellido, dni, telefono, email, password, rol } = input;
+
+    const nombreNormalizado = nombre.trim();
+    const apellidoNormalizado = apellido.trim();
+    const dniNormalizado = dni.trim();
+    const telefonoNormalizado = telefono.trim();
+    const emailNormalizado = normalizarEmail(email);
+
+    const usuarioExistente = findUserByEmail(emailNormalizado);
+    if (usuarioExistente) {
+        throw new AuthError(409, "Ya existe un usuario con ese email");
+    }
+
+    const usuarioConDniExistente = findUserByDni(dniNormalizado);
+    if (usuarioConDniExistente) {
+        throw new AuthError(409, "Ya existe un usuario con ese DNI");
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const id = createUser(
+        nombreNormalizado,
+        apellidoNormalizado,
+        dniNormalizado,
+        telefonoNormalizado,
+        emailNormalizado,
+        passwordHash,
+        rol
+    );
+
+    return {
+        id,
+        nombre: nombreNormalizado,
+        apellido: apellidoNormalizado,
+        email: emailNormalizado,
+        rol,
+        created_at: new Date().toISOString()
+    };
 }
 
 interface LoginInput {
     email: unknown;
     password: unknown;
-}
-
-export async function registerUser(
-    input: RegisterInput
-) {
-    const { nombre, apellido, dni, telefono, email, password, rol } = input;
-
-    if (
-        typeof nombre !== "string" ||
-        typeof apellido !== "string" ||
-        typeof dni !== "string" ||
-        typeof telefono !== "string" ||
-        typeof email !== "string" ||
-        typeof password !== "string" ||
-        typeof rol !== "string"
-    ) {
-        throw new AuthError(
-            400,
-            "Nombre, apellido, DNI, telefono, email, password y rol son obligatorios"
-        );
-    }
-
-    if (!nombre.trim() || !apellido.trim() || !dni.trim() || !telefono.trim()) {
-        throw new AuthError(
-            400,
-            "Nombre, apellido, DNI y telefono son obligatorios"
-        );
-    }
-
-    const emailNormalizado = email
-        .trim()
-        .toLowerCase();
-
-    if (!emailNormalizado.includes("@")) {
-        throw new AuthError(
-            400,
-            "El email no es válido"
-        );
-    }
-
-    if (password.length < 6) {
-        throw new AuthError(
-            400,
-            "La contraseña debe tener al menos 6 caracteres"
-        );
-    }
-
-    if (!ROLES_VALIDOS.includes(rol as UserRole)) {
-        throw new AuthError(
-            400,
-            "El rol debe ser CLIENTE, CONDUCTOR u OPERADOR"
-        );
-    }
-
-    const usuarioExistente =
-        findUserByEmail(emailNormalizado);
-
-    if (usuarioExistente) {
-        throw new AuthError(
-            409,
-            "Ya existe un usuario con ese email"
-        );
-    }
-
-    const passwordHash = await bcrypt.hash(
-        password,
-        10
-    );
-
-    const id = createUser(
-        nombre.trim(),
-        apellido.trim(),
-        dni.trim(),
-        telefono.trim(),
-        emailNormalizado,
-        passwordHash,
-        rol as UserRole
-    );
-
-    return {
-        id,
-        nombre: nombre.trim(),
-        apellido: apellido.trim(),
-        dni: dni.trim(),
-        telefono: telefono.trim(),
-        email: emailNormalizado,
-        rol,
-        estado: "ACTIVO"
-    };
 }
 
 export async function loginUser(

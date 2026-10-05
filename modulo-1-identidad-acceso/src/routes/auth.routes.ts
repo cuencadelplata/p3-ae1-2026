@@ -12,8 +12,6 @@ import {
     oauth2LinkAccount
 } from "../controllers/recovery.controller";
 import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware";
-import { loginRateLimit } from "../middleware/login-rate-limit.middleware";
-import { obtenerMiPerfil } from "../controllers/me.controller";
 
 const router = Router();
 
@@ -23,10 +21,8 @@ router.post(
     register
 );
 
-// RF-1.2: rate limiting con Redis antes de validar credenciales
 router.post(
     "/iniciar-sesion",
-    loginRateLimit,
     login
 );
 
@@ -34,13 +30,6 @@ router.get(
     "/validar-identidad-y-rol",
     authenticateToken,
     validateToken
-);
-
-// RF-1.2: datos del propio usuario a partir de su token (lo usan M2 y otros módulos)
-router.get(
-    "/me",
-    authenticateToken,
-    obtenerMiPerfil
 );
 
 // ============ RF-1.4: Recuperación y Permiso ============

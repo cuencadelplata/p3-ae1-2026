@@ -10,16 +10,28 @@ import db from "../../src/config/database";
 
 const email = `usuario-${Date.now()}@test.com`;
 const password = "123456";
+const inicioPrueba = Date.now() % 1000000;
 
 function registrationData(
     userEmail: string,
     userPassword: string,
     role: string
 ) {
+    const dni = String(
+        30000000 +
+        inicioPrueba +
+        Array.from(userEmail)
+            .reduce(
+                (total, caracter) =>
+                    total * 31 + caracter.charCodeAt(0),
+                0
+            ) % 1000000
+    );
+
     return {
         nombre: "Usuario",
         apellido: "Prueba",
-        dni: "30123456",
+        dni,
         telefono: "11 5555 1234",
         email: userEmail,
         password: userPassword,
@@ -40,7 +52,6 @@ describe.sequential(
             expect(response.status).toBe(201);
             expect(response.body.email).toBe(email);
             expect(response.body.rol).toBe("CLIENTE");
-            expect(response.body.estado).toBe("ACTIVO");
             expect(
                 response.body.password_hash
             ).toBeUndefined();
@@ -56,6 +67,31 @@ describe.sequential(
                 expect(response.status).toBe(409);
                 expect(response.body.error).toBe(
                     "Ya existe un usuario con ese email"
+                );
+            }
+        );
+
+        it(
+            "Impedir el registro de un DNI repetido",
+            async () => {
+                const response = await request(app)
+                    .post("/auth/registrar-usuario")
+                    .send({
+                        ...registrationData(
+                            `dni-repetido-${Date.now()}@test.com`,
+                            password,
+                            "CONDUCTOR"
+                        ),
+                        dni: registrationData(
+                            email,
+                            password,
+                            "CLIENTE"
+                        ).dni
+                    });
+
+                expect(response.status).toBe(409);
+                expect(response.body.error).toBe(
+                    "Ya existe un usuario con ese DNI"
                 );
             }
         );

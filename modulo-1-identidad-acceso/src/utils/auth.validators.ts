@@ -6,6 +6,11 @@ export const ROLES_VALIDOS: UserRole[] = [
     "OPERADOR"
 ];
 
+export const ROLES_REGISTRABLES: UserRole[] = [
+    "CLIENTE",
+    "CONDUCTOR"
+];
+
 export function normalizarEmail(
     email: string
 ): string {
@@ -31,5 +36,13 @@ export function esRolValido(
 ): rol is UserRole {
     return ROLES_VALIDOS.includes(
         rol as UserRole
+    );
+}
+
+export function esRolRegistrable(
+    rol: string
+): rol is "CLIENTE" | "CONDUCTOR" {
+    return ROLES_REGISTRABLES.includes(
+        rol as "CLIENTE" | "CONDUCTOR"
     );
 }
