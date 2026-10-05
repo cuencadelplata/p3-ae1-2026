@@ -13,15 +13,17 @@ Esta carpeta contiene la implementación consolidada del Módulo 1 y todos sus r
 - Validación protegida de identidad y rol.
 - Bloqueo de usuarios.
 
-### Recuperación de acceso (RF-1.4)
+### Recuperación y revocación (RF-1.4)
 
 - Solicitud de recuperación mediante email.
-- Generación de tokens únicos con una duración de 30 minutos.
+- Generación de un token temporal guardado en Redis con una duración de 15 minutos.
+- Publicación del evento `auth.recuperacion_solicitada` en RabbitMQ para que el servicio de notificaciones envíe el correo.
 - Restablecimiento de contraseña con token válido.
-- Invalidación del token después de utilizarlo.
+- Invalidación del token después de utilizarlo o al pedir uno nuevo.
+- Revocación de los JWT anteriores al cambiar la contraseña o a pedido del usuario.
 - Contraseñas protegidas mediante bcrypt.
 
-Actualmente el proyecto no envía correos reales. El token se registra en la salida del servidor para facilitar las pruebas locales.
+M1 no envía el correo: solo publica el evento. El detalle está en `RF-1.4.md`.
 
 ### Integración OAuth2/OpenID Connect (RF-1.5)
 
@@ -38,6 +40,7 @@ POST /auth/iniciar-sesion
 GET  /auth/validar-identidad-y-rol
 POST /auth/solicitar-recuperacion
 POST /auth/resetear-contrasena
+POST /auth/revocar-credenciales
 GET  /auth/oauth2/authorize
 GET  /auth/oauth2/callback
 POST /auth/oauth2/link
@@ -153,5 +156,5 @@ Las columnas personales agregadas al registro se incorporan mediante una migraci
 | RF-1.1: Registro | Completo |
 | RF-1.2: Autenticación | Completo |
 | RF-1.3: Identidad y rol | Completo |
-| RF-1.4: Recuperación de acceso | Completo, sin envío real de emails |
+| RF-1.4: Recuperación y revocación | Completo. El envío del correo queda a cargo del servicio de notificaciones |
 | RF-1.5: OAuth2/OpenID Connect | Stub funcional, pendiente de integración real |
