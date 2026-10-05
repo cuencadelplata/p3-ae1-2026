@@ -28,6 +28,25 @@ paths:
       responses:
         '200':
           description: Servicio disponible.
+        '503':
+          description: Una dependencia crítica del servicio no está disponible (QR - Redis).
+  /health/live:
+    get:
+      tags: [QR]
+      summary: Vitalidad del proceso QR, sin consultar dependencias
+      servers:
+        - url: http://localhost:3103
+      responses:
+        '200': { description: Proceso vivo. }
+  /health/ready:
+    get:
+      tags: [QR]
+      summary: Disponibilidad del servicio QR (Redis crítico)
+      servers:
+        - url: http://localhost:3103
+      responses:
+        '200': { description: Servicio disponible. }
+        '503': { description: Redis no disponible. }
   /notifications:
     post:
       tags: [Notifications]
@@ -47,6 +66,9 @@ paths:
       responses:
         '201': { description: QR generado. }
         '400': { description: Solicitud inválida. }
+        '415': { description: Content-Type no admitido. }
+        '500': { description: Error interno al generar el QR. }
+        '503': { description: Almacenamiento de QR no disponible; incluye Retry-After. }
   /qr/validate:
     post:
       tags: [QR]
@@ -55,8 +77,13 @@ paths:
         - url: http://localhost:3103
       responses:
         '200': { description: QR válido y consumido. }
-        '404': { description: QR no encontrado. }
+        '400': { description: Solicitud inválida. }
+        '404': { description: QR no encontrado o no corresponde al viaje. }
         '409': { description: QR ya utilizado. }
+        '410': { description: QR vencido. }
+        '415': { description: Content-Type no admitido. }
+        '500': { description: Error interno inesperado. }
+        '503': { description: Almacenamiento de QR no disponible; incluye Retry-After. }
   /api/v1/receipts:
     post:
       tags: [Receipts]
