@@ -5,6 +5,9 @@ export type ConsumeOutcome = "OK" | "NOT_FOUND" | "TRIP_MISMATCH" | "ALREADY_USE
 // Contrato de almacenamiento de QR. Es asíncrono para admitir un almacenamiento externo
 // compartido entre instancias; cada implementación debe garantizar que consumeIfValid
 // compruebe y marque el uso como una única operación atómica.
+//
+// `now` es la hora del proceso que valida. Un store con reloj propio (por ejemplo, Redis)
+// puede ignorarlo y decidir el vencimiento con su propia hora.
 export interface QrStore {
   save(record: QrRecord): Promise<void>;
   consumeIfValid(tokenHash: string, tripId: string, now: Date): Promise<ConsumeOutcome>;
