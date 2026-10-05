@@ -4,7 +4,7 @@
     "info": {
         "title": "Conductores API",
         "version": "1.0.0",
-        "description": "Esta API se utilizará para la comunicación con los conductores y los vehículos."
+        "description": "Esta API se utilizará para la comunicación con los conductores, vehículos y viajes."
     },
 "servers": [
     {
@@ -364,7 +364,80 @@
         "required": ["usuarioID", "habilitado", "disponible", "estado", "estado_conexion"]
       }
     }
+  },
+   "/viajes/{viajeId}": {
+      "get": {
+        "summary": "Obtener la información de un viaje",
+        "parameters": [
+          {
+            "name": "viajeId",
+            "in": "path",
+            "required": true,
+            "description": "ID del viaje para obtener su información",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Información del viaje obtenida correctamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/viaje",
+                  "compontents": {
+                    "schemas": {
+                      "Viaje": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "conductorId": {
+                            "type": "string"
+                          },
+                          "origen": {
+                            "type": "string"
+                          },
+                          "destino": {
+                            "type": "string"
+                          },
+                          "fechaHoraInicio": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "fechaHoraFin": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "estado": {
+                            "type": "string",
+                            "enum": ["pendiente", "en curso", "finalizado", "cancelado", "solicitado", "aceptado"]
+                          }
+                        },
+                        "finalizadoAt":{
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },      
+                        "required": ["id", "conductorId", "origen", "destino", "fechaHoraInicio", "finalizadoAt", "estado"]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Viaje no encontrado"
+          }
+        }
+      }
+
   }
+
+  
 
 
 
