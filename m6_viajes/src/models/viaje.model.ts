@@ -1,5 +1,5 @@
 // src/models/viaje.model.ts
-
+// Este archivo define el modelo de datos para los viajes, incluyendo la interfaz Viaje y el enum EstadoViaje. La interfaz Viaje representa un viaje con sus propiedades, mientras que el enum EstadoViaje define los posibles estados de un viaje.
 export enum EstadoViaje {
     SOLICITADO = 'SOLICITADO',
     ASIGNADO = 'ASIGNADO',

@@ -7,4 +7,4 @@ CREATE TABLE IF NOT EXISTS viajes (
     destino TEXT NOT NULL,
     codigo_verificacion VARCHAR(100) NOT NULL,
     fecha_creacion TIMESTAMP NOT NULL DEFAULT now()
-);
+); 

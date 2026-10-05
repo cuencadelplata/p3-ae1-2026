@@ -6,7 +6,7 @@ import * as viajeRepo from '../repositories/viaje.repository.js';
 import { randomUUID } from 'node:crypto';
 import { consultarEstadoConductor } from '../services/conductor.service.js';
 import { publicarEvento } from '../services/rabbitmq.service.js';
-
+//en este archivo definimos los controladores del modulo de viajes, que implementan la lógica de negocio para cada endpoint definido en las rutas. Cada controlador recibe la solicitud HTTP, valida los datos, interactúa con los servicios y repositorios necesarios, y devuelve la respuesta HTTP correspondiente.
 export const solicitarViaje = async (req: Request, res: Response): Promise<any> => {
     const { clienteId, origen, destino } = req.body;
     const id = randomUUID();

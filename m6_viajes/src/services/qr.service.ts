@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const M8_URL = process.env.M8_URL || 'http://localhost:4001';
 const M8_TIMEOUT_MS = Number(process.env.M8_TIMEOUT_MS) || 3000;
-
+//nos conectamos al servicio M8 para generar y validar códigos QR de los viajes. En caso de que el M8 no esté disponible, simulamos la generación y validación de códigos QR para pruebas locales y en Docker.
 const cliente = axios.create({ baseURL: M8_URL, timeout: M8_TIMEOUT_MS });
 
 export interface GenerarQRResponse {

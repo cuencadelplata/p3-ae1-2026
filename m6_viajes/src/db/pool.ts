@@ -1,5 +1,5 @@
 import pg from 'pg';
-
+//en este archivo definimos la conexión a la base de datos TripDB usando un pool de conexiones. Esto permite manejar múltiples conexiones concurrentes de manera eficiente y manejar errores de conexión.
 const pool = new pg.Pool({
     host: process.env.DB_HOST || 'localhost',
     port: Number(process.env.DB_PORT) || 5432,

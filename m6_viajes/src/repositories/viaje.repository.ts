@@ -1,7 +1,7 @@
 import pool from '../db/pool.js';
 import type { Viaje } from '../models/viaje.model.js';
 import { EstadoViaje } from '../models/viaje.model.js';
-
+//en este archivo definimos las funciones que interactúan con la base de datos para crear, buscar y actualizar viajes. Estas funciones son llamadas por los controladores del módulo de viajes.
 export async function crear(viaje: Viaje): Promise<void> {
     await pool.query(
         `INSERT INTO viajes (id, cliente_id, estado, origen, destino, codigo_verificacion, fecha_creacion)

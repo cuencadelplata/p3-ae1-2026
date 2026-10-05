@@ -3,7 +3,7 @@ import { redisClient } from './redis.service.js';
 
 const M3_URL = process.env.M3_URL || 'http://localhost:4003';
 const M3_TIMEOUT_MS = Number(process.env.M3_TIMEOUT_MS) || 3000;
-
+//nos conectamos al servicio M3 para consultar el estado del conductor. En caso de que el M3 no esté disponible, lanzamos un error 503 para que el cliente pueda manejarlo.
 const cliente = axios.create({ baseURL: M3_URL, timeout: M3_TIMEOUT_MS });
 
 export interface EstadoConductor {
