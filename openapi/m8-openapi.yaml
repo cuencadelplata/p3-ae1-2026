@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: M8 - API integrada
-  version: 1.0.0
+  version: 2.0.0
   description: |
     Índice de los contratos HTTP reales de la aplicación única M8.
     Los RF conservan sus rutas y responsabilidades internas, pero se exponen
@@ -119,6 +119,19 @@ paths:
         '401': { description: JWT de M1 ausente o inválido. }
         '403': { description: El usuario autenticado no puede consultar la entrega. }
         '404': { description: Entrega no encontrada. }
+  /internal/deliveries/simulate:
+    post:
+      tags: [NotificationDelivery]
+      summary: Simular el procesamiento de una solicitud de entrega
+      description: Endpoint técnico disponible fuera de producción para verificar el procesamiento idempotente de `NotificationRequested`.
+      servers:
+        - url: http://localhost:3000
+      responses:
+        '200': { description: Solicitud procesada o duplicado reconocido de forma idempotente. }
+        '400': { description: Envelope de notificación inválido. }
+        '403': { description: Simulación deshabilitada en producción. }
+        '502': { description: Falló el proveedor de entrega simulado. }
+        '500': { description: Error interno inesperado. }
   /notifications:
     post:
       tags: [Notifications]
@@ -169,6 +182,8 @@ paths:
     get:
       tags: [Receipts]
       summary: Consultar un comprobante
+      security:
+        - BearerAuth: []
       servers:
         - url: http://localhost:3000
       parameters:
@@ -178,11 +193,16 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Comprobante encontrado. }
+        '401': { description: JWT de M1 ausente o inválido. }
+        '403': { description: El usuario autenticado no puede acceder al comprobante. }
         '404': { description: Comprobante no encontrado. }
+        '503': { description: Dependencia requerida no disponible. }
   /api/v1/receipts/{tripId}/pdf:
     get:
       tags: [Receipts]
       summary: Descargar PDF del comprobante
+      security:
+        - BearerAuth: []
       servers:
         - url: http://localhost:3000
       parameters:
@@ -192,6 +212,96 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: PDF, content type application/pdf. }
+        '401': { description: JWT de M1 ausente o inválido. }
+        '403': { description: El usuario autenticado no puede acceder al comprobante. }
+        '404': { description: Comprobante no encontrado. }
+  /api/v1/receipts/downloads/{token}:
+    get:
+      tags: [Receipts]
+      summary: Descargar un comprobante mediante enlace temporal
+      description: Descarga el PDF a partir de un token temporal; no expone ni requiere datos adicionales del viaje.
+      servers:
+        - url: http://localhost:3000
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: PDF, content type application/pdf. }
+        '410': { description: Enlace temporal vencido o inexistente. }
+  /api/v1/receipts/{tripId}/resend:
+    post:
+      tags: [Receipts]
+      summary: Reenviar un comprobante existente
+      description: RF8.4. Registra un reenvío sin regenerar el PDF y aplica autorización de M1, bloqueo distribuido y límite de solicitudes.
+      security:
+        - BearerAuth: []
+      servers:
+        - url: http://localhost:3000
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReceiptResendRequest'
+      responses:
+        '202': { description: Reenvío aceptado y registrado. }
+        '400': { description: Solicitud inválida. }
+        '401': { description: JWT de M1 ausente o inválido. }
+        '403': { description: El usuario autenticado no puede reenviar el comprobante. }
+        '404': { description: Comprobante no encontrado. }
+        '409': { description: Ya existe un reenvío concurrente en curso. }
+        '422': { description: Datos de reenvío inválidos. }
+        '429': { description: Límite de reenvíos superado. }
+        '503': { description: Dependencia requerida no disponible. }
+  /api/v1/receipts/resend:
+    post:
+      tags: [Receipts]
+      summary: Reenviar un comprobante indicando el viaje en el cuerpo
+      description: Variante de RF8.4 que recibe `tripId` dentro del cuerpo JSON.
+      security:
+        - BearerAuth: []
+      servers:
+        - url: http://localhost:3000
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReceiptResendRequestWithTripId'
+      responses:
+        '202': { description: Reenvío aceptado y registrado. }
+        '400': { description: Solicitud inválida. }
+        '401': { description: JWT de M1 ausente o inválido. }
+        '403': { description: El usuario autenticado no puede reenviar el comprobante. }
+        '404': { description: Comprobante no encontrado. }
+        '409': { description: Ya existe un reenvío concurrente en curso. }
+        '422': { description: Datos de reenvío inválidos. }
+        '429': { description: Límite de reenvíos superado. }
+        '503': { description: Dependencia requerida no disponible. }
+  /internal/receipts/{tripId}/delivery-reference:
+    get:
+      tags: [Receipts]
+      summary: Obtener una referencia interna de entrega de comprobante
+      description: Ruta interna de coordinación para obtener el enlace temporal y su vencimiento; no pertenece a la API pública.
+      servers:
+        - url: http://localhost:3000
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Referencia temporal disponible. }
+        '400': { description: Identificador de viaje inválido. }
+        '404': { description: Comprobante no encontrado. }
+        '503': { description: Dependencia requerida no disponible. }
   /tickets:
     post:
       tags: [Support]
@@ -291,3 +401,27 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Token JWT emitido por M1.
+  schemas:
+    ReceiptResendRequest:
+      type: object
+      properties:
+        channel:
+          type: string
+          enum: [EMAIL, SMS, PUSH]
+          default: EMAIL
+        destination:
+          type: string
+      additionalProperties: false
+    ReceiptResendRequestWithTripId:
+      type: object
+      required: [tripId]
+      properties:
+        tripId:
+          type: string
+        channel:
+          type: string
+          enum: [EMAIL, SMS, PUSH]
+          default: EMAIL
+        destination:
+          type: string
+      additionalProperties: false
