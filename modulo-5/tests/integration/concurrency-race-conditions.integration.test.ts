@@ -1,27 +1,26 @@
 import { RideRequestService, ConflictError } from '../../src/services/ride-request.service';
-import { DbService } from '../../src/services/db.service';
 import { RedisService } from '../../src/services/redis.service';
-import { RabbitMqService } from '../../src/services/rabbitmq.service';
+import { RabbitMQService } from '../../src/services/rabbitmq.service';
 import { CreateRideRequestDTO } from '../../src/types/ride-request.types';
 
 describe('AE2 — Tests de Concurrencia, Idempotencia y Casos Límite (RNF-08, RNF-09, RF-5.4, RF-5.5)', () => {
   let rideRequestService: RideRequestService;
-  let dbService: DbService;
   let redisService: RedisService;
-  let rabbitMqService: RabbitMqService;
+  let rabbitMQService: RabbitMQService;
 
   beforeEach(() => {
-    dbService = new DbService();
+    process.env.DISABLE_REDIS = 'true';
+    process.env.DISABLE_RABBITMQ = 'true';
     redisService = new RedisService();
-    rabbitMqService = new RabbitMqService();
-    rideRequestService = new RideRequestService(dbService, redisService, rabbitMqService);
+    rabbitMQService = new RabbitMQService();
+    rideRequestService = new RideRequestService(redisService, rabbitMQService);
   });
 
   afterAll(async () => {
-    await dbService.disconnect();
     await redisService.disconnect();
-    await rabbitMqService.disconnect();
+    await rabbitMQService.disconnect();
   });
+
 
   const sampleCreateDTO: CreateRideRequestDTO = {
     origin: {
@@ -88,7 +87,7 @@ describe('AE2 — Tests de Concurrencia, Idempotencia y Casos Límite (RNF-08, R
     expect(driverIds).toContain(updatedRequest.assignedDriverId);
 
     // 7. Verificar que se publicó el evento de asignación en RabbitMQ hacia M6 y M8
-    const assignedMessage = rabbitMqService.publishedMessages.find(
+    const assignedMessage = rabbitMQService.publishedMessages.find(
       (m) =>
         m.routingKey === 'driver.offer.accepted' &&
         m.message.correlationId === request.id

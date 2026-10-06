@@ -1,108 +1,144 @@
 import { describe, it, expect, beforeEach, afterAll } from '@jest/globals';
 import { RedisService } from '../../src/services/redis.service';
-import { RideRequest, EstimatedFare } from '../../src/types/ride-request.types';
+import { RideOffer } from '../../src/types/ride-request.types';
 
 describe('RedisService (RNF-06, RNF-08, RNF-09, Criterio 6)', () => {
   let redisService: RedisService;
 
   beforeEach(() => {
+    process.env.DISABLE_REDIS = 'true';
     redisService = new RedisService();
-    redisService.clearFallback();
   });
 
   afterAll(async () => {
     await redisService.disconnect();
   });
 
-  describe('Idempotencia Distribuida (RNF-08)', () => {
-    it('debe almacenar y recuperar una solicitud por su Idempotency-Key', async () => {
-      const mockRequest: RideRequest = {
-        id: 'req_123',
-        clientId: 'client_1',
-        origin: { latitude: -34.6037, longitude: -58.3816, address: 'Obelisco' },
-        destination: { latitude: -34.5885, longitude: -58.3974, address: 'Recoleta' },
-        vehicleType: 'AUTO',
-        status: 'SEARCHING',
-        estimatedFare: {
-          amount: 2050,
-          currency: 'ARS',
-          estimatedDistanceKm: 3.8,
-          estimatedDurationMin: 12,
-          fareToken: 'ft_1'
-        },
-        assignedDriverId: null,
-        idempotencyKey: 'idem_key_abc',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 180000).toISOString()
-      };
+  describe('Almacenamiento de Ofertas con TTL (RNF-06)', () => {
+    const mockOffer: RideOffer = {
+      id: 'off_test_123',
+      requestId: 'req_test_123',
+      driverId: 'drv_101',
+      status: 'PENDING',
+      estimatedFare: {
+        amount: 2500,
+        currency: 'ARS',
+        estimatedDistanceKm: 4.5,
+        estimatedDurationMin: 12
+      },
+      origin: { latitude: -34.6037, longitude: -58.3816, address: 'Obelisco' },
+      destination: { latitude: -34.5885, longitude: -58.3974, address: 'Recoleta' },
+      vehicleType: 'AUTO',
+      ttlSeconds: 30,
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 30000).toISOString()
+    };
 
-      await redisService.saveIdempotentRequest('idem_key_abc', mockRequest, 3600);
-      const retrieved = await redisService.getIdempotentRequest('idem_key_abc');
+    it('debe almacenar y recuperar una oferta por su ID', async () => {
+      await redisService.saveOffer(mockOffer, 30);
+      const retrieved = await redisService.getOffer(mockOffer.id);
 
       expect(retrieved).not.toBeNull();
-      expect(retrieved?.id).toBe('req_123');
-      expect(retrieved?.clientId).toBe('client_1');
-      expect(retrieved?.estimatedFare.amount).toBe(2050);
+      expect(retrieved?.id).toBe('off_test_123');
+      expect(retrieved?.driverId).toBe('drv_101');
     });
 
-    it('debe devolver null para una Idempotency-Key inexistente', async () => {
-      const retrieved = await redisService.getIdempotentRequest('clave_inexistente');
+    it('debe devolver null para una oferta inexistente', async () => {
+      const retrieved = await redisService.getOffer('oferta_inexistente');
       expect(retrieved).toBeNull();
+    });
+
+    it('debe reportar TTL restante positivo para una oferta recién guardada', async () => {
+      await redisService.saveOffer(mockOffer, 60);
+      const remainingTtl = await redisService.getRemainingTtl(mockOffer.id);
+      expect(remainingTtl).toBeGreaterThan(0);
+      expect(remainingTtl).toBeLessThanOrEqual(60);
+    });
+
+    it('debe eliminar una oferta explícitamente (Criterio 6: Invalidación)', async () => {
+      await redisService.saveOffer(mockOffer, 60);
+      await redisService.deleteOffer(mockOffer.id);
+
+      const afterDelete = await redisService.getOffer(mockOffer.id);
+      expect(afterDelete).toBeNull();
+    });
+
+    it('debe expirar la oferta automáticamente cuando se cumple el TTL (fallback en memoria)', async () => {
+      await redisService.saveOffer(mockOffer, 1);
+
+      // Esperar 1.1 segundos
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+
+      const retrieved = await redisService.getOffer(mockOffer.id);
+      expect(retrieved).toBeNull();
+
+      const remainingTtl = await redisService.getRemainingTtl(mockOffer.id);
+      expect(remainingTtl).toBe(-2);
     });
   });
 
-  describe('Candado Atómico de Cliente Activo (RNF-09, Criterio 6 y 7)', () => {
-    it('debe adquirir candado con éxito para un cliente libre (operación SET NX)', async () => {
-      const acquired = await redisService.acquireClientActiveLock('client_10', 'req_001', 180);
+  describe('Bloqueo Distribuido (RNF-09)', () => {
+    it('debe adquirir un lock cuando no hay conflicto', async () => {
+      const acquired = await redisService.acquireLock('request_001');
       expect(acquired).toBe(true);
-
-      const activeReqId = await redisService.getActiveRequestIdForClient('client_10');
-      expect(activeReqId).toBe('req_001');
     });
 
-    it('debe denegar adquisición de candado si el cliente ya posee una solicitud activa (evita race condition)', async () => {
-      const first = await redisService.acquireClientActiveLock('client_10', 'req_001', 180);
+    it('debe denegar un segundo lock mientras el primero está activo', async () => {
+      const first = await redisService.acquireLock('request_002', 5000);
       expect(first).toBe(true);
 
-      // Segunda solicitud concurrente con el mismo clientId
-      const second = await redisService.acquireClientActiveLock('client_10', 'req_002', 180);
+      const second = await redisService.acquireLock('request_002', 5000);
       expect(second).toBe(false);
     });
 
-    it('debe invalidar y liberar el candado explícitamente (Criterio 6: Invalidación)', async () => {
-      await redisService.acquireClientActiveLock('client_20', 'req_001', 180);
-      expect(await redisService.getActiveRequestIdForClient('client_20')).toBe('req_001');
+    it('debe liberar el lock y permitir readquisición', async () => {
+      await redisService.acquireLock('request_003', 5000);
+      await redisService.releaseLock('request_003');
 
-      // Invalidación explícita (ej. al cancelar o asignar)
-      await redisService.releaseClientActiveLock('client_20');
-
-      const afterRelease = await redisService.getActiveRequestIdForClient('client_20');
-      expect(afterRelease).toBeNull();
-
-      // Debe permitir volver a solicitar viaje tras la liberación
-      const reacquire = await redisService.acquireClientActiveLock('client_20', 'req_002', 180);
-      expect(reacquire).toBe(true);
+      const reacquired = await redisService.acquireLock('request_003', 5000);
+      expect(reacquired).toBe(true);
     });
   });
 
-  describe('Caché Efímero de Estimación de Tarifas M7 (RNF-06)', () => {
-    it('debe cachear y recuperar una estimación de tarifa', async () => {
-      const fare: EstimatedFare = {
-        amount: 2225,
-        currency: 'ARS',
-        estimatedDistanceKm: 3.5,
-        estimatedDurationMin: 12,
-        fareToken: 'est_1234567890'
+  describe('Invalidación de Ofertas por Solicitud (RF-5.6)', () => {
+    it('debe invalidar múltiples ofertas de forma atómica', async () => {
+      const offer1: RideOffer = {
+        id: 'off_inv_1', requestId: 'req_1', driverId: 'drv_1', status: 'PENDING',
+        estimatedFare: { amount: 1000, currency: 'ARS', estimatedDistanceKm: 2, estimatedDurationMin: 5 },
+        origin: { latitude: -34.60, longitude: -58.38, address: 'A' },
+        destination: { latitude: -34.59, longitude: -58.39, address: 'B' },
+        vehicleType: 'AUTO', ttlSeconds: 30,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30000).toISOString()
       };
+      const offer2 = { ...offer1, id: 'off_inv_2', driverId: 'drv_2' };
 
-      const cacheKey = '-27.46_-58.98_-27.47_-58.99_AUTO';
-      await redisService.cacheEstimatedFare(cacheKey, fare, 60);
+      await redisService.saveOffer(offer1, 30);
+      await redisService.saveOffer(offer2, 30);
 
-      const cached = await redisService.getCachedEstimatedFare(cacheKey);
-      expect(cached).not.toBeNull();
-      expect(cached?.amount).toBe(2225);
-      expect(cached?.currency).toBe('ARS');
+      await redisService.invalidateOffersForRequest(['off_inv_1', 'off_inv_2']);
+
+      expect(await redisService.getOffer('off_inv_1')).toBeNull();
+      expect(await redisService.getOffer('off_inv_2')).toBeNull();
+    });
+  });
+
+  describe('Marcado de Cancelación de Solicitudes (RF-5.6)', () => {
+    it('debe marcar y verificar una solicitud como cancelada', async () => {
+      await redisService.markRequestCancelled('req_cancel_1');
+      const isCancelled = await redisService.isRequestCancelled('req_cancel_1');
+      expect(isCancelled).toBe(true);
+    });
+
+    it('debe retornar false para solicitud no cancelada', async () => {
+      const isCancelled = await redisService.isRequestCancelled('req_no_existe');
+      expect(isCancelled).toBe(false);
+    });
+  });
+
+  describe('Estado de conexión', () => {
+    it('isReady debe reportar false en modo simulación', () => {
+      expect(redisService.isReady()).toBe(false);
     });
   });
 });

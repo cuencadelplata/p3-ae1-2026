@@ -66,6 +66,7 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@postgres-db:5432/dispatch_db?schema=public
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - M4_SERVICE_URL=http://m4-api:3004/api/v1
     depends_on:
       postgres-db:
         condition: service_healthy

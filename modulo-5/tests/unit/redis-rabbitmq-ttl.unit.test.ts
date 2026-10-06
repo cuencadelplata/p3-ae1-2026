@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { RedisService } from '../../src/services/redis.service';
-import { RabbitMQService, OfferCreatedEvent } from '../../src/services/rabbitmq.service';
+import { RabbitMQService } from '../../src/services/rabbitmq.service';
+import { OfferCreatedEvent } from '../../src/types/ride-request.types';
 import { RideRequestService } from '../../src/services/ride-request.service';
 import { CreateRideRequestDTO, RideOffer } from '../../src/types/ride-request.types';
 
@@ -52,7 +53,7 @@ describe('RNF-06 & RNF-07: Pruebas unitarias de Redis (TTL) y RabbitMQ', () => {
     };
 
     it('debe guardar una oferta en Redis y recuperarla antes de que expire', async () => {
-      await redisService.saveOfferWithTtl(mockOffer, 5);
+      await redisService.saveOffer(mockOffer, 5);
 
       const retrieved = await redisService.getOffer(mockOffer.id);
       expect(retrieved).not.toBeNull();
@@ -66,7 +67,7 @@ describe('RNF-06 & RNF-07: Pruebas unitarias de Redis (TTL) y RabbitMQ', () => {
 
     it('debe expirar la clave automáticamente cuando se cumple el TTL', async () => {
       // Guardar con 1 segundo de TTL
-      await redisService.saveOfferWithTtl(mockOffer, 1);
+      await redisService.saveOffer(mockOffer, 1);
 
       // Esperar 1.1 segundos
       await new Promise((resolve) => setTimeout(resolve, 1100));
@@ -79,7 +80,7 @@ describe('RNF-06 & RNF-07: Pruebas unitarias de Redis (TTL) y RabbitMQ', () => {
     });
 
     it('debe permitir eliminar una oferta manualmente de Redis', async () => {
-      await redisService.saveOfferWithTtl(mockOffer, 10);
+      await redisService.saveOffer(mockOffer, 10);
       await redisService.deleteOffer(mockOffer.id);
 
       const retrieved = await redisService.getOffer(mockOffer.id);

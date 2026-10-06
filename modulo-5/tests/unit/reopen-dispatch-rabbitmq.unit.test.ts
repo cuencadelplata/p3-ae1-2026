@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { RideRequestService } from '../../src/services/ride-request.service';
-import { RabbitMQService, DriverCancellationEvent } from '../../src/services/rabbitmq.service';
+import { RabbitMQService } from '../../src/services/rabbitmq.service';
+import { DriverCancellationEvent } from '../../src/types/ride-request.types';
 import { RedisService } from '../../src/services/redis.service';
 import { RideOffer } from '../../src/types/ride-request.types';
 
