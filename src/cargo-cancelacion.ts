@@ -1,4 +1,4 @@
-import type { Request, Response } from "express";
+import { Router, type Request, type Response } from "express";
 
 const GRACE_PERIOD_SECONDS = 120;
 
@@ -229,13 +229,25 @@ function buildResponse(
   };
 }
 
-// --- Handler de Express (agregado para exponer el RF 7.4 como endpoint) ---
+// --- Handler de Express ---
 export const calcularCargoCancelacionHandler = (req: Request, res: Response) => {
   try {
     const resultado = calcularCargoCancelacion(req.body);
     return res.status(200).json(resultado);
   } catch (error: any) {
     const statusCode = error.statusCode ?? 400;
-    return res.status(statusCode).json({ error: error.message || "Error al calcular cargo de cancelación" });
+    return res.status(statusCode).json({
+      error: error.message || "Error al calcular cargo de cancelación",
+    });
   }
 };
+
+// --- Router de Express para RF-7.4 ---
+const cargoCancelacionRouter = Router();
+
+cargoCancelacionRouter.post(
+  "/api/m7/cargo-cancelacion",
+  calcularCargoCancelacionHandler
+);
+
+export default cargoCancelacionRouter;

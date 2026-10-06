@@ -35,10 +35,15 @@ describe("autorizarPago (RF-7.3 - Autorización/captura)", () => {
   });
 
   it("lanza error al intentar autorizar dos veces la misma orden (idempotencia)", () => {
-    registrarMetodoPago("cliente1", "viajeP", "efectivo");
-    registrarMetodoPago("cliente1", "viajeQ", "efectivo");
-    autorizarPago("viajeP", "orden-repetida"); // primera vez, OK
-    expect(() => autorizarPago("viajeQ", "orden-repetida")).toThrow(
+    // Usamos IDs únicos para este test para asegurar que no colisionen con otros datos
+    registrarMetodoPago("cliente1", "viajeIdemP", "efectivo");
+    registrarMetodoPago("cliente1", "viajeIdemQ", "efectivo");
+
+    // Primera autorización con la orden orden-idempotente-1
+    autorizarPago("viajeIdemP", "orden-idempotente-1");
+
+    // Intentar autorizar otro viaje usando exactamente la misma orden de pago
+    expect(() => autorizarPago("viajeIdemQ", "orden-idempotente-1")).toThrow(
       "Esta orden de pago ya fue procesada anteriormente"
     );
   });
