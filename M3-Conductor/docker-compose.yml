@@ -1,0 +1,91 @@
+services:
+  # Servidor Redis en memoria para mocks y caché
+  redis:
+    image: redis:7-alpine
+    container_name: p3-m3-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  # Broker de mensajería asíncrona (RNF-07). Panel de administración en
+  # http://localhost:15672 (guest / guest)
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: p3-m3-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Backend Node.js - Módulo 3 (Conductores & Valoraciones)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: p3-m3-api
+    container_name: p3-m3-api
+    restart: unless-stopped
+    ports:
+      - "5000:3000"
+    environment:
+      PORT: 3000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_TTL_HABILITADO: ${REDIS_TTL_HABILITADO:-300}
+      REDIS_TTL_DISPONIBLE: ${REDIS_TTL_DISPONIBLE:-60}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      RABBITMQ_EXCHANGE: m3.conductores.events
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # Consumidor de ejemplo de los eventos de M3 (logs: docker compose logs -f consumer)
+  consumer:
+    image: p3-m3-api
+    container_name: p3-m3-consumer
+    restart: unless-stopped
+    command: ["npm", "run", "consumer"]
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      RABBITMQ_EXCHANGE: m3.conductores.events
+      RABBITMQ_EXAMPLE_QUEUE: m3.ejemplo.driver-events
+    depends_on:
+      api:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
+  # Frontend Web - Módulo 3 (Test Runner & Swagger UI)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    image: p3-m3-frontend
+    container_name: p3-m3-frontend
+    restart: unless-stopped
+    ports:
+      - "4000:80"
+    depends_on:
+      - api
+
+volumes:
+  redis_data:
+  rabbitmq_data:

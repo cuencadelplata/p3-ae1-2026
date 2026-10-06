@@ -1,0 +1,325 @@
+{
+
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Conductores API",
+        "version": "1.0.0",
+        "description": "Esta API se utilizará para la comunicación con los conductores y los vehículos."
+    },
+"servers": [
+    {
+      "url": "http://localhost:3000/api",
+      "description": "Servidor local para realizar tests de la API"
+    }
+  ],
+  "paths": {
+    "/conductores": {
+      "get": {
+        "summary": "Listado de conductores",
+        "responses": {
+          "200": {
+            "description": "Pedir la lista completa de conductores registrados en la base de datos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Crear un nuevo conductor",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/conductores"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Conductor creado exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/conductores"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida"
+          }
+        }
+      }
+    },
+    "/conductores/{id}": {
+      "get": {
+        "summary": "Obtener un conductor por ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID del conductor a obtener",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conductor encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/conductores/{id}"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conductor no encontrado"
+          }
+        }
+      }
+    },
+     "/conductores/{id}/habilitado": {
+      "get": {
+        "summary": "Estado de habilitación del conductor (RF 3.1)",
+        "description": "Resuelve primero contra la caché de Redis; si no está cacheado, consulta la base de datos y recarga la caché con TTL. Es la única vía permitida para que otros módulos consulten este dato (no deben hacer SQL directo).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "usuarioID del conductor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de habilitación obtenido (desde caché o base de datos)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "usuarioID": { "type": "string" },
+                    "habilitado": { "type": "string", "enum": ["pendiente", "activo", "suspendido", "rechazado"] },
+                    "origen": { "type": "string", "enum": ["cache", "db"] }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Conductor no encontrado" }
+        }
+      }
+    },
+    "/conductores/{id}/disponible": {
+      "get": {
+        "summary": "Estado efímero de disponibilidad del conductor (RF 3.3)",
+        "description": "Consulta exclusivamente Redis (clave con TTL tipo heartbeat), sin acceder a la base de datos, pensado para que el Módulo 5 la consulte de forma optimizada y frecuente durante el matching de viajes.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "usuarioID del conductor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de disponibilidad obtenido desde Redis (false si no hay heartbeat vigente)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "usuarioID": { "type": "string" },
+                    "disponible": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conductores/": {
+      "post": {
+        "summary": "Crear un nuevo conductor",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/conductores"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Conductor creado exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/conductores"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida"
+          }
+        }
+      }
+    },
+    "/conductor/valoraciones": {
+      "get": {
+        "summary": "Obtener las valoraciones de conductor",
+        "parameters": [
+          {
+            "name": "conductorId",
+            "in": "path",
+            "required": true,
+            "description": "ID del conductor para obtener sus valoraciones",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "valoraciones del conductor obtenidas correctamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/valoraciones"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conductor no encontrado"
+          }
+        }
+      },
+      "post": {
+        "summary": "Registrar una nueva valoracion de un conductor",
+        "parameters": [
+          {
+            "name": "conductorId",
+            "in": "path",
+            "required": true,
+            "description": "ID del conductor para registrar su valoracion",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/nuevaValoracion"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "valoracion registrada correctamente"
+          },
+          "400": {"description": "Solicitud inválida" },
+          "404": {"description": "Conductor no encontrado" }
+        }
+      }
+    }
+  },
+
+  "components": {
+    "schemas": {
+    "nuevaValoracion": {
+        "type": "object",
+        "required": ["usuarioId", "valoracion"],
+        "properties": {
+          "valoracion": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "viajeId": {
+            "type": "string",
+            "description": "ID del viaje asociado a la valoración"
+            },
+          "comentario": {
+            "type": "string",
+            "description": "Comentario opcional sobre la valoración"
+          }
+        }
+      },
+
+      "valoracion": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/nuevaValoracion"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "conductorId": {"type": "string"},
+              "fecha": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": ["id", "conductorId", "fecha"]
+          }
+        ]
+      },
+      "Conductor": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "apellido": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "telefono": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "nombre", "apellido", "email", "telefono"]
+      }
+    }
+  }
+
+
+
+}
