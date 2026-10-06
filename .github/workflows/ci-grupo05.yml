@@ -10,6 +10,10 @@ jobs:
   test-and-build:
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        working-directory: m2
+
     steps:
       - name: 1. Checkout del código
         uses: actions/checkout@v4
@@ -19,6 +23,7 @@ jobs:
         with:
           node-version: 22
           cache: 'npm'
+          cache-dependency-path: m2/package-lock.json
 
       - name: 3. Instalar dependencias limpias
         run: npm ci
