@@ -1,40 +1,53 @@
-name: M6 Viajes - Tests
+name: M6 integrado - Tests
 
 on:
   push:
-    branches: [ M6-Viajes, main ]
+    branches: [ '**' ]
     paths:
-      - 'm6_viajes/**'
+      - 'modulo6/**'
+      - 'README.md'
       - '.github/workflows/m6-tests.yml'
   pull_request:
-    branches: [ M6-Viajes, main ]
+    branches: [ '**' ]
     paths:
-      - 'm6_viajes/**'
+      - 'modulo6/**'
+      - 'README.md'
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: modulo6/package-lock.json
 
     - name: Install dependencies
-      working-directory: m6_viajes
+      working-directory: modulo6
       run: npm ci
 
-    - name: Levantar base de datos (TripDB y Redis)
-      working-directory: m6_viajes
-      run: docker compose up -d
+    - name: Levantar stack integrado
+      working-directory: modulo6
+      run: docker compose up -d --build
 
-    - name: Run unit tests
-      working-directory: m6_viajes
+    - name: Compilar servicios
+      working-directory: modulo6
+      run: npm run build
+
+    - name: Ejecutar tests unitarios
+      working-directory: modulo6
       run: npm test
 
-    - name: Run E2E tests (Docker)
-      working-directory: m6_viajes
+    - name: Ejecutar tests E2E
+      working-directory: modulo6
       run: npm run test:e2e
+
+    - name: Detener stack integrado
+      if: always()
+      working-directory: modulo6
+      run: docker compose down
