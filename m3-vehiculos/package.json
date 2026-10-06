@@ -1,0 +1,54 @@
+{
+  "name": "p3-ae1-2026",
+  "version": "1.0.0",
+  "description": "Paradigmas 3 AE1 2026",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:e2e": "playwright test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cuencadelplata/p3-ae1-2026.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/cuencadelplata/p3-ae1-2026/issues"
+  },
+  "homepage": "https://github.com/cuencadelplata/p3-ae1-2026#readme",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
+    "amqplib": "^2.2.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-validator": "^7.3.2",
+    "redis": "^6.2.1",
+    "swagger-jsdoc": "^6.3.0",
+    "swagger-ui-express": "^5.0.1",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@swc/core": "^1.16.1",
+    "@swc/jest": "^0.2.39",
+    "@types/amqplib": "^0.10.8",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.4.0",
+    "@types/swagger-ui-express": "^4.1.8",
+    "jest": "^30.5.1",
+    "nodemon": "^3.1.14",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.12",
+    "tsx": "^4.23.13",
+    "typescript": "^5.7.0"
+  }
+}
