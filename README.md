@@ -61,7 +61,7 @@ Endpoints del panel:
 - `POST /conductores/`
 - `GET /conductor/valoraciones` y `POST /conductor/valoraciones`
 
-Esas rutas leen y escriben las valoraciones ya registradas (`conductor:{id}:valoraciones`). No muestran la valoración pendiente que genera el evento de viaje finalizado.
+Esas rutas leen y escriben las valoraciones ya registradas (`conductor:{id}:valoraciones`). El panel, además, muestra arriba las notificaciones de valoraciones habilitadas.
 
 ---
 
@@ -72,15 +72,17 @@ Cuando el módulo de viajes publica `viaje.finalizado`, M3 hace lo siguiente:
 1. El consumidor escucha el exchange `viajes.events`, routing key `viaje.finalizado`, cola `valoraciones.viaje-finalizado`.
 2. Valida `viajeId`, `conductorId` y `clienteId`.
 3. Guarda la valoración en Redis con la clave `valoracion:pendiente:{viajeId}` y estado `PENDIENTE`.
-4. Publica `valoracion.habilitada` en el exchange `valoraciones.events`, routing key `valoracion.habilitada`, cola `cliente.valoracion-habilitada`.
+4. Publica `valoracion.habilitada` en el exchange `valoraciones.events`, routing key `valoracion.habilitada`. Llegan dos copias: la cola `cliente.valoracion-habilitada` (para el módulo cliente) y la cola `valoraciones.notificaciones-panel` (para el panel).
 
-Para disparar el evento sin el módulo de viajes, con la API ya iniciada:
+El panel se conecta a `GET /api/valoraciones/notificaciones/stream` y muestra el aviso en cuanto llega. Las pendientes guardadas en Redis se listan con `GET /api/valoraciones/pendientes`. El contrato de los dos eventos está en `M3-Conductor/src/api/valoraciones/asyncapi.yml`.
+
+Para disparar el evento sin el módulo de viajes, con la API ya iniciada y el panel abierto:
 
 ```bash
 npm run mock:viaje-finalizado
 ```
 
-El mensaje publicado queda en la cola `cliente.valoracion-habilitada`. Se puede ver en RabbitMQ Management. El panel web no consume esa cola: el aviso al cliente lo tiene que leer el módulo que se suscriba a `valoracion.habilitada`.
+El aviso aparece en el panel. El mismo mensaje sigue en la cola `cliente.valoracion-habilitada`, visible en RabbitMQ Management.
 
 En el evento guardado, `evaluadorId` es el conductor y `evaluadoId` es el cliente.
 
