@@ -73,21 +73,19 @@ jobs:
           RECEIPT_LINK_TTL_SECONDS: "5"
         run: docker compose up -d
 
-      - name: Wait for service health
+      - name: Wait for unified M8 application readiness
         run: |
-          for url in http://localhost:3101 http://localhost:3103 http://localhost:3008 http://localhost:3000; do
-            for attempt in $(seq 1 30); do
-              if curl --fail --silent "$url/health" > /dev/null; then
-                break
-              fi
-              if [ "$attempt" -eq 30 ]; then
-                echo "Service did not become healthy: $url" >&2
-                docker compose ps
-                docker compose logs
-                exit 1
-              fi
-              sleep 2
-            done
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:3000/health/ready > /dev/null; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "Unified M8 application did not become ready" >&2
+              docker compose ps
+              docker compose logs
+              exit 1
+            fi
+            sleep 2
           done
 
       - name: Run workspace API E2E tests
