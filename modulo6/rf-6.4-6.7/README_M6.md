@@ -78,7 +78,7 @@ La suite unitaria/de integración local usa puertos efímeros y levanta el servi
 
 ## Endpoints provistos por la API
 
-La especificación completa se encuentra en [openapi.yaml](openapi.yaml).
+La especificación completa se encuentra en el [OpenAPI consolidado](../openapi.yaml).
 
 ### Crear un viaje
 

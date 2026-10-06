@@ -40,6 +40,6 @@ curl -X POST http://localhost:3000/api/viajes/<viajeId>/iniciar \
 
 ## Especificación y pruebas
 
-- OpenAPI: [openapi.yaml](openapi.yaml)
+- OpenAPI: [contrato consolidado](../openapi.yaml)
 - Unitarias: `npm run test:rf-6.1-6.2-6.3`
 - E2E Docker: `npm run test:e2e:rf-6.1-6.2-6.3`

@@ -93,7 +93,7 @@ npm run test:e2e:rf-6.5-6.6
 
 ## Endpoints provistos por la API
 
-La especificación completa se encuentra en [openapi.yaml](docs/m6-rf6.5-rf6.6/openapi.yaml).
+La especificación completa se encuentra en el [OpenAPI consolidado](../openapi.yaml).
 
 ### Cancelar por cliente
 

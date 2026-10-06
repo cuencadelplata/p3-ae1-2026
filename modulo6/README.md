@@ -45,9 +45,7 @@ Compose inicia un simulador interno para las dependencias M3/M4/M7/M8. Los tres 
 
 ## Contratos
 
-- RF-6.1/6.2/6.3: [OpenAPI](rf-6.1-6.2-6.3/openapi.yaml)
-- RF-6.4/6.7: [OpenAPI](rf-6.4-6.7/openapi.yaml)
-- RF-6.5/6.6: [OpenAPI](rf-6.5-6.6/docs/m6-rf6.5-rf6.6/openapi.yaml)
+- Todos los requisitos: [OpenAPI consolidado](openapi.yaml)
 
 ## Estructura
 
@@ -69,9 +67,10 @@ modulo6/
 │   ├── rf-6.1-6.2-6.3/   # mock M8
 │   ├── rf-6.4-6.7/
 │   └── rf-6.5-6.6/
-├── rf-6.1-6.2-6.3/   # SQL y contrato OpenAPI
-├── rf-6.4-6.7/       # contrato OpenAPI
-├── rf-6.5-6.6/       # contratos y documentación
+├── rf-6.1-6.2-6.3/   # SQL y documentación específica
+├── rf-6.4-6.7/       # documentación específica
+├── rf-6.5-6.6/       # contratos auxiliares y documentación
+├── openapi.yaml      # especificación unificada de las tres APIs
 ├── docker-compose.yml
 └── package.json
 ```

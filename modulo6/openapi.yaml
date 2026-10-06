@@ -1,0 +1,950 @@
+openapi: 3.0.3
+info:
+  title: M6 - Viajes
+  version: 3.0.0
+  description: |
+    Especificación consolidada de las APIs M6 para RF-6.1/6.2/6.3, RF-6.4/6.7 y RF-6.5/6.6.
+    Viajes es la fuente central del ciclo de vida. La fachada expone finalización e historial
+    en su propio puerto y la API de cancelaciones delega cambios a Viajes y publica eventos.
+    Estas APIs no implementan autenticación; deben exponerse únicamente dentro de una red confiable.
+  contact:
+    name: Equipo M6
+  license:
+    name: ISC
+    url: https://opensource.org/license/isc-license-txt/
+servers:
+  - url: http://localhost:3000
+    description: API central Viajes (RF-6.1/6.2/6.3)
+security: []
+tags:
+  - name: Viajes
+    description: Solicitud y ciclo de vida central de los viajes
+  - name: Integración RF-6
+    description: Endpoints centrales consumidos por otros módulos
+  - name: Finalización
+    description: Fachada RF-6.4
+  - name: Historial
+    description: Consulta de transiciones RF-6.7
+  - name: Cancelaciones
+    description: Cancelaciones RF-6.5/6.6
+  - name: Salud
+    description: Disponibilidad de las APIs
+paths:
+  /health:
+    get:
+      tags: [Salud]
+      summary: Comprobar disponibilidad del servicio
+      description: La fachada comprueba su proceso HTTP; no verifica la disponibilidad de Viajes ni sus dependencias.
+      operationId: healthCheck
+      servers:
+        - url: http://localhost:3000
+          description: API central Viajes
+        - url: http://localhost:3002
+          description: Fachada RF-6.4/6.7
+      responses:
+        '200':
+          description: Proceso disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+        '404':
+          description: Ruta de salud no disponible en ese servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/viajes:
+    post:
+      tags: [Viajes]
+      summary: Solicitar un viaje
+      description: |
+        Crea un viaje con estado SOLICITADO. La API central responde con el viaje directamente;
+        la fachada RF-6.4/6.7 responde con el viaje envuelto en la propiedad `viaje`.
+      operationId: solicitarViaje
+      servers:
+        - url: http://localhost:3000
+          description: API central Viajes (respuesta directa)
+        - url: http://localhost:3002
+          description: Fachada RF-6.4/6.7 (respuesta envuelta)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitarViajeRequest'
+            example:
+              clienteId: cliente-123
+              origen: Calle Principal 100
+              destino: Centro Comercial
+      responses:
+        '201':
+          description: Viaje creado en estado SOLICITADO
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ViajeResponse'
+                  - $ref: '#/components/schemas/CrearViajeResponse'
+              examples:
+                apiCentral:
+                  summary: Respuesta de la API central
+                  value:
+                    id: 3f0c9c1e-6a51-4d0e-9b57-0c2d1a7f4b11
+                    clienteId: cliente-123
+                    conductorId: null
+                    estado: SOLICITADO
+                    origen: Calle Principal 100
+                    destino: Centro Comercial
+                    fechaCreacion: '2026-10-05T15:30:00Z'
+                fachada:
+                  summary: Respuesta de la fachada
+                  value:
+                    viaje:
+                      id: 3f0c9c1e-6a51-4d0e-9b57-0c2d1a7f4b11
+                      clienteId: cliente-123
+                      conductorId: null
+                      estado: solicitado
+                      inicio: '2026-10-05T15:30:00Z'
+        '400':
+          description: Datos inválidos o estado inicial no permitido por la fachada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Respuesta inválida del módulo central al responder a través de la fachada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: TripDB no disponible o módulo central inaccesible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/viajes/{id}:
+    get:
+      tags: [Integración RF-6]
+      summary: Obtener un viaje para integración
+      operationId: obtenerViaje
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Viaje encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajeIntegracionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DbNoDisponible'
+
+  /api/viajes/{id}/cancelacion:
+    patch:
+      tags: [Integración RF-6]
+      summary: Cancelar un viaje en la API central
+      description: Cancela atómicamente un viaje SOLICITADO o CONDUCTOR_EN_CAMINO. La API de cancelaciones M6 además publica su evento correspondiente.
+      operationId: cancelarViajeCentral
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelarViajeCentralRequest'
+            example:
+              actor: cliente
+              motivo: Cambio de planes
+      responses:
+        '200':
+          description: Viaje cancelado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajeIntegracionResponse'
+        '400':
+          description: Motivo inválido o transición no permitida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DbNoDisponible'
+
+  /api/viajes/{id}/asignar:
+    post:
+      tags: [Viajes]
+      summary: Asignar conductor a un viaje
+      description: Asigna un conductor a un viaje SOLICITADO y lo cambia a CONDUCTOR_EN_CAMINO.
+      operationId: asignarConductor
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AsignarConductorRequest'
+            example:
+              conductorId: conductor-001
+      responses:
+        '200':
+          description: Conductor asignado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsignarConductorResponse'
+        '400':
+          description: El viaje no está en estado SOLICITADO o los datos son inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DbNoDisponible'
+
+  /api/viajes/{id}/arribo:
+    put:
+      tags: [Viajes]
+      summary: Registrar el arribo del conductor
+      description: |
+        Requiere estado CONDUCTOR_EN_CAMINO y conductor asignado. Consulta a M3 si el conductor
+        está habilitado. El primer arribo cambia a ARRIBADO y publica viaje.arribado una sola vez;
+        luego solicita a M8 un QR. Si la generación falla, repetir el PUT mientras siga ARRIBADO
+        recupera el QR sin consultar M3 ni republicar el evento.
+      operationId: registrarArribo
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Arribo registrado y QR generado o reutilizado mientras siga vigente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrarArriboResponse'
+        '400':
+          description: Estado no elegible o no hay conductor asignado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: M3 informa que el conductor no está habilitado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          description: TripDB, M3 o M8 no disponible
+          headers:
+            Retry-After:
+              description: Tiempo sugerido para reintentar, cuando lo informa M8
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/viajes/{id}/iniciar:
+    post:
+      tags: [Viajes]
+      summary: Iniciar viaje con validación de QR
+      description: |
+        Requiere estado ARRIBADO. M6 valida el token con M8; solo ante validación positiva cambia
+        a EN_CURSO y publica viaje.iniciado. Los rechazos conservan ARRIBADO. Ante QR vencido o
+        usado, M6 puede generar y devolver un QR nuevo.
+      operationId: iniciarViaje
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IniciarViajeRequest'
+            example:
+              codigoVerificacion: AB3K8F
+      responses:
+        '200':
+          description: Viaje iniciado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IniciarViajeResponse'
+        '400':
+          description: El viaje no está en estado ARRIBADO o la solicitud es inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Código de verificación inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El viaje o el QR no existe
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ErrorResponse'
+                  - $ref: '#/components/schemas/M8ErrorResponse'
+        '409':
+          description: QR usado; puede incluir un QR nuevo si el viaje sigue ARRIBADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/M8ErrorResponse'
+        '410':
+          description: QR expirado; puede incluir un QR nuevo si el viaje sigue ARRIBADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/M8ErrorResponse'
+        '500':
+          description: Error inesperado de M8
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: M8 o TripDB no disponible
+          headers:
+            Retry-After:
+              description: Tiempo sugerido antes de reintentar, cuando lo informa M8
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ErrorResponse'
+                  - $ref: '#/components/schemas/M8ErrorResponse'
+
+  /api/clientes/{clienteId}/viajes:
+    get:
+      tags: [Viajes]
+      summary: Consultar viajes e historial de un cliente
+      description: Devuelve los viajes del cliente con historial de transiciones y datos de finalización si existen.
+      operationId: obtenerViajesDeCliente
+      parameters:
+        - name: clienteId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Viajes del cliente; la lista puede estar vacía
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajesClienteResponse'
+        '400':
+          description: Identificador de cliente inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/DbNoDisponible'
+
+  /api/viajes/{id}/finalizacion:
+    post:
+      tags: [Finalización]
+      summary: Finalizar un viaje y autorizar el pago
+      description: |
+        Requiere estado EN_CURSO. M6 obtiene métricas estimadas de M4, calcula la tarifa y solicita
+        autorización del pago a M7. La fachada RF-6.4 reenvía la solicitud y la respuesta al servicio central.
+      operationId: finalizarViaje
+      servers:
+        - url: http://localhost:3000
+          description: API central Viajes
+        - url: http://localhost:3002
+          description: Fachada RF-6.4/6.7
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FinalizarViajeRequest'
+            example:
+              origen:
+                latitude: -34.6037
+                longitude: -58.3816
+                address: Calle A
+              destino:
+                latitude: -34.6118
+                longitude: -58.396
+                address: Calle B
+              tipoVehiculo: auto
+              horaFin: '2026-10-05T18:00:00Z'
+              metodoPago: tarjeta
+      responses:
+        '200':
+          description: Viaje finalizado y pago autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinalizarViajeResponse'
+        '400':
+          description: Datos inválidos o el viaje no está EN_CURSO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          description: M4, M7 o Viajes devolvió una respuesta inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: TripDB, M4, M7 o el módulo central no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/viajes/{id}/historial-transiciones:
+    get:
+      tags: [Historial]
+      summary: Consultar historial de transiciones
+      description: Devuelve las transiciones del viaje en orden cronológico. La fachada RF-6.7 delega al servicio central.
+      operationId: obtenerHistorialTransiciones
+      servers:
+        - url: http://localhost:3000
+          description: API central Viajes
+        - url: http://localhost:3002
+          description: Fachada RF-6.7
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Historial del viaje; puede estar vacío
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistorialTransicionesResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          description: TripDB o el módulo central no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/viajes/{viajeId}/cancelacion-cliente:
+    post:
+      tags: [Cancelaciones]
+      summary: Cancelar viaje por solicitud del cliente
+      description: La API consulta y cancela el viaje en RF-6 y publica el evento cancelacion_cliente en RabbitMQ.
+      operationId: cancelarViajePorCliente
+      servers:
+        - url: http://localhost:3001
+          description: API M6 de cancelaciones
+      parameters:
+        - $ref: '#/components/parameters/ViajeIdCancelacion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelarViajeRequest'
+            example:
+              motivo: Cambio de planes
+      responses:
+        '200':
+          description: Viaje cancelado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelacionResponse'
+        '400':
+          description: Motivo inválido o transición no permitida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Viaje no encontrado en RF-6
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: RF-6 devolvió un identificador distinto al solicitado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/viajes/{viajeId}/cancelacion-conductor:
+    post:
+      tags: [Cancelaciones]
+      summary: Cancelar viaje por solicitud del conductor
+      description: La API cancela el viaje en RF-6 y publica despacho.reabrir para devolver la solicitud a búsqueda.
+      operationId: cancelarViajePorConductor
+      servers:
+        - url: http://localhost:3001
+          description: API M6 de cancelaciones
+      parameters:
+        - $ref: '#/components/parameters/ViajeIdCancelacion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelarViajeRequest'
+            example:
+              motivo: No puedo continuar
+      responses:
+        '200':
+          description: Viaje cancelado y evento despacho.reabrir publicado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelacionResponse'
+        '400':
+          description: Motivo inválido o transición no permitida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Viaje no encontrado en RF-6
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: RF-6 devolvió un identificador distinto al solicitado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  parameters:
+    ViajeId:
+      name: id
+      in: path
+      required: true
+      description: Identificador del viaje
+      schema:
+        type: string
+      example: 3f0c9c1e-6a51-4d0e-9b57-0c2d1a7f4b11
+    ViajeIdCancelacion:
+      name: viajeId
+      in: path
+      required: true
+      description: Identificador del viaje
+      schema:
+        type: string
+      example: 3f0c9c1e-6a51-4d0e-9b57-0c2d1a7f4b11
+  responses:
+    NotFound:
+      description: Viaje no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Viaje no encontrado
+    DbNoDisponible:
+      description: TripDB no disponible
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Base de datos no disponible, intente más tarde
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    EstadoViaje:
+      type: string
+      description: Estados posibles del ciclo de vida de un viaje
+      enum: [SOLICITADO, ASIGNADO, CONDUCTOR_EN_CAMINO, ARRIBADO, EN_CURSO, COMPLETADO, CANCELADO]
+    SolicitarViajeRequest:
+      type: object
+      required: [clienteId, origen, destino]
+      properties:
+        clienteId:
+          type: string
+          description: Identificador del cliente
+          example: cliente-123
+        origen:
+          type: string
+          description: Dirección de origen
+          example: Calle Principal 100
+        destino:
+          type: string
+          description: Dirección de destino
+          example: Centro Comercial
+        estado:
+          type: string
+          enum: [SOLICITADO, solicitado]
+          description: Opcional en la fachada; solo admite el estado inicial SOLICITADO.
+    ViajeResponse:
+      type: object
+      required: [id, clienteId, estado, origen, destino, fechaCreacion]
+      properties:
+        id:
+          type: string
+          description: UUID del viaje
+        clienteId:
+          type: string
+        conductorId:
+          type: string
+          nullable: true
+        estado:
+          $ref: '#/components/schemas/EstadoViaje'
+        origen:
+          type: string
+        destino:
+          type: string
+        codigoVerificacion:
+          type: string
+          nullable: true
+          description: Token del QR vigente; nulo antes del arribo.
+        qrCode:
+          type: string
+          nullable: true
+          description: Data URL del QR vigente; nulo antes del arribo.
+        qrExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        fechaCreacion:
+          type: string
+          format: date-time
+    CrearViajeResponse:
+      type: object
+      required: [viaje]
+      properties:
+        viaje:
+          type: object
+          required: [id, clienteId, conductorId, estado]
+          properties:
+            id:
+              type: string
+            clienteId:
+              type: string
+            conductorId:
+              type: string
+              nullable: true
+            estado:
+              type: string
+              enum: [solicitado]
+            inicio:
+              type: string
+              format: date-time
+    ViajeIntegracionResponse:
+      type: object
+      required: [id, clienteId, estado]
+      properties:
+        id:
+          type: string
+        clienteId:
+          type: string
+        conductorId:
+          type: string
+          nullable: true
+        estado:
+          $ref: '#/components/schemas/EstadoViaje'
+    AsignarConductorRequest:
+      type: object
+      required: [conductorId]
+      properties:
+        conductorId:
+          type: string
+          example: conductor-001
+    AsignarConductorResponse:
+      type: object
+      required: [mensaje, viaje]
+      properties:
+        mensaje:
+          type: string
+        viaje:
+          $ref: '#/components/schemas/ViajeResponse'
+    RegistrarArriboResponse:
+      type: object
+      required: [mensaje, viaje, qr]
+      properties:
+        mensaje:
+          type: string
+        viaje:
+          $ref: '#/components/schemas/ViajeResponse'
+        qr:
+          $ref: '#/components/schemas/QRResponse'
+    QRResponse:
+      type: object
+      required: [token, qrDataUrl, expiresAt]
+      properties:
+        token:
+          type: string
+        qrDataUrl:
+          type: string
+          format: uri
+        expiresAt:
+          type: string
+          format: date-time
+    IniciarViajeRequest:
+      type: object
+      required: [codigoVerificacion]
+      properties:
+        codigoVerificacion:
+          type: string
+          description: Token leído del QR
+    IniciarViajeResponse:
+      type: object
+      required: [mensaje, viaje]
+      properties:
+        mensaje:
+          type: string
+        viaje:
+          $ref: '#/components/schemas/ViajeResponse'
+    CancelarViajeCentralRequest:
+      type: object
+      required: [actor, motivo]
+      properties:
+        actor:
+          type: string
+          enum: [cliente, conductor]
+        motivo:
+          type: string
+          minLength: 1
+    CancelarViajeRequest:
+      type: object
+      required: [motivo]
+      properties:
+        motivo:
+          type: string
+          minLength: 1
+    CancelacionResponse:
+      type: object
+      required: [viaje]
+      properties:
+        viaje:
+          $ref: '#/components/schemas/ViajeIntegracionResponse'
+    CoordenadasFinalizacion:
+      type: object
+      required: [latitude, longitude]
+      properties:
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        address:
+          type: string
+    FinalizarViajeRequest:
+      type: object
+      required: [origen, destino, tipoVehiculo, horaFin, metodoPago]
+      properties:
+        origen:
+          $ref: '#/components/schemas/CoordenadasFinalizacion'
+        destino:
+          $ref: '#/components/schemas/CoordenadasFinalizacion'
+        tipoVehiculo:
+          type: string
+          enum: [auto, moto]
+        horaFin:
+          type: string
+          format: date-time
+        metodoPago:
+          type: string
+          enum: [efectivo, tarjeta, transferencia]
+    FinalizarViajeResponse:
+      type: object
+      required: [viaje, paymentId, metricasEstimadas, fuenteMetrica]
+      properties:
+        viaje:
+          type: object
+          required: [id, clienteId, estado, horaFin, total, distanciaKm, tiempoMinutos]
+          properties:
+            id:
+              type: string
+            clienteId:
+              type: string
+            conductorId:
+              type: string
+              nullable: true
+            estado:
+              type: string
+              enum: [completado]
+            horaFin:
+              type: string
+              format: date-time
+            tiempoMinutos:
+              type: number
+            distanciaKm:
+              type: number
+            metodoPago:
+              type: string
+            total:
+              type: number
+            origen:
+              $ref: '#/components/schemas/CoordenadasFinalizacion'
+            destino:
+              $ref: '#/components/schemas/CoordenadasFinalizacion'
+            tipoVehiculo:
+              type: string
+              enum: [auto, moto]
+            fuenteMetrica:
+              type: string
+              enum: [M4]
+            metricasEstimadas:
+              type: boolean
+              enum: [true]
+        paymentId:
+          type: string
+        metricasEstimadas:
+          type: boolean
+          enum: [true]
+        fuenteMetrica:
+          type: string
+          enum: [M4]
+    HistorialTransicionesResponse:
+      type: object
+      required: [historial]
+      properties:
+        historial:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransicionViaje'
+    TransicionViaje:
+      type: object
+      required: [from, to, timestamp]
+      properties:
+        from:
+          type: string
+          description: Estado anterior en la transición
+        to:
+          type: string
+          description: Estado nuevo en la transición
+        timestamp:
+          type: string
+          format: date-time
+        detalle:
+          type: string
+    ViajesClienteResponse:
+      type: object
+      required: [clienteId, viajes]
+      properties:
+        clienteId:
+          type: string
+        viajes:
+          type: array
+          items:
+            type: object
+            required: [id, clienteId, estado, historialTransiciones, finalizacion]
+            properties:
+              id:
+                type: string
+              clienteId:
+                type: string
+              conductorId:
+                type: string
+                nullable: true
+              estado:
+                $ref: '#/components/schemas/EstadoViaje'
+              origen:
+                type: string
+              destino:
+                type: string
+              fechaCreacion:
+                type: string
+                format: date-time
+              finalizacion:
+                type: object
+                allOf:
+                  - $ref: '#/components/schemas/FinalizacionDetails'
+                nullable: true
+              historialTransiciones:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransicionViaje'
+    FinalizacionDetails:
+      type: object
+      required: [tiempoMinutos, distanciaKm, horaFin, metodoPago, total, tipoVehiculo, fuenteMetrica, metricasEstimadas, paymentId]
+      properties:
+        tiempoMinutos:
+          type: number
+        distanciaKm:
+          type: number
+        horaFin:
+          type: string
+          format: date-time
+        metodoPago:
+          type: string
+        total:
+          type: number
+        origen:
+          $ref: '#/components/schemas/CoordenadasFinalizacion'
+        destino:
+          $ref: '#/components/schemas/CoordenadasFinalizacion'
+        tipoVehiculo:
+          type: string
+          enum: [auto, moto]
+        fuenteMetrica:
+          type: string
+          enum: [M4]
+        metricasEstimadas:
+          type: boolean
+          enum: [true]
+        paymentId:
+          type: string
+    M8ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code]
+          properties:
+            code:
+              type: string
+              enum: [QR_NOT_FOUND, QR_ALREADY_USED, QR_EXPIRED, QR_INVALID]
+        qr:
+          $ref: '#/components/schemas/QRResponse'
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Mensaje de error
+          example: Viaje no encontrado
