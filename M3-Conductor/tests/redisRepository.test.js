@@ -87,14 +87,114 @@ describe('redisRepository.obtenerDisponibilidad (RF 3.3 - estado efímero, sin a
 });
 
 describe('redisRepository.actualizarDisponibilidad', () => {
-  test('setea la clave efímera en Redis con TTL tipo heartbeat', async () => {
-    await redisRepository.actualizarDisponibilidad('cond_001', true);
+  test('consulta el estado previo en Redis con redis.get antes de hacer el set y setea la clave efímera con TTL', async () => {
+    redis.get.mockResolvedValue(null);
 
+    const resultado = await redisRepository.actualizarDisponibilidad('cond_001', true);
+
+    // Debe hacer un get previo para conocer el valor anterior
+    expect(redis.get).toHaveBeenCalledWith('conductor:cond_001:disponible');
     expect(redis.set).toHaveBeenCalledWith(
       'conductor:cond_001:disponible',
       JSON.stringify({ usuarioID: 'cond_001', disponible: true }),
       'EX',
       expect.any(Number)
     );
+    expect(resultado).toEqual({
+      usuarioID: 'cond_001',
+      disponible: true,
+      disponibleAnterior: false
+    });
+  });
+
+  test('devuelve disponibleAnterior=true cuando ya existía un heartbeat previo en Redis', async () => {
+    redis.get.mockResolvedValue(JSON.stringify({ usuarioID: 'cond_001', disponible: true }));
+
+    const resultado = await redisRepository.actualizarDisponibilidad('cond_001', false);
+
+    expect(redis.get).toHaveBeenCalledWith('conductor:cond_001:disponible');
+    expect(resultado).toEqual({
+      usuarioID: 'cond_001',
+      disponible: false,
+      disponibleAnterior: true
+    });
+  });
+
+  test('devuelve disponibleAnterior=false cuando la clave anterior no existía o había expirado por inactividad', async () => {
+    // Clave expirada en Redis: redis.get devuelve null
+    redis.get.mockResolvedValue(null);
+
+    const resultado = await redisRepository.actualizarDisponibilidad('cond_002', false);
+
+    expect(resultado).toEqual({
+      usuarioID: 'cond_002',
+      disponible: false,
+      disponibleAnterior: false
+    });
+  });
+
+  test('en caso de fallo en redis.set, usa fallback en memoria sin lanzar excepción', async () => {
+    redis.get.mockResolvedValue(null);
+    redis.set.mockRejectedValue(new Error('Redis timeout'));
+
+    const resultado = await redisRepository.actualizarDisponibilidad('cond_003', true);
+
+    expect(resultado).toEqual({
+      usuarioID: 'cond_003',
+      disponible: true,
+      disponibleAnterior: false
+    });
+  });
+});
+
+describe('redisRepository.actualizarHabilitado (RF 3.1 - write-through con TTL)', () => {
+  test('actualiza en la base de datos y refresca la caché de Redis con TTL', async () => {
+    conductorDBRepository.actualizarHabilitado.mockResolvedValue({
+      usuarioID: 'cond_001',
+      habilitado: 'activo',
+      habilitadoAnterior: 'pendiente'
+    });
+
+    const resultado = await redisRepository.actualizarHabilitado('cond_001', 'activo');
+
+    expect(conductorDBRepository.actualizarHabilitado).toHaveBeenCalledWith('cond_001', 'activo');
+    expect(redis.set).toHaveBeenCalledWith(
+      'conductor:cond_001:habilitado',
+      JSON.stringify({ usuarioID: 'cond_001', habilitado: 'activo' }),
+      'EX',
+      expect.any(Number)
+    );
+    expect(resultado).toEqual({
+      usuarioID: 'cond_001',
+      habilitado: 'activo',
+      habilitadoAnterior: 'pendiente'
+    });
+  });
+
+  test('devuelve null y no actualiza Redis si el conductor no existe en la base de datos', async () => {
+    conductorDBRepository.actualizarHabilitado.mockResolvedValue(null);
+
+    const resultado = await redisRepository.actualizarHabilitado('inexistente', 'activo');
+
+    expect(conductorDBRepository.actualizarHabilitado).toHaveBeenCalledWith('inexistente', 'activo');
+    expect(resultado).toBeNull();
+    expect(redis.set).not.toHaveBeenCalled();
+  });
+
+  test('si falla redis.set al refrescar la caché, no lanza error y retorna el resultado de BD', async () => {
+    conductorDBRepository.actualizarHabilitado.mockResolvedValue({
+      usuarioID: 'cond_001',
+      habilitado: 'suspendido',
+      habilitadoAnterior: 'activo'
+    });
+    redis.set.mockRejectedValue(new Error('Redis write failed'));
+
+    const resultado = await redisRepository.actualizarHabilitado('cond_001', 'suspendido');
+
+    expect(resultado).toEqual({
+      usuarioID: 'cond_001',
+      habilitado: 'suspendido',
+      habilitadoAnterior: 'activo'
+    });
   });
 });

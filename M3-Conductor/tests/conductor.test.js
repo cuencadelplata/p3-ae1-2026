@@ -1,12 +1,20 @@
 const Conductor = require('../src/models/Conductor');
 const conductoresController = require('../src/controllers/conductoresController');
 const redisRepository = require('../src/repositories/redisRepository');
+const eventPublisher = require('../src/events/eventPublisher');
 
 // Mock del cliente redis para evitar sockets/conexiones colgadas en background
 jest.mock('../src/config/redisClient', () => ({
   on: jest.fn(),
   quit: jest.fn(),
   disconnect: jest.fn()
+}));
+
+// Mock del publicador de eventos para evitar conexiones a RabbitMQ
+jest.mock('../src/events/eventPublisher', () => ({
+  publicarDriverAvailabilityUpdated: jest.fn(),
+  publicarDriverStatusChanged: jest.fn(),
+  publicar: jest.fn()
 }));
 
 // Mock del repositorio de redis
@@ -275,7 +283,7 @@ describe('Controlador Conductores (conductoresController)', () => {
       expect(res.json).toHaveBeenCalledWith(mockResultado);
     });
 
-    test('debe retornar 200 con disponible=false cuando no hay heartbeat (clave expirada o inexistente)', async () => {
+    test('debe retornar 200 con disponible=false cuando no hay heartbeat (clave expirada o inexistente) y no emitir evento', async () => {
       req.params = { id: 'cond_002' };
       const mockResultado = { usuarioID: 'cond_002', disponible: false };
       redisRepository.obtenerDisponibilidad.mockResolvedValue(mockResultado);
@@ -284,6 +292,8 @@ describe('Controlador Conductores (conductoresController)', () => {
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(mockResultado);
+      // Expiración pasiva en Redis: no notifica al broker
+      expect(eventPublisher.publicarDriverAvailabilityUpdated).not.toHaveBeenCalled();
     });
 
     test('debe retornar error 500 si el repositorio falla', async () => {
@@ -297,6 +307,175 @@ describe('Controlador Conductores (conductoresController)', () => {
         error: 'Error al obtener disponibilidad del conductor',
         detalle: 'Redis connection error'
       });
+    });
+  });
+
+  describe('actualizarDisponible (RF 3.3 / RNF-07)', () => {
+    test('debe retornar 400 si el campo disponible no es booleano', async () => {
+      req.params = { id: 'cond_001' };
+      req.body = { disponible: 'si' };
+
+      await conductoresController.actualizarDisponible(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: "El campo 'disponible' es requerido y debe ser booleano"
+      });
+      expect(eventPublisher.publicarDriverAvailabilityUpdated).not.toHaveBeenCalled();
+    });
+
+    test('debe retornar 400 si el body no incluye disponible', async () => {
+      req.params = { id: 'cond_001' };
+      req.body = {};
+
+      await conductoresController.actualizarDisponible(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: "El campo 'disponible' es requerido y debe ser booleano"
+      });
+    });
+
+    test('debe retornar 200 y emitir DriverAvailabilityUpdated cuando la disponibilidad cambia (false -> true)', async () => {
+      req.params = { id: 'cond_001' };
+      req.body = { disponible: true };
+      const mockResultado = { usuarioID: 'cond_001', disponible: true, disponibleAnterior: false };
+      redisRepository.actualizarDisponibilidad.mockResolvedValue(mockResultado);
+
+      await conductoresController.actualizarDisponible(req, res);
+
+      expect(redisRepository.actualizarDisponibilidad).toHaveBeenCalledWith('cond_001', true);
+      expect(eventPublisher.publicarDriverAvailabilityUpdated).toHaveBeenCalledWith(mockResultado);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ ...mockResultado, eventoEmitido: true });
+    });
+
+    test('debe retornar 200 y NO emitir evento cuando la disponibilidad no cambia (heartbeat true -> true)', async () => {
+      req.params = { id: 'cond_001' };
+      req.body = { disponible: true };
+      const mockResultado = { usuarioID: 'cond_001', disponible: true, disponibleAnterior: true };
+      redisRepository.actualizarDisponibilidad.mockResolvedValue(mockResultado);
+
+      await conductoresController.actualizarDisponible(req, res);
+
+      expect(redisRepository.actualizarDisponibilidad).toHaveBeenCalledWith('cond_001', true);
+      expect(eventPublisher.publicarDriverAvailabilityUpdated).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ ...mockResultado, eventoEmitido: false });
+    });
+
+    test('debe retornar 200 y NO emitir evento si la clave expiró por inactividad y se reporta disponible=false (false -> false)', async () => {
+      // Clave expirada en Redis = disponibleAnterior: false. Si se manda disponible: false, no hay cambio.
+      req.params = { id: 'cond_001' };
+      req.body = { disponible: false };
+      const mockResultado = { usuarioID: 'cond_001', disponible: false, disponibleAnterior: false };
+      redisRepository.actualizarDisponibilidad.mockResolvedValue(mockResultado);
+
+      await conductoresController.actualizarDisponible(req, res);
+
+      expect(redisRepository.actualizarDisponibilidad).toHaveBeenCalledWith('cond_001', false);
+      expect(eventPublisher.publicarDriverAvailabilityUpdated).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ ...mockResultado, eventoEmitido: false });
+    });
+
+    test('debe retornar error 500 si el repositorio falla', async () => {
+      req.params = { id: 'cond_001' };
+      req.body = { disponible: true };
+      redisRepository.actualizarDisponibilidad.mockRejectedValue(new Error('Redis connection failed'));
+
+      await conductoresController.actualizarDisponible(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error al actualizar disponibilidad del conductor',
+        detalle: 'Redis connection failed'
+      });
+      expect(eventPublisher.publicarDriverAvailabilityUpdated).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('actualizarHabilitado (RF 3.1 / RNF-07)', () => {
+    test('debe retornar 400 si el campo habilitado no es un estado válido', async () => {
+      req.params = { id: 'cond_001' };
+      req.body = { habilitado: 'invalido' };
+
+      await conductoresController.actualizarHabilitado(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: "El campo 'habilitado' debe ser uno de: pendiente, activo, suspendido, rechazado"
+      });
+      expect(eventPublisher.publicarDriverStatusChanged).not.toHaveBeenCalled();
+    });
+
+    test('debe retornar 404 si el conductor no existe en la base de datos', async () => {
+      req.params = { id: 'inexistente' };
+      req.body = { habilitado: 'activo' };
+      redisRepository.actualizarHabilitado.mockResolvedValue(null);
+
+      await conductoresController.actualizarHabilitado(req, res);
+
+      expect(redisRepository.actualizarHabilitado).toHaveBeenCalledWith('inexistente', 'activo');
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        error: "Conductor con ID 'inexistente' no encontrado"
+      });
+      expect(eventPublisher.publicarDriverStatusChanged).not.toHaveBeenCalled();
+    });
+
+    test('debe retornar 200 y emitir DriverStatusChanged cuando el estado cambia', async () => {
+      req.params = { id: 'cond_001' };
+      req.body = { habilitado: 'activo', motivo: 'Documentación aprobada' };
+      const mockResultado = {
+        usuarioID: 'cond_001',
+        habilitado: 'activo',
+        habilitadoAnterior: 'pendiente'
+      };
+      redisRepository.actualizarHabilitado.mockResolvedValue(mockResultado);
+
+      await conductoresController.actualizarHabilitado(req, res);
+
+      expect(redisRepository.actualizarHabilitado).toHaveBeenCalledWith('cond_001', 'activo');
+      expect(eventPublisher.publicarDriverStatusChanged).toHaveBeenCalledWith({
+        ...mockResultado,
+        motivo: 'Documentación aprobada'
+      });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ ...mockResultado, eventoEmitido: true });
+    });
+
+    test('debe retornar 200 y NO emitir evento si el estado no cambia', async () => {
+      req.params = { id: 'cond_001' };
+      req.body = { habilitado: 'activo' };
+      const mockResultado = {
+        usuarioID: 'cond_001',
+        habilitado: 'activo',
+        habilitadoAnterior: 'activo'
+      };
+      redisRepository.actualizarHabilitado.mockResolvedValue(mockResultado);
+
+      await conductoresController.actualizarHabilitado(req, res);
+
+      expect(redisRepository.actualizarHabilitado).toHaveBeenCalledWith('cond_001', 'activo');
+      expect(eventPublisher.publicarDriverStatusChanged).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ ...mockResultado, eventoEmitido: false });
+    });
+
+    test('debe retornar error 500 si el repositorio falla', async () => {
+      req.params = { id: 'cond_001' };
+      req.body = { habilitado: 'suspendido' };
+      redisRepository.actualizarHabilitado.mockRejectedValue(new Error('DB failure'));
+
+      await conductoresController.actualizarHabilitado(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error al actualizar habilitación del conductor',
+        detalle: 'DB failure'
+      });
+      expect(eventPublisher.publicarDriverStatusChanged).not.toHaveBeenCalled();
     });
   });
 });
