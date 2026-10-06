@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 const MODULE_DIR = fileURLToPath(new URL("../..", import.meta.url));
-const RECEIPTS = process.env.RECEIPTS_URL ?? "http://localhost:3008";
+const RECEIPTS = process.env.RECEIPTS_URL ?? process.env.M8_URL ?? "http://localhost:3000";
 const FISCAL = process.env.FISCAL_URL ?? "http://localhost:4010";
 const RABBIT_API = process.env.RABBITMQ_API_URL ?? "http://localhost:15672/api";
 const RABBIT_AUTH = `Basic ${Buffer.from(process.env.RABBITMQ_API_CREDENTIALS ?? "guest:guest").toString("base64")}`;
@@ -82,11 +82,17 @@ async function withStopped(service, fn) {
 
 async function ready() {
   const response = await fetch(`${RECEIPTS}/health/ready`);
-  return { status: response.status, body: await response.json() };
+  const body = await response.json();
+  const receipts = body.modules?.receipts ?? body;
+  return { status: receipts.status === "unavailable" ? 503 : 200, body: receipts };
 }
 
 async function waitAllAvailable() {
   await waitFor(async () => (await ready()).body.status === "ok", { timeoutMs: 60000, what: "que todas las dependencias vuelvan" });
+  await waitFor(
+    async () => (await receiptFetch(`/api/v1/receipts/${run}-identity-check`)).status === 404,
+    { timeoutMs: 15000, what: "la validacion de identidad de M1" },
+  );
 }
 
 async function rabbit(method, path, body) {
@@ -309,7 +315,7 @@ test("sin PostgreSQL: el proceso sigue vivo, la API responde 503 y los pagos se 
     assert.equal(status, 503);
     assert.equal(body.dependencies.postgres.status, "unavailable");
 
-    const response = await receiptFetch(`/api/v1/receipts/${issued}`);
+    const response = await fetch(`${RECEIPTS}/internal/receipts/${issued}/delivery-reference`);
     assert.equal(response.status, 503, "una base caida no debe responder 500");
     assert.equal((await response.json()).error.code, "DATABASE_UNAVAILABLE");
     assert.ok(response.headers.get("retry-after"));
@@ -326,7 +332,7 @@ test("sin PostgreSQL: el proceso sigue vivo, la API responde 503 y los pagos se 
 
 test("PostgreSQL caido al arrancar: el servicio inicia igual y se recupera cuando la base vuelve", async () => {
   await withStopped("postgres", async () => {
-    compose("restart", "receipts");
+    compose("restart", "m8-app");
 
     const live = await waitFor(async () => (await fetch(`${RECEIPTS}/health/live`)).ok, {
       what: "que el servicio arranque sin la base",

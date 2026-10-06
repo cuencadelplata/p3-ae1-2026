@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const urls = {
-  notifications: "http://localhost:3101",
-  qr: "http://localhost:3103",
-  receipts: "http://localhost:3008",
-  support: "http://localhost:3000",
-};
+const M8 = process.env.M8_URL ?? "http://localhost:3000";
 const receiptsAuthorization = process.env.RECEIPTS_AUTHORIZATION ?? "Bearer e2e-operator";
 
 const gateId = `m8-7w-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -26,17 +21,17 @@ function postJson(url, body) {
   });
 }
 
-test("health de los cuatro servicios globales", async () => {
-  const checks = await Promise.all(Object.entries(urls).map(async ([service, baseUrl]) => {
-    const { response, body } = await requestJson(`${baseUrl}/health`);
-    assert.equal(response.status, 200, `${service} debe responder 200`);
-    assert.equal(typeof body, "object", `${service} debe responder JSON`);
-  }));
-  assert.equal(checks.length, 4);
+test("health de la aplicacion M8 integrada informa sus modulos", async () => {
+  const { response, body } = await requestJson(`${M8}/health/ready`);
+  assert.equal(response.status, 200);
+  assert.equal(body.status, "ok");
+  for (const moduleName of ["notifications", "qr", "receipts", "support", "delivery"]) {
+    assert.equal(body.modules[moduleName].status, "ok", `${moduleName} debe estar disponible`);
+  }
 });
 
 test("Notifications procesa una solicitud valida", async () => {
-  const { response, body } = await postJson(`${urls.notifications}/notifications`, {
+  const { response, body } = await postJson(`${M8}/notifications`, {
     tripId: `${gateId}-notification`,
     recipientId: `${gateId}-recipient`,
     eventType: "DRIVER_ASSIGNED",
@@ -49,16 +44,16 @@ test("Notifications procesa una solicitud valida", async () => {
 
 test("QR se crea, valida y no se puede reutilizar", async () => {
   const tripId = `${gateId}-qr`;
-  const generated = await postJson(`${urls.qr}/qr`, { tripId });
+  const generated = await postJson(`${M8}/qr`, { tripId });
   assert.equal(generated.response.status, 201);
   assert.equal(typeof generated.body.token, "string");
   assert.match(generated.body.qrDataUrl, /^data:image\/png;base64,/);
 
-  const validated = await postJson(`${urls.qr}/qr/validate`, { tripId, token: generated.body.token });
+  const validated = await postJson(`${M8}/qr/validate`, { tripId, token: generated.body.token });
   assert.equal(validated.response.status, 200);
   assert.deepEqual(validated.body, { valid: true });
 
-  const reused = await postJson(`${urls.qr}/qr/validate`, { tripId, token: generated.body.token });
+  const reused = await postJson(`${M8}/qr/validate`, { tripId, token: generated.body.token });
   assert.equal(reused.response.status, 409);
   assert.equal(reused.body.error.code, "QR_ALREADY_USED");
 });
@@ -85,22 +80,22 @@ test("Receipts emite, conserva idempotencia, consulta y descarga PDF", async () 
     payment: { method: "BILLETERA", status: "APROBADO" },
   };
 
-  const issued = await postJson(`${urls.receipts}/api/v1/receipts`, payload);
+  const issued = await postJson(`${M8}/api/v1/receipts`, payload);
   assert.equal(issued.response.status, 201);
   const receiptId = issued.body.data.receiptId;
   assert.equal(typeof receiptId, "string");
 
-  const repeated = await postJson(`${urls.receipts}/api/v1/receipts`, payload);
+  const repeated = await postJson(`${M8}/api/v1/receipts`, payload);
   assert.equal(repeated.response.status, 200);
   assert.equal(repeated.body.data.receiptId, receiptId);
 
-  const queried = await requestJson(`${urls.receipts}/api/v1/receipts/${tripId}`, {
+  const queried = await requestJson(`${M8}/api/v1/receipts/${tripId}`, {
     headers: { authorization: receiptsAuthorization },
   });
   assert.equal(queried.response.status, 200);
   assert.equal(queried.body.data.receiptId, receiptId);
 
-  const pdf = await fetch(`${urls.receipts}/api/v1/receipts/${tripId}/pdf`, {
+  const pdf = await fetch(`${M8}/api/v1/receipts/${tripId}/pdf`, {
     headers: { authorization: receiptsAuthorization },
   });
   assert.equal(pdf.status, 200);
@@ -108,7 +103,7 @@ test("Receipts emite, conserva idempotencia, consulta y descarga PDF", async () 
 });
 
 test("Support crea un ticket", async () => {
-  const { response, body } = await postJson(`${urls.support}/tickets`, {
+  const { response, body } = await postJson(`${M8}/tickets`, {
     viajeId: `${gateId}-ticket`,
     motivo: "Validacion E2E global",
   });
@@ -118,7 +113,7 @@ test("Support crea un ticket", async () => {
 });
 
 test("Support publica un evento historico valido en RabbitMQ", async () => {
-  const { response, body } = await postJson(`${urls.support}/events/publish`, {
+  const { response, body } = await postJson(`${M8}/events/publish`, {
     routingKey: "viaje.completado",
     payload: { viajeId: `${gateId}-rabbit`, importe: 2500 },
     count: 1,

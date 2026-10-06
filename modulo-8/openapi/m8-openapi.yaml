@@ -1,10 +1,14 @@
 openapi: 3.0.3
 info:
-  title: M8 - API aggregate
+  title: M8 - API integrada
   version: 1.0.0
   description: |
-    Índice de los contratos HTTP reales de los servicios M8. No existe
-    un gateway único: cada operación declara el servidor que la expone.
+    Índice de los contratos HTTP reales de la aplicación única M8.
+    Los RF conservan sus rutas y responsabilidades internas, pero se exponen
+    desde un único servicio HTTP.
+servers:
+  - url: http://localhost:3000
+    description: Aplicación integrada del Módulo 8.
 tags:
   - name: Notifications
   - name: QR
@@ -16,18 +20,18 @@ paths:
   /health:
     get:
       tags: [Notifications, QR, Receipts, Support, NotificationDelivery]
-      summary: Health check de cada servicio M8
-      description: Consultar este path en uno de los servidores declarados.
+      summary: Health check agregado del servicio M8
+      description: Alias de disponibilidad del único servicio HTTP de M8.
       servers:
-        - url: http://localhost:3101
+        - url: http://localhost:3000
           description: Notifications
-        - url: http://localhost:3103
+        - url: http://localhost:3000
           description: QR
-        - url: http://localhost:3008
+        - url: http://localhost:3000
           description: Receipts
         - url: http://localhost:3000
           description: Support
-        - url: http://localhost:3107
+        - url: http://localhost:3000
           description: NotificationDelivery
       responses:
         '200':
@@ -39,9 +43,9 @@ paths:
       tags: [QR, NotificationDelivery]
       summary: Vitalidad del proceso, sin consultar dependencias
       servers:
-        - url: http://localhost:3103
+        - url: http://localhost:3000
           description: QR
-        - url: http://localhost:3107
+        - url: http://localhost:3000
           description: NotificationDelivery
       responses:
         '200': { description: Proceso vivo. }
@@ -50,9 +54,9 @@ paths:
       tags: [QR, NotificationDelivery]
       summary: Disponibilidad del servicio y sus dependencias críticas
       servers:
-        - url: http://localhost:3103
+        - url: http://localhost:3000
           description: QR
-        - url: http://localhost:3107
+        - url: http://localhost:3000
           description: NotificationDelivery
       responses:
         '200': { description: Servicio disponible. }
@@ -64,7 +68,7 @@ paths:
       security:
         - BearerAuth: []
       servers:
-        - url: http://localhost:3107
+        - url: http://localhost:3000
       responses:
         '201': { description: Device token registrado. }
         '400': { description: Solicitud inválida. }
@@ -75,7 +79,7 @@ paths:
       security:
         - BearerAuth: []
       servers:
-        - url: http://localhost:3107
+        - url: http://localhost:3000
       responses:
         '200': { description: Tokens activos del usuario. }
         '401': { description: JWT de M1 ausente o inválido. }
@@ -86,7 +90,7 @@ paths:
       security:
         - BearerAuth: []
       servers:
-        - url: http://localhost:3107
+        - url: http://localhost:3000
       parameters:
         - name: token
           in: path
@@ -104,7 +108,7 @@ paths:
       security:
         - BearerAuth: []
       servers:
-        - url: http://localhost:3107
+        - url: http://localhost:3000
       parameters:
         - name: notificationId
           in: path
@@ -120,7 +124,7 @@ paths:
       tags: [Notifications]
       summary: Procesar una notificación de viaje
       servers:
-        - url: http://localhost:3101
+        - url: http://localhost:3000
       responses:
         '201': { description: Notificación procesada. }
         '400': { description: Solicitud inválida. }
@@ -130,7 +134,7 @@ paths:
       tags: [QR]
       summary: Generar un QR temporal
       servers:
-        - url: http://localhost:3103
+        - url: http://localhost:3000
       responses:
         '201': { description: QR generado. }
         '400': { description: Solicitud inválida. }
@@ -142,7 +146,7 @@ paths:
       tags: [QR]
       summary: Validar y consumir un QR
       servers:
-        - url: http://localhost:3103
+        - url: http://localhost:3000
       responses:
         '200': { description: QR válido y consumido. }
         '400': { description: Solicitud inválida. }
@@ -157,7 +161,7 @@ paths:
       tags: [Receipts]
       summary: Emitir un comprobante
       servers:
-        - url: http://localhost:3008
+        - url: http://localhost:3000
       responses:
         '201': { description: Comprobante creado. }
         '200': { description: Comprobante existente por idempotencia. }
@@ -166,7 +170,7 @@ paths:
       tags: [Receipts]
       summary: Consultar un comprobante
       servers:
-        - url: http://localhost:3008
+        - url: http://localhost:3000
       parameters:
         - name: tripId
           in: path
@@ -180,7 +184,7 @@ paths:
       tags: [Receipts]
       summary: Descargar PDF del comprobante
       servers:
-        - url: http://localhost:3008
+        - url: http://localhost:3000
       parameters:
         - name: tripId
           in: path

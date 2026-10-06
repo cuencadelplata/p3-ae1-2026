@@ -1,3 +1,5 @@
+import express from 'express';
+
 import { createSupportApp } from './app.js';
 import { loadSupportConfig, type SupportConfig } from './config/env.js';
 import { loadDatabaseRetryMs, loadSupportDbConfig } from './db/config.js';
@@ -19,6 +21,7 @@ export function createSupportRuntime(
   config: SupportConfig,
   ticketRepository: TicketRepository,
   database?: ReadinessProbes['database'],
+  includeStandaloneHttpApp = true,
 ) {
   const eventPublisher = config.legacyEvents
     ? new LegacyRabbitSupportEventPublisher()
@@ -29,10 +32,13 @@ export function createSupportRuntime(
       database,
       legacyBroker: config.legacyEvents ? () => RabbitMQConsumer.isConnected() : undefined,
     });
-  const app = createSupportApp({ ticketService, legacyEvents: config.legacyEvents, readiness });
+  const app = includeStandaloneHttpApp
+    ? createSupportApp({ ticketService, legacyEvents: config.legacyEvents, readiness })
+    : express();
 
   return {
     app,
+    ticketService,
     readiness,
 
     // Inicia el consumo asíncrono (RF-8.6) sólo si lo heredado de AE1 está habilitado.
@@ -47,7 +53,10 @@ export function createSupportRuntime(
 // entrypoint. Los tickets se persisten en PostgreSQL y la base es obligatoria:
 // sin SUPPORT_DATABASE_URL lanza y el proceso no arranca. El repositorio en
 // memoria queda sólo para los tests. Crear el pool no abre conexiones.
-export function buildSupportFromEnv(env: NodeJS.ProcessEnv = process.env) {
+export function buildSupportFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  includeStandaloneHttpApp = true,
+) {
   const config = loadSupportConfig(env);
   const dbConfig = loadSupportDbConfig(env);
   const retryMs = loadDatabaseRetryMs(env);
@@ -55,7 +64,7 @@ export function buildSupportFromEnv(env: NodeJS.ProcessEnv = process.env) {
   const pool = createSupportPool(dbConfig.databaseUrl);
   const database = new SupportDatabase({ pool, schema: dbConfig.schema, retryMs });
   const ticketRepository = new PostgresTicketRepository(pool, dbConfig.schema);
-  const runtime = createSupportRuntime(config, ticketRepository, database);
+  const runtime = createSupportRuntime(config, ticketRepository, database, includeStandaloneHttpApp);
 
   return { config, pool, database, ...runtime };
 }

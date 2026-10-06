@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 
-const RECEIPTS = process.env.RECEIPTS_URL ?? "http://localhost:3008";
+const RECEIPTS = process.env.RECEIPTS_URL ?? process.env.M8_URL ?? "http://localhost:3000";
 const M7 = process.env.M7_URL ?? "http://localhost:4020";
 const RABBIT_API = process.env.RABBITMQ_API_URL ?? "http://localhost:15672/api";
 const RABBIT_AUTH = `Basic ${Buffer.from(process.env.RABBITMQ_API_CREDENTIALS ?? "guest:guest").toString("base64")}`;
@@ -122,12 +122,13 @@ after(async () => {
 test("/health/ready informa PostgreSQL, Redis, RabbitMQ, el autorizador fiscal y M7 disponibles", async () => {
   const response = await fetch(`${RECEIPTS}/health/ready`, { headers: { "X-Correlation-Id": run } });
   const body = await response.json();
+  const receipts = body.modules?.receipts ?? body;
 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("x-correlation-id"), run);
-  assert.equal(body.status, "ok");
+  assert.equal(receipts.status, "ok");
   for (const dependency of ["postgres", "redis", "rabbitmq", "fiscal", "payments"]) {
-    assert.equal(body.dependencies[dependency].status, "available", `${dependency} debe estar disponible`);
+    assert.equal(receipts.dependencies[dependency].status, "available", `${dependency} debe estar disponible`);
   }
 });
 
