@@ -6,7 +6,7 @@ describe('API M4', () => {
   beforeEach(async () => locationService.clear());
 
   it('publica ubicacion y devuelve el conductor en una busqueda cercana', async () => {
-    await request(app).put('/api/v1/drivers/driver-1/location').send({
+    await request(app).put('/api/v1/drivers/1/location').send({
       latitude: -27.4692,
       longitude: -58.8306,
       vehicleType: 'AUTO',
@@ -19,11 +19,11 @@ describe('API M4', () => {
       .expect(200);
 
     expect(response.body.count).toBe(1);
-    expect(response.body.drivers[0].driverId).toBe('driver-1');
+    expect(response.body.drivers[0].driverId).toBe(1);
   });
 
   it('acepta maxCandidates como lo utiliza el contrato de M5', async () => {
-    for (const [driverId, latitude] of [['driver-1', -27.4692], ['driver-2', -27.47]]) {
+    for (const [driverId, latitude] of [[1, -27.4692], [2, -27.47]] as const) {
       await request(app).put(`/api/v1/drivers/${driverId}/location`).send({
         latitude,
         longitude: -58.8306,
@@ -51,7 +51,7 @@ describe('API M4', () => {
   });
 
   it('valida coordenadas incorrectas', async () => {
-    const response = await request(app).put('/api/v1/drivers/driver-1/location').send({
+    const response = await request(app).put('/api/v1/drivers/1/location').send({
       latitude: 120,
       longitude: -58.8306,
       vehicleType: 'AUTO',
@@ -63,7 +63,7 @@ describe('API M4', () => {
 
   it('rechaza una ubicacion con marca temporal futura', async () => {
     const futureTimestamp = new Date(Date.now() + 60_000).toISOString();
-    const response = await request(app).put('/api/v1/drivers/driver-1/location').send({
+    const response = await request(app).put('/api/v1/drivers/1/location').send({
       latitude: -27.4692,
       longitude: -58.8306,
       vehicleType: 'AUTO',
@@ -75,20 +75,20 @@ describe('API M4', () => {
   });
 
   it('elimina la ubicacion de un conductor', async () => {
-    await request(app).put('/api/v1/drivers/driver-1/location').send({
+    await request(app).put('/api/v1/drivers/1/location').send({
       latitude: -27.4692,
       longitude: -58.8306,
       vehicleType: 'AUTO',
       available: true
     }).expect(200);
 
-    await request(app).delete('/api/v1/drivers/driver-1/location').expect(204);
+    await request(app).delete('/api/v1/drivers/1/location').expect(204);
 
-    await request(app).get('/api/v1/drivers/driver-1/location').expect(404);
+    await request(app).get('/api/v1/drivers/1/location').expect(404);
   });
 
   it('devuelve 404 al eliminar un conductor sin ubicacion registrada', async () => {
-    await request(app).delete('/api/v1/drivers/driver-x/location').expect(404);
+    await request(app).delete('/api/v1/drivers/999/location').expect(404);
   });
 
   it('geocodifica una direccion conocida con el proveedor simulado', async () => {
@@ -104,14 +104,14 @@ describe('API M4', () => {
     const recent = new Date(Date.now() - 5_000).toISOString();
     const stale = new Date(Date.now() - 10_000).toISOString();
 
-    await request(app).put('/api/v1/drivers/driver-1/location').send({
+    await request(app).put('/api/v1/drivers/1/location').send({
       latitude: -27.4692,
       longitude: -58.8306,
       vehicleType: 'AUTO',
       timestamp: recent
     }).expect(200);
 
-    const response = await request(app).put('/api/v1/drivers/driver-1/location').send({
+    const response = await request(app).put('/api/v1/drivers/1/location').send({
       latitude: -27.5,
       longitude: -58.9,
       vehicleType: 'AUTO',
@@ -119,7 +119,7 @@ describe('API M4', () => {
     }).expect(409);
 
     expect(response.body.code).toBe('STALE_LOCATION_UPDATE');
-    const location = await request(app).get('/api/v1/drivers/driver-1/location').expect(200);
+    const location = await request(app).get('/api/v1/drivers/1/location').expect(200);
     expect(location.body.latitude).toBe(-27.4692);
   });
 

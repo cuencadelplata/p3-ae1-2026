@@ -1,39 +1,60 @@
 services:
+  m4-api:
+    build: .
+    ports:
+      - "3004:3004"
+    environment:
+      - PORT=3004
+      - NODE_ENV=production
+      - LOCATION_TTL_SECONDS=60
+      - M1_URL=${M1_URL:-http://host.docker.internal:3001}
+      - M3_URL=${M3_URL:-http://host.docker.internal:3003}
+      - REDIS_URL=redis://redis:6379
+      - REDIS_KEY_PREFIX=driver:
+      - POSTGRES_URL=postgres://postgres:postgres@postgres:5432/m4_locations
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - RABBITMQ_TRIP_EVENTS_EXCHANGE=trip.events
+      - GEOCODING_PROVIDER_URL=https://nominatim.openstreetmap.org/search
+      - USE_MOCK_GEOCODING=false
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
   redis:
-    image: redis:7.4-alpine
-    command: redis-server --appendonly no
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
-    volumes:
-      - m4-redis-data:/data
-    restart: unless-stopped
 
-  m4-api:
-    build: .
-    image: segocodee/p3-m4-ubicacion:2.0.0
+  postgres:
+    image: postgres:16-alpine
     ports:
-      - "3004:3004"
+      - "5432:5432"
     environment:
-      PORT: 3004
-      LOCATION_TTL_SECONDS: 60
-      REDIS_URL: redis://redis:6379
-    depends_on:
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=m4_locations
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d m4_locations"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-  m4-ui:
-    build: ../modulo-4-ui
-    image: segocodee/p3-m4-ui:1.0.0
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
     ports:
-      - "8084:80"
-    depends_on:
-      m4-api:
-        condition: service_healthy
-    restart: unless-stopped
-
-volumes:
-  m4-redis-data:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

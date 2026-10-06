@@ -2,7 +2,9 @@ openapi: 3.0.3
 info:
   title: Modulo 4 - Ubicacion y Disponibilidad
   version: 2.0.0
-  description: API REST para ubicaciones temporales, disponibilidad, cercania, geocodificacion simulada y ETA.
+  description: |
+    API REST para ubicaciones temporales en Redis, disponibilidad operativa, búsqueda para M5,
+    historial persistente en PostgreSQL, validación de token/rol con M1 y geocodificación.
 servers:
   - url: http://localhost:3004/api/v1
     description: API local directa
@@ -23,7 +25,7 @@ paths:
           description: Servicio M4 activo y respondiendo
           content:
             application/json:
-              example: { status: UP, service: m4-location-service, timestamp: "2026-09-30T21:00:00.000Z" }
+              example: { status: UP, service: m4-location-service, timestamp: "2026-10-05T20:00:00.000Z" }
   /health/readiness:
     get:
       tags: [Salud]
@@ -45,7 +47,9 @@ paths:
     put:
       tags: [Ubicaciones]
       summary: Actualizar ubicacion del conductor (RF-4.1)
-      description: Rechaza con 409 una marca temporal anterior a la ultima registrada.
+      security:
+        - BearerAuth: []
+      description: Guarda la ubicacion temporal en Redis y el registro en el historial de PostgreSQL. Valida identidad y rol CONDUCTOR con M1.
       requestBody:
         required: true
         content:
@@ -59,6 +63,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/DriverLocation' }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '409':
           description: La actualizacion es anterior a la ubicacion vigente
           content:
@@ -68,23 +74,55 @@ paths:
     get:
       tags: [Ubicaciones]
       summary: Consultar ubicacion activa
+      security:
+        - BearerAuth: []
       responses:
         '200':
           description: Ubicacion vigente
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DriverLocation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
     delete:
       tags: [Ubicaciones]
       summary: Eliminar ubicacion del conductor
+      security:
+        - BearerAuth: []
       responses:
         '204': { description: Ubicacion eliminada }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /drivers/{driverId}/location-history:
+    parameters:
+      - $ref: '#/components/parameters/DriverId'
+      - in: query
+        name: limit
+        schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        description: Cantidad maxima de registros recientes del historial en PostgreSQL
+    get:
+      tags: [Ubicaciones]
+      summary: Consultar historial persistente de ubicaciones del conductor en PostgreSQL
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Listado de ubicaciones pasadas ordenadas por fecha descendente
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/LocationHistoryRecord' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /drivers/{driverId}/availability:
     patch:
       tags: [Ubicaciones]
       summary: Cambiar disponibilidad del conductor
+      security:
+        - BearerAuth: []
       parameters:
         - $ref: '#/components/parameters/DriverId'
       requestBody:
@@ -104,11 +142,13 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/DriverLocation' }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
   /drivers/nearby:
     get:
       tags: [Busqueda]
-      summary: Buscar conductores cercanos (RF-4.2 y RF-4.3)
+      summary: Buscar conductores cercanos para M5 (RF-4.2)
       parameters:
         - { in: query, name: latitude, required: true, schema: { type: number, minimum: -90, maximum: 90 }, example: -27.4692 }
         - { in: query, name: longitude, required: true, schema: { type: number, minimum: -180, maximum: 180 }, example: -58.8306 }
@@ -126,7 +166,7 @@ paths:
   /geocode:
     post:
       tags: [Calculos]
-      summary: Geocodificar direccion con proveedor simulado (RF-4.4)
+      summary: Geocodificar direccion con proveedor externo / simulado (RF-4.4)
       requestBody:
         required: true
         content:
@@ -136,7 +176,7 @@ paths:
               required: [address]
               properties:
                 address: { type: string, minLength: 3, maxLength: 200 }
-            example: { address: Facultad Cuenca del Plata }
+            example: { address: Plaza 25 de Mayo, Corrientes }
       responses:
         '200':
           description: Coordenadas encontradas
@@ -145,10 +185,12 @@ paths:
               schema: { $ref: '#/components/schemas/GeocodeResponse' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '502': { description: Error en el proveedor de geocodificación externo }
+        '504': { description: Timeout en la geocodificación externa }
   /estimate:
     post:
       tags: [Calculos]
-      summary: Estimar distancia y ETA (RF-4.5)
+      summary: Estimar distancia Haversine y ETA (RF-4.5)
       requestBody:
         required: true
         content:
@@ -170,16 +212,32 @@ paths:
               schema: { $ref: '#/components/schemas/DistanceEstimate' }
         '400': { $ref: '#/components/responses/BadRequest' }
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token Bearer devuelto por M1 para validar identidad y rol CONDUCTOR
   parameters:
     DriverId:
       in: path
       name: driverId
       required: true
-      schema: { type: string, minLength: 1 }
-      example: driver-1
+      schema: { type: integer, minimum: 1 }
+      example: 101
   responses:
     BadRequest:
-      description: Datos invalidos
+      description: Datos invalidos o error de validación
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Token Bearer invalido o ausente (M1)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Rol de usuario no es CONDUCTOR o el userId no coincide (M1)
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -210,11 +268,22 @@ components:
         - type: object
           required: [driverId, vehicleType, available, updatedAt, expiresAt]
           properties:
-            driverId: { type: string }
+            driverId: { type: integer, example: 101 }
             vehicleType: { type: string, enum: [AUTO, MOTO] }
             available: { type: boolean }
             updatedAt: { type: string, format: date-time }
             expiresAt: { type: string, format: date-time }
+    LocationHistoryRecord:
+      allOf:
+        - $ref: '#/components/schemas/Coordinates'
+        - type: object
+          required: [driverId, vehicleType, available, updatedAt]
+          properties:
+            id: { type: integer, example: 1 }
+            driverId: { type: integer, example: 101 }
+            vehicleType: { type: string, enum: [AUTO, MOTO] }
+            available: { type: boolean }
+            updatedAt: { type: string, format: date-time }
     NearbyDriver:
       allOf:
         - $ref: '#/components/schemas/DriverLocation'
@@ -238,7 +307,7 @@ components:
           required: [address, provider]
           properties:
             address: { type: string }
-            provider: { type: string, enum: [SIMULATED] }
+            provider: { type: string }
     DistanceEstimate:
       type: object
       required: [distanceKm, estimatedEtaMinutes]
@@ -251,6 +320,3 @@ components:
       properties:
         code: { type: string }
         message: { type: string }
-        details:
-          type: array
-          items: { type: string }

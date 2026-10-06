@@ -5,29 +5,36 @@ import { fileURLToPath } from 'node:url';
 
 import { EstimateDistanceEtaUseCase } from './application/use-cases/estimate-distance-eta.usecase.js';
 import { GeocodeAddressUseCase } from './application/use-cases/geocode-address.usecase.js';
+import { GetLocationHistoryUseCase } from './application/use-cases/get-location-history.usecase.js';
 import { SearchNearbyDriversUseCase } from './application/use-cases/search-nearby-drivers.usecase.js';
 import { UpdateLocationUseCase } from './application/use-cases/update-location.usecase.js';
 
 import { config } from './infrastructure/config/env.config.js';
+import { M1AuthAdapter } from './infrastructure/auth/m1-auth.adapter.js';
 import { HttpGeocodingAdapter } from './infrastructure/geocoding/http-geocoding.adapter.js';
 import { MockGeocodingAdapter } from './infrastructure/geocoding/mock-geocoding.adapter.js';
 import { HealthController } from './infrastructure/http/controllers/health.controller.js';
 import { LocationController } from './infrastructure/http/controllers/location.controller.js';
 import { correlationMiddleware } from './infrastructure/http/middlewares/correlation.middleware.js';
 import { errorHandlerMiddleware } from './infrastructure/http/middlewares/error.middleware.js';
+import { MemoryLocationHistoryRepository } from './infrastructure/postgres/memory-location-history.repository.js';
+import { PostgresLocationHistoryRepository } from './infrastructure/postgres/postgres-location-history.repository.js';
 import { MemoryLocationRepository } from './infrastructure/redis/memory-location.repository.js';
 import { RedisLocationRepository } from './infrastructure/redis/redis-location.repository.js';
-import type { LocationRepository } from './ports/location-repository.port.js';
+import type { LocationHistoryRepository, LocationRepository } from './ports/location-repository.port.js';
 import type { GeocodingProvider } from './ports/geocoding-provider.port.js';
+import type { AuthService } from './ports/auth-service.port.js';
 import type { EventPublisher } from './ports/event-publisher.port.js';
-import type { RabbitMQConnection } from './infrastructure/rabbitmq/rabbitmq.connection.ts';
+import type { RabbitMQConnection } from './infrastructure/rabbitmq/rabbitmq.connection.js';
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectDirectory = path.resolve(moduleDirectory, '..');
 
 export interface AppDependencies {
   locationRepository?: LocationRepository;
+  historyRepository?: LocationHistoryRepository;
   geocodingProvider?: GeocodingProvider;
+  authService?: AuthService;
   eventPublisher?: EventPublisher;
   rabbitmqConnection?: RabbitMQConnection;
 }
@@ -47,14 +54,24 @@ export const createApp = (dependencies: AppDependencies = {}): Application => {
       ? new RedisLocationRepository(config.redisUrl, config.redisKeyPrefix)
       : defaultMemoryRepository);
 
+  const historyRepo: LocationHistoryRepository =
+    dependencies.historyRepository ||
+    (config.postgresUrl && process.env.NODE_ENV !== 'test'
+      ? new PostgresLocationHistoryRepository(config.postgresUrl)
+      : new MemoryLocationHistoryRepository());
+
   const geocoder: GeocodingProvider =
     dependencies.geocodingProvider ||
     (config.useMockGeocoding
       ? new MockGeocodingAdapter()
       : new HttpGeocodingAdapter(config.geocodingProviderUrl, config.geocodingApiKey, config.geocodingTimeoutMs));
 
+  const auth: AuthService =
+    dependencies.authService || new M1AuthAdapter(config.m1Url, config.skipAuthValidation);
+
   // Casos de Uso
-  const updateLocationUseCase = new UpdateLocationUseCase(repository, config.locationTtlSeconds);
+  const updateLocationUseCase = new UpdateLocationUseCase(repository, historyRepo, config.locationTtlSeconds);
+  const getLocationHistoryUseCase = new GetLocationHistoryUseCase(historyRepo);
   const searchNearbyDriversUseCase = new SearchNearbyDriversUseCase(repository);
   const geocodeAddressUseCase = new GeocodeAddressUseCase(geocoder);
   const estimateDistanceEtaUseCase = new EstimateDistanceEtaUseCase();
@@ -67,6 +84,8 @@ export const createApp = (dependencies: AppDependencies = {}): Application => {
     searchNearbyDriversUseCase,
     geocodeAddressUseCase,
     estimateDistanceEtaUseCase,
+    getLocationHistoryUseCase,
+    auth,
     dependencies.eventPublisher
   );
 
@@ -100,11 +119,12 @@ export const createApp = (dependencies: AppDependencies = {}): Application => {
   // Endpoints de Salud (RNF-05)
   application.get('/health/liveness', healthController.getLiveness);
   application.get('/health/readiness', healthController.getReadiness);
-  application.get('/health', healthController.getReadiness); // Compatibilidad previa
+  application.get('/health', healthController.getReadiness);
 
   // Endpoints de la API
   application.put('/api/v1/drivers/:driverId/location', locationController.updateLocation);
   application.get('/api/v1/drivers/:driverId/location', locationController.getLocation);
+  application.get('/api/v1/drivers/:driverId/location-history', locationController.getLocationHistory);
   application.delete('/api/v1/drivers/:driverId/location', locationController.removeLocation);
   application.patch('/api/v1/drivers/:driverId/availability', locationController.updateAvailability);
   application.get('/api/v1/drivers/nearby', locationController.findNearby);

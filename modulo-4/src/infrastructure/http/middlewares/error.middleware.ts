@@ -1,12 +1,14 @@
 import type { NextFunction, Request, Response } from 'express';
 import {
+  ForbiddenError,
   GeocodingNotFoundError,
   GeocodingProviderError,
   GeocodingTimeoutError,
   InvalidCoordinatesError,
   LocationValidationError,
   NotFoundError,
-  StaleLocationError
+  StaleLocationError,
+  UnauthorizedError
 } from '../../../domain/errors/location.errors.js';
 import { Logger } from '../../logger/structured.logger.js';
 
@@ -17,6 +19,24 @@ export const errorHandlerMiddleware = (
   _next: NextFunction
 ): void => {
   Logger.error(`Error procesando solicitud HTTP: ${error.message}`, error);
+
+  if (error instanceof UnauthorizedError) {
+    res.status(401).json({
+      code: 'UNAUTHORIZED',
+      error: 'Unauthorized',
+      message: error.message
+    });
+    return;
+  }
+
+  if (error instanceof ForbiddenError) {
+    res.status(403).json({
+      code: 'FORBIDDEN',
+      error: 'Forbidden',
+      message: error.message
+    });
+    return;
+  }
 
   if (error instanceof NotFoundError || error instanceof GeocodingNotFoundError) {
     res.status(404).json({

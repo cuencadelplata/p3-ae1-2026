@@ -1,10 +1,12 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { EstimateDistanceEtaUseCase } from '../../../application/use-cases/estimate-distance-eta.usecase.js';
 import type { GeocodeAddressUseCase } from '../../../application/use-cases/geocode-address.usecase.js';
+import type { GetLocationHistoryUseCase } from '../../../application/use-cases/get-location-history.usecase.js';
 import type { SearchNearbyDriversUseCase } from '../../../application/use-cases/search-nearby-drivers.usecase.js';
 import type { UpdateLocationUseCase } from '../../../application/use-cases/update-location.usecase.js';
 import type { VehicleType } from '../../../domain/entities/location.entity.js';
 import { LocationValidationError, NotFoundError } from '../../../domain/errors/location.errors.js';
+import type { AuthService } from '../../../ports/auth-service.port.js';
 import type { EventPublisher } from '../../../ports/event-publisher.port.js';
 import type { LocationRepository } from '../../../ports/location-repository.port.js';
 
@@ -15,12 +17,31 @@ export class LocationController {
     private readonly searchNearbyDriversUseCase: SearchNearbyDriversUseCase,
     private readonly geocodeAddressUseCase: GeocodeAddressUseCase,
     private readonly estimateDistanceEtaUseCase: EstimateDistanceEtaUseCase,
+    private readonly getLocationHistoryUseCase?: GetLocationHistoryUseCase,
+    private readonly authService?: AuthService,
     private readonly eventPublisher?: EventPublisher
   ) {}
 
+  private parseDriverIdParam(rawId: unknown): number {
+    const driverId = Number.parseInt(String(rawId), 10);
+    if (Number.isNaN(driverId) || driverId <= 0) {
+      throw new LocationValidationError('El identificador driverId debe ser un número entero positivo canónico de M1');
+    }
+    return driverId;
+  }
+
+  private async validateAuthIfPresent(req: Request, driverId: number): Promise<void> {
+    if (this.authService) {
+      const authHeader = req.headers.authorization || '';
+      await this.authService.validateConductorIdentity(authHeader, driverId);
+    }
+  }
+
   public updateLocation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const driverId = String(req.params.driverId);
+      const driverId = this.parseDriverIdParam(req.params.driverId);
+      await this.validateAuthIfPresent(req, driverId);
+
       const { latitude, longitude, vehicleType, available, timestamp } = req.body;
 
       if (typeof latitude !== 'number' || typeof longitude !== 'number') {
@@ -51,7 +72,9 @@ export class LocationController {
 
   public getLocation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const driverId = String(req.params.driverId);
+      const driverId = this.parseDriverIdParam(req.params.driverId);
+      await this.validateAuthIfPresent(req, driverId);
+
       const location = await this.locationRepository.get(driverId);
       if (!location) {
         throw new NotFoundError(`Ubicación activa no encontrada para el conductor ${driverId}`);
@@ -62,9 +85,31 @@ export class LocationController {
     }
   };
 
+  public getLocationHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const driverId = this.parseDriverIdParam(req.params.driverId);
+      await this.validateAuthIfPresent(req, driverId);
+
+      const limitParam = req.query.limit ? Number.parseInt(String(req.query.limit), 10) : 20;
+      const limit = Number.isNaN(limitParam) || limitParam <= 0 ? 20 : limitParam;
+
+      if (!this.getLocationHistoryUseCase) {
+        res.status(200).json([]);
+        return;
+      }
+
+      const history = await this.getLocationHistoryUseCase.execute(driverId, limit);
+      res.status(200).json(history);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   public removeLocation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const driverId = String(req.params.driverId);
+      const driverId = this.parseDriverIdParam(req.params.driverId);
+      await this.validateAuthIfPresent(req, driverId);
+
       const deleted = await this.locationRepository.delete(driverId);
       if (!deleted) {
         throw new NotFoundError(`Ubicación activa no encontrada para eliminar el conductor ${driverId}`);
@@ -77,7 +122,9 @@ export class LocationController {
 
   public updateAvailability = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const driverId = String(req.params.driverId);
+      const driverId = this.parseDriverIdParam(req.params.driverId);
+      await this.validateAuthIfPresent(req, driverId);
+
       const { available } = req.body;
 
       if (typeof available !== 'boolean') {

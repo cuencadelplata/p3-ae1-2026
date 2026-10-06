@@ -7,7 +7,7 @@ import { MemoryLocationRepository } from '../../src/infrastructure/redis/memory-
 import { RedisEventStore } from '../../src/infrastructure/redis/redis-event-store.js';
 import type { EventPublisher } from '../../src/ports/event-publisher.port.js';
 
-describe('RabbitMQ & Idempotencia (RNF-07 / RNF-08)', () => {
+describe('RabbitMQ, Adaptación M6 e Idempotencia (RNF-07 / RNF-08 / Requerimiento 7)', () => {
   let repository: MemoryLocationRepository;
   let eventStore: RedisEventStore;
   let mockPublisher: EventPublisher;
@@ -43,7 +43,7 @@ describe('RabbitMQ & Idempotencia (RNF-07 / RNF-08)', () => {
 
     // Guardar ubicación inicial activa para conductor 100
     await repository.saveIfNewer({
-      driverId: 'driver-100',
+      driverId: 100,
       latitude: -27.4692,
       longitude: -58.8306,
       vehicleType: 'AUTO',
@@ -53,7 +53,7 @@ describe('RabbitMQ & Idempotencia (RNF-07 / RNF-08)', () => {
     }, 60);
   });
 
-  it('debe procesar un evento de viaje TripStarted y marcar el conductor como NO disponible (available: false)', async () => {
+  it('debe procesar un evento de viaje TripStarted (o viaje.iniciado) y marcar el conductor como NO disponible', async () => {
     const mockChannel = {
       ack: vi.fn(),
       nack: vi.fn()
@@ -64,7 +64,38 @@ describe('RabbitMQ & Idempotencia (RNF-07 / RNF-08)', () => {
         JSON.stringify({
           eventId: 'evt-001',
           tripId: 'trip-99',
-          driverId: 'driver-100',
+          driverId: 100, // ID entero
+          eventType: 'viaje.iniciado', // Adaptación propuesta M6
+          timestamp: new Date().toISOString()
+        })
+      ),
+      properties: { headers: {} },
+      fields: { routingKey: 'viaje.iniciado' }
+    } as any;
+
+    await consumer.processMessage(mockChannel, mockMsg);
+
+    const updated = await repository.get(100);
+    expect(updated?.available).toBe(false);
+
+    expect(mockChannel.ack).toHaveBeenCalledWith(mockMsg);
+    expect(publishedEvents).toHaveLength(1);
+    expect(publishedEvents[0].driverId).toBe(100);
+    expect(publishedEvents[0].available).toBe(false);
+  });
+
+  it('debe rechazar y enviar a DLQ un mensaje con driverId no numérico o inválido', async () => {
+    const mockChannel = {
+      ack: vi.fn(),
+      nack: vi.fn()
+    } as any;
+
+    const mockMsg = {
+      content: Buffer.from(
+        JSON.stringify({
+          eventId: 'evt-invalid',
+          tripId: 'trip-99',
+          driverId: 'invalid-string-id',
           eventType: 'TripStarted',
           timestamp: new Date().toISOString()
         })
@@ -75,12 +106,8 @@ describe('RabbitMQ & Idempotencia (RNF-07 / RNF-08)', () => {
 
     await consumer.processMessage(mockChannel, mockMsg);
 
-    const updated = await repository.get('driver-100');
-    expect(updated?.available).toBe(false);
-
-    expect(mockChannel.ack).toHaveBeenCalledWith(mockMsg);
-    expect(publishedEvents).toHaveLength(1);
-    expect(publishedEvents[0].available).toBe(false);
+    expect(mockChannel.nack).toHaveBeenCalledWith(mockMsg, false, false); // Enviado a DLQ (no requeue)
+    expect(mockChannel.ack).not.toHaveBeenCalled();
   });
 
   it('debe ignorar eventos duplicados con el mismo eventId debido a la verificación de idempotencia', async () => {
@@ -92,9 +119,9 @@ describe('RabbitMQ & Idempotencia (RNF-07 / RNF-08)', () => {
     const mockMsg = {
       content: Buffer.from(
         JSON.stringify({
-          eventId: 'evt-001',
+          eventId: 'evt-dup-123',
           tripId: 'trip-99',
-          driverId: 'driver-100',
+          driverId: 100,
           eventType: 'TripStarted',
           timestamp: new Date().toISOString()
         })
@@ -111,7 +138,6 @@ describe('RabbitMQ & Idempotencia (RNF-07 / RNF-08)', () => {
     await consumer.processMessage(mockChannel, mockMsg);
     expect(mockChannel.ack).toHaveBeenCalledTimes(2);
 
-    // Debe haberse publicado solo 1 evento de cambio de disponibilidad
     expect(publishedEvents).toHaveLength(1);
   });
 });

@@ -1,7 +1,9 @@
 import { TripEventHandler } from './application/event-handlers/trip-event.handler.js';
 import { createApp } from './app.js';
 import { config } from './infrastructure/config/env.config.js';
+import { M1AuthAdapter } from './infrastructure/auth/m1-auth.adapter.js';
 import { Logger } from './infrastructure/logger/structured.logger.js';
+import { PostgresLocationHistoryRepository } from './infrastructure/postgres/postgres-location-history.repository.js';
 import { RabbitMQEventPublisher } from './infrastructure/rabbitmq/rabbitmq-event.publisher.js';
 import { RabbitMQTripEventConsumer } from './infrastructure/rabbitmq/rabbitmq-trip-event.consumer.js';
 import { RabbitMQConnection } from './infrastructure/rabbitmq/rabbitmq.connection.js';
@@ -10,12 +12,23 @@ import { RedisEventStore } from './infrastructure/redis/redis-event-store.js';
 import { RedisLocationRepository } from './infrastructure/redis/redis-location.repository.js';
 
 async function bootstrap() {
-  Logger.info(`Iniciando M4 - Servicio de Ubicación y Disponibilidad v2.0.0 (ENV: ${config.nodeEnv})`);
+  Logger.info(`Iniciando M4 - Servicio de Ubicación y Disponibilidad v2.0.0 (ENV: ${config.nodeEnv})`, {
+    m1Url: config.m1Url,
+    m3Url: config.m3Url,
+    postgresUrl: config.postgresUrl,
+    redisKeyPrefix: config.redisKeyPrefix
+  });
 
   // Repositorio de Ubicación Redis (o Memory fallback)
   const locationRepository = config.redisUrl
     ? new RedisLocationRepository(config.redisUrl, config.redisKeyPrefix)
     : new MemoryLocationRepository();
+
+  // Repositorio de Historial PostgreSQL
+  const historyRepository = new PostgresLocationHistoryRepository(config.postgresUrl);
+
+  // Adaptador de Autenticación M1
+  const authService = new M1AuthAdapter(config.m1Url, config.skipAuthValidation);
 
   // Almacén de Idempotencia Redis
   const eventStore = new RedisEventStore(config.redisUrl);
@@ -41,6 +54,8 @@ async function bootstrap() {
   // Crear aplicación Express
   const app = createApp({
     locationRepository,
+    historyRepository,
+    authService,
     eventPublisher,
     rabbitmqConnection
   });
