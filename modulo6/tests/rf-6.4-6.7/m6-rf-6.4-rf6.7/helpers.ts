@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import { createViajeApi, type ViajesApiClient } from '../../../src/rf-6.4-6.7/api.js';
-import { createSimulator } from '../../simulator/m6-rf-6.4-rf6.7/server.js';
+import { createSimulator } from '../../../simulator/rf-6.4-6.7/m6-rf-6.4-rf6.7/server.js';
 
 interface TestViaje {
   id: string;

@@ -14,8 +14,7 @@
   },
   "include": [
     "src/**/*.ts",
-    "rf-6.4-6.7/simulator/**/*.ts",
-    "rf-6.5-6.6/simulator/**/*.ts"
+    "simulator/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }

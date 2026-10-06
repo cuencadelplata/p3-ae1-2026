@@ -78,7 +78,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["node", "dist/rf-6.4-6.7/simulator/m6-rf-6.4-rf6.7/server.js"]
+    command: ["node", "dist/simulator/rf-6.4-6.7/m6-rf-6.4-rf6.7/server.js"]
     expose:
       - "3001"
 

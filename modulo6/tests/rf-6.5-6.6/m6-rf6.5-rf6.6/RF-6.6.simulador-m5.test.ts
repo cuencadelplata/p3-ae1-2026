@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyDriverCancellation, type SimulatedDispatchRequest } from '../../simulator/m6-rf6.5-rf6.6/m5-dispatch-simulator.js';
+import { applyDriverCancellation, type SimulatedDispatchRequest } from '../../../simulator/rf-6.5-6.6/m6-rf6.5-rf6.6/m5-dispatch-simulator.js';
 
 describe('Simulador de M5 - reapertura del despacho', () => {
   it('libera la solicitud y excluye al conductor que canceló', () => {

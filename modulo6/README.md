@@ -57,9 +57,21 @@ modulo6/
 │   ├── rf-6.1-6.2-6.3/
 │   ├── rf-6.4-6.7/
 │   └── rf-6.5-6.6/
-├── rf-6.1-6.2-6.3/   # tests, SQL, mock M8 y contrato
-├── rf-6.4-6.7/       # tests E2E, simulador y contrato
-├── rf-6.5-6.6/       # tests, simuladores y contrato
+├── tests/
+│   ├── rf-6.1-6.2-6.3/
+│   ├── rf-6.4-6.7/
+│   └── rf-6.5-6.6/
+├── tests-e2e/
+│   ├── rf-6.1-6.2-6.3/
+│   ├── rf-6.4-6.7/
+│   └── rf-6.5-6.6/
+├── simulator/
+│   ├── rf-6.1-6.2-6.3/   # mock M8
+│   ├── rf-6.4-6.7/
+│   └── rf-6.5-6.6/
+├── rf-6.1-6.2-6.3/   # SQL y contrato OpenAPI
+├── rf-6.4-6.7/       # contrato OpenAPI
+├── rf-6.5-6.6/       # contratos y documentación
 ├── docker-compose.yml
 └── package.json
 ```

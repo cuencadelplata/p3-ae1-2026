@@ -56,7 +56,7 @@ npm run simulator:rf6
 
 El simulador escucha en el puerto `3000` (configurable con `PORT`) y soporta crear,
 consultar, asignar y cancelar viajes usando los contratos documentados en
-`rf-6.5-6.6/simulator/m6-rf6.5-rf6.6/rf-6-apis.yaml`. En la cancelación por conductor, M6
+`simulator/rf-6.5-6.6/m6-rf6.5-rf6.6/rf-6-apis.yaml`. En la cancelación por conductor, M6
 publica el evento `cancelacion_conductor` en la cola `despacho.reabrir`, que es la
 cola consumida por la rama `ae2/lautaro-romero`.
 
@@ -93,7 +93,7 @@ npm run test:e2e:rf-6.5-6.6
 
 ## Endpoints provistos por la API
 
-La especificación completa se encuentra en [rf-6.5-6.6/docs/m6-rf6.5-rf6.6/openapi.yaml](rf-6.5-6.6/docs/m6-rf6.5-rf6.6/openapi.yaml).
+La especificación completa se encuentra en [openapi.yaml](docs/m6-rf6.5-rf6.6/openapi.yaml).
 
 ### Cancelar por cliente
 
@@ -117,4 +117,4 @@ Respuesta exitosa: `200 OK`, con el viaje cancelado y el resultado del retorno a
  - `RABBITMQ_URL`: URL del broker. Por defecto: `amqp://rabbitmq:5672`.
  - `PORT`: puerto de esta API. Por defecto: `3001`.
 
-El contrato consumido por esta API se documenta en [rf-6-apis.yaml](simulator/m6-rf6.5-rf6.6/rf-6-apis.yaml); en esa carpeta también se conservan los simuladores RF-6 y M5. Los comandos npm se ejecutan desde `modulo6`.
+El contrato consumido por esta API se documenta en [rf-6-apis.yaml](../simulator/rf-6.5-6.6/m6-rf6.5-rf6.6/rf-6-apis.yaml); en esa carpeta también se conservan los simuladores RF-6 y M5. Los comandos npm se ejecutan desde `modulo6`.

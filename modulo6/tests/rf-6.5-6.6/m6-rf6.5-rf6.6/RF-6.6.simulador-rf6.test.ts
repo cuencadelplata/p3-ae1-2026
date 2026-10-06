@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Server } from 'node:http';
 import { createViajeApi, HttpRf6ApiClient } from '../../../src/rf-6.5-6.6/api.js';
-import { createRf6Simulator } from '../../simulator/m6-rf6.5-rf6.6/rf6-server.js';
+import { createRf6Simulator } from '../../../simulator/rf-6.5-6.6/m6-rf6.5-rf6.6/rf6-server.js';
 
  describe('RF-6.6 - Integración con simulador RF-6', () => {
   it('cancela un viaje asignado usando GET y PATCH del contrato RF-6', async () => {
