@@ -5,12 +5,12 @@ services:
       - "3000:3000"
     environment:
       PORT: 3000
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/historial
-      REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-      CARGO_CANCELACION_URL: http://cargo-cancelacion:3007
+      DATABASE_URL: postgresql://postgres:postgres@172.19.0.2:5432/historial
+      REDIS_URL: redis://172.19.0.3:6379
+      RABBITMQ_URL: amqp://guest:guest@172.19.0.4:5672
+      CARGO_CANCELACION_URL: http://172.19.0.5:3007
       SUPABASE_URL: https://ljuhdtbwhoskyeowrlvr.supabase.co
-      SUPABASE_KEY: sb_secret_9BDDzhLx6Kp-7EjJAKbpUw_zwFJoTyV
+      SUPABASE_KEY: ssb_secret_-o36ZgRHzIJFBBhdg0t_0w__uk-2RSB
     depends_on:
       db:
         condition: service_healthy
