@@ -10,6 +10,8 @@ services:
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
       CARGO_CANCELACION_URL: http://cargo-cancelacion:3007
+      SUPABASE_URL: https://ljuhdtbwhoskyeowrlvr.supabase.co
+      SUPABASE_KEY: sb_secret_9BDDzhLx6Kp-7EjJAKbpUw_zwFJoTyV
     depends_on:
       db:
         condition: service_healthy
