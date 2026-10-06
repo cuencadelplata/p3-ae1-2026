@@ -12,7 +12,7 @@ require("dotenv").config();
 
 const { EVENTOS } = require("../events/driverEvents");
 
-const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
+const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://admin:admin123@localhost:5672";
 const EXCHANGE = process.env.RABBITMQ_EXCHANGE || "m3.conductores.events";
 const QUEUE = process.env.RABBITMQ_EXAMPLE_QUEUE || "m3.ejemplo.driver-events";
 // "driver.#" recibe todos los eventos de conductor; un módulo real podría

@@ -4,7 +4,7 @@
     "info": {
         "title": "Conductores API",
         "version": "1.0.0",
-        "description": "Esta API se utilizará para la comunicación con los conductores y los vehículos."
+        "description": "Esta API se utilizará para la comunicación con los conductores, vehículos y viajes."
     },
 "servers": [
     {
@@ -190,6 +190,99 @@
         }
       }
     },
+    "/conductor/{id}/estado": {
+      "get": {
+        "summary": "Obtener estado de habilitación y disponibilidad de un conductor",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID del conductor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado obtenido correctamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoConductor"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conductor no encontrado"
+          }
+        }
+      }
+    },
+    "/conductor/{id}/habilitado": {
+      "get": {
+        "summary": "Consultar si un conductor está habilitado",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID del conductor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de habilitación obtenido correctamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoConductor"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conductor no encontrado"
+          }
+        }
+      }
+    },
+    "/conductor/{id}/disponible": {
+      "get": {
+        "summary": "Consultar si un conductor está disponible",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID del conductor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de disponibilidad obtenido correctamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoConductor"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conductor no encontrado"
+          }
+        }
+      }
+    },
     "/conductor/valoraciones": {
       "get": {
         "summary": "Obtener las valoraciones de conductor",
@@ -316,9 +409,103 @@
           }
         },
         "required": ["id", "nombre", "apellido", "email", "telefono"]
+      },
+      "EstadoConductor": {
+        "type": "object",
+        "properties": {
+          "usuarioID": {
+            "type": "string"
+          },
+          "habilitado": {
+            "type": "boolean"
+          },
+          "disponible": {
+            "type": "boolean"
+          },
+          "estado": {
+            "type": "string"
+          },
+          "estado_conexion": {
+            "type": "string"
+          }
+        },
+        "required": ["usuarioID", "habilitado", "disponible", "estado", "estado_conexion"]
       }
     }
+  },
+   "/viajes/{viajeId}": {
+      "get": {
+        "summary": "Obtener la información de un viaje",
+        "parameters": [
+          {
+            "name": "viajeId",
+            "in": "path",
+            "required": true,
+            "description": "ID del viaje para obtener su información",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Información del viaje obtenida correctamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/viaje",
+                  "compontents": {
+                    "schemas": {
+                      "Viaje": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "conductorId": {
+                            "type": "string"
+                          },
+                          "origen": {
+                            "type": "string"
+                          },
+                          "destino": {
+                            "type": "string"
+                          },
+                          "fechaHoraInicio": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "fechaHoraFin": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "estado": {
+                            "type": "string",
+                            "enum": ["pendiente", "en curso", "finalizado", "cancelado", "solicitado", "aceptado"]
+                          }
+                        },
+                        "finalizadoAt":{
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },      
+                        "required": ["id", "conductorId", "origen", "destino", "fechaHoraInicio", "finalizadoAt", "estado"]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Viaje no encontrado"
+          }
+        }
+      }
+
   }
+
+  
 
 
 

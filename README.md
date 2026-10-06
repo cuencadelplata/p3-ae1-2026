@@ -2,32 +2,46 @@
 
 Módulo M3 para la gestión de conductores y valoraciones de movilidad urbana, desarrollado para la cátedra **Paradigmas y Lenguajes de Programación III (AE1 - 2026)**.
 
+Los comandos de esta guía se ejecutan dentro de `M3-Conductor`.
+
 ---
 
-## 🚀 Puesta en marcha
+## Puesta en marcha
 
-### Opción 1: Con Docker Compose (Recomendada)
-Levanta Redis, RabbitMQ, la API Backend en Node.js, el consumidor de eventos de ejemplo y el Frontend en Nginx:
+### Opción 1: Con Docker Compose (recomendada)
+
+Levanta Redis, RabbitMQ, la API en Node.js, el consumidor de eventos de ejemplo y el frontend en Nginx:
 
 ```bash
+cd M3-Conductor
 docker compose up -d --build
 ```
 
-- **Frontend (Test Runner & Swagger UI):** [http://localhost:4000](http://localhost:4000)
-- **API Backend (vía proxy frontend):** [http://localhost:4000/api](http://localhost:4000/api)
-- **API Backend directa:** [http://localhost:5000/api](http://localhost:5000/api)
+- **Frontend (Test Runner y Swagger UI):** [http://localhost:4000](http://localhost:4000)
+- **API por el proxy del frontend:** [http://localhost:4000/api](http://localhost:4000/api)
+- **API directa:** [http://localhost:5000/api](http://localhost:5000/api)
+- **Health check:** [http://localhost:5000/health](http://localhost:5000/health)
 - **Redis:** `localhost:6379`
-- **RabbitMQ:** `localhost:5672` — panel en [http://localhost:15672](http://localhost:15672) (`guest` / `guest`)
+- **RabbitMQ (AMQP):** `localhost:5672`
+- **RabbitMQ Management:** [http://localhost:15672](http://localhost:15672) (`admin` / `admin123`)
 - **Consumidor de ejemplo:** `docker compose logs -f consumer`
 
 ### Opción 2: Local con Node.js
+
+Redis y RabbitMQ tienen que estar corriendo. Se pueden levantar solo esos dos servicios con Docker:
+
 ```bash
+cd M3-Conductor
+docker compose up -d redis rabbitmq
 npm install
 npm start
 ```
-- **Frontend & API:** [http://localhost:3000](http://localhost:3000)
-- **Health Check:** [http://localhost:3000/health](http://localhost:3000/health)
+
+- **Frontend y API:** [http://localhost:3000](http://localhost:3000)
+- **Health check:** [http://localhost:3000/health](http://localhost:3000/health)
 - **Consumidor de ejemplo:** `npm run consumer` (requiere RabbitMQ en `RABBITMQ_URL`)
+
+En el panel, cambiá **Base URL** a `http://localhost:3000/api`. El valor por defecto (`http://localhost:4000/api`) corresponde a Docker.
 
 ---
 
@@ -46,38 +60,59 @@ M3 publica eventos en el exchange topic `m3.conductores.events` cada vez que cam
 
 ---
 
-## 🧪 Pruebas End-to-End (E2E) con Playwright
+## Probar con el frontend
 
-El proyecto cuenta con una suite completa de pruebas E2E automatizadas con **Playwright** que validan tanto la interfaz de usuario interactiva como los contratos REST de la API.
+El panel está en `M3-Conductor/public/index.html`.
 
-### Comandos disponibles
+1. Abrí [http://localhost:4000](http://localhost:4000) si usás Docker, o [http://localhost:3000](http://localhost:3000) si usás `npm start`.
+2. Confirmá la **Base URL** (`http://localhost:4000/api` o `http://localhost:3000/api`).
+3. Tocá el botón de refresco junto a la URL. El indicador pasa a verde cuando la API responde.
+4. En **Test Runner**, elegí un endpoint, cargá datos de prueba si pide body y enviá la petición.
+5. La respuesta HTTP y el JSON aparecen a la derecha.
+
+La pestaña **Swagger UI** documenta la misma API REST.
+
+Endpoints del panel:
+
+- `GET /conductores` y `GET /conductores/{id}`
+- `POST /conductores/`
+- `GET /conductor/valoraciones` y `POST /conductor/valoraciones`
+
+Esas rutas leen y escriben las valoraciones ya registradas (`conductor:{id}:valoraciones`). No muestran la valoración pendiente que genera el evento de viaje finalizado.
+
+---
+
+## Valoración habilitada al finalizar un viaje
+
+Cuando el módulo de viajes publica `viaje.finalizado`, M3 hace lo siguiente:
+
+1. El consumidor escucha el exchange `viajes.events`, routing key `viaje.finalizado`, cola `valoraciones.viaje-finalizado`.
+2. Valida `viajeId`, `conductorId` y `clienteId`.
+3. Guarda la valoración en Redis con la clave `valoracion:pendiente:{viajeId}` y estado `PENDIENTE`.
+4. Publica `valoracion.habilitada` en el exchange `valoraciones.events`, routing key `valoracion.habilitada`, cola `cliente.valoracion-habilitada`.
+
+Para disparar el evento sin el módulo de viajes, con la API ya iniciada:
+
+```bash
+npm run mock:viaje-finalizado
+```
+
+El mensaje publicado queda en la cola `cliente.valoracion-habilitada`. Se puede ver en RabbitMQ Management. El panel web no consume esa cola: el aviso al cliente lo tiene que leer el módulo que se suscriba a `valoracion.habilitada`.
+
+En el evento guardado, `evaluadorId` es el conductor y `evaluadoId` es el cliente.
+
+---
+
+## Pruebas end-to-end con Playwright
+
+Suite E2E que cubre el Test Runner y los contratos REST. Se ejecuta desde `M3-Conductor`, con la API y Redis disponibles.
 
 | Comando | Descripción |
 |---|---|
-| `npm run test:e2e` | Ejecuta la suite completa de pruebas E2E en modo headless |
-| `npm run test:e2e:ui` | Abre la interfaz visual interactiva de Playwright Test UI |
-| `npm run test:e2e:headed` | Ejecuta las pruebas en el navegador visible en tiempo real |
-| `npm run test:e2e:report` | Abre el reporte HTML con métricas, trazas y capturas |
+| `npm run test:e2e` | Suite completa, sin ventana del navegador |
+| `npm run test:e2e:ui` | Interfaz de Playwright |
+| `npm run test:e2e:headed` | Pruebas con el navegador visible |
+| `npm run test:e2e:report` | Reporte HTML con trazas y capturas |
 
-### Estructura de las pruebas
-
-- **`tests/e2e/frontend.spec.js`**:
-  - Carga inicial del panel interactivo (Test Runner), títulos y controles.
-  - Verificación de conectividad con el botón de Ping hacia el backend (`#serverStatusBadge`).
-  - Ejecución de peticiones interactivas:
-    - `GET /conductores`: listado y respuesta 200 OK.
-    - `GET /conductores/{id}`: consulta con ID existente (`cond_001`).
-    - `GET /conductores/{id}`: manejo de error 404 para ID inexistente.
-    - `POST /conductores/`: alta de nuevo conductor con payload dinámico y validación 201 Created.
-    - `GET /conductor/valoraciones`: consulta de reseñas mediante query params.
-    - `POST /conductor/valoraciones`: registro de valoración con puntaje y comentario.
-  - Registro de peticiones en el historial y funcionalidad de borrado.
-  - Alternancia entre el modo **Test Runner** y **Swagger UI**.
-
-- **`tests/e2e/api.spec.js`**:
-  - `GET /health`: estado del módulo y conexión a Redis.
-  - `GET /api/conductores`: estructura y lista de conductores.
-  - `GET /api/conductores/:id`: obtención individual y caso de error 404.
-  - `POST /api/conductores`: creación exitosa (201) y validación de body vacío (400).
-  - `GET /api/conductor/valoraciones`: obtención por ID y validación de parámetros faltantes (400).
-  - `POST /api/conductor/valoraciones`: registro válido y validación de rango de puntaje 1-5 (400).
+- **`tests/e2e/frontend.spec.js`:** carga del panel, ping al backend, `GET` y `POST` de conductores y valoraciones, historial y cambio entre Test Runner y Swagger UI.
+- **`tests/e2e/api.spec.js`:** `GET /health`, CRUD de conductores y validaciones de valoraciones (parámetros faltantes y puntaje fuera de 1–5).

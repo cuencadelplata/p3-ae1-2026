@@ -63,7 +63,22 @@
   </header>
 
   <!-- Main Content Container -->
+  <div id="notifToast" class="hidden fixed bottom-4 right-4 z-50 max-w-sm bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-900/40 px-4 py-3 text-sm"></div>
+
   <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <section id="notificacionesPanel" class="lg:col-span-12 bg-slate-800 rounded-xl border border-slate-700 p-4 shadow-sm">
+      <div class="flex items-center justify-between gap-3 mb-3">
+        <h2 class="font-semibold text-sm text-slate-200 flex items-center gap-2">
+          <i data-lucide="bell" class="w-4 h-4 text-amber-400"></i>
+          Notificaciones de valoración
+        </h2>
+        <span id="notifStatus" class="text-[11px] px-2 py-0.5 rounded-full border border-slate-600 text-slate-400">Sin conexión</span>
+      </div>
+      <ul id="notificacionesList" class="space-y-2">
+        <li class="text-xs text-slate-500 italic">Todavía no hay valoraciones habilitadas.</li>
+      </ul>
+    </section>
 
     <!-- VIEW 1: TEST RUNNER -->
     <div id="testerView" class="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
@@ -686,6 +701,118 @@
       renderHistory();
     }
 
+    const notificacionesVistas = new Set();
+    const notificacionesEnPantalla = [];
+
+    function baseApiUrl() {
+      let baseUrl = document.getElementById('baseUrlInput').value.trim();
+      if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+      return baseUrl;
+    }
+
+    function textoPlano(valor) {
+      return String(valor ?? '').replace(/[&<>"']/g, (caracter) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[caracter]));
+    }
+
+    function renderNotificaciones() {
+      const list = document.getElementById('notificacionesList');
+      if (!notificacionesEnPantalla.length) {
+        list.innerHTML = '<li class="text-xs text-slate-500 italic">Todavía no hay valoraciones habilitadas.</li>';
+        return;
+      }
+
+      list.innerHTML = notificacionesEnPantalla.map((item) => `
+        <li class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-semibold text-amber-300">Valoración habilitada</span>
+            <span class="text-slate-500">${textoPlano(item.cuando)}</span>
+          </div>
+          <p class="text-slate-300 mt-1">Viaje <span class="font-mono text-slate-100">${textoPlano(item.viajeId)}</span> · estado ${textoPlano(item.estado)}</p>
+          <p class="text-slate-400 mt-0.5">Evaluador ${textoPlano(item.evaluadorId)} · evaluado ${textoPlano(item.evaluadoId)}</p>
+        </li>
+      `).join('');
+    }
+
+    function agregarNotificacion(item, mostrarToast) {
+      if (!item.viajeId || notificacionesVistas.has(item.viajeId)) return;
+      notificacionesVistas.add(item.viajeId);
+      notificacionesEnPantalla.unshift(item);
+      renderNotificaciones();
+
+      if (!mostrarToast) return;
+      const toast = document.getElementById('notifToast');
+      toast.textContent = `Valoración habilitada para el viaje ${item.viajeId}`;
+      toast.classList.remove('hidden');
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => toast.classList.add('hidden'), 5000);
+    }
+
+    function desdePendiente(pendiente) {
+      return {
+        viajeId: pendiente.viajeId,
+        estado: pendiente.estado || 'PENDIENTE',
+        evaluadorId: pendiente.evaluadorId,
+        evaluadoId: pendiente.evaluadoId,
+        cuando: pendiente.habilitadaDesde || ''
+      };
+    }
+
+    function desdeEvento(evento) {
+      const data = evento.data || {};
+      return {
+        viajeId: data.viajeId,
+        estado: data.estado || 'PENDIENTE',
+        evaluadorId: data.evaluadorId,
+        evaluadoId: data.evaluadoId,
+        cuando: evento.occurredAt || data.habilitadaDesde || ''
+      };
+    }
+
+    async function cargarPendientes() {
+      try {
+        const respuesta = await fetch(baseApiUrl() + '/valoraciones/pendientes');
+        if (!respuesta.ok) return;
+        const pendientes = await respuesta.json();
+        pendientes.forEach((pendiente) => agregarNotificacion(desdePendiente(pendiente), false));
+      } catch (_error) {
+        // El stream vuelve a intentar cuando la API está disponible.
+      }
+    }
+
+    function conectarNotificaciones() {
+      if (window._notifSource) {
+        window._notifSource.close();
+      }
+
+      const badge = document.getElementById('notifStatus');
+      badge.textContent = 'Conectando';
+      badge.className = 'text-[11px] px-2 py-0.5 rounded-full border border-yellow-700 text-yellow-300';
+
+      const source = new EventSource(baseApiUrl() + '/valoraciones/notificaciones/stream');
+      window._notifSource = source;
+
+      source.onopen = () => {
+        badge.textContent = 'En vivo';
+        badge.className = 'text-[11px] px-2 py-0.5 rounded-full border border-emerald-700 text-emerald-300';
+      };
+
+      source.onmessage = (mensaje) => {
+        const evento = JSON.parse(mensaje.data);
+        agregarNotificacion(desdeEvento(evento), true);
+      };
+
+      source.onerror = () => {
+        badge.textContent = 'Reconectando';
+        badge.className = 'text-[11px] px-2 py-0.5 rounded-full border border-rose-700 text-rose-300';
+      };
+    }
+
     async function pingServer() {
       const baseUrl = document.getElementById('baseUrlInput').value.trim();
       const badge = document.getElementById('serverStatusBadge');
@@ -729,6 +856,15 @@
     document.addEventListener('DOMContentLoaded', () => {
       lucide.createIcons();
       selectEndpoint('get_conductores');
+      cargarPendientes();
+      conectarNotificaciones();
+      document.getElementById('baseUrlInput').addEventListener('change', () => {
+        notificacionesVistas.clear();
+        notificacionesEnPantalla.length = 0;
+        renderNotificaciones();
+        cargarPendientes();
+        conectarNotificaciones();
+      });
     });
   </script>
 </body>

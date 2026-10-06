@@ -1,5 +1,5 @@
 const getSupabaseClient = require("../config/SupabaseClient");
-const { mockConductores } = require("../mocks/mockData");
+const { mockConductores } = require("../mocks/conductor/mockData");
 
 // Fallback en memoria: se usa cuando Supabase no está configurado (desarrollo/tests)
 // o cuando la consulta a la base de datos falla. Es la ÚNICA puerta de entrada a

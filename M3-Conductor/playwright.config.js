@@ -1,6 +1,6 @@
 const { defineConfig, devices } = require('@playwright/test');
 
-const baseURL = process.env.BASE_URL || 'http://localhost:4000';
+const baseURL = process.env.BASE_URL || 'http://localhost:3000';
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
@@ -21,6 +21,12 @@ module.exports = defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
+  },
+  webServer: {
+    command: 'node src/server.js',
+    url: 'http://localhost:3000/health',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120 * 1000,
   },
   projects: [
     {

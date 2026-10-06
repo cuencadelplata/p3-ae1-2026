@@ -1,7 +1,7 @@
 const amqp = require("amqplib");
 require("dotenv").config();
 
-const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
+const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://admin:admin123@localhost:5672";
 // Exchange de tipo "topic" donde M3 publica todos sus eventos de dominio. Los
 // módulos interesados (ej. M5 matching) crean su propia cola y la bindean con
 // la routing key que les interese (ver docs/EVENTOS.md).

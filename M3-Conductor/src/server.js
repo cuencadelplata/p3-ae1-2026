@@ -1,7 +1,11 @@
+//server.js
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
 require("dotenv").config();
+const { connectRabbitMQ } = require("./infraestructure/rabbimq.client");
+const { startViajeFinalizadoConsumer } = require("./modules/valoraciones/consumers/viajeFinalizado.consumer");
+const { startValoracionHabilitadaConsumer } = require("./modules/valoraciones/consumers/valoracionHabilitada.consumer");
 
 const conductorRoutes = require("./routes/conductorRoutes");
 const { seedRedisIfEmpty } = require("./repositories/redisRepository");
@@ -28,7 +32,7 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// Rutas de la API montadas en /api (según OpenAPI.json)
+// Rutas de la API montadas en /api /openapi.json
 app.use("/api", conductorRoutes);
 
 // Manejador para rutas no encontradas
@@ -43,16 +47,26 @@ app.listen(PORT, async () => {
   console.log(`   ➜ API:       http://localhost:${PORT}/api`);
   console.log(`   ➜ Frontend:  http://localhost:${PORT}`);
   console.log(`   ➜ Health:    http://localhost:${PORT}/health`);
+  console.log(`   ➜ RabbitMQ:  http://localhost:${PORT}/rabbitmq`);
   console.log(`====================================================`);
 
   // Poblar datos mock en Redis
   await seedRedisIfEmpty();
 
-  // Conexión anticipada a RabbitMQ (RNF-07). Si falla, el servidor sigue
-  // funcionando y el publisher reintenta en el próximo evento.
+  // Conexión anticipada del publisher de eventos de conductores (RNF-07). Si
+  // falla, el servidor sigue funcionando y el publisher reintenta en el próximo evento.
   rabbitmq.getChannel().catch((err) => {
     console.warn(`[RabbitMQ] No disponible al iniciar (${err.message}). Se reintentará al publicar.`);
   });
+
+  // Consumidores de valoraciones (viaje.finalizado -> valoracion.habilitada)
+  try {
+    await connectRabbitMQ();
+    await startViajeFinalizadoConsumer();
+    await startValoracionHabilitadaConsumer();
+  } catch (error) {
+    console.error("No se pudieron iniciar los consumidores de RabbitMQ:", error.message);
+  }
 });
 
 module.exports = app;

@@ -14,15 +14,18 @@ services:
       timeout: 3s
       retries: 5
 
-  # Broker de mensajería asíncrona (RNF-07). Panel de administración en
-  # http://localhost:15672 (guest / guest)
+  # Broker de mensajería asíncrona entre módulos (RNF-07). Panel de
+  # administración en http://localhost:15672 (admin / admin123)
   rabbitmq:
-    image: rabbitmq:3.13-management-alpine
+    image: rabbitmq:4-management
     container_name: p3-m3-rabbitmq
     restart: unless-stopped
     ports:
       - "5672:5672"
       - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -30,6 +33,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - p3-shared
+      - default
 
   # Backend Node.js - Módulo 3 (Conductores & Valoraciones)
   api:
@@ -41,15 +47,24 @@ services:
     restart: unless-stopped
     ports:
       - "5000:3000"
+
     environment:
       PORT: 3000
+
+      # Redis - comunicación síncrona
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_TTL_HABILITADO: ${REDIS_TTL_HABILITADO:-300}
       REDIS_TTL_DISPONIBLE: ${REDIS_TTL_DISPONIBLE:-60}
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+
+      # RabbitMQ - comunicación asíncrona
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: admin
+      RABBITMQ_PASSWORD: admin123
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
       RABBITMQ_EXCHANGE: m3.conductores.events
     depends_on:
       redis:
@@ -64,7 +79,7 @@ services:
     restart: unless-stopped
     command: ["npm", "run", "consumer"]
     environment:
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
       RABBITMQ_EXCHANGE: m3.conductores.events
       RABBITMQ_EXAMPLE_QUEUE: m3.ejemplo.driver-events
     depends_on:
@@ -85,6 +100,10 @@ services:
       - "4000:80"
     depends_on:
       - api
+
+networks:
+  p3-shared:
+    name: p3-shared
 
 volumes:
   redis_data:

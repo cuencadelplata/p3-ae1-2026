@@ -1,0 +1,11 @@
+{
+  "eventId": "550e8400-e29b-41d4-a716-446655440000",
+  "eventType": "viaje.finalizado",
+  "occurredAt": "2026-10-05T18:30:00Z",
+  "data": {
+    "viajeId": "viaje-123",
+    "conductorId": "conductor-456",
+    "clienteId": "cliente-789",
+    "finalizadoAt": "2026-10-05T18:30:00Z"
+  }
+}
