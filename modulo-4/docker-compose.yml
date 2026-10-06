@@ -1,0 +1,79 @@
+services:
+  m4-api:
+    build: .
+    ports:
+      - "3004:3004"
+    environment:
+      PORT: "3004"
+      NODE_ENV: "production"
+      LOCATION_TTL_SECONDS: "60"
+      M1_URL: "${M1_URL:-http://host.docker.internal:3001}"
+      M3_URL: "${M3_URL:-http://host.docker.internal:3003}"
+      REDIS_URL: "redis://redis:6379"
+      REDIS_KEY_PREFIX: "driver:"
+      POSTGRES_URL: "postgres://postgres:postgres@postgres:5432/m4_locations"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+      RABBITMQ_TRIP_EVENTS_EXCHANGE: "${RABBITMQ_TRIP_EVENTS_EXCHANGE:-trip.events}"
+      RABBITMQ_TRIP_STARTED_KEY: "${RABBITMQ_TRIP_STARTED_KEY:-TripStarted}"
+      RABBITMQ_TRIP_COMPLETED_KEY: "${RABBITMQ_TRIP_COMPLETED_KEY:-TripCompleted}"
+      RABBITMQ_TRIP_CANCELLED_KEY: "${RABBITMQ_TRIP_CANCELLED_KEY:-TripCancelled}"
+      GEOCODING_PROVIDER_URL: "https://nominatim.openstreetmap.org/search"
+      USE_MOCK_GEOCODING: "false"
+      SKIP_AUTH_VALIDATION: "false"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  m4-ui:
+    build: ../modulo-4-ui
+    ports:
+      - "8084:80"
+    depends_on:
+      - m4-api
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+      POSTGRES_DB: "m4_locations"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d m4_locations"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
