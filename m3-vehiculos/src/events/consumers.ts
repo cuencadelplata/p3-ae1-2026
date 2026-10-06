@@ -1,9 +1,11 @@
 import { EXCHANGE, getChannel } from "../config/rabbitClient.js";
 
+// Los consumidores de documentos (notificación y validación) viven en
+// src/documents/documents-consumers.ts
 export async function iniciarConsumidores() {
   const channel = getChannel();
 
-  // --- Flujo 1: notificación al conductor cuando se crea un vehículo ---
+  // --- Notificación al conductor cuando se crea un vehículo ---
   const colaVehiculo = "notificaciones.vehiculo.creado";
   await channel.assertQueue(colaVehiculo, { durable: true });
   await channel.bindQueue(colaVehiculo, EXCHANGE, "vehiculo.creado");
@@ -17,19 +19,5 @@ export async function iniciarConsumidores() {
     channel.ack(msg);
   });
 
-  // --- Flujo 2: validación asíncrona cuando se sube un documento ---
-  const colaDocumento = "validacion.documento.subido";
-  await channel.assertQueue(colaDocumento, { durable: true });
-  await channel.bindQueue(colaDocumento, EXCHANGE, "documento.subido");
-
-  channel.consume(colaDocumento, (msg) => {
-    if (!msg) return;
-    const evento = JSON.parse(msg.content.toString());
-    console.log(
-      `[rabbitmq] Validación disparada para documento ${evento.data.tipoDocumento} (${evento.data.numeroDocumento}) del conductor ${evento.data.driverId}`,
-    );
-    channel.ack(msg);
-  });
-
-  console.log("[rabbitmq] Consumidores iniciados: vehiculo.creado, documento.subido");
+  console.log("[rabbitmq] Consumidores iniciados: vehiculo.creado");
 }

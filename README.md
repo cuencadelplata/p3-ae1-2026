@@ -265,7 +265,8 @@ de forma asíncrona por un listener dedicado:
 | Evento (routing key) | Se publica cuando... | Cola consumidora | Qué hace el consumidor |
 |---|---|---|---|
 | `vehiculo.creado` | se registra un vehículo nuevo (RF-3.2) | `notificaciones.vehiculo.creado` | Simula la notificación al conductor de que su vehículo quedó registrado |
-| `documento.subido` | se registra un documento nuevo (RF-3.4) | `validacion.documento.subido` | Simula el disparo de un proceso de validación del documento subido |
+| `documento.registrado` | se registra un documento nuevo (RF-3.4) | `documentos.notificaciones` | Simula la notificación al conductor de que su documento quedó registrado |
+| `documento.validacion.solicitada` | se registra un documento nuevo (RF-3.4) | `documentos.validacion` | Simula una validación externa y pasa el documento de `PENDIENTE` a `APROBADO`/`RECHAZADO`. Es idempotente: si el documento ya no está `PENDIENTE` no lo reprocesa (y el `UPDATE` filtra por `estado = PENDIENTE`). Ante un error hace `nack` con reintento |
 
 La publicación de eventos nunca bloquea ni revierte la operación principal:
 si RabbitMQ no responde, el error se loguea pero la creación del vehículo o
@@ -328,6 +329,6 @@ paralelo real (no secuenciales).
 Esta rama (`ae2/victoria-bladilo`) parte del commit `679c3f6` (tag
 `ae1-m3-base`), último commit de `m3-vehiculos` anterior al deadline
 original de AE1, usado como base ante la ausencia de un tag oficial. El trabajo de AE2 construido sobre
-esa base (Redis con persistencia, RabbitMQ con 2 flujos asíncronos, caso de
+esa base (Redis con persistencia, RabbitMQ con flujos asíncronos, caso de
 concurrencia documentado) corresponde a los mismos RF de AE1: RF-3.2
 (vehículos) y RF-3.4 (documentación).

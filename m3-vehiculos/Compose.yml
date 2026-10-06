@@ -34,9 +34,10 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: m3-rabbitmq
+    restart: unless-stopped
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "5672:5672"    # protocolo AMQP
+      - "15672:15672"  # panel web de administración
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s

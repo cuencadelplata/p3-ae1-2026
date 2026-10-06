@@ -24,27 +24,3 @@ export function publicarVehiculoCreado(vehiculo: {
     console.error("[rabbitmq] Error publicando vehiculo.creado:", err);
   }
 }
-
-export function publicarDocumentoSubido(documento: {
-  id: string;
-  driverId: string;
-  tipoDocumento: string;
-  numeroDocumento: string;
-}) {
-  try {
-    const channel = getChannel();
-    const payload = {
-      evento: "documento.subido",
-      timestamp: new Date().toISOString(),
-      data: documento,
-    };
-    channel.publish(
-      EXCHANGE,
-      "documento.subido",
-      Buffer.from(JSON.stringify(payload)),
-      { contentType: "application/json", persistent: true },
-    );
-  } catch (err) {
-    console.error("[rabbitmq] Error publicando documento.subido:", err);
-  }
-}

@@ -9,7 +9,8 @@ import { vehiculoRoutes } from "./vehiculos/vehiculo-routes.js";
 import { documentoRoutes } from "./documents/documents-routes.js";
 import { redis } from "./config/redisClient.js";
 import { connectRabbit } from "./config/rabbitClient.js";
-import { iniciarConsumidores } from "./events/consumers.js";
+import { iniciarConsumidores as iniciarConsumidoresVehiculos } from "./events/consumers.js";
+import { iniciarConsumidores as iniciarConsumidoresDocumentos } from "./documents/documents-consumers.js";
 
 dotenv.config();
 
@@ -39,19 +40,20 @@ app.use(errorHandler);
 
 await redis.connect();
 console.log(" Conectado a Redis");
-await connectRabbit();
-console.log(" Conectado a RabbitMQ");
-await iniciarConsumidores();
+
+// Si RabbitMQ no está disponible, el servicio arranca igual: la publicación
+// de eventos nunca bloquea la operación principal.
+try {
+  await connectRabbit();
+  console.log(" Conectado a RabbitMQ");
+  await iniciarConsumidoresVehiculos();
+  await iniciarConsumidoresDocumentos();
+} catch (err) {
+  console.error("Error iniciando RabbitMQ o sus consumidores:", err);
+}
 
 app.listen(PORT, () => {
   console.log(`🚀 m3-drivers corriendo en http://localhost:${PORT}`);
   console.log(`   Health check: http://localhost:${PORT}/health`);
   console.log(`   Docs (Swagger UI): http://localhost:${PORT}/docs`);
 });
-
-// TODO: montar acá los Routess cuando existan
-// app.use("/api/v1/drivers/:driverId/vehicles", vehiculoroutes);
-// app.use("/api/v1/drivers/:driverId/documents", documentoRouter);
-
-// no usamos errorhandler al final (osi?)
-//app.use(errorHandler);
