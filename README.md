@@ -17,13 +17,13 @@ Implementación del módulo M2 para los requisitos RF-2.1 a RF-2.5:
 
 Las imágenes publicadas están disponibles en:
 
-- [Backend M2](https://hub.docker.com/r/leangau/m2-perfilhistorialestado/tags?name=api)
-- [Frontend M2](https://hub.docker.com/r/leangau/m2-perfilhistorialestado/tags?name=client)
+- [Backend M2](https://hub.docker.com/r/leangau/integration-m2-ae2/tags?name=api)
+- [Frontend M2](https://hub.docker.com/r/leangau/integration-m2-ae2/tags?name=client)
 
 ```bash
-docker pull leangau/m2-perfilhistorialestado:api
-docker pull leangau/m2-perfilhistorialestado:client
-docker image ls leangau/m2-perfilhistorialestado
+docker pull leangau/integration-m2-ae2:api
+docker pull leangau/integration-m2-ae2:client
+docker image ls leangau/integration-m2-ae2
 ```
 
 ---

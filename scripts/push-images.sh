@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-REPO="leangau/m2-perfilhistorialestado"
+REPO="leangau/integration-m2-ae2"
 EXTRA_TAG=""
 MULTIARCH="false"
 
