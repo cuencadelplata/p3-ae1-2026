@@ -6,11 +6,19 @@ export interface Coordinates {
 }
 
 export interface DriverLocation extends Coordinates {
-  driverId: string;
+  driverId: number; // Identificador canónico del conductor como número entero positivo
   vehicleType: VehicleType;
   available: boolean;
   updatedAt: string;
   expiresAt: string;
+}
+
+export interface LocationHistoryRecord extends Coordinates {
+  id?: number;
+  driverId: number;
+  vehicleType: VehicleType;
+  available: boolean;
+  updatedAt: string;
 }
 
 export interface NearbyDriver extends DriverLocation {
@@ -31,14 +39,20 @@ export interface GeocodedAddress extends Coordinates {
 export interface TripEvent {
   eventId: string;
   tripId: string;
-  driverId: string;
-  eventType: 'TripStarted' | 'TripCompleted' | 'TripCancelled';
+  driverId: number;
+  eventType: 'TripStarted' | 'TripCompleted' | 'TripCancelled' | 'viaje.iniciado' | 'viaje.finalizado' | 'viaje.cancelado';
   timestamp: string;
 }
 
 export interface DriverAvailabilityChangedEvent {
   eventId: string;
-  driverId: string;
+  driverId: number;
   available: boolean;
   timestamp: string;
+}
+
+export interface M1UserValidationResponse {
+  valid: boolean;
+  userId: number;
+  role: string;
 }

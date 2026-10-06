@@ -17,7 +17,7 @@ export class RedisLocationRepository implements LocationRepository {
   private readonly database: number;
   private readonly keyPrefix: string;
 
-  public constructor(redisUrl: string, keyPrefix = 'm4:driver:') {
+  public constructor(redisUrl: string, keyPrefix = 'driver:') {
     const url = new URL(redisUrl);
     if (url.protocol !== 'redis:') throw new Error('REDIS_URL debe comenzar con redis://');
     this.host = url.hostname || '127.0.0.1';
@@ -65,7 +65,7 @@ export class RedisLocationRepository implements LocationRepository {
     return { saved: false, location: current ?? location };
   }
 
-  public async get(driverId: string): Promise<DriverLocation | null> {
+  public async get(driverId: number): Promise<DriverLocation | null> {
     const value = await this.command(['GET', this.key(driverId)]);
     return typeof value === 'string' ? (JSON.parse(value) as DriverLocation) : null;
   }
@@ -84,7 +84,7 @@ export class RedisLocationRepository implements LocationRepository {
     return locations.filter((location): location is DriverLocation => location !== null);
   }
 
-  public async delete(driverId: string): Promise<boolean> {
+  public async delete(driverId: number): Promise<boolean> {
     const result = await this.command(['DEL', this.key(driverId)]);
     return result === 1;
   }
@@ -96,7 +96,10 @@ export class RedisLocationRepository implements LocationRepository {
     }
   }
 
-  private key(driverId: string): string {
+  /**
+   * Formato de clave Redis (Requerimiento 3): driver:{driverId}:location
+   */
+  private key(driverId: number): string {
     return `${this.keyPrefix}${driverId}:location`;
   }
 
