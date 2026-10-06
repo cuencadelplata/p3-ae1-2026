@@ -148,3 +148,8 @@ playwright-report/
 blob-report/
 playwright/.cache/
 
+# Playwright
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
