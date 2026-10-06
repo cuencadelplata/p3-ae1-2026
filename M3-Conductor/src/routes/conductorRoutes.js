@@ -12,6 +12,11 @@ const {
   obtenerValoraciones,
   crearValoracion
 } = require("../controllers/valoracionesController");
+const {
+  obtenerPendientes,
+  obtenerNotificaciones,
+  streamNotificaciones
+} = require("../controllers/notificacionesController");
 
 /**
  * Rutas de conductores
@@ -38,5 +43,9 @@ router.get("/conductores/:id/disponible", obtenerDisponibleConductor);
  */
 router.get("/conductor/valoraciones", obtenerValoraciones);
 router.post("/conductor/valoraciones", crearValoracion);
+
+router.get("/valoraciones/pendientes", obtenerPendientes);
+router.get("/valoraciones/notificaciones", obtenerNotificaciones);
+router.get("/valoraciones/notificaciones/stream", streamNotificaciones);
 
 module.exports = router;

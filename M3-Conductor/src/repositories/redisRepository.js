@@ -143,6 +143,30 @@ async function guardarValoracionPendiente(valoracion) {
   return valoracion;
 }
 
+async function listarValoracionesPendientes() {
+  const claves = [];
+  let cursor = "0";
+
+  do {
+    const [siguiente, encontradas] = await redis.scan(
+      cursor,
+      "MATCH",
+      "valoracion:pendiente:*",
+      "COUNT",
+      50
+    );
+    cursor = siguiente;
+    claves.push(...encontradas);
+  } while (cursor !== "0");
+
+  if (claves.length === 0) {
+    return [];
+  }
+
+  const valores = await redis.mget(...claves);
+  return valores.filter(Boolean).map((item) => JSON.parse(item));
+}
+
 module.exports = {
   seedRedisIfEmpty,
   obtenerConductores,
@@ -150,5 +174,6 @@ module.exports = {
   crearConductor,
   obtenerValoraciones,
   registrarValoracion,
-  guardarValoracionPendiente
+  guardarValoracionPendiente,
+  listarValoracionesPendientes
 };

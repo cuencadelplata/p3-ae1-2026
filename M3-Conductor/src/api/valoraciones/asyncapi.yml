@@ -1,0 +1,139 @@
+asyncapi: 2.6.0
+info:
+  title: Valoraciones M3
+  version: 1.0.0
+  description: >
+    Eventos de valoración del módulo de conductores.
+    M3 consume viaje.finalizado y publica valoracion.habilitada.
+    El panel se suscribe a valoracion.habilitada para mostrar la notificación.
+
+servers:
+  rabbitmq:
+    url: localhost:5672
+    protocol: amqp
+    description: Broker local (Docker Compose usa admin / admin123)
+
+channels:
+  viaje/finalizado:
+    description: El módulo de viajes avisa que un viaje terminó.
+    subscribe:
+      operationId: consumirViajeFinalizado
+      summary: M3 habilita una valoración pendiente
+      message:
+        $ref: '#/components/messages/ViajeFinalizado'
+      bindings:
+        amqp:
+          cc: [viaje.finalizado]
+          ack: true
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: viajes.events
+          type: topic
+          durable: true
+        queue:
+          name: valoraciones.viaje-finalizado
+          durable: true
+
+  valoracion/habilitada:
+    description: M3 avisa que el cliente ya puede valorar ese viaje.
+    publish:
+      operationId: publicarValoracionHabilitada
+      summary: Publicar valoración habilitada
+      message:
+        $ref: '#/components/messages/ValoracionHabilitada'
+    subscribe:
+      operationId: mostrarNotificacionValoracion
+      summary: El panel muestra la notificación en vivo
+      message:
+        $ref: '#/components/messages/ValoracionHabilitada'
+      bindings:
+        amqp:
+          cc: [valoracion.habilitada]
+          ack: true
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: valoraciones.events
+          type: topic
+          durable: true
+        queue:
+          name: valoraciones.notificaciones-panel
+          durable: true
+
+components:
+  messages:
+    ViajeFinalizado:
+      name: viaje.finalizado
+      title: Viaje finalizado
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/EventoViajeFinalizado'
+    ValoracionHabilitada:
+      name: valoracion.habilitada
+      title: Valoración habilitada
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/EventoValoracionHabilitada'
+
+  schemas:
+    EventoViajeFinalizado:
+      type: object
+      required: [eventId, eventType, occurredAt, data]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          enum: [viaje.finalizado]
+        occurredAt:
+          type: string
+          format: date-time
+        data:
+          type: object
+          required: [viajeId, conductorId, clienteId]
+          properties:
+            viajeId:
+              type: string
+            conductorId:
+              type: string
+            clienteId:
+              type: string
+            finalizadoAt:
+              type: string
+              format: date-time
+
+    EventoValoracionHabilitada:
+      type: object
+      required: [eventId, eventType, occurredAt, data]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          enum: [valoracion.habilitada]
+        occurredAt:
+          type: string
+          format: date-time
+        data:
+          type: object
+          required: [viajeId, evaluadorId, evaluadoId, estado]
+          properties:
+            viajeId:
+              type: string
+            evaluadorId:
+              type: string
+              description: Conductor que puede valorar
+            evaluadoId:
+              type: string
+              description: Cliente evaluado
+            estado:
+              type: string
+              enum: [PENDIENTE]
+            habilitadaDesde:
+              type: string
+              format: date-time

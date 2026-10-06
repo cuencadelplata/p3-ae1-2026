@@ -5,6 +5,7 @@ const path = require("path");
 require("dotenv").config();
 const { connectRabbitMQ } = require("./infraestructure/rabbimq.client");
 const { startViajeFinalizadoConsumer } = require("./modules/valoraciones/consumers/viajeFinalizado.consumer");
+const { startValoracionHabilitadaConsumer } = require("./modules/valoraciones/consumers/valoracionHabilitada.consumer");
 
 const conductorRoutes = require("./routes/conductorRoutes");
 const { seedRedisIfEmpty } = require("./repositories/redisRepository");
@@ -54,6 +55,7 @@ app.listen(PORT, async () => {
     await seedRedisIfEmpty();
     await connectRabbitMQ();
     await startViajeFinalizadoConsumer();
+    await startValoracionHabilitadaConsumer();
   } catch (error) {
     console.error("No se pudo iniciar Redis o RabbitMQ:", error.message);
   }
