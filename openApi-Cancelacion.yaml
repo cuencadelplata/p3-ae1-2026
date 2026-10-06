@@ -1,4 +1,4 @@
-openapi: 3.0.3
+openapi: 5.0.0
 info:
   title: M7 - Tarifas, Pagos y Liquidaciones | RF-7.4 Cargo de cancelacion
   description: >

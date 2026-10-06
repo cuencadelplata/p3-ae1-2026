@@ -7,12 +7,6 @@ services:
       - .env
     environment:
       PORT: 3000
-      DATABASE_URL: ${DATABASE_URL:?Defini DATABASE_URL en .env}
-      REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-      CARGO_CANCELACION_URL: http://cargo-cancelacion:3007
-      SUPABASE_URL: ${SUPABASE_URL:?Defini SUPABASE_URL en .env}
-      SUPABASE_KEY: ${SUPABASE_KEY:?Defini SUPABASE_KEY en .env}
     depends_on:
       db:
         condition: service_healthy
@@ -23,13 +17,10 @@ services:
       cargo-cancelacion:
         condition: service_started
     restart: on-failure
-    networks:
-      - m7-network
+    network_mode: host
 
   db:
     image: postgres:16-alpine
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -41,41 +32,26 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    networks:
-      - m7-network
+    network_mode: host
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    networks:
-      - m7-network
+    network_mode: host
 
   rabbitmq:
     image: rabbitmq:3-management
-    ports:
-      - "5672:5672"
-      - "15672:15672"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 5s
       timeout: 10s
       retries: 12
-    networks:
-      - m7-network
+    network_mode: host
 
   cargo-cancelacion:
     image: node:20-alpine
-    ports:
-      - "3007:3007"
     command: >
       node -e "require('http').createServer((q,s)=>{let b='';q.on('data',d=>b+=d);q.on('end',()=>{const r=JSON.parse(b||'{}');s.setHeader('Content-Type','application/json');s.end(JSON.stringify({tripId:r.tripId,requestedBy:r.requestedBy,charge:r.requestedBy==='cliente'?1000:0,currency:'ARS'}))})}).listen(3007)"
-    networks:
-      - m7-network
+    network_mode: host
 
 volumes:
   m7-db-data:
-
-networks:
-  m7-network:
-    driver: bridge

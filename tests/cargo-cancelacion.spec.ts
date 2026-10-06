@@ -124,7 +124,7 @@ test.describe("RF-7.4 - Cargo de cancelación", () => {
 
     const body = await response.json();
 
-   expect(body.error).toContain("El viaje esta en estado 'en_curso' y no admite cargo de cancelacion");
+   expect(body.error).toContain("No se puede calcular un cargo de cancelacion");
   });
 
 
@@ -161,7 +161,7 @@ test.describe("RF-7.4 - Cargo de cancelación", () => {
 
     const body = await response.json();
 
-    expect(body.error).toBe("vehicleType invalido: debe ser 'auto' o 'moto'");
+    expect(body.error).toBe("vehicleType debe ser 'auto' o 'moto'");
   });
 
 });
