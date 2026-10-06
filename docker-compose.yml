@@ -1,12 +1,16 @@
 services:
   m7-app:
     build: .
-    ports:
-      - "3000:3000"
     env_file:
       - .env
     environment:
       PORT: 3000
+      DATABASE_URL: ${DATABASE_URL:?Defini DATABASE_URL en .env}
+      REDIS_URL: redis://localhost:6379
+      RABBITMQ_URL: amqp://guest:guest@localhost:5672
+      CARGO_CANCELACION_URL: http://localhost:3007
+      SUPABASE_URL: ${SUPABASE_URL:?Defini SUPABASE_URL en .env}
+      SUPABASE_KEY: ${SUPABASE_KEY:?Defini SUPABASE_KEY en .env}
     depends_on:
       db:
         condition: service_healthy

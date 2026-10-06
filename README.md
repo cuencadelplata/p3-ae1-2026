@@ -1,109 +1,72 @@
 # M7: Tarifas, Pagos y Liquidaciones (AE2 Integrado)
 
-Backend unificado que consolida todos los requerimientos funcionales del **Módulo 7**, orquestado con **Docker Compose** e implementando el patrón de diseño **Circuit Breaker** para resiliencia ante caídas de Backing Services.
+Backend del Módulo 7, con estimación de tarifas, métodos de pago, cancelaciones, reintegros e historial financiero. Usa Docker Compose para los servicios locales y Supabase para persistir los pagos.
 
----
+## Requisitos
 
-## Requisitos previos
-
-- Docker y Docker Compose instalados
-- Node.js 20+
+- Docker y Docker Compose
+- Node.js 20 o superior
 - npm
 
----
+## Requerimientos cubiertos
 
-## Cómo ejecutar
+| RF | Requerimiento | Endpoint o evento |
+|---|---|---|
+| RF-7.1 | Estimación de tarifa | `POST /tarifas/estimacion` |
+| RF-7.2 | Registro de método de pago | `POST /metodo-pago`, `GET /metodo-pago/:viajeId` |
+| RF-7.3 | Autorización de pago | `POST /metodo-pago/:viajeId/autorizar` |
+| RF-7.4 | Cargo por cancelación | `POST /tarifas/cancelacion` |
+| RF-7.5 | Prevención de pagos duplicados | `GET /pagos/:idOrden/duplicado` |
+| RF-7.6 | Reintegro por viaje cancelado | Consumer RabbitMQ |
+| RF-7.7 | Historial financiero | `/operations` |
 
-### 1. Clonar el repositorio
+## Configuración local
 
-```bash
-git clone https://github.com/cuencadelplata/p3-ae1-2026.git
-cd p3-ae1-2026
-git checkout M7--Tarifas,-Pagos-y-Liquidaciones
-```
+Clona el repositorio y crea un archivo `.env` en su raíz. El archivo está excluido de Git; no lo subas ni compartas sus credenciales.
 
-### 2. Crear el archivo .env
-
-```bash
-cat > .env << 'ENVEOF'
+```dotenv
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/historial
 REDIS_URL=redis://localhost:6379
-RABBITMQ_URL=amqp://guest:guest@localhost:5672
+RABBITMQ_URL=amqp://localhost:5672
 CARGO_CANCELACION_URL=http://localhost:3007
-SUPABASE_URL=https://ljuhdtbwhoskyeowrlvr.supabase.co
-SUPABASE_KEY=TU_KEY_DE_SUPABASE
-ENVEOF
+SUPABASE_URL=https://tu-proyecto.supabase.co
+SUPABASE_KEY=tu-publishable-key
 ```
 
-### 3. Levantar los servicios
+Usa la URL real de tu proyecto Supabase y una publishable key vigente. No uses una secret key en la aplicación. La configuración de ejemplo usa PostgreSQL, Redis y RabbitMQ locales en Docker; los pagos se guardan en Supabase. Para usar PostgreSQL de Supabase en lugar del contenedor local, configura `DATABASE_URL` con la URI del pooler y la contraseña de la base de datos.
+
+## Ejecutar con Docker Compose
 
 ```bash
 docker compose up --build -d
-```
-
-### 4. Verificar que todo está corriendo
-
-```bash
 docker compose ps
+docker compose logs m7-app --tail=50
 ```
 
-### 5. Verificar que la app conectó (esperar ~20 segundos)
+Compose carga las variables desde `.env`. El modo de red `host` requiere una versión de Docker Desktop que lo soporte y tenga habilitada esa opción. Los servicios locales usan los puertos predeterminados de PostgreSQL (5432), Redis (6379), RabbitMQ (5672 y 15672), M7 (3000) y el mock de cargo (3007).
 
-```bash
-docker compose logs m7-app --tail=20
-```
+- API y documentación interactiva: <http://localhost:3000/docs>
+- Healthcheck: <http://localhost:3000/health>
+- Panel de RabbitMQ: <http://localhost:15672> (usuario y contraseña: `guest`)
 
-Deberías ver:
-- `[postgres] Tablas de base de datos verificadas/creadas con éxito.`
-- `[redis] Conectado exitosamente.`
-- `[rabbit] Conectado exitosamente y escuchando eventos en RabbitMQ.`
-
-### 6. Instalar dependencias
+## Pruebas
 
 ```bash
 npm install
 npx playwright install --with-deps chromium
+npx vitest run
+npx playwright test
 ```
 
-### 7. Ejecutar los tests unitarios
+## Circuit Breaker
 
-```bash
-npm run test:unit
-```
-
-### 8. Ejecutar los tests e2e
-
-```bash
-npm run test:e2e
-```
-
----
-
-## Endpoints principales
-
-| RF | Endpoint | Método |
-|---|---|---|
-| RF-7.1 | `/tarifas/estimacion` | POST |
-| RF-7.2 | `/metodo-pago` | POST / GET |
-| RF-7.3 | `/metodo-pago/:viajeId/autorizar` | POST |
-| RF-7.4 | `/tarifas/cancelacion` | POST |
-| RF-7.5 | `/pagos/:idOrden/duplicado` | GET |
-| RF-7.6 | Consumer RabbitMQ (evento `cancelacion_cliente`) | - |
-| RF-7.7 | `/operations` | GET / POST / PATCH |
-
-- **Documentación interactiva**: `http://localhost:3000/docs`
-- **Healthcheck**: `http://localhost:3000/health`
-- **Panel RabbitMQ**: `http://localhost:15672` (guest/guest)
-
----
+El Circuit Breaker evita sobrecargar Redis o el servicio de cargo cuando no están disponibles. En estado `OPEN`, usa el fallback configurado y el endpoint `GET /health` informa el estado. Luego del período de enfriamiento, prueba la reconexión en estado `HALF-OPEN`.
 
 ## Detener los servicios
 
 ```bash
 docker compose down
 ```
-
----
 
 ## Imagen Docker
 
