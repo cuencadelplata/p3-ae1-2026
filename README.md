@@ -1,54 +1,102 @@
 # Módulo 8 — Notificaciones, Documentos y Soporte
 
-M8 reúne cuatro servicios HTTP independientes para AE1. No existe gateway:
-cada servicio conserva su propio puerto y contrato.
+Este directorio contiene la implementación integrada de M8 para AE2. La
+aplicación reúne internamente RF8.1 a RF8.7 en un único proceso HTTP, sin
+mezclar sus responsabilidades de negocio.
 
-| Servicio | Puerto | Alcance AE1 |
-| --- | ---: | --- |
-| Notifications | 3101 | RF-8.1, procesamiento PUSH mock. |
-| QR | 3103 | RF-8.2, QR temporal de un solo uso. |
-| Receipts | 3008 | RF-8.3 y RF-8.4, comprobantes PDF y reenvío simulado. En `ae2/juan-gualtieri`: versión 2.3.0 con PostgreSQL, RabbitMQ, Redis, autorizador fiscal simulado (`fiscal-sandbox`, puerto 4010) y API de pagos de M7 simulada (`m7-payments-sandbox`, puerto 4020) ([README](services/receipts/README.md)). |
-| Support | 3000 | RF-8.5 y base parcial de integración RabbitMQ para RF-8.6. |
+M8 no administra el ciclo de vida del viaje: en particular, no inicia viajes
+ni modifica el estado `EN_CURSO`, que pertenece a M6.
 
-## Requisitos y uso
+## Alcance
 
-Node.js 24, PNPM 10.33.0 y Docker Compose.
+- RF8.1: notificaciones de viaje e idempotencia de negocio;
+- RF8.2: QR temporal, TTL y consumo de un solo uso;
+- RF8.3 y RF8.4: comprobantes, PDF y reenvío;
+- RF8.5: tickets de soporte;
+- RF8.6: mensajería RabbitMQ, Inbox, retry y DLQ;
+- RF8.7: entrega PUSH, dispositivos, intentos e idempotencia de delivery.
+
+PostgreSQL, Redis y RabbitMQ son infraestructura compartida dentro de M8. Cada
+RF conserva ownership lógico de sus datos. M8 no accede directamente a datos
+de infraestructura de otros módulos.
+
+## Requisitos
+
+- Node.js 24;
+- pnpm 10.33.0;
+- Docker Desktop con Docker Compose.
+
+## Ejecución local
+
+Primero crear una configuración local a partir del ejemplo:
 
 ```powershell
+Copy-Item .env.example .env
 pnpm install --frozen-lockfile
 pnpm run build
 pnpm run test
-docker compose build
-docker compose up -d
-pnpm run test:e2e
-docker compose down --remove-orphans
 ```
 
-`compose.yaml` inicia también RabbitMQ (puertos 5672 y 15672), PostgreSQL y Redis.
-Receipts guarda sus datos en PostgreSQL (esquema `receipts`).
+Luego levantar la topología completa:
 
-## Contratos y documentación
+```powershell
+docker compose --env-file .env up -d --build
+docker compose --env-file .env ps
+```
 
-- El índice OpenAPI agregado está en `openapi/m8-openapi.yaml`; enumera los
-  servicios sin fingir un endpoint único.
-- Los contratos canónicos por servicio están en `openapi/`; consultar los
-  runbooks de [Notifications](services/notifications/README.md),
-  [QR](services/qr/README.md), [Receipts](services/receipts/README.md) y
-  [Support](services/support/README.md).
-- El estado explícito de RF8.1 a RF8.7 está en `docs/rf-status.md`.
-- Los acuerdos y decisiones pendientes para coordinar AE2 están en
-  [docs/ae2-intermodule-agreements.md](docs/ae2-intermodule-agreements.md).
-- Cada servicio publica su propia UI Scalar: Support en `/api-docs` y Receipts
-  en `/docs` (redirige a `/api/v1/docs`).
-- El contrato RabbitMQ ejecutable de AE1 está en
-  `contracts/events/rabbitmq-ae1.md`.
-- La documentación histórica y de migración preservada está en `docs/`.
-- `tests/e2e/` contiene la regresión API global; `.github/workflows/m8-ci.yml`
-  ejecuta build, tests, Compose, health y esa suite en CI.
+La única aplicación HTTP de M8 queda publicada en el puerto configurado por
+`M8_HOST_PORT` (3000 por defecto):
 
-## Estado AE1 y siguiente etapa
+- `GET /health/live`: vitalidad del proceso;
+- `GET /health/ready` y `GET /health`: disponibilidad agregada;
+- `GET /openapi.yaml`: índice OpenAPI integrado;
+- `GET /docs`: documentación interactiva Scalar;
+- rutas funcionales de Notifications, QR, Receipts, Support y Delivery.
 
-Notifications conserva `PushProvider` y su mock; RF-8.7 no está completado.
-Support implementa tickets en memoria y una base parcial de RabbitMQ para
-RF-8.6; no existen retry, DLQ ni contratos de evento versionados. Persistencia
-distribuida, Redis, proveedores reales y esos mecanismos pertenecen a AE2.
+Para detener el entorno local:
+
+```powershell
+docker compose --env-file .env down --remove-orphans
+```
+
+## Imagen publicada y demostración
+
+La versión integrada AE2 se publicará como `juanmainval/m8-notificaciones-qr:2.0.0`.
+La imagen necesita la misma infraestructura compartida, por lo que se ejecuta con
+Compose, no con un `docker run` aislado.
+
+```powershell
+docker image ls juanmainval/m8-notificaciones-qr
+docker pull juanmainval/m8-notificaciones-qr:2.0.0
+$env:M8_IMAGE = "juanmainval/m8-notificaciones-qr:2.0.0"
+docker compose --env-file .env up -d --no-build
+docker compose --env-file .env ps
+Invoke-WebRequest http://localhost:3000/health/ready -UseBasicParsing
+```
+
+Luego se pueden abrir `http://localhost:3000/docs` para Scalar y
+`http://localhost:3000/openapi.yaml` para el contrato. La demostración HTTP
+integrada se verifica con `pnpm run test:e2e` y la infraestructura con
+`pnpm run test:infrastructure`.
+
+Las variables `M1_JWT_SECRET` y `M2_INTERNAL_API_KEY` del ejemplo sirven solo
+para desarrollo local. En cualquier entorno real deben inyectarse externamente
+sin versionar secretos.
+
+## Calidad
+
+La verificación completa se ejecuta con:
+
+```powershell
+pnpm run build
+pnpm run test
+pnpm run test:e2e
+```
+
+El detalle operativo y de recuperación está en [docs/RUNBOOK.md](docs/RUNBOOK.md).
+
+## Identificación de entrega
+
+- Rama integrada final prevista: `AE2/notificaciones-qr-receipts-support`.
+- Archivo comprimido de entrega: `AE2-M08-ApellidoNombre.zip`.
+- Informe: `Informe-AE2-M08-Apellido.docx`.
