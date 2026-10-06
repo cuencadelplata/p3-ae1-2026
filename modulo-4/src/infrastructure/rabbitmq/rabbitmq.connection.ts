@@ -1,4 +1,5 @@
 import amqp from 'amqplib';
+import { config } from '../config/env.config.js';
 import { Logger } from '../logger/structured.logger.js';
 
 export class RabbitMQConnection {
@@ -39,7 +40,6 @@ export class RabbitMQConnection {
         this.channel = null;
       });
 
-      // Configurar Exchanges y Colas base
       await this.setupTopology(ch);
       Logger.info('Conexión y topología de RabbitMQ inicializadas con éxito');
     } catch (error) {
@@ -68,18 +68,19 @@ export class RabbitMQConnection {
   }
 
   private async setupTopology(channel: amqp.Channel): Promise<void> {
-    // Exchange para publicar eventos de conductor
+    // Exchange para publicar eventos de disponibilidad de conductor
     await channel.assertExchange('driver.events', 'topic', { durable: true });
 
-    // Exchange para recibir eventos de viaje
-    await channel.assertExchange('trip.events', 'topic', { durable: true });
+    // Exchange configurable para recibir eventos de viaje (ej. trip.events o viajes.events)
+    const tripExchange = config.rabbitmqTripExchange;
+    await channel.assertExchange(tripExchange, 'topic', { durable: true });
 
-    // Exchange y cola Dead Letter Queue (DLQ)
+    // DLX y DLQ
     await channel.assertExchange('m4.dlx', 'direct', { durable: true });
     await channel.assertQueue('m4.dlq', { durable: true });
     await channel.bindQueue('m4.dlq', 'm4.dlx', 'm4.dead_letter');
 
-    // Cola principal del microservicio M4 con DLX configurado
+    // Cola principal del microservicio M4
     await channel.assertQueue('m4.trip-events.queue', {
       durable: true,
       arguments: {
@@ -88,9 +89,21 @@ export class RabbitMQConnection {
       }
     });
 
-    // Subscripción a los eventos de viaje relevantes
-    await channel.bindQueue('m4.trip-events.queue', 'trip.events', 'TripStarted');
-    await channel.bindQueue('m4.trip-events.queue', 'trip.events', 'TripCompleted');
-    await channel.bindQueue('m4.trip-events.queue', 'trip.events', 'TripCancelled');
+    // Subscripción a routing keys configuradas (soporta TripStarted y viaje.iniciado)
+    const keysToBind = new Set([
+      config.rabbitmqTripStartedKey,
+      config.rabbitmqTripCompletedKey,
+      config.rabbitmqTripCancelledKey,
+      'TripStarted',
+      'TripCompleted',
+      'TripCancelled',
+      'viaje.iniciado',
+      'viaje.finalizado',
+      'viaje.cancelado'
+    ]);
+
+    for (const key of keysToBind) {
+      await channel.bindQueue('m4.trip-events.queue', tripExchange, key);
+    }
   }
 }

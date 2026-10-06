@@ -11,6 +11,12 @@ export class TripEventHandler {
 
   public async handleTripEvent(event: TripEvent): Promise<void> {
     const { driverId, eventType, eventId } = event;
+
+    if (!Number.isInteger(driverId) || driverId <= 0) {
+      Logger.warn(`Evento de viaje ignorado: driverId no es un entero válido (${driverId})`, { eventId, driverId });
+      return;
+    }
+
     const currentLocation = await this.locationRepository.get(driverId);
 
     if (!currentLocation) {
@@ -22,10 +28,18 @@ export class TripEventHandler {
       return;
     }
 
+    // Normalización de tipos de evento (soporta propuesta previa 'TripStarted' y propuesta M6 'viaje.iniciado')
+    const normalizedType = String(eventType).toLowerCase();
     let newAvailability = currentLocation.available;
-    if (eventType === 'TripStarted') {
+
+    if (normalizedType === 'tripstarted' || normalizedType === 'viaje.iniciado') {
       newAvailability = false;
-    } else if (eventType === 'TripCompleted' || eventType === 'TripCancelled') {
+    } else if (
+      normalizedType === 'tripcompleted' ||
+      normalizedType === 'viaje.finalizado' ||
+      normalizedType === 'tripcancelled' ||
+      normalizedType === 'viaje.cancelado'
+    ) {
       newAvailability = true;
     }
 
@@ -43,7 +57,6 @@ export class TripEventHandler {
         { eventId, driverId, available: newAvailability }
       );
 
-      // Emite evento DriverAvailabilityChanged
       const availabilityEvent: DriverAvailabilityChangedEvent = {
         eventId: `avail-${eventId}-${Date.now()}`,
         driverId,

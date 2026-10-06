@@ -47,7 +47,7 @@ export class RabbitMQTripEventConsumer {
   }
 
   public async processMessage(channel: amqp.Channel, msg: amqp.ConsumeMessage): Promise<void> {
-    let payload: Partial<TripEvent>;
+    let payload: Record<string, unknown>;
     try {
       payload = JSON.parse(msg.content.toString('utf8'));
     } catch (parseError) {
@@ -56,22 +56,27 @@ export class RabbitMQTripEventConsumer {
       return;
     }
 
-    const eventId = payload.eventId || msg.properties.messageId;
-    const eventType = (payload.eventType || msg.fields.routingKey) as TripEvent['eventType'];
-    const driverId = payload.driverId;
-    const tripId = payload.tripId || 'N/A';
+    const eventId = String(payload.eventId || msg.properties.messageId || '');
+    const rawEventType = String(payload.eventType || msg.fields.routingKey || '');
+    const rawDriverId = payload.driverId;
+    const tripId = String(payload.tripId || 'N/A');
 
-    if (!eventId || !driverId || !eventType) {
-      Logger.warn('Mensaje de RabbitMQ incompleto (falta eventId, driverId o eventType). Enviando a DLQ.', { payload });
+    // Validación de formato del mensaje (Requerimiento 7)
+    const driverId = Number.parseInt(String(rawDriverId), 10);
+
+    if (!eventId || !rawEventType || Number.isNaN(driverId) || driverId <= 0) {
+      Logger.warn('Mensaje de RabbitMQ descartado por formato inválido (falta eventId, eventType o driverId entero válido). Enviando a DLQ.', {
+        payload,
+        parsedDriverId: driverId
+      });
       channel.nack(msg, false, false);
       return;
     }
 
-    // 1. Verificación de Idempotencia (RNF-08)
+    // 1. Verificación de Idempotencia por eventId (RNF-08)
     const alreadyProcessed = await this.eventStore.isEventProcessed(eventId);
     if (alreadyProcessed) {
-      Logger.info(`Evento duplicado ignorado por idempotencia: eventId=${eventId}`, { eventId, driverId, eventType });
-      // Confirmar inmediatamente para remover el duplicado de la cola
+      Logger.info(`Evento duplicado ignorado por idempotencia: eventId=${eventId}`, { eventId, driverId, rawEventType });
       channel.ack(msg);
       return;
     }
@@ -87,8 +92,8 @@ export class RabbitMQTripEventConsumer {
         eventId,
         tripId,
         driverId,
-        eventType,
-        timestamp: payload.timestamp || new Date().toISOString()
+        eventType: rawEventType as TripEvent['eventType'],
+        timestamp: String(payload.timestamp || new Date().toISOString())
       };
 
       // 2. Procesar la actualización en Redis y emitir disponibilidad (RNF-07)
@@ -97,15 +102,15 @@ export class RabbitMQTripEventConsumer {
       // 3. Registrar idempotencia en Redis
       await this.eventStore.markEventProcessed(eventId);
 
-      // 4. Confirmar ACK SOLO después de actualizar satisfactoriamente la caché
+      // 4. Confirmar ACK SOLO después de actualizar la caché
       channel.ack(msg);
       Logger.info(`Mensaje de evento de viaje procesado y confirmado (ACK): eventId=${eventId}`, {
         eventId,
         driverId,
-        eventType
+        eventType: rawEventType
       });
     } catch (error) {
-      Logger.error(`Error al procesar evento de viaje ${eventType} para driver ${driverId}`, error, {
+      Logger.error(`Error al procesar evento de viaje ${rawEventType} para driver ${driverId}`, error, {
         eventId,
         retryCount
       });
