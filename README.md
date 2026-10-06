@@ -25,10 +25,10 @@ Backend del Módulo 7, con estimación de tarifas, métodos de pago, cancelacion
 Clona el repositorio y crea un archivo `.env` en su raíz. El archivo está excluido de Git; no lo subas ni compartas sus credenciales.
 
 ```dotenv
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/historial
-REDIS_URL=redis://localhost:6379
-RABBITMQ_URL=amqp://localhost:5672
-CARGO_CANCELACION_URL=http://localhost:3007
+DATABASE_URL=postgresql://postgres:postgres@db:5432/historial
+REDIS_URL=redis://redis:6379
+RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+CARGO_CANCELACION_URL=http://cargo-cancelacion:3007
 SUPABASE_URL=https://tu-proyecto.supabase.co
 SUPABASE_KEY=tu-publishable-key
 ```
@@ -43,7 +43,7 @@ docker compose ps
 docker compose logs m7-app --tail=50
 ```
 
-Compose carga las variables desde `.env`. El modo de red `host` requiere una versión de Docker Desktop que lo soporte y tenga habilitada esa opción. Los servicios locales usan los puertos predeterminados de PostgreSQL (5432), Redis (6379), RabbitMQ (5672 y 15672), M7 (3000) y el mock de cargo (3007).
+Compose carga las variables desde `.env` y conecta los contenedores mediante una red bridge. Los servicios locales publican los puertos predeterminados de PostgreSQL (5432), Redis (6379), RabbitMQ (5672 y 15672), M7 (3000) y el mock de cargo (3007).
 
 - API y documentación interactiva: <http://localhost:3000/docs>
 - Healthcheck: <http://localhost:3000/health>
