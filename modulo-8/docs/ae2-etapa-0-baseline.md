@@ -1,8 +1,8 @@
 # AE2 — Etapa 0: baseline técnico integrado
 
-**Fecha de ejecución:** 2026-10-05 (America/Argentina/Buenos_Aires)  
-**Rama auditada:** `integration/m8-ae2-unified`  
-**Commit actualizado:** `099ca41 refactor(rf8.3): exponer receipts como modulo montable en la aplicacion comun de M8`  
+**Fecha de ejecución:** 2026-10-05 (America/Argentina/Buenos_Aires)
+**Rama auditada:** `integration/m8-ae2-unified`
+**Commit actualizado:** `099ca41 refactor(rf8.3): exponer receipts como modulo montable en la aplicacion comun de M8`
 **Objetivo:** registrar el estado reproducible previo a los cambios de cierre
 arquitectónico de M8. Esta etapa no modifica código, contratos ni
 infraestructura.

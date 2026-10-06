@@ -1,6 +1,6 @@
 # AE2 — Etapa 2: diseño del bootstrap único de M8
 
-**Estado:** propuesta técnica previa a implementación.  
+**Estado:** propuesta técnica previa a implementación.
 **Objetivo:** definir cómo alojar RF8.1–RF8.7 en una única aplicación HTTP y
 un único proceso Node.js, sin borrar la separación interna de los módulos.
 

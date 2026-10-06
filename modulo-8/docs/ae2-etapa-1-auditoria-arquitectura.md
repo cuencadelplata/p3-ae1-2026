@@ -1,6 +1,6 @@
 # AE2 — Etapa 1: auditoría de arquitectura hacia una aplicación M8 única
 
-**Rama auditada:** `integration/m8-ae2-unified`  
+**Rama auditada:** `integration/m8-ae2-unified`
 **Propósito:** identificar las brechas entre el estado integrado actual y el
 objetivo AE2 de una única aplicación e imagen Docker de M8. Este documento no
 implementa cambios ni reemplaza los contratos OpenAPI vigentes.
