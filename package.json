@@ -19,6 +19,7 @@
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@types/amqplib": "^0.10.8",
+    "@types/dotenv": "^6.1.1",
     "@types/express": "^5.0.6",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.23.1",
@@ -30,7 +31,9 @@
   },
   "dependencies": {
     "@scalar/express-api-reference": "^0.10.18",
+    "@supabase/supabase-js": "^2.117.2",
     "amqplib": "^2.1.0",
+    "dotenv": "^18.0.5",
     "express": "^5.2.1",
     "pg": "^8.23.0",
     "redis": "^6.2.1",

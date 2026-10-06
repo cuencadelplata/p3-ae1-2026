@@ -1,35 +1,43 @@
+import dotenv from "dotenv";
+dotenv.config();
 import express from "express";
 import { apiReference } from "@scalar/express-api-reference";
-import { readFileSync, existsSync } from "fs";
+import fs from "fs";
 import { parse } from "yaml";
+import path from "path";
 
 import { config } from "./config";
 import { inicializarBaseDatos } from "./infraestructura/basedatos";
 import { conectarRedis, redisBreaker } from "./infraestructura/redis";
 import { iniciarRabbit } from "./infraestructura/rabbit";
-import { cargoCancelacionBreaker } from "./reintegro/cargoCancelacionClient";
+import { cargoCancelacionBreaker } from "./reintegro/obtenerCargo";
 
-// Importación de módulos de negocio (RF-7.1 al RF-7.7)
 import estimacionTarifaRouter from "./estimacion-tarifa/estimacion-tarifa";
 import rutaPago from "./metodo-pago/rutaPago";
 import mockMercadoPagoAPI from "./mock/mercadoPagoAPI";
 import cargoCancelacionRouter from "./cargo-cancelacion/cargo-cancelacion";
 import rutaPagoDuplicado from "./pago-duplicado/rutaPagoDuplicado";
-import rutaReintegro from "./reintegro/rutaReintegro";
 import historialRouter, { historial } from "./historial-financiero/historial-financiero";
 
 const app = express();
 app.use(express.json());
 
 // Documentación interactiva de la API (Scalar / OpenAPI)
-if (existsSync("./openapi.yaml")) {
-  try {
-    const spec = parse(readFileSync("./openapi.yaml", "utf8"));
-    app.use("/docs", apiReference({ content: spec }));
-  } catch (err) {
-    console.warn("[openapi] Error al cargar openapi.yaml:", (err as Error).message);
-  }
-}
+app.get("/openapi.yaml", (req, res) => {
+  const openapiPath = path.join(__dirname, "../openapi.yaml");
+  const openapiContent = fs.readFileSync(openapiPath, "utf-8");
+  res.setHeader("Content-Type", "application/yaml");
+  res.send(openapiContent);
+});
+
+app.use(
+  "/docs",
+  apiReference({
+    spec: {
+      url: "/openapi.yaml",
+    },
+  })
+);
 
 app.get("/", (_req, res) => res.redirect("/docs"));
 
@@ -57,11 +65,10 @@ app.use(mockMercadoPagoAPI);
 // RF-7.4: Cargo de cancelación
 app.use(cargoCancelacionRouter);
 
-// RF-7.5: Prevención de pago duplicado (idempotencia)
+// RF-7.6: Verificación de idempotencia
 app.use(rutaPagoDuplicado);
 
-// RF-7.6: Reintegro por viaje cancelado
-app.use(rutaReintegro);
+// RF-7.5 (reintegro) se dispara por evento de RabbitMQ (ver infraestructura/rabbit.ts)
 
 // RF-7.7: Historial financiero
 app.use(historialRouter);
@@ -79,7 +86,7 @@ async function main() {
 
   // 2. Conectar a Redis (con Circuit Breaker)
   console.log("[inicio] Conectando a Redis...");
-  await conectarRedis();
+  conectarRedis(); // no bloquea: si Redis no está, el servicio levanta igual
 
   // 3. Conectar a RabbitMQ (topología y consumer de eventos)
   console.log("[inicio] Conectando a RabbitMQ...");

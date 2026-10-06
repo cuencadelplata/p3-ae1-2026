@@ -1,69 +1,133 @@
-import { describe, it, expect } from "vitest";
-import {
-  registrarMetodoPago,
-  autorizarPago,
-  rechazarPago,
-} from "../metodo-pago/procesoPago";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../supabaseClient", () => ({
+  supabase: {
+    from: vi.fn(),
+  },
+}));
+
+import { supabase } from "../supabaseClient";
+import { autorizarPago, rechazarPago } from "../metodo-pago/procesoPago";
+
+let builder: any;
+
+function filaPago(overrides: Record<string, any> = {}) {
+  return {
+    pago_Id: "pago-test",
+    cliente_Id: "cliente1",
+    viaje_Id: "viaje-test",
+    tipo: "efectivo",
+    detalle: "",
+    fecha: new Date().toISOString(),
+    estado: "pendiente",
+    paymentId: null,
+    total: null,
+    moneda: null,
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  builder = {
+    update: vi.fn(() => builder),
+    select: vi.fn(() => builder),
+    eq: vi.fn(() => builder),
+    single: vi.fn(),
+    maybeSingle: vi.fn(),
+  };
+  (supabase.from as any).mockReturnValue(builder);
+});
 
 describe("autorizarPago (RF-7.3 - Autorización/captura)", () => {
-  it("autoriza un pago que está en estado 'pendiente'", () => {
-    registrarMetodoPago("cliente1", "viajeJ", "efectivo");
-    const autorizado = autorizarPago("viajeJ", "orden-J");
+  it("autoriza un pago pendiente", async () => {
+    builder.maybeSingle.mockResolvedValueOnce({
+      data: filaPago({ viaje_Id: "viaje-autorizado" }),
+      error: null,
+    });
+    builder.single.mockResolvedValueOnce({
+      data: filaPago({ viaje_Id: "viaje-autorizado", estado: "autorizado" }),
+      error: null,
+    });
+
+    const autorizado = await autorizarPago("viaje-autorizado", "orden-autorizada");
+
     expect(autorizado.estado).toBe("autorizado");
+    expect(builder.update).toHaveBeenCalledWith({
+      estado: "autorizado",
+      paymentId: undefined,
+      total: undefined,
+      moneda: undefined,
+    });
   });
 
-  it("lanza error si no existe un método de pago para ese viaje", () => {
-    expect(() => autorizarPago("viaje-inexistente-999", "orden-999")).toThrow(
+  it("falla si no existe un pago para ese viaje", async () => {
+    builder.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+
+    await expect(
+      autorizarPago("viaje-inexistente-999", "orden-inexistente")
+    ).rejects.toThrow(
       "no existe un tipo de pago registrado que este asociado para dicho viaje"
     );
   });
 
-  it("lanza error si se intenta autorizar un pago que ya fue autorizado", () => {
-    registrarMetodoPago("cliente1", "viajeK", "efectivo");
-    autorizarPago("viajeK", "orden-K1");
-    expect(() => autorizarPago("viajeK", "orden-K2")).toThrow(
-      "El pago no fue procesado aún"
-    );
+  it("rechaza una orden ya procesada, incluso para otro viaje", async () => {
+    builder.maybeSingle.mockResolvedValueOnce({
+      data: filaPago({ viaje_Id: "viaje-primero" }),
+      error: null,
+    });
+    builder.single.mockResolvedValueOnce({
+      data: filaPago({ viaje_Id: "viaje-primero", estado: "autorizado" }),
+      error: null,
+    });
+    await autorizarPago("viaje-primero", "orden-repetida");
+
+    await expect(
+      autorizarPago("viaje-segundo", "orden-repetida")
+    ).rejects.toThrow("Esta orden de pago ya fue procesada anteriormente");
   });
 
-  it("lanza error al intentar autorizar un pago que ya fue rechazado", () => {
-    registrarMetodoPago("cliente1", "viajeN", "efectivo");
-    rechazarPago("viajeN");
-    expect(() => autorizarPago("viajeN", "orden-N")).toThrow(
-      "El pago no fue procesado aún"
-    );
-  });
+  it("rechaza un pago pendiente y actualiza su estado", async () => {
+    builder.maybeSingle.mockResolvedValueOnce({
+      data: filaPago({ viaje_Id: "viaje-rechazado" }),
+      error: null,
+    });
+    builder.single.mockResolvedValueOnce({
+      data: filaPago({ viaje_Id: "viaje-rechazado", estado: "rechazado" }),
+      error: null,
+    });
 
-  it("lanza error al intentar autorizar dos veces la misma orden (idempotencia)", () => {
-    // Usamos IDs únicos para este test para asegurar que no colisionen con otros datos
-    registrarMetodoPago("cliente1", "viajeIdemP", "efectivo");
-    registrarMetodoPago("cliente1", "viajeIdemQ", "efectivo");
+    const rechazado = await rechazarPago("viaje-rechazado");
 
-    // Primera autorización con la orden orden-idempotente-1
-    autorizarPago("viajeIdemP", "orden-idempotente-1");
-
-    // Intentar autorizar otro viaje usando exactamente la misma orden de pago
-    expect(() => autorizarPago("viajeIdemQ", "orden-idempotente-1")).toThrow(
-      "Esta orden de pago ya fue procesada anteriormente"
-    );
-  });
-
-  it("rechaza un pago pendiente y cambia su estado a 'rechazado'", () => {
-    registrarMetodoPago("cliente1", "viajeL", "efectivo");
-    const rechazado = rechazarPago("viajeL");
     expect(rechazado.estado).toBe("rechazado");
+    expect(builder.update).toHaveBeenCalledWith({ estado: "rechazado" });
   });
 
-  it("lanza error al rechazar un viaje sin método de pago registrado", () => {
-    expect(() => rechazarPago("viaje-inexistente-888")).toThrow(
+  it("falla al rechazar un viaje sin pago registrado", async () => {
+    builder.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+
+    await expect(rechazarPago("viaje-inexistente-888")).rejects.toThrow(
       "no existe un tipo de pago registrado que este asociado para dicho viaje"
     );
   });
 
-  it("lanza error al intentar rechazar un pago que ya fue autorizado", () => {
-    registrarMetodoPago("cliente1", "viajeM", "efectivo");
-    autorizarPago("viajeM", "orden-M");
-    expect(() => rechazarPago("viajeM")).toThrow(
+  it("no permite autorizar un pago que ya no está pendiente", async () => {
+    builder.maybeSingle.mockResolvedValueOnce({
+      data: filaPago({ viaje_Id: "viaje-ya-autorizado", estado: "autorizado" }),
+      error: null,
+    });
+
+    await expect(
+      autorizarPago("viaje-ya-autorizado", "orden-segunda")
+    ).rejects.toThrow("El pago no fue procesado aún");
+  });
+
+  it("no permite rechazar un pago que ya no está pendiente", async () => {
+    builder.maybeSingle.mockResolvedValueOnce({
+      data: filaPago({ viaje_Id: "viaje-ya-autorizado", estado: "autorizado" }),
+      error: null,
+    });
+
+    await expect(rechazarPago("viaje-ya-autorizado")).rejects.toThrow(
       "El pago no fue procesado aún"
     );
   });
