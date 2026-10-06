@@ -1,5 +1,6 @@
 import express, { type Application } from 'express';
 import { apiReference } from '@scalar/express-api-reference';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -92,9 +93,10 @@ export const createApp = (dependencies: AppDependencies = {}): Application => {
   // Documentación OpenAPI / Scalar
   application.use('/openapi', express.static(path.join(projectDirectory, 'openapi')));
   application.get('/scalar/standalone.js', (_req, res) => {
-    res.sendFile(
+    const scalarAsset = readFileSync(
       path.join(projectDirectory, 'node_modules', '@scalar', 'api-reference', 'dist', 'browser', 'standalone.js')
     );
+    res.type('application/javascript').send(scalarAsset);
   });
   application.get(
     '/docs',
