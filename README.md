@@ -4,82 +4,109 @@ Backend unificado que consolida todos los requerimientos funcionales del **Módu
 
 ---
 
-## 📋 Requerimientos Cubiertos (RF-7.1 al RF-7.7)
+## Requisitos previos
 
-| RF | Requerimiento | Endpoints / Eventos | Implementación |
-|---|---|---|---|
-| **RF-7.1** | Estimación de tarifa | `POST /tarifa/estimacion` | Cálculo según distancia, tiempo y tipo de vehículo (auto/moto). |
-| **RF-7.2** | Registro de método de pago | `POST /metodo-pago`, `GET /metodo-pago/:viajeId` | Gestión de efectivo, tarjeta y transferencia en estado pendiente. |
-| **RF-7.3** | Autorización de pago | `POST /metodo-pago/:viajeId/autorizar`, `rechazar` | Integración y autorización con mock de pasarela (Mercado Pago). |
-| **RF-7.4** | Cargo por cancelación | `POST /cancelacion/cargo` | Reglas de gracia (120s), cancelación por conductor ($0) y penalizaciones. |
-| **RF-7.5** | Prevención de pagos duplicados | `GET /pagos/:idOrden/duplicado` | Idempotencia rápida con Redis y persistencia de respaldo en PostgreSQL. |
-| **RF-7.6** | Reintegro por viaje cancelado | `POST /reintegro`, Consumer RabbitMQ | Reintegro del 95% ante eventos de cancelación publicados por M6. |
-| **RF-7.7** | Historial financiero | `GET /operations`, `POST /operations`, `PATCH /operations/:id/status` | Trazabilidad completa con persistencia en PostgreSQL / memoria. |
+- Docker y Docker Compose instalados
+- Node.js 20+
+- npm
 
 ---
 
-## 🛡️ Patrón de Diseño: Circuit Breaker (Disyuntor)
+## Cómo ejecutar
 
-Para evitar sobrecargar servicios caídos o bloquear la aplicación con esperas infinitas, se implementó el patrón **Circuit Breaker** en `src/patrones/circuitBreaker.ts`:
-
-1. **Estado CLOSED (Normal)**:
-   - Las consultas a Redis o al servicio de cancelación se ejecutan normalmente.
-2. **Estado OPEN (Disparado ante caídas)**:
-   - Al detectar fallos consecutivos (por ejemplo si se ejecuta `docker stop redis`), el circuito se **abre inmediatamente** (*fail-fast*).
-   - **Degradación elegante / Fallback**: No se bloquea la API con timeouts ni se bombardea el servicio con reintentos; el sistema desvía el flujo automáticamente a **PostgreSQL** o memoria.
-   - En el endpoint `GET /health` se puede visualizar el estado en vivo de los circuitos (`OPEN` / `CLOSED`).
-3. **Estado HALF-OPEN (Reconexión inteligente)**:
-   - Tras un tiempo de enfriamiento (cooldown de 15s), el circuito permite una prueba. Si el servicio fue levantado (`docker start`), el circuito se **cierra** y regresa a operación normal.
-
----
-
-## 🚀 Cómo Ejecutar con Docker Compose
-
-Levanta la base de datos PostgreSQL, Redis, RabbitMQ y la aplicación completa en un solo comando:
+### 1. Clonar el repositorio
 
 ```bash
-docker compose up --build
+git clone https://github.com/cuencadelplata/p3-ae1-2026.git
+cd p3-ae1-2026
+git checkout M7--Tarifas,-Pagos-y-Liquidaciones
 ```
 
-- **API y Documentación interactiva (Scalar)**: `http://localhost:3000/docs`
-- **Healthcheck y estado de Circuit Breakers**: `http://localhost:3000/health`
-- **Panel de control de RabbitMQ**: `http://localhost:15672` (usuario: `guest`, contraseña: `guest`)
-- **Base de datos PostgreSQL**: puerto `5432` (db: `historial`, user: `postgres`, pass: `postgres`)
+### 2. Crear el archivo .env
 
-Para detener los servicios:
+```bash
+cat > .env << 'ENVEOF'
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/historial
+REDIS_URL=redis://localhost:6379
+RABBITMQ_URL=amqp://guest:guest@localhost:5672
+CARGO_CANCELACION_URL=http://localhost:3007
+SUPABASE_URL=https://ljuhdtbwhoskyeowrlvr.supabase.co
+SUPABASE_KEY=TU_KEY_DE_SUPABASE
+ENVEOF
+```
+
+### 3. Levantar los servicios
+
+```bash
+docker compose up --build -d
+```
+
+### 4. Verificar que todo está corriendo
+
+```bash
+docker compose ps
+```
+
+### 5. Verificar que la app conectó (esperar ~20 segundos)
+
+```bash
+docker compose logs m7-app --tail=20
+```
+
+Deberías ver:
+- `[postgres] Tablas de base de datos verificadas/creadas con éxito.`
+- `[redis] Conectado exitosamente.`
+- `[rabbit] Conectado exitosamente y escuchando eventos en RabbitMQ.`
+
+### 6. Instalar dependencias
+
+```bash
+npm install
+npx playwright install --with-deps chromium
+```
+
+### 7. Ejecutar los tests unitarios
+
+```bash
+npm run test:unit
+```
+
+### 8. Ejecutar los tests e2e
+
+```bash
+npm run test:e2e
+```
+
+---
+
+## Endpoints principales
+
+| RF | Endpoint | Método |
+|---|---|---|
+| RF-7.1 | `/tarifas/estimacion` | POST |
+| RF-7.2 | `/metodo-pago` | POST / GET |
+| RF-7.3 | `/metodo-pago/:viajeId/autorizar` | POST |
+| RF-7.4 | `/tarifas/cancelacion` | POST |
+| RF-7.5 | `/pagos/:idOrden/duplicado` | GET |
+| RF-7.6 | Consumer RabbitMQ (evento `cancelacion_cliente`) | - |
+| RF-7.7 | `/operations` | GET / POST / PATCH |
+
+- **Documentación interactiva**: `http://localhost:3000/docs`
+- **Healthcheck**: `http://localhost:3000/health`
+- **Panel RabbitMQ**: `http://localhost:15672` (guest/guest)
+
+---
+
+## Detener los servicios
+
 ```bash
 docker compose down
 ```
 
 ---
 
-## 🧪 Pruebas en Vivo para la Presentación
-
-### 1. Demostración de Resiliencia y Circuit Breaker (Apagar Backing Services):
-
-1. Con todo levantado, verifica la salud:
-   ```bash
-   curl http://localhost:3000/health
-   # Respuesta: {"status":"ok", "circuitos":{"redis":"CLOSED", ...}}
-   ```
-2. Simular la caída de Redis:
-   ```bash
-   docker stop m7-redis
-   ```
-3. Consultar pagos duplicados o el healthcheck:
-   - La API responde inmediatamente sin trabarse porque el Circuit Breaker entra en `OPEN` y consulta directo en PostgreSQL.
-4. Volver a levantar Redis:
-   ```bash
-   docker start m7-redis
-   ```
-   - El circuito pasa a `HALF-OPEN` y luego regresa a `CLOSED` de forma transparente.
-
-### 2. Ejecutar los tests automatizados:
+## Imagen Docker
 
 ```bash
-# Tests unitarios y validación del Circuit Breaker (Vitest)
-npm run test:unit
-
-# Tests de integración y resiliencia completa (Playwright)
-npm run test:e2e
+docker pull aylen0/m7-tarifas-ae2:4.0
 ```
