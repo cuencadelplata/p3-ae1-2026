@@ -1,4 +1,4 @@
-import type { DriverLocation, LocationHistoryRecord } from '../domain/entities/location.entity.js';
+import type { DriverLocation, LocationHistoryEntry } from '../domain/entities/location.entity.js';
 
 export interface SaveLocationResult {
   saved: boolean;
@@ -15,6 +15,6 @@ export interface LocationRepository {
 }
 
 export interface LocationHistoryRepository {
-  saveRecord(record: LocationHistoryRecord): Promise<void>;
-  getHistoryByDriver(driverId: number, limit?: number): Promise<LocationHistoryRecord[]>;
+  saveRecord(record: Omit<LocationHistoryEntry, 'id' | 'recordedAt' | 'createdAt'>): Promise<void>;
+  getHistoryByDriver(driverId: number, limit?: number): Promise<LocationHistoryEntry[]>;
 }

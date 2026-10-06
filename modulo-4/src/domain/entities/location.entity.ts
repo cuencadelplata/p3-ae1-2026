@@ -6,19 +6,26 @@ export interface Coordinates {
 }
 
 export interface DriverLocation extends Coordinates {
-  driverId: number; // Identificador canónico del conductor como número entero positivo
+  driverId: number; // Identificador canónico del conductor como número entero positivo (M1 userId)
   vehicleType: VehicleType;
   available: boolean;
   updatedAt: string;
   expiresAt: string;
 }
 
-export interface LocationHistoryRecord extends Coordinates {
-  id?: number;
+export interface LocationHistoryEntry extends Coordinates {
+  id: number;
   driverId: number;
   vehicleType: VehicleType;
   available: boolean;
   updatedAt: string;
+  recordedAt: string;
+  createdAt: string;
+}
+
+export interface LocationHistoryResponse {
+  count: number;
+  entries: LocationHistoryEntry[];
 }
 
 export interface NearbyDriver extends DriverLocation {
