@@ -107,7 +107,7 @@ export function calcularCargoCancelacion(
   }
 
   if (!(vehicleType in VEHICLE_MULTIPLIER)) {
-    throw new DominioError("vehicleType invalido: debe ser 'auto' o 'moto'");
+    throw new DominioError("vehicleType debe ser 'auto' o 'moto'");
   }
 
   if (typeof estimatedFare !== "number" || isNaN(estimatedFare) || estimatedFare <= 0) {
@@ -118,7 +118,7 @@ export function calcularCargoCancelacion(
 
   if (ESTADOS_NO_CANCELABLES.includes(tripStatus)) {
     throw new DominioError(
-      `El viaje esta en estado '${tripStatus}' y no admite cargo de cancelacion`,
+      `No se puede calcular un cargo de cancelacion`,
       409
     );
   }
