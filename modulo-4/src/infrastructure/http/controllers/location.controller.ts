@@ -94,7 +94,7 @@ export class LocationController {
       const limit = Number.isNaN(limitParam) || limitParam <= 0 ? 20 : limitParam;
 
       if (!this.getLocationHistoryUseCase) {
-        res.status(200).json([]);
+        res.status(200).json({ count: 0, entries: [] });
         return;
       }
 

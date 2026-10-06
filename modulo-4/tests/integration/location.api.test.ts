@@ -24,7 +24,7 @@ describe('Location API Endpoints (M4 - Requerimientos 1, 3, 4 y 5)', () => {
 
   it('PUT & GET /api/v1/drivers/:driverId/location debe guardar y consultar la ubicación del conductor', async () => {
     const putRes = await client
-      .put('/api/v1/drivers/77/location') // driverId entero canónico
+      .put('/api/v1/drivers/77/location')
       .send({
         latitude: -27.4692,
         longitude: -58.8306,
@@ -40,7 +40,7 @@ describe('Location API Endpoints (M4 - Requerimientos 1, 3, 4 y 5)', () => {
     expect(getRes.body.latitude).toBe(-27.4692);
   });
 
-  it('GET /api/v1/drivers/:driverId/location-history debe devolver el historial de PostgreSQL (Requerimiento 4)', async () => {
+  it('GET /api/v1/drivers/:driverId/location-history debe devolver el historial { count, entries } (Requerimiento 4)', async () => {
     await client
       .put('/api/v1/drivers/77/location')
       .send({
@@ -53,9 +53,10 @@ describe('Location API Endpoints (M4 - Requerimientos 1, 3, 4 y 5)', () => {
     const res = await client.get('/api/v1/drivers/77/location-history?limit=10');
 
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body.length).toBe(1);
-    expect(res.body[0].driverId).toBe(77);
+    expect(res.body).toHaveProperty('count', 1);
+    expect(Array.isArray(res.body.entries)).toBe(true);
+    expect(res.body.entries.length).toBe(1);
+    expect(res.body.entries[0].driverId).toBe(77);
   });
 
   it('GET /api/v1/drivers/nearby debe devolver conductores cercanos con el formato para M5 (Requerimiento 5)', async () => {
