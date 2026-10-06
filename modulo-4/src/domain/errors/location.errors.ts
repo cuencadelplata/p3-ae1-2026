@@ -19,6 +19,20 @@ export class StaleLocationError extends Error {
   }
 }
 
+export class UnauthorizedError extends Error {
+  public constructor(message = 'Token de autenticación inválido o no provisto') {
+    super(message);
+    this.name = 'UnauthorizedError';
+  }
+}
+
+export class ForbiddenError extends Error {
+  public constructor(message = 'Acceso denegado. Se requiere el rol de CONDUCTOR y la coincidencia de usuario') {
+    super(message);
+    this.name = 'ForbiddenError';
+  }
+}
+
 export class GeocodingNotFoundError extends Error {
   public constructor(address: string) {
     super(`Dirección no encontrada por el geocodificador: ${address}`);
