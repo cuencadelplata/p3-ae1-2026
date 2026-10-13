@@ -4,9 +4,11 @@ import {
   idempotencyConflict,
   invalidTransition,
   ticketNotFound,
+  tripNotFound,
   validationError,
 } from '../errors/support-error.js';
 import type { SupportEventPublisher } from '../events/support-event-publisher.js';
+import type { TripVerifier } from '../integrations/m6-trips.js';
 import { TRANSICIONES_PERMITIDAS } from '../models/ticket.model.js';
 import type { Ticket, TicketHistoryEntry, TicketStatus } from '../models/ticket.model.js';
 import { IdempotencyKeyConflictError, TicketVersionConflictError } from '../repositories/ticket.repository.js';
@@ -65,6 +67,8 @@ export class TicketService {
   constructor(
     private readonly repository: TicketRepository,
     private readonly eventPublisher: SupportEventPublisher,
+    // Sin verificador no se consulta a M6: cualquier tripId se acepta.
+    private readonly tripVerifier?: TripVerifier,
   ) {}
 
   async crearTicket(
@@ -73,7 +77,7 @@ export class TicketService {
     { idempotencyKey, ...opciones }: OpcionesDeNuevoTicket = {},
   ): Promise<{ ticket: Ticket; creado: boolean }> {
     const resultado = idempotencyKey === undefined
-      ? { ticket: await this.repository.crear(tripId, motivo, opciones), creado: true }
+      ? { ticket: await this.crearVerificado(tripId, motivo, opciones), creado: true }
       : await this.crearUnaSolaVez(tripId, motivo, idempotencyKey, opciones);
 
     // Un reintento devuelve el ticket existente sin volver a publicar.
@@ -83,15 +87,37 @@ export class TicketService {
     return resultado;
   }
 
+  private async crearVerificado(tripId: string, motivo: string, opciones: OpcionesDeCreacion): Promise<Ticket> {
+    await this.verificarViaje(tripId);
+    return this.repository.crear(tripId, motivo, opciones);
+  }
+
+  // El viaje se verifica sólo si el ticket todavía no existe: un reintento
+  // con una clave ya usada devuelve su ticket sin consultar a M6, también si
+  // M6 está caído. La búsqueda previa es un atajo; quién crea lo sigue
+  // decidiendo crearConClave, de forma atómica.
   private async crearUnaSolaVez(tripId: string, motivo: string, clave: string, opciones: OpcionesDeCreacion) {
     try {
       const hash = huellaDelPedido({ tripId, motivo });
+      if (this.tripVerifier) {
+        const existente = await this.repository.buscarPorClave({ clave, hash });
+        if (existente) {
+          return { ticket: existente, creado: false };
+        }
+        await this.verificarViaje(tripId);
+      }
       return await this.repository.crearConClave(tripId, motivo, { clave, hash }, opciones);
     } catch (error) {
       if (error instanceof IdempotencyKeyConflictError) {
         throw idempotencyConflict();
       }
       throw error;
+    }
+  }
+
+  private async verificarViaje(tripId: string): Promise<void> {
+    if (this.tripVerifier && !(await this.tripVerifier.existe(tripId))) {
+      throw tripNotFound();
     }
   }
 
