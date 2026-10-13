@@ -6,6 +6,9 @@ function isMalformedJsonError(error: unknown): boolean {
 }
 
 function sendError(res: Response, error: SupportError) {
+  if (error.retryAfterSeconds !== undefined) {
+    res.setHeader('Retry-After', String(error.retryAfterSeconds));
+  }
   res.status(error.status).json({
     error: {
       code: error.code,
