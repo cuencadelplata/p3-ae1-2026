@@ -20,6 +20,19 @@ export const TRIP_NOTIFICATION_EVENT_TYPES = [
 
 export type TripNotificationEventType = (typeof TRIP_NOTIFICATION_EVENT_TYPES)[number];
 
+export const DOCUMENT_NOTIFICATION_EVENT_TYPES = ["DriverDocumentRegistered"] as const;
+
+export type DocumentNotificationEventType = (typeof DOCUMENT_NOTIFICATION_EVENT_TYPES)[number];
+
+export type NotificationBusinessEventType = TripNotificationEventType | DocumentNotificationEventType;
+
+export const DELIVERY_NOTIFICATION_EVENT_TYPES = [
+  ...EVENT_TYPES,
+  "DRIVER_DOCUMENT_REGISTERED",
+] as const;
+
+export type DeliveryNotificationEventType = (typeof DELIVERY_NOTIFICATION_EVENT_TYPES)[number];
+
 export const HTTP_EVENT_TYPE_TO_TRIP_NOTIFICATION_EVENT_TYPE: Record<
   EventType,
   TripNotificationEventType
@@ -104,7 +117,7 @@ export interface LogicalNotification {
   tripId: string | null;
   rideRequestId: string | null;
   recipientId: string | number;
-  eventType: TripNotificationEventType;
+  eventType: NotificationBusinessEventType;
   title: string;
   message: string;
   correlationId: string;
@@ -156,6 +169,18 @@ export interface TripEventEnvelope {
   data: TripEventData;
 }
 
+// --- Contrato RF8.6 -> RF8.1: documento registrado por M3 ---
+
+export interface DriverDocumentRegisteredNotificationEvent {
+  messageId: string;
+  eventType: "DriverDocumentRegistered";
+  documentId: string;
+  driverId: number;
+  tipoDocumento: string;
+  correlationId: string;
+  occurredAt: string;
+}
+
 // --- Contrato Congelado RF8.1 -> RF8.7 (Outbox NotificationRequested) ---
 
 export interface NotificationRequestedData {
@@ -163,7 +188,7 @@ export interface NotificationRequestedData {
   tripId?: string;
   rideRequestId?: string;
   recipientId: string | number;
-  eventType: EventType;
+  eventType: DeliveryNotificationEventType;
   channel: NotificationChannel;
   message: string;
   createdAt: string;

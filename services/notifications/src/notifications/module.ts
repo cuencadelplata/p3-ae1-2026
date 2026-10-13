@@ -1,3 +1,5 @@
+import type { PoolClient } from 'pg';
+
 import { createNotificationsRouter } from '../app';
 import { createRf81Application, type Rf81Application } from './rf81-application';
 
@@ -5,6 +7,13 @@ export interface NotificationsModule {
   name: 'notifications';
   router: ReturnType<typeof createNotificationsRouter>;
   readiness(): Promise<{ status: 'ok' | 'unavailable' }>;
+  processDriverDocumentRegisteredEvent(
+    value: unknown,
+  ): ReturnType<Rf81Application['processDriverDocumentRegisteredEvent']>;
+  processDriverDocumentRegisteredEventWithClient(
+    client: PoolClient,
+    value: unknown,
+  ): ReturnType<Rf81Application['processDriverDocumentRegisteredEventWithClient']>;
   start(): void;
   stop(): Promise<void>;
 }
@@ -36,6 +45,12 @@ export function createNotificationsModule(): NotificationsModule {
     router: createNotificationsRouter(),
     async readiness() {
       return { status: available ? 'ok' : 'unavailable' };
+    },
+    processDriverDocumentRegisteredEvent(value) {
+      return runtime.processDriverDocumentRegisteredEvent(value);
+    },
+    processDriverDocumentRegisteredEventWithClient(client, value) {
+      return runtime.processDriverDocumentRegisteredEventWithClient(client, value);
     },
     start() {
       void initialize();

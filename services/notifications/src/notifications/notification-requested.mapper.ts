@@ -3,7 +3,6 @@ import {
   type LogicalNotification,
   type NotificationRequestedData,
   type NotificationRequestedEnvelope,
-  type TripNotificationEventType,
 } from "./notification.types";
 import {
   M8_PRODUCER,
@@ -13,17 +12,24 @@ import {
 } from "./notification-outbox.repository";
 
 export function toPublicNotificationEventType(
-  eventType: TripNotificationEventType,
+  eventType: LogicalNotification["eventType"],
 ): NotificationRequestedData["eventType"] {
+  if (eventType === "DriverDocumentRegistered") {
+    return "DRIVER_DOCUMENT_REGISTERED";
+  }
   return TRIP_NOTIFICATION_EVENT_TYPE_TO_EVENT_TYPE[eventType];
 }
 
 export function createNotificationRequestedData(
   notification: LogicalNotification,
 ): NotificationRequestedData {
+  const recipientId = notification.eventType === "DriverDocumentRegistered"
+    ? Number(notification.recipientId)
+    : notification.recipientId;
+
   const data: NotificationRequestedData = {
     notificationId: notification.notificationId,
-    recipientId: notification.recipientId,
+    recipientId,
     eventType: toPublicNotificationEventType(notification.eventType),
     channel: "PUSH",
     message: notification.message,

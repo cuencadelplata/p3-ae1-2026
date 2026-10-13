@@ -73,6 +73,7 @@ describe("PostgreSQL NotificationRepository", () => {
       { version: 3, name: "create_notification_outbox_pending_index" },
       { version: 4, name: "align_notification_outbox_delivery_contract" },
       { version: 5, name: "support_ride_requested_without_trip_id" },
+      { version: 6, name: "support_driver_document_registered_notifications" },
     ]);
   });
 
@@ -286,6 +287,48 @@ describe("PostgreSQL NotificationRepository", () => {
     expect(saved.outbox.messageId).not.toBe(notification.sourceMessageId);
     expect(await countRows(notification.sourceMessageId, notification.recipientId)).toBe(1);
     expect(await countOutboxRows(notification.sourceMessageId, notification.recipientId)).toBe(1);
+  });
+
+  it("persiste una notificación de documento de conductor y su Outbox una sola vez", async () => {
+    const application = createRf81Application({ pool });
+    const event = {
+      messageId: `m3-document-${randomUUID()}`,
+      eventType: "DriverDocumentRegistered",
+      documentId: `document-${randomUUID()}`,
+      driverId: 42,
+      tipoDocumento: "LICENCIA",
+      correlationId: "",
+      occurredAt: "2026-10-13T15:30:00.000Z",
+    };
+    event.correlationId = event.documentId;
+
+    const created = await application.processDriverDocumentRegisteredEvent(event);
+    const repeated = await application.processDriverDocumentRegisteredEvent(event);
+
+    expect(created).toMatchObject({ status: "SUCCESS_CREATED", valid: true, created: true });
+    expect(repeated).toMatchObject({ status: "SUCCESS_ALREADY_PROCESSED", valid: true, created: false });
+    if (!created.valid || !repeated.valid) {
+      throw new Error("El evento de documento no se procesó correctamente.");
+    }
+
+    expect(created.data).toMatchObject({
+      recipientId: "42",
+      eventType: "DriverDocumentRegistered",
+      tripId: null,
+      rideRequestId: null,
+      message: "Tu documento fue registrado correctamente.",
+    });
+    expect(repeated.data.notificationId).toBe(created.data.notificationId);
+    expect(created.outbox?.payload).toEqual({
+      notificationId: created.data.notificationId,
+      recipientId: 42,
+      eventType: "DRIVER_DOCUMENT_REGISTERED",
+      channel: "PUSH",
+      message: "Tu documento fue registrado correctamente.",
+      createdAt: created.data.createdAt,
+    });
+    expect(await countRows(event.messageId, event.driverId)).toBe(1);
+    expect(await countOutboxRows(event.messageId, event.driverId)).toBe(1);
   });
 
   it("no duplica la intención Outbox para una notificación idempotente", async () => {

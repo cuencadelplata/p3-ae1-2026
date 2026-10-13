@@ -2,6 +2,7 @@ import type { ErrorDetail, LogicalNotification } from "./notification.types";
 import type { NotificationRepository } from "./notification.repository";
 import type { NotificationOutboxIntent, NotificationWithOutboxRepository } from "./notification-outbox.repository";
 import { NotificationPersistenceError } from "./notification-persistence.error";
+import { handleDriverDocumentRegisteredEvent } from "./driver-document-registered-notification.handler";
 import { handleTripNotificationEvent } from "./trip-notification.handler";
 import type { PoolClient } from "pg";
 
@@ -31,6 +32,12 @@ export type ProcessNormalizedTripNotificationEventResult =
       error: NotificationPersistenceError;
     };
 
+export type ProcessDriverDocumentRegisteredEventResult = ProcessNormalizedTripNotificationEventResult;
+
+type LogicalNotificationHandler = (value: unknown) =>
+  | { valid: true; data: LogicalNotification }
+  | { valid: false; details: ErrorDetail[] };
+
 function supportsOutbox(
   repository: NotificationRepository | NotificationWithOutboxRepository,
 ): repository is NotificationWithOutboxRepository {
@@ -41,7 +48,22 @@ export async function processNormalizedTripNotificationEvent(
   value: unknown,
   repository: NotificationRepository | NotificationWithOutboxRepository,
 ): Promise<ProcessNormalizedTripNotificationEventResult> {
-  const notificationResult = handleTripNotificationEvent(value);
+  return processNotificationEvent(value, repository, handleTripNotificationEvent);
+}
+
+export async function processDriverDocumentRegisteredEvent(
+  value: unknown,
+  repository: NotificationRepository | NotificationWithOutboxRepository,
+): Promise<ProcessDriverDocumentRegisteredEventResult> {
+  return processNotificationEvent(value, repository, handleDriverDocumentRegisteredEvent);
+}
+
+async function processNotificationEvent(
+  value: unknown,
+  repository: NotificationRepository | NotificationWithOutboxRepository,
+  handler: LogicalNotificationHandler,
+): Promise<ProcessNormalizedTripNotificationEventResult> {
+  const notificationResult = handler(value);
 
   if (!notificationResult.valid) {
     return { status: "INVALID_EVENT", valid: false, details: notificationResult.details };
@@ -100,7 +122,24 @@ export async function processNormalizedTripNotificationEventWithClient(
   value: unknown,
   repository: NotificationWithOutboxRepository,
 ): Promise<ProcessNormalizedTripNotificationEventResult> {
-  const notificationResult = handleTripNotificationEvent(value);
+  return processNotificationEventWithClient(client, value, repository, handleTripNotificationEvent);
+}
+
+export async function processDriverDocumentRegisteredEventWithClient(
+  client: PoolClient,
+  value: unknown,
+  repository: NotificationWithOutboxRepository,
+): Promise<ProcessDriverDocumentRegisteredEventResult> {
+  return processNotificationEventWithClient(client, value, repository, handleDriverDocumentRegisteredEvent);
+}
+
+async function processNotificationEventWithClient(
+  client: PoolClient,
+  value: unknown,
+  repository: NotificationWithOutboxRepository,
+  handler: LogicalNotificationHandler,
+): Promise<ProcessNormalizedTripNotificationEventResult> {
+  const notificationResult = handler(value);
 
   if (!notificationResult.valid) {
     return { status: "INVALID_EVENT", valid: false, details: notificationResult.details };
