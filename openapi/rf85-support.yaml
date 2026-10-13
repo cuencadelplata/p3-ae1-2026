@@ -18,6 +18,20 @@ info:
     La verificación se habilita con `M6_TRIPS_URL`; sin esa variable no se
     consulta a M6 y cualquier `tripId` se acepta.
 
+    **Autenticación.** Con `SUPPORT_M1_IDENTITY_URL` definida, todas las rutas
+    de `/tickets` exigen `Authorization: Bearer <token>`. Support no decodifica
+    el token: lo reenvía a M1 (`GET /auth/validar-identidad-y-rol`) y sólo
+    acepta una respuesta `200` con `valid: true`. El autor que queda en el
+    historial es `m1:<userId>` y `X-Actor-Id` se ignora. Sin esa variable no
+    se exige autenticación y el autor es el que declara `X-Actor-Id`.
+
+    - Sin cabecera: `401 SUPPORT_AUTH_REQUIRED`.
+    - M1 rechaza el token (`401`/`403`), o responde `valid: false` porque el
+      usuario no existe o está bloqueado: `401 SUPPORT_INVALID_TOKEN`.
+    - M1 no responde a tiempo, está caído o responde fuera de contrato:
+      `503 SUPPORT_IDENTITY_UNAVAILABLE` con `Retry-After`. Falla cerrado: sin
+      identidad confirmada no se atiende el pedido.
+
     **Errores.** Todas las respuestas de error tienen la forma
     `{ error: { code, message, details? }, correlationId }`.
 
@@ -40,6 +54,9 @@ paths:
       tags: [Tickets (RF8.5)]
       summary: Crea un ticket de soporte asociado a un viaje
       operationId: crearTicket
+      security:
+        - {}
+        - bearerAuth: []
       description: |
         Crea el ticket en estado `ABIERTO`, versión 1, y registra la entrada
         inicial de su historial.
@@ -139,6 +156,8 @@ paths:
                     correlationId: 4f8f6a1e-2b7c-4d7e-9c55-0b6f3c2a9d10
         '422':
           $ref: '#/components/responses/ViajeNoEncontrado'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '503':
@@ -147,6 +166,9 @@ paths:
       tags: [Tickets (RF8.5)]
       summary: Lista tickets, con filtros y paginación
       operationId: listarTickets
+      security:
+        - {}
+        - bearerAuth: []
       description: |
         Devuelve un array de tickets ordenado por fecha de creación
         descendente y, a igual fecha, por id descendente. El orden es estable:
@@ -219,6 +241,8 @@ paths:
                       fechaActualizacion: '2026-10-04T02:59:24.570Z'
         '400':
           $ref: '#/components/responses/ErrorDeValidacion'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '503':
@@ -229,6 +253,9 @@ paths:
       tags: [Tickets (RF8.5)]
       summary: Obtiene un ticket por su id
       operationId: obtenerTicket
+      security:
+        - {}
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/TicketId'
         - $ref: '#/components/parameters/CorrelationId'
@@ -247,6 +274,8 @@ paths:
                   $ref: '#/components/examples/TicketAbierto'
         '404':
           $ref: '#/components/responses/TicketNoEncontrado'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '503':
@@ -257,6 +286,9 @@ paths:
       tags: [Tickets (RF8.5)]
       summary: Cambia el estado de un ticket
       operationId: actualizarEstado
+      security:
+        - {}
+        - bearerAuth: []
       description: |
         Transiciones permitidas:
 
@@ -363,6 +395,8 @@ paths:
                       code: SUPPORT_CONCURRENCY_CONFLICT
                       message: El ticket cambió desde la última lectura. Consultalo de nuevo y reintentá.
                     correlationId: 7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '503':
@@ -373,6 +407,9 @@ paths:
       tags: [Tickets (RF8.5)]
       summary: Devuelve el historial de estados de un ticket
       operationId: obtenerHistorial
+      security:
+        - {}
+        - bearerAuth: []
       description: |
         Entradas en orden cronológico. La primera se crea junto con el ticket
         y tiene `estadoAnterior: null`.
@@ -410,6 +447,8 @@ paths:
                       fecha: '2026-10-04T02:59:24.570Z'
         '404':
           $ref: '#/components/responses/TicketNoEncontrado'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '503':
@@ -499,6 +538,14 @@ paths:
                     error: routingKey y payload son requeridos
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token emitido por M1 (`POST /auth/iniciar-sesion`). Sólo se exige con
+        `SUPPORT_M1_IDENTITY_URL` definida.
   parameters:
     TicketId:
       name: id
@@ -525,7 +572,9 @@ components:
       required: false
       description: |
         Quién hace el pedido. String opaco que queda como autor
-        (`cambiadoPor`) en el historial; `null` si no se envía.
+        (`cambiadoPor`) en el historial; `null` si no se envía. Se ignora
+        cuando la autenticación con M1 está habilitada: el autor es
+        `m1:<userId>`.
       schema:
         type: string
         minLength: 1
@@ -559,7 +608,8 @@ components:
     Retry-After:
       description: |
         Segundos a esperar antes de reintentar. Sólo está presente cuando la
-        falla es de M6 (`SUPPORT_TRIP_SERVICE_UNAVAILABLE`).
+        falla es de M6 (`SUPPORT_TRIP_SERVICE_UNAVAILABLE`) o de M1
+        (`SUPPORT_IDENTITY_UNAVAILABLE`).
       schema:
         type: integer
         minimum: 1
@@ -614,13 +664,41 @@ components:
                   code: SUPPORT_TICKET_NOT_FOUND
                   message: Ticket no encontrado.
                 correlationId: trip-42
-    BaseNoDisponible:
+    NoAutenticado:
       description: |
-        La base de datos de Support no está disponible. El pedido no dejó
-        cambios parciales y puede reintentarse.
+        Sólo con la autenticación habilitada. Falta la cabecera
+        `Authorization`, o M1 no acepta el token: vencido, mal firmado,
+        revocado, o de un usuario inexistente o bloqueado.
       headers:
         X-Correlation-Id:
           $ref: '#/components/headers/X-Correlation-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            sinCabecera:
+              value:
+                error:
+                  code: SUPPORT_AUTH_REQUIRED
+                  message: 'Se requiere la cabecera Authorization: Bearer <token>.'
+                correlationId: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+            tokenInvalido:
+              value:
+                error:
+                  code: SUPPORT_INVALID_TOKEN
+                  message: El token de autenticación no es válido.
+                correlationId: 5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a
+    BaseNoDisponible:
+      description: |
+        La base de datos de Support no está disponible o, con la
+        autenticación habilitada, M1 no pudo validar la identidad. El pedido
+        no dejó cambios parciales y puede reintentarse.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/X-Correlation-Id'
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
       content:
         application/json:
           schema:
@@ -632,6 +710,12 @@ components:
                   code: SUPPORT_DB_UNAVAILABLE
                   message: El servicio de soporte no está disponible en este momento. Reintentá en unos instantes.
                 correlationId: 9b1f3c2d-8e4a-4f6b-b7c9-0d1e2f3a4b5c
+            identidadNoDisponible:
+              value:
+                error:
+                  code: SUPPORT_IDENTITY_UNAVAILABLE
+                  message: No fue posible validar la identidad en este momento. Reintentá en unos instantes.
+                correlationId: 7e1c3a5b-9d2f-4b6a-8c0e-3f5a7b9d1c2e
     ViajeNoEncontrado:
       description: |
         M6 no tiene un viaje con ese `tripId`. No se creó ningún ticket.
@@ -657,7 +741,8 @@ components:
     DependenciaNoDisponible:
       description: |
         Una dependencia necesaria para crear el ticket no está disponible: la
-        base de datos de Support o el servicio de viajes de M6. El pedido no
+        base de datos de Support, el servicio de viajes de M6 o, con la
+        autenticación habilitada, el servicio de identidad de M1. El pedido no
         dejó cambios parciales y puede reintentarse con la misma
         `Idempotency-Key`.
       headers:
@@ -682,6 +767,12 @@ components:
                   code: SUPPORT_TRIP_SERVICE_UNAVAILABLE
                   message: No fue posible verificar el viaje en este momento. Reintentá en unos instantes.
                 correlationId: 2f4a6c8e-0b1d-4e3f-a5c7-9d8e7f6a5b4c
+            identidadNoDisponible:
+              value:
+                error:
+                  code: SUPPORT_IDENTITY_UNAVAILABLE
+                  message: No fue posible validar la identidad en este momento. Reintentá en unos instantes.
+                correlationId: 7e1c3a5b-9d2f-4b6a-8c0e-3f5a7b9d1c2e
     ErrorInterno:
       description: Error no esperado. El detalle queda en el log, nunca en la respuesta.
       headers:
@@ -840,12 +931,15 @@ components:
               type: string
               enum:
                 - SUPPORT_VALIDATION_ERROR
+                - SUPPORT_AUTH_REQUIRED
+                - SUPPORT_INVALID_TOKEN
                 - SUPPORT_TICKET_NOT_FOUND
                 - SUPPORT_INVALID_TRANSITION
                 - SUPPORT_CONCURRENCY_CONFLICT
                 - SUPPORT_IDEMPOTENCY_CONFLICT
                 - SUPPORT_TRIP_NOT_FOUND
                 - SUPPORT_TRIP_SERVICE_UNAVAILABLE
+                - SUPPORT_IDENTITY_UNAVAILABLE
                 - SUPPORT_DB_UNAVAILABLE
                 - SUPPORT_INTERNAL_ERROR
             message:
