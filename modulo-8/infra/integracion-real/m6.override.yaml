@@ -1,0 +1,25 @@
+# Override para el docker-compose.yml de M6 (modulo6/), usado sólo para
+# levantarlo junto a M8 en la misma máquina.
+#
+# Cambia ÚNICAMENTE los puertos publicados en el host, que chocan con los de
+# M8 (3000, 5432, 6379, 5672, 15672). No toca imágenes, comandos, variables ni
+# código de M6. Dentro de su red los servicios siguen en sus puertos de siempre.
+services:
+  viajes:
+    ports: !override
+      - "${M6_VIAJES_HOST_PORT:-13000}:3000"
+
+  cancelacion:
+    ports: !reset []
+
+  fachada:
+    ports: !reset []
+
+  tripdb:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  rabbitmq:
+    ports: !reset []
