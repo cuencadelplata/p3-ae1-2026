@@ -167,6 +167,24 @@ El mock histórico de M6 simula /qr y /qr/validate con codigo y valido; difiere 
 
 M6 debe acordar el snapshot de viaje que puede entregar a RF8.3. M8 no puede leer la DB de M6.
 
+### Support RF8.5: verificación de existencia del viaje
+
+**PROPUESTA M8 / PENDIENTE DE ACUERDO con M6.** Al crear un ticket, RF8.5 necesita saber si el `tripId` corresponde a un viaje real. La propuesta es consultar por REST el endpoint que M6 ya publica:
+
+- **Evidencia:** `GET /api/viajes/{id}` (`obtenerViaje`, "Obtener un viaje para integración") en `modulo6/openapi.yaml` de `origin/ae2/m6-codutti-diez-mordka-mortola`, relevado el 2026-10-13. Responde `200 { id, clienteId, conductorId, estado }`, `404 { error }` y `503 { error }`; no exige autenticación. No está en `origin/M6-Viajes`.
+- **Uso por M8:** sólo existencia. RF8.5 no lee el estado ni los ids de cliente/conductor, no filtra por estado y no modifica el viaje. M6 conserva el lifecycle.
+- **Mapeo en M8:** `404` (y `400`) → `422 SUPPORT_TRIP_NOT_FOUND`; timeout, error de red, `5xx` o cuerpo fuera de contrato → `503 SUPPORT_TRIP_SERVICE_UNAVAILABLE` con `Retry-After`. Falla cerrado: sin confirmación de M6 no se crea el ticket. Contrato en `openapi/rf85-support.yaml`.
+- **Estado en M8:** el cliente está implementado y se habilita con `M6_TRIPS_URL`. Sin esa variable la verificación está desactivada; el Compose de M8 no la define ni incluye un sandbox de M6 hasta cerrar el acuerdo (§21: un mock inventado no habilita integración).
+
+M6 debe confirmar:
+
+1. que `GET /api/viajes/{id}` es contrato canónico y llegará a su rama compartida;
+2. que el `id` es el mismo identificador que M8 recibe como `tripId` en eventos y en los otros RF;
+3. la respuesta ante un id con formato inválido (hoy M8 trata `400` como viaje inexistente);
+4. host y puerto para integración (su Compose publica `viajes` en 3000 y `fachada` en 3002) y si habrá autenticación entre servicios.
+
+El relevamiento también muestra que la rama AE2 de M6 ya tiene un único `modulo6/openapi.yaml`. El "Estado crítico" de esta sección describe la auditoría del 2026-09-27 y debe revisarse con M6 antes de darlo por resuelto.
+
 ## 12. M7 ↔ M8
 
 **CONFIRMADO:** M7 es la fuente evidenciada de pago e importe. Sus OpenAPI son parciales frente a rutas efectivas y mantiene dos copias exactas de cargo de cancelación. No hay contrato M7↔M8. Estado: **PENDIENTE CRÍTICO**.
@@ -263,6 +281,7 @@ ningún contrato externo.
 | B-05 | M8 | Implementación de Processing→Delivery | RF8.7 está confirmado, pero faltan su implementación y campos de delivery | 8.1, 8.7 | Equipo M8 | BLOQUEANTE DE IMPLEMENTACIÓN |
 | B-06 | Transversal | Adopción o adaptación de envelope RabbitMQ por productores externos | El contrato interno M8 ya está definido; falta su adopción externa o adaptación mediante RF8.6 | 8.6, 8.7 | M5/M6/M7/M8 | BLOQUEANTE EXTERNO |
 | I-01 | M5 | Hechos notificables y owner de asignación | Define alcance de Notifications | 8.1, 8.6 | Equipos M5/M6 | IMPORTANTE |
+| I-02 | M6 | Confirmar `GET /api/viajes/{id}` como contrato canónico de consulta de viaje | RF8.5 verifica la existencia del viaje al crear un ticket; sin confirmación la verificación queda desactivada | 8.5 | Equipo M6 | IMPORTANTE |
 | N-01 | M4/M9 | Confirmar ausencia directa | Evita dependencias artificiales | — | Equipos M4/M9 | NO BLOQUEANTE |
 
 ## 24. Checklist para otros grupos
@@ -296,6 +315,7 @@ ningún contrato externo.
 - Motivo: eventos de viaje. RF: 8.1, 8.2, 8.3, 8.6. Decisión: productor, routing key, momento, payload, versión e idempotencia.
 - Motivo: QR no cambia viajes. RF: 8.2. Decisión: solicitante/validador QR y transición posterior exclusivamente M6.
 - Motivo: snapshot de receipt. RF: 8.3. Decisión: campos que M6 puede entregar sin DB compartida.
+- Motivo: verificación de existencia del viaje al crear un ticket. RF: 8.5. Decisión: confirmar `GET /api/viajes/{id}` como contrato canónico, el significado del `id`, la respuesta ante ids inválidos y el host de integración.
 
 ### Equipo M7
 
@@ -326,3 +346,4 @@ ningún contrato externo.
 | --- | --- | --- |
 | 2026-09-27 | AE2-0: auditoría contractual global | CONFIRMADO como relevamiento |
 | 2026-09-27 | AE2-1A: creación de este documento | PROPUESTA M8 / PENDIENTE DE ACUERDO |
+| 2026-10-13 | RF8.5: verificación de viaje contra `GET /api/viajes/{id}` de M6 (§11, I-02) | PROPUESTA M8 / PENDIENTE DE ACUERDO con M6 |
