@@ -5,13 +5,25 @@ import { runMigrations } from "../db/migrations";
 import { createNotificationsPool } from "../db/pool";
 import { createPostgresNotificationWithOutboxRepository } from "../repositories/postgres-notification-outbox.repository";
 import type { NotificationDeliveryIntent, NotificationWithOutboxRepository } from "./notification-outbox.repository";
-import { processNormalizedTripNotificationEvent, processNormalizedTripNotificationEventWithClient, type ProcessNormalizedTripNotificationEventResult } from "./normalized-trip-notification.service";
+import {
+  processDriverDocumentRegisteredEvent,
+  processDriverDocumentRegisteredEventWithClient,
+  processNormalizedTripNotificationEvent,
+  processNormalizedTripNotificationEventWithClient,
+  type ProcessDriverDocumentRegisteredEventResult,
+  type ProcessNormalizedTripNotificationEventResult,
+} from "./normalized-trip-notification.service";
 import { mapTripEventEnvelope } from "./trip-event-envelope.mapper";
 import type { NotificationRequestedEnvelope } from "./notification.types";
 
 export interface Rf81Application {
   processTripEvent(value: unknown): Promise<ProcessNormalizedTripNotificationEventResult>;
   processTripEventEnvelope(value: unknown): Promise<ProcessNormalizedTripNotificationEventResult>;
+  processDriverDocumentRegisteredEvent(value: unknown): Promise<ProcessDriverDocumentRegisteredEventResult>;
+  processDriverDocumentRegisteredEventWithClient(
+    client: PoolClient,
+    value: unknown,
+  ): Promise<ProcessDriverDocumentRegisteredEventResult>;
   processTripEventWithClient(
     client: PoolClient,
     value: unknown,
@@ -55,6 +67,17 @@ export function createRf81Application(options: CreateRf81ApplicationOptions): Rf
         return Promise.resolve({ status: "INVALID_EVENT", valid: false, details: mapped.details });
       }
       return processNormalizedTripNotificationEvent(mapped.data, repository);
+    },
+    processDriverDocumentRegisteredEvent(
+      value: unknown,
+    ): Promise<ProcessDriverDocumentRegisteredEventResult> {
+      return processDriverDocumentRegisteredEvent(value, repository);
+    },
+    processDriverDocumentRegisteredEventWithClient(
+      client: PoolClient,
+      value: unknown,
+    ): Promise<ProcessDriverDocumentRegisteredEventResult> {
+      return processDriverDocumentRegisteredEventWithClient(client, value, repository);
     },
     processTripEventWithClient(
       client: PoolClient,

@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from "pg";
 
 import { NotificationPersistenceError } from "../notifications/notification-persistence.error";
 import type { NotificationRepository, SaveNotificationResult } from "../notifications/notification.repository";
-import type { LogicalNotification, TripNotificationEventType } from "../notifications/notification.types";
+import type { LogicalNotification, NotificationBusinessEventType } from "../notifications/notification.types";
 
 interface NotificationRow {
   notification_id: string;
@@ -10,7 +10,7 @@ interface NotificationRow {
   trip_id: string | null;
   ride_request_id: string | null;
   recipient_id: string;
-  event_type: TripNotificationEventType;
+  event_type: NotificationBusinessEventType;
   title: string;
   message: string;
   correlation_id: string;

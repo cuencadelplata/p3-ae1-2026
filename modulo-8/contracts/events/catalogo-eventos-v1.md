@@ -432,6 +432,25 @@ Su finalidad es solicitar la entrega de una notificación lógica ya creada por 
 | **Inválido / Esquema Erróneo** | Falta `messageId`, `tripId`, `recipientId` o `eventType` desconocido | No ingresa a la DB ni al Outbox. Se descarta. | `NACK` (`requeue=false`) → DLQ |
 | **Fallo DB / Transitorio** | Pérdida temporal de conexión a PostgreSQL / Timeout | Reencola a `m8.notifications.trip-events.retry` incrementando `x-retry-count`. Si es >= 3 reintentos, va a la DLQ. | `NACK` con reencolado / Retry queue |
 
+### 5.5 `documento.registrado` (M3 → RF8.1)
+
+M3 acordó publicar el hecho externo `DriverDocumentRegistered` en el exchange
+`m3.eventos`, con routing key `documento.registrado`. RF8.6 administrará la
+cola propia `m8.notificaciones.documento-registrado` y entregará el evento
+validado a RF8.1.
+
+RF8.1 crea una notificación lógica con el mensaje “Tu documento fue registrado
+correctamente.” y la persiste con su Outbox. El destinatario es `driverId`, que
+debe ser el `userId` numérico canónico de M1. Mientras M3 emita un UUID interno
+en ese campo, no se habilita la entrega PUSH.
+
+La variante de `NotificationRequested` no incluye `tripId` y usa
+`DRIVER_DOCUMENT_REGISTERED`; RF8.7 debe ampliar su validador contractual para
+aceptarla antes de activar la entrega integrada.
+
+El contrato completo está en
+[`m3-driver-document-registered.contract.md`](./m3-driver-document-registered.contract.md).
+
 
 
 ## 6. Contrato REST interno con Receipts Delivery

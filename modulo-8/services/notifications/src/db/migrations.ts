@@ -156,6 +156,32 @@ const migrations = [
        END $$`,
     ],
   },
+  {
+    version: 6,
+    name: "support_driver_document_registered_notifications",
+    statements: [
+      `ALTER TABLE notifications.notifications
+         DROP CONSTRAINT IF EXISTS notifications_event_type_check`,
+      `ALTER TABLE notifications.notifications
+         ADD CONSTRAINT notifications_event_type_check
+         CHECK (event_type IN (
+           'TripRequested', 'TripAssigned', 'DriverArrived',
+           'TripStarted', 'TripCancelled', 'TripCompleted',
+           'DriverDocumentRegistered'
+         ))`,
+      `ALTER TABLE notifications.notifications
+         DROP CONSTRAINT IF EXISTS notifications_context_reference_check`,
+      `ALTER TABLE notifications.notifications
+         ADD CONSTRAINT notifications_context_reference_check
+         CHECK (
+           (event_type = 'TripRequested' AND ride_request_id IS NOT NULL AND trip_id IS NULL)
+           OR
+           (event_type = 'DriverDocumentRegistered' AND ride_request_id IS NULL AND trip_id IS NULL)
+           OR
+           (event_type NOT IN ('TripRequested', 'DriverDocumentRegistered') AND trip_id IS NOT NULL)
+         )`,
+    ],
+  },
 ] as const;
 
 export async function runMigrations(pool: Pool): Promise<void> {
