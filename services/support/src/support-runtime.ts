@@ -1,7 +1,7 @@
 import express from 'express';
 
 import { createSupportApp } from './app.js';
-import { loadSupportConfig, type SupportConfig } from './config/env.js';
+import { loadM6TripsConfig, loadSupportConfig, type SupportConfig } from './config/env.js';
 import { loadDatabaseRetryMs, loadSupportDbConfig } from './db/config.js';
 import { SupportDatabase } from './db/database.js';
 import { createSupportPool } from './db/pool.js';
@@ -10,6 +10,7 @@ import {
   NoopSupportEventPublisher,
 } from './events/support-event-publisher.js';
 import { checkSupportReadiness, type ReadinessProbes } from './http/readiness.js';
+import { createM6TripsClient, type TripVerifier } from './integrations/m6-trips.js';
 import { RabbitMQConsumer } from './rabbitmq/consumer.js';
 import { PostgresTicketRepository } from './repositories/postgres-ticket.repository.js';
 import type { TicketRepository } from './repositories/ticket.repository.js';
@@ -22,15 +23,18 @@ export function createSupportRuntime(
   ticketRepository: TicketRepository,
   database?: ReadinessProbes['database'],
   includeStandaloneHttpApp = true,
+  // Sin verificador no se consulta a M6 al crear un ticket.
+  tripVerifier?: TripVerifier,
 ) {
   const eventPublisher = config.legacyEvents
     ? new LegacyRabbitSupportEventPublisher()
     : new NoopSupportEventPublisher();
-  const ticketService = new TicketService(ticketRepository, eventPublisher);
+  const ticketService = new TicketService(ticketRepository, eventPublisher, tripVerifier);
   const readiness = () =>
     checkSupportReadiness({
       database,
       legacyBroker: config.legacyEvents ? () => RabbitMQConsumer.isConnected() : undefined,
+      trips: tripVerifier ? () => tripVerifier.isReachable() : undefined,
     });
   const app = includeStandaloneHttpApp
     ? createSupportApp({ ticketService, legacyEvents: config.legacyEvents, readiness })
@@ -60,11 +64,21 @@ export function buildSupportFromEnv(
   const config = loadSupportConfig(env);
   const dbConfig = loadSupportDbConfig(env);
   const retryMs = loadDatabaseRetryMs(env);
+  const m6Trips = loadM6TripsConfig(env);
+  if (!m6Trips) {
+    console.log('[Support] M6_TRIPS_URL no está definida: los tickets se crean sin verificar el viaje en M6.');
+  }
 
   const pool = createSupportPool(dbConfig.databaseUrl);
   const database = new SupportDatabase({ pool, schema: dbConfig.schema, retryMs });
   const ticketRepository = new PostgresTicketRepository(pool, dbConfig.schema);
-  const runtime = createSupportRuntime(config, ticketRepository, database, includeStandaloneHttpApp);
+  const runtime = createSupportRuntime(
+    config,
+    ticketRepository,
+    database,
+    includeStandaloneHttpApp,
+    m6Trips && createM6TripsClient(m6Trips),
+  );
 
   return { config, pool, database, ...runtime };
 }
