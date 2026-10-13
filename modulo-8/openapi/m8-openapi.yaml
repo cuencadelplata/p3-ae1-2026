@@ -308,13 +308,17 @@ paths:
       summary: Crear un ticket de soporte
       servers:
         - url: http://localhost:3000
+      security:
+        - {}
+        - BearerAuth: []
       responses:
+        '401': { description: Sólo con SUPPORT_M1_IDENTITY_URL. Falta el Bearer o M1 no acepta el token. }
         '201': { description: Ticket creado. }
         '200': { description: Ticket existente por Idempotency-Key. }
         '400': { description: Solicitud inválida. }
         '409': { description: Idempotency-Key usada con otro pedido. }
         '422': { description: El viaje no existe en M6. }
-        '503': { description: Base de datos o servicio de viajes de M6 no disponible; ante M6 incluye Retry-After. }
+        '503': { description: Base de datos, servicio de viajes de M6 o identidad de M1 no disponible; ante M6 y M1 incluye Retry-After. }
     get:
       tags: [Support]
       summary: Listar tickets con filtros y paginación
@@ -333,10 +337,14 @@ paths:
         - name: cursor
           in: query
           schema: { type: string }
+      security:
+        - {}
+        - BearerAuth: []
       responses:
+        '401': { description: Sólo con SUPPORT_M1_IDENTITY_URL. Falta el Bearer o M1 no acepta el token. }
         '200': { description: Página de tickets; X-Next-Cursor si hay más. }
         '400': { description: Parámetros inválidos. }
-        '503': { description: Base de datos no disponible. }
+        '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
   /tickets/{id}:
     get:
       tags: [Support]
@@ -348,10 +356,14 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      security:
+        - {}
+        - BearerAuth: []
       responses:
+        '401': { description: Sólo con SUPPORT_M1_IDENTITY_URL. Falta el Bearer o M1 no acepta el token. }
         '200': { description: Ticket encontrado. }
         '404': { description: Ticket no encontrado. }
-        '503': { description: Base de datos no disponible. }
+        '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
   /tickets/{id}/estado:
     patch:
       tags: [Support]
@@ -363,12 +375,16 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      security:
+        - {}
+        - BearerAuth: []
       responses:
+        '401': { description: Sólo con SUPPORT_M1_IDENTITY_URL. Falta el Bearer o M1 no acepta el token. }
         '200': { description: Ticket actualizado, o sin efecto si ya estaba en ese estado. }
         '400': { description: Solicitud inválida. }
         '404': { description: Ticket no encontrado. }
         '409': { description: Transición no permitida o conflicto de versión. }
-        '503': { description: Base de datos no disponible. }
+        '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
   /tickets/{id}/historial:
     get:
       tags: [Support]
@@ -380,10 +396,14 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      security:
+        - {}
+        - BearerAuth: []
       responses:
+        '401': { description: Sólo con SUPPORT_M1_IDENTITY_URL. Falta el Bearer o M1 no acepta el token. }
         '200': { description: Historial en orden cronológico. }
         '404': { description: Ticket no encontrado. }
-        '503': { description: Base de datos no disponible. }
+        '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
   /events/publish:
     post:
       tags: [Support]
