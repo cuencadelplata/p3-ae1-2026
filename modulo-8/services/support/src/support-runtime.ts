@@ -1,7 +1,7 @@
 import express from 'express';
 
 import { createSupportApp } from './app.js';
-import { loadM6TripsConfig, loadSupportConfig, type SupportConfig } from './config/env.js';
+import { loadM1IdentityConfig, loadM6TripsConfig, loadSupportConfig, type SupportConfig } from './config/env.js';
 import { loadDatabaseRetryMs, loadSupportDbConfig } from './db/config.js';
 import { SupportDatabase } from './db/database.js';
 import { createSupportPool } from './db/pool.js';
@@ -10,6 +10,7 @@ import {
   NoopSupportEventPublisher,
 } from './events/support-event-publisher.js';
 import { checkSupportReadiness, type ReadinessProbes } from './http/readiness.js';
+import { createM1IdentityClient, type IdentityVerifier } from './integrations/m1-identity.js';
 import { createM6TripsClient, type TripVerifier } from './integrations/m6-trips.js';
 import { RabbitMQConsumer } from './rabbitmq/consumer.js';
 import { PostgresTicketRepository } from './repositories/postgres-ticket.repository.js';
@@ -25,6 +26,8 @@ export function createSupportRuntime(
   includeStandaloneHttpApp = true,
   // Sin verificador no se consulta a M6 al crear un ticket.
   tripVerifier?: TripVerifier,
+  // Sin verificador de identidad /tickets no exige Bearer.
+  identityVerifier?: IdentityVerifier,
 ) {
   const eventPublisher = config.legacyEvents
     ? new LegacyRabbitSupportEventPublisher()
@@ -35,15 +38,17 @@ export function createSupportRuntime(
       database,
       legacyBroker: config.legacyEvents ? () => RabbitMQConsumer.isConnected() : undefined,
       trips: tripVerifier ? () => tripVerifier.isReachable() : undefined,
+      identity: identityVerifier ? () => identityVerifier.isReachable() : undefined,
     });
   const app = includeStandaloneHttpApp
-    ? createSupportApp({ ticketService, legacyEvents: config.legacyEvents, readiness })
+    ? createSupportApp({ ticketService, legacyEvents: config.legacyEvents, readiness, identityVerifier })
     : express();
 
   return {
     app,
     ticketService,
     readiness,
+    identityVerifier,
 
     // Inicia el consumo asíncrono (RF-8.6) sólo si lo heredado de AE1 está habilitado.
     async startLegacyEvents() {
@@ -68,6 +73,10 @@ export function buildSupportFromEnv(
   if (!m6Trips) {
     console.log('[Support] M6_TRIPS_URL no está definida: los tickets se crean sin verificar el viaje en M6.');
   }
+  const m1Identity = loadM1IdentityConfig(env);
+  if (!m1Identity) {
+    console.log('[Support] SUPPORT_M1_IDENTITY_URL no está definida: /tickets no exige autenticación.');
+  }
 
   const pool = createSupportPool(dbConfig.databaseUrl);
   const database = new SupportDatabase({ pool, schema: dbConfig.schema, retryMs });
@@ -78,6 +87,7 @@ export function buildSupportFromEnv(
     database,
     includeStandaloneHttpApp,
     m6Trips && createM6TripsClient(m6Trips),
+    m1Identity && createM1IdentityClient(m1Identity),
   );
 
   return { config, pool, database, ...runtime };

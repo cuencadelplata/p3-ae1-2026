@@ -21,6 +21,7 @@ export function createSupportModule(): SupportModule {
     ticketService: support.ticketService,
     legacyEvents: support.config.legacyEvents,
     readiness: support.readiness,
+    identityVerifier: support.identityVerifier,
   });
   if (support.config.legacyEvents) registerLegacyEventRoutes(router);
 
