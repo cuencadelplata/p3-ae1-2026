@@ -54,6 +54,75 @@ docker compose up --build -d
 | `SUPPORT_DB_RETRY_MS` | `5000` | Espera entre intentos de aplicar las migraciones al arrancar. |
 | `RABBITMQ_URL` | `amqp://localhost:5672` | Broker usado por el consumer heredado de AE1. |
 | `SUPPORT_LEGACY_EVENTS` | `on` | `on`: conecta el consumer RabbitMQ de AE1, publica `ticket.creado` / `ticket.actualizado` y expone `POST /events/publish`. `off`: Support no se conecta al broker y la API de tickets funciona igual. Cualquier otro valor impide el arranque. |
+| `M6_TRIPS_URL` | — (sin definir) | URL base del servicio de viajes de M6, por ejemplo `http://localhost:3000`. Si está definida, `POST /tickets` verifica que el viaje exista. Sin definir, la verificación queda desactivada y se avisa en el log al arrancar. |
+| `M6_TIMEOUT_MS` | `2000` | Espera máxima de cada consulta a M6. Debe ser un entero positivo; sólo se valida si `M6_TRIPS_URL` está definida. |
+
+### Verificación del viaje contra M6
+
+Con `M6_TRIPS_URL` definida, `POST /tickets` consulta `GET /api/viajes/{id}` de
+M6 antes de crear el ticket. M6 es el dueño del viaje: Support sólo pregunta si
+existe, no lee su estado ni lo modifica, y acepta viajes en cualquier estado.
+
+| Respuesta de M6 | Respuesta de Support | Ticket |
+| --- | --- | --- |
+| `200` con el mismo `id` | `201` (o `200` en un reintento idempotente) | Se crea |
+| `404`, o `400` por un id con formato inválido | `422 SUPPORT_TRIP_NOT_FOUND` | No se crea |
+| Sin respuesta en `M6_TIMEOUT_MS`, error de red, otro status o cuerpo fuera de contrato | `503 SUPPORT_TRIP_SERVICE_UNAVAILABLE` con `Retry-After: 5` | No se crea |
+
+- **Reintentos idempotentes.** Si la `Idempotency-Key` ya creó un ticket, se
+  devuelve ese ticket (`200`) sin consultar a M6, también con M6 caído. La
+  misma clave con otro pedido responde `409`, también sin consultar a M6. El
+  viaje se verifica sólo cuando el ticket todavía no existe.
+- **Sólo la creación depende de M6.** Consultar, listar y cambiar el estado de
+  un ticket no lo consultan.
+- **Sin circuit breaker.** Cada consulta tiene su timeout, igual que la
+  consulta de Receipts a M7.
+- **Health.** Con la verificación habilitada, `GET /health/ready` agrega el
+  check `trips` (no crítico), que consulta `GET /health` de M6.
+
+#### Decisión: falla cerrado
+
+Si M6 no está disponible, el ticket **no se crea**. Es una decisión consciente:
+
+- un ticket queda siempre asociado a un viaje que M6 confirmó;
+- no hace falta un estado intermedio ni cambios en el schema;
+- el cliente no pierde el pedido: lo repite con la misma `Idempotency-Key`
+  después de `Retry-After`, sin riesgo de duplicarlo;
+- es el mismo criterio que usa Receipts con M7 y con el autorizador fiscal.
+
+El costo es que, mientras M6 está caído, no se pueden abrir tickets nuevos.
+
+**Alternativa descartada:** crear el ticket "sin verificar" y validarlo cuando
+M6 vuelva. Mejora la disponibilidad, pero admite tickets de viajes que no
+existen y exige un estado adicional del ticket, una migración y un proceso de
+reconciliación que decida qué hacer con los que nunca se confirman.
+
+#### Estado del acuerdo con M6
+
+El cliente se escribió contra `GET /api/viajes/{id}` tal como lo publica M6 en
+`modulo6/openapi.yaml` (rama `ae2/m6-codutti-diez-mordka-mortola`). Que ese
+endpoint sea el contrato canónico está **pendiente de confirmación de M6**
+(ver `docs/ae2-intermodule-agreements.md`, §11). Hasta entonces el Compose de
+M8 no define `M6_TRIPS_URL` ni incluye un sandbox de M6: la verificación está
+desactivada en el stack integrado.
+
+### Autenticación con M1 (no implementada)
+
+Support no autentica: `X-Actor-Id` es un string opaco que el cliente declara y
+sólo se guarda en el historial. No se implementa ahora porque la autorización
+de tickets sigue pendiente de acuerdo con M1/M2 y M8 todavía no tiene un
+mecanismo único (RF8.4 valida el Bearer contra M1; RF8.7 verifica el JWT
+localmente).
+
+Primer paso propuesto, cuando se acuerde:
+
+- **sólo autenticación:** validar el `Authorization: Bearer` reenviándolo a
+  `GET /auth/validar-identidad-y-rol` de M1, como hace RF8.4, y tomar el actor
+  del `userId` devuelto en lugar de `X-Actor-Id`;
+- **activable por configuración** (por ejemplo `M1_IDENTITY_URL`), para no
+  romper a los clientes de AE1 que hoy llaman sin `Authorization`;
+- **sin autorización por dueño del viaje:** no hay una correspondencia
+  acordada entre el `clienteId` de M6 y el `userId` de M1.
 
 ### Base de Datos (CommunicationsDB)
 
@@ -83,7 +152,7 @@ schema `support` del PostgreSQL compartido de M8, con el rol `m8_support`.
 | --- | --- |
 | `GET /health` | 200 mientras el proceso vive (forma de AE1). |
 | `GET /health/live` | 200 mientras el proceso vive. |
-| `GET /health/ready` | 200 `ok` o `degraded` (broker heredado caído); 503 `unavailable` (base caída o migraciones pendientes). Incluye el detalle de `checks`. |
+| `GET /health/ready` | 200 `ok` o `degraded` (broker heredado caído, o M6 sin responder si la verificación está habilitada); 503 `unavailable` (base caída o migraciones pendientes). Incluye el detalle de `checks`. |
 
 ### Detener los Contenedores
 
@@ -119,7 +188,7 @@ El repositorio en memoria y el de PostgreSQL pasan exactamente los mismos casos
 
 ### 🟢 RF-8.5: Gestión de Tickets de Soporte
 - `GET /` - Estado del servicio y mapa de endpoints.
-- `POST /tickets` - Crear un ticket asociado a un viaje (`tripId`, `motivo`). `viajeId` se acepta como alias deprecado. Cabeceras opcionales `Idempotency-Key` y `X-Actor-Id`.
+- `POST /tickets` - Crear un ticket asociado a un viaje (`tripId`, `motivo`). `viajeId` se acepta como alias deprecado. Cabeceras opcionales `Idempotency-Key` y `X-Actor-Id`. Con `M6_TRIPS_URL` definida, verifica antes que el viaje exista en M6.
 - `GET /tickets/:id` - Consultar un ticket por su ID.
 - `PATCH /tickets/:id/estado` - Cambiar el estado (`ABIERTO`, `EN_PROCESO`, `RESUELTO`) según las transiciones permitidas, con `expectedVersion` y `motivo` opcionales.
 - `GET /tickets/:id/historial` - Historial de estados del ticket, en orden cronológico.
