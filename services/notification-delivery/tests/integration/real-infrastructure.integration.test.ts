@@ -120,7 +120,9 @@ test('Infraestructura Real - PostgreSQL + RabbitMQ E2E (RF8.7 + RF8.6)', async (
 
     // 3. Esperar a que el consumidor procese y persista en PostgreSQL
     let deliveryRecord = null;
-    for (let i = 0; i < 25; i++) {
+    // En infraestructura real el consumidor puede necesitar unos segundos para
+    // recibir el mensaje desde RabbitMQ después de afirmar la topología.
+    for (let i = 0; i < 60; i++) {
       deliveryRecord = await deliveryRepo.getByNotificationId(testNotificationId);
       if (deliveryRecord && deliveryRecord.status === 'DELIVERED') break;
       await new Promise((r) => setTimeout(r, 200));
@@ -134,7 +136,7 @@ test('Infraestructura Real - PostgreSQL + RabbitMQ E2E (RF8.7 + RF8.6)', async (
 
     // 4. Verificar Inbox técnico persistido en messaging.inbox_events
     let hasBeenProcessed = false;
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 60; i++) {
       hasBeenProcessed = await inboxStore.hasBeenProcessed('m8.delivery.notification-requested', testMessageId);
       if (hasBeenProcessed) break;
       await new Promise((r) => setTimeout(r, 200));

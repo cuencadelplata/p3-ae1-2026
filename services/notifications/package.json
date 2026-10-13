@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "test": "vitest run --config vitest.config.ts",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "pnpm --dir ../.. run ensure:dependencies && vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "express": "^5.2.1",
