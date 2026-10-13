@@ -102,9 +102,10 @@ reconciliación que decida qué hacer con los que nunca se confirman.
 El cliente se escribió contra `GET /api/viajes/{id}` tal como lo publica M6 en
 `modulo6/openapi.yaml` (rama `ae2/m6-codutti-diez-mordka-mortola`). Que ese
 endpoint sea el contrato canónico está **pendiente de confirmación de M6**
-(ver `docs/ae2-intermodule-agreements.md`, §11). Hasta entonces el Compose de
-M8 no define `M6_TRIPS_URL` ni incluye un sandbox de M6: la verificación está
-desactivada en el stack integrado.
+(ver `docs/ae2-intermodule-agreements.md`, §11). Support no usa sandbox ni
+mock de M6: se conecta con el servicio real de M6 (rama
+`ae2/m6-codutti-diez-mordka-mortola`). El `compose.yaml` de M8 no define
+`M6_TRIPS_URL`; lo hace `compose.integracion-real.yaml`.
 
 ### Autenticación con M1 (no implementada)
 
