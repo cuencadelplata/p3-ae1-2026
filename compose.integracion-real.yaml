@@ -1,0 +1,65 @@
+# Conecta Support (RF8.5) con los servicios REALES de M6 (viajes) y M1
+# (identidad).
+#
+# Se usa siempre junto con compose.yaml, y con los stacks de M6 y M1 ya
+# levantados (ver infra/integracion-real/README.md):
+#
+#   docker compose --env-file .env -f compose.yaml -f compose.integracion-real.yaml up -d --build
+#
+# No define servicios de otros módulos ni cambia la configuración de otros RF:
+# sólo une m8-app a las redes de M6 y M1 y le indica a Support dónde están.
+services:
+  m8-app:
+    environment:
+      # RF8.5: verificación del viaje contra M6 (GET /api/viajes/{id}).
+      M6_TRIPS_URL: "http://${M6_VIAJES_HOST:-viajes}:3000"
+      M6_TIMEOUT_MS: "${M6_TIMEOUT_MS:-2000}"
+      # RF8.5: autenticación de /tickets contra M1
+      # (GET /auth/validar-identidad-y-rol).
+      SUPPORT_M1_IDENTITY_URL: "http://${M1_HOST:-m1-identidad-acceso}:3001"
+
+      # M6 y M1 también tienen servicios llamados "redis" y "rabbitmq" en sus
+      # redes. Al unirse a ellas, esos nombres serían ambiguos para m8-app, que
+      # podría conectarse al broker o al Redis de otro módulo. Por eso todas
+      # las variables de compose.yaml que nombran infraestructura de M8 se
+      # repiten acá con un alias que sólo existe en la red de M8. Son las
+      # mismas URLs y credenciales de compose.yaml: sólo cambia el hostname.
+      # Si se modifican allá, hay que modificarlas acá.
+      NOTIFICATIONS_DATABASE_URL: "postgres://m8_notifications:${NOTIFICATIONS_DB_PASSWORD:-m8_notifications_local}@m8-postgres:5432/${POSTGRES_DB:-m8}"
+      DELIVERY_DATABASE_URL: "postgres://m8_notification_delivery:${DELIVERY_DB_PASSWORD:-m8_delivery_local}@m8-postgres:5432/${POSTGRES_DB:-m8}"
+      RECEIPTS_DATABASE_URL: "postgres://m8_receipts:${RECEIPTS_DB_PASSWORD:-m8_receipts_local}@m8-postgres:5432/${POSTGRES_DB:-m8}"
+      SUPPORT_DATABASE_URL: "postgres://m8_support:${SUPPORT_DB_PASSWORD:-m8_support_local}@m8-postgres:5432/${POSTGRES_DB:-m8}"
+      REDIS_URL: redis://m8-redis:6379
+      RABBITMQ_URL: amqp://guest:guest@m8-rabbitmq:5672
+    networks:
+      - default
+      - m6-real
+      - m1-real
+
+  postgres:
+    networks:
+      default:
+        aliases:
+          - m8-postgres
+
+  redis:
+    networks:
+      default:
+        aliases:
+          - m8-redis
+
+  rabbitmq:
+    networks:
+      default:
+        aliases:
+          - m8-rabbitmq
+
+networks:
+  m6-real:
+    external: true
+    # Nombre fijado por el compose de M6 (networks.default.name).
+    name: "${M6_NETWORK:-m6_viajes_default}"
+  m1-real:
+    external: true
+    # Red por defecto del proyecto con el que se levanta M1 (-p m1-integracion).
+    name: "${M1_NETWORK:-m1-integracion_default}"
