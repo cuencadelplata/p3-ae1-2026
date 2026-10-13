@@ -111,6 +111,7 @@ export class ActivacionReservaService {
       const activada = await this.repository.cambiarEstado(reserva.id, 'ACTIVANDO', 'ACTIVADA', {
         idSolicitud: request.requestId,
         assignedDriverId: request.assignedDriverId,
+        criterioAsignacion: 'MEJOR_VALORACION',
       });
       if (activada !== null) await this.cache.set(activada);
       return this.resultado(reserva.id, activada !== null);

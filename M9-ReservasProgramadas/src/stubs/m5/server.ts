@@ -1,7 +1,6 @@
 import { RabbitMqConnection } from '../../infrastructure/rabbitmq/rabbitmq.connection.js';
-import { createM5StubApp } from './app.js';
-import { createM5StubState } from './app.js';
-import { startM5StubMessaging } from './rabbitmq.js';
+import { createM5StubApp, createM5StubState } from './app.js';
+import { createM5StubDispatch, startM5StubMessaging } from './rabbitmq.js';
 
 const port = Number(process.env.PORT ?? 3001);
 const retryDelayMs = Number(process.env.RABBITMQ_RETRY_DELAY_MS ?? 1_000);
@@ -20,9 +19,15 @@ const rabbitMq = new RabbitMqConnection(
 );
 
 await rabbitMq.connect();
-await startM5StubMessaging(rabbitMq, state, Number(process.env.RABBITMQ_RETRY_LIMIT ?? 3));
+const dispatch = createM5StubDispatch(rabbitMq, state);
+await startM5StubMessaging(
+  rabbitMq,
+  dispatch,
+  Number(process.env.RABBITMQ_RETRY_LIMIT ?? 3),
+  process.env.M5_STUB_AUTO_RESPOND !== 'false',
+);
 
-const server = createM5StubApp(state).listen(port, () => {
+const server = createM5StubApp(dispatch).listen(port, () => {
   console.log(`M5 contract stub escuchando en el puerto ${port}.`);
 });
 

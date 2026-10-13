@@ -1,47 +1,17 @@
-import { randomUUID } from 'node:crypto';
-
+import type { ErrorRequestHandler, RequestHandler } from 'express';
 import express from 'express';
 import { z } from 'zod';
 
-import type { TipoVehiculo } from '../../domain/reserva.js';
+import {
+  createM5StubState,
+  M5StubDispatchService,
+  M5StubError,
+  type M5StubState,
+  type OfferAction,
+} from './dispatch.js';
 
-type RideStatus =
-  | 'PENDING'
-  | 'SEARCHING'
-  | 'OFFERED'
-  | 'ASSIGNED'
-  | 'EXPIRED'
-  | 'NO_DRIVERS_AVAILABLE'
-  | 'CANCELLED';
-
-export interface RideRequestStub {
-  id: string;
-  clientId: string;
-  origin: { latitude: number; longitude: number; address: string };
-  destination: { latitude: number; longitude: number; address: string };
-  vehicleType: TipoVehiculo;
-  status: RideStatus;
-  assignedDriverId: string | null;
-  estimatedFare: {
-    amount: number;
-    currency: string;
-    estimatedDistanceKm: number;
-    estimatedDurationMin: number;
-  };
-  createdAt: string;
-  updatedAt: string;
-  expiresAt: string;
-}
-
-export interface M5StubState {
-  rideRequests: Map<string, RideRequestStub>;
-  idempotencyRequests: Map<string, string>;
-}
-
-export const createM5StubState = (): M5StubState => ({
-  rideRequests: new Map(),
-  idempotencyRequests: new Map(),
-});
+export { createM5StubState } from './dispatch.js';
+export type { M5StubState, RideRequestStub } from './dispatch.js';
 
 const geoLocationSchema = z.object({
   latitude: z.number().min(-90).max(90),
@@ -55,62 +25,61 @@ const createRideRequestSchema = z
     vehicleType: z.enum(['AUTO', 'MOTO']),
   })
   .strict();
+const candidateSearchSchema = z
+  .object({
+    radiusKm: z.number().min(0.1).max(50).default(5),
+    maxCandidates: z.number().int().min(1).max(50).default(5),
+  })
+  .strict();
+const sendOffersSchema = z
+  .object({
+    driverIds: z.array(z.string().min(1)).min(1).optional(),
+    ttlSeconds: z.number().int().min(5).max(180).default(30),
+  })
+  .strict();
+const respondOfferSchema = z
+  .object({
+    action: z.enum(['ACCEPT', 'REJECT']),
+    driverId: z.string().min(1).optional(),
+  })
+  .strict();
 
 const error = (code: string, message: string) => ({
   code,
   message,
   timestamp: new Date().toISOString(),
 });
+const pathParam = (value: string | string[] | undefined): string => z.string().parse(value);
 
-export const createStubRideRequest = (
-  state: M5StubState,
-  input: z.infer<typeof createRideRequestSchema>,
-  idempotencyKey: string,
-  status: RideStatus = 'SEARCHING',
-): RideRequestStub => {
-  const existingId = state.idempotencyRequests.get(idempotencyKey);
-  if (existingId !== undefined) return state.rideRequests.get(existingId)!;
-  const now = new Date();
-  const ride: RideRequestStub = {
-    id: randomUUID(),
-    clientId: 'm9-scheduled-reservation',
-    ...input,
-    status,
-    assignedDriverId: status === 'ASSIGNED' ? '30000000-0000-4000-8000-000000000001' : null,
-    estimatedFare: {
-      amount: 0,
-      currency: 'ARS',
-      estimatedDistanceKm: 0,
-      estimatedDurationMin: 0,
-    },
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
-    expiresAt: new Date(now.getTime() + 180_000).toISOString(),
-  };
-  state.rideRequests.set(ride.id, ride);
-  state.idempotencyRequests.set(idempotencyKey, ride.id);
-  return ride;
+const requireBearer: RequestHandler = (request, response, next) => {
+  if (request.header('authorization')?.startsWith('Bearer ') !== true) {
+    response.status(401).json(error('UNAUTHORIZED', 'Bearer requerido.'));
+    return;
+  }
+  next();
 };
 
-export const createM5StubApp = (state: M5StubState = createM5StubState()) => {
+const asyncRoute =
+  (handler: RequestHandler): RequestHandler =>
+  (request, response, next) => {
+    Promise.resolve(handler(request, response, next)).catch(next);
+  };
+
+export const createM5StubApp = (
+  source: M5StubState | M5StubDispatchService = createM5StubState(),
+) => {
+  const dispatch =
+    source instanceof M5StubDispatchService ? source : new M5StubDispatchService(source);
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json());
   app.get('/health', (_request, response) => response.status(200).json({ status: 'ok' }));
+  app.use('/api/v1', requireBearer);
 
   app.post('/api/v1/ride-requests', (request, response) => {
-    if (request.header('authorization')?.startsWith('Bearer ') !== true) {
-      response.status(401).json(error('UNAUTHORIZED', 'Bearer requerido.'));
-      return;
-    }
     const idempotencyKey = request.header('idempotency-key');
     if (!z.string().uuid().safeParse(idempotencyKey).success) {
       response.status(400).json(error('VALIDATION_ERROR', 'Idempotency-Key inválida.'));
-      return;
-    }
-    const existingId = state.idempotencyRequests.get(idempotencyKey!);
-    if (existingId !== undefined) {
-      response.status(201).json(state.rideRequests.get(existingId));
       return;
     }
     const parsed = createRideRequestSchema.safeParse(request.body);
@@ -125,44 +94,15 @@ export const createM5StubApp = (state: M5StubState = createM5StubState()) => {
       response.status(422).json(error('SEMANTIC_ERROR', 'Origen y destino idénticos.'));
       return;
     }
-    const ride = createStubRideRequest(state, parsed.data, idempotencyKey!);
-    response.status(201).json(ride);
+    response.status(201).json(dispatch.createRequest(parsed.data, idempotencyKey!));
   });
 
   app.get('/api/v1/ride-requests/:requestId', (request, response) => {
-    if (request.header('authorization')?.startsWith('Bearer ') !== true) {
-      response.status(401).json(error('UNAUTHORIZED', 'Bearer requerido.'));
-      return;
-    }
-    const ride = state.rideRequests.get(request.params.requestId);
-    if (ride === undefined) {
-      response.status(404).json(error('NOT_FOUND', 'Solicitud no encontrada.'));
-      return;
-    }
-    if (ride.status === 'SEARCHING') {
-      ride.status = 'ASSIGNED';
-      ride.assignedDriverId = '30000000-0000-4000-8000-000000000001';
-      ride.updatedAt = new Date().toISOString();
-    }
-    response.json(ride);
+    response.json(dispatch.getRequest(pathParam(request.params.requestId)));
   });
 
   app.post('/api/v1/ride-requests/:requestId/cancel', (request, response) => {
-    if (request.header('authorization')?.startsWith('Bearer ') !== true) {
-      response.status(401).json(error('UNAUTHORIZED', 'Bearer requerido.'));
-      return;
-    }
-    const ride = state.rideRequests.get(request.params.requestId);
-    if (ride === undefined) {
-      response.status(404).json(error('NOT_FOUND', 'Solicitud no encontrada.'));
-      return;
-    }
-    if (ride.status === 'ASSIGNED') {
-      response.status(409).json(error('INVALID_STATE', 'La solicitud ya fue asignada.'));
-      return;
-    }
-    ride.status = 'CANCELLED';
-    ride.updatedAt = new Date().toISOString();
+    const ride = dispatch.cancelRequest(pathParam(request.params.requestId));
     response.json({
       requestId: ride.id,
       clientId: ride.clientId,
@@ -173,5 +113,108 @@ export const createM5StubApp = (state: M5StubState = createM5StubState()) => {
     });
   });
 
+  app.post('/api/v1/ride-requests/:requestId/candidates', (request, response) => {
+    const parsed = candidateSearchSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      response.status(400).json(error('VALIDATION_ERROR', 'Parámetros de búsqueda inválidos.'));
+      return;
+    }
+    const ride = dispatch.getRequest(pathParam(request.params.requestId));
+    const candidates = dispatch.searchCandidates(ride.id, parsed.data);
+    if (candidates.length === 0) {
+      response.status(404).json(error('NO_DRIVERS_AVAILABLE', 'No hay candidatos disponibles.'));
+      return;
+    }
+    response.json({
+      requestId: ride.id,
+      vehicleType: ride.vehicleType,
+      searchRadiusKm: parsed.data.radiusKm,
+      candidatesCount: candidates.length,
+      candidates: candidates.map(
+        ({ driverId, vehicleType, distanceKm, estimatedEtaMinutes, rating }) => ({
+          driverId,
+          vehicleType,
+          distanceKm,
+          estimatedEtaMinutes,
+          rating,
+        }),
+      ),
+      searchTimestamp: new Date().toISOString(),
+    });
+  });
+
+  app.post(
+    '/api/v1/ride-requests/:requestId/offers',
+    asyncRoute(async (request, response) => {
+      const parsed = sendOffersSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        response.status(400).json(error('VALIDATION_ERROR', 'Parámetros de oferta inválidos.'));
+        return;
+      }
+      const requestId = pathParam(request.params.requestId);
+      const offers = await dispatch.sendOffers(requestId, parsed.data);
+      response.status(201).json({
+        requestId,
+        offersSentCount: offers.length,
+        offers,
+        message: `Oferta enviada a ${offers.length} conductor(es).`,
+      });
+    }),
+  );
+
+  app.get('/api/v1/ride-requests/:requestId/offers', (request, response) => {
+    const requestId = pathParam(request.params.requestId);
+    const offers = dispatch.getOffers(requestId);
+    response.json({
+      requestId,
+      offersCount: offers.length,
+      offers,
+    });
+  });
+
+  const respond = async (offerId: string, action: OfferAction, driverId?: string) =>
+    dispatch.respondToOffer(offerId, action, driverId);
+
+  app.post(
+    '/api/v1/offers/:offerId/respond',
+    asyncRoute(async (request, response) => {
+      const parsed = respondOfferSchema.safeParse(request.body);
+      if (!parsed.success) {
+        response.status(400).json(error('VALIDATION_ERROR', 'Respuesta de oferta inválida.'));
+        return;
+      }
+      response.json(
+        await respond(pathParam(request.params.offerId), parsed.data.action, parsed.data.driverId),
+      );
+    }),
+  );
+
+  for (const action of ['accept', 'reject'] as const) {
+    app.post(
+      `/api/v1/offers/:offerId/${action}`,
+      asyncRoute(async (request, response) => {
+        response.json(
+          await respond(
+            pathParam(request.params.offerId),
+            action === 'accept' ? 'ACCEPT' : 'REJECT',
+            typeof request.body?.driverId === 'string' ? request.body.driverId : undefined,
+          ),
+        );
+      }),
+    );
+  }
+
+  app.get('/api/v1/offers/:offerId', (request, response) => {
+    response.json(dispatch.getOffer(pathParam(request.params.offerId)));
+  });
+
+  const errorHandler: ErrorRequestHandler = (cause, _request, response, _next) => {
+    if (cause instanceof M5StubError) {
+      response.status(cause.statusCode).json(error(cause.code, cause.message));
+      return;
+    }
+    response.status(500).json(error('INTERNAL_ERROR', 'Error interno del stub M5.'));
+  };
+  app.use(errorHandler);
   return app;
 };

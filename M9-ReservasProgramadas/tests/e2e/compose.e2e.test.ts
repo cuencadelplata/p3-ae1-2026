@@ -90,7 +90,8 @@ describe('E2E local contra contenedores', () => {
     expect(activada).toMatchObject({
       estado: 'ACTIVADA',
       idSolicitud: expect.stringMatching(/^[0-9a-f-]{36}$/),
-      assignedDriverId: expect.any(String),
+      assignedDriverId: '30000000-0000-4000-8000-000000000002',
+      criterioAsignacion: 'MEJOR_VALORACION',
     });
   }, 30_000);
 });

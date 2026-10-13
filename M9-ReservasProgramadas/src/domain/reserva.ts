@@ -61,5 +61,6 @@ export interface CambiosReserva extends ActualizarReserva {
 export interface CambioEstadoReserva {
   idSolicitud?: string | null;
   assignedDriverId?: string | null;
+  criterioAsignacion?: string | null;
   routeSnapshot?: RouteSnapshot | null;
 }

@@ -36,6 +36,7 @@ services:
       RABBITMQ_DLQ: ${RABBITMQ_DLQ:-m9.reservas.dlq}
       RABBITMQ_RETRY_LIMIT: ${RABBITMQ_RETRY_LIMIT:-3}
       RABBITMQ_RETRY_DELAY_MS: ${RABBITMQ_RETRY_DELAY_MS:-1000}
+      M5_STUB_AUTO_RESPOND: ${M5_STUB_AUTO_RESPOND:-true}
       OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-5000}
       RESERVATION_JOB_INTERVAL: ${RESERVATION_JOB_INTERVAL:-*/5 * * * * *}
     ports:
@@ -76,6 +77,8 @@ services:
       RABBITMQ_RETRY_DELAY_MS: ${RABBITMQ_RETRY_DELAY_MS:-1000}
     expose:
       - '3001'
+    ports:
+      - '127.0.0.1:${M5_STUB_PORT:-3001}:3001'
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://localhost:3001/health']
       interval: 5s

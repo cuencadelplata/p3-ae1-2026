@@ -21,7 +21,7 @@ de pruebas están consolidadas en el
 
 - Node.js 22 y npm.
 - Docker Desktop/Engine con Compose 2.20+.
-- Puertos libres: 3000, 5432, 6379, 5672 y 15672, o equivalentes configurados.
+- Puertos libres: 3000, 3001, 5432, 6379, 5672 y 15672, o equivalentes configurados.
 
 No requiere cuentas cloud. Las credenciales predeterminadas son únicamente locales; no
 usar secretos reales en `.env.example` ni versionar `.env`.
@@ -186,6 +186,7 @@ automáticamente el estado `200 ready`, sin reiniciar M9.
 | Liveness            | `http://localhost:3000/health`       |
 | Readiness           | `http://localhost:3000/readiness`    |
 | RabbitMQ Management | `http://localhost:15672/`            |
+| Stub contractual M5 | `http://localhost:3001/`             |
 
 `/readiness` informa por separado PostgreSQL, Redis y RabbitMQ. M5/M7 pueden degradar una
 operación, pero no determinan por sí solos la salud del proceso.
@@ -216,13 +217,62 @@ Ejemplo:
 
 Al llegar el horario, el scheduler toma un lock Redis y ejecuta la transición condicional
 `PROGRAMADA→ACTIVANDO`. Reserva y `reservation.ready-for-dispatch.v1` se guardan juntos.
-El Outbox worker publica y el stub M5 responde `ride-request.assigned.v1` o
-`ride-request.failed.v1`. M9 registra Inbox y resultado en una transacción. Un `eventId`
-duplicado no repite el efecto.
+El Outbox worker publica y el stub M5 busca conductores disponibles con vehículo compatible,
+los ordena por valoración descendente y distancia ascendente, y crea una oferta con TTL para
+el mejor candidato. Un rechazo o vencimiento genera la oferta para el siguiente. La primera
+aceptación publica `ride-request.assigned.v1`; si no quedan candidatos publica
+`ride-request.failed.v1`. M9 registra Inbox y resultado en una transacción, guarda
+`criterioAsignacion=MEJOR_VALORACION` y no repite el efecto de un `eventId` duplicado.
+
+Para que el E2E sea automático y reproducible, `M5_STUB_AUTO_RESPOND=true` hace que el candidato
+con valoración 4,9 rechace y que el siguiente, con 4,7, acepte. Con `false`, las respuestas pueden
+ejecutarse manualmente mediante los endpoints `/api/v1/offers/{offerId}/accept`, `/reject` o
+`/respond`. Estos endpoints pertenecen al doble de M5, no a la API pública de M9.
 
 `DISPATCH_MODE=events` es el modo Compose. `rest` conserva compatibilidad con el OpenAPI
 oficial M5, pero no se ejecutan ambos modos simultáneamente. El contrato de eventos M5 es
 local de demostración y espera acuerdo externo.
+
+### Demostrar rechazo y aceptación en el stub M5
+
+Con Compose iniciado, este ejemplo usa el contrato M5 desde PowerShell. El primer candidato
+es el mejor valorado; al rechazar, queda una nueva oferta pendiente para el siguiente:
+
+```powershell
+$headers = @{
+  Authorization = "Bearer m5-local-e2e-token"
+  "Idempotency-Key" = [guid]::NewGuid().ToString()
+}
+$solicitud = @{
+  origin = @{ latitude = -27.4514; longitude = -58.9867; address = "Terminal" }
+  destination = @{ latitude = -27.4692; longitude = -58.8306; address = "Aeropuerto" }
+  vehicleType = "AUTO"
+} | ConvertTo-Json -Depth 3
+
+$ride = Invoke-RestMethod -Method Post -Uri http://localhost:3001/api/v1/ride-requests `
+  -Headers $headers -ContentType "application/json" -Body $solicitud
+$auth = @{ Authorization = "Bearer m5-local-e2e-token" }
+$candidatos = Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:3001/api/v1/ride-requests/$($ride.id)/candidates" `
+  -Headers $auth -ContentType "application/json" -Body "{}"
+$primera = Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:3001/api/v1/ride-requests/$($ride.id)/offers" `
+  -Headers $auth -ContentType "application/json" -Body "{}"
+Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:3001/api/v1/offers/$($primera.offers[0].id)/reject" `
+  -Headers $auth -ContentType "application/json" -Body "{}"
+
+$ofertas = Invoke-RestMethod `
+  -Uri "http://localhost:3001/api/v1/ride-requests/$($ride.id)/offers" -Headers $auth
+$siguiente = $ofertas.offers | Where-Object status -eq "PENDING" | Select-Object -First 1
+Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:3001/api/v1/offers/$($siguiente.id)/accept" `
+  -Headers $auth -ContentType "application/json" -Body "{}"
+Invoke-RestMethod -Uri "http://localhost:3001/api/v1/ride-requests/$($ride.id)" -Headers $auth
+```
+
+El resultado esperado es `ASSIGNED` con el segundo candidato. El contrato ejecutable del doble
+se encuentra en `openapi/m5-stub.yaml`.
 
 ## Variables principales
 
@@ -239,6 +289,7 @@ local de demostración y espera acuerdo externo.
 | `DISPATCH_MODE`               | `events`                 | `events` o `rest`                |
 | `M5_BASE_URL` / `M7_BASE_URL` | stubs locales            | contratos REST                   |
 | `M5_SERVICE_TOKEN`            | vacío                    | secreto externo; nunca versionar |
+| `M5_STUB_AUTO_RESPOND`        | `true`                   | automatiza rechazo y aceptación  |
 
 La lista completa y segura está en `.env.example`.
 
@@ -271,9 +322,9 @@ Start-Process ./coverage/index.html
 composición al finalizar; ejecutar `npm run local:up` nuevamente si se desea seguir usando
 el módulo.
 
-Resultados observados el 5 de octubre de 2026: `verify` aprobó 60 pruebas,
+Resultados observados el 13 de octubre de 2026: las suites normales aprobaron 62 pruebas,
 `test:infrastructure` aprobó 10 pruebas y `test:e2e` aprobó 3 escenarios. La cobertura global
-fue 89,86 % de sentencias, 77,99 % de ramas, 93,54 % de funciones y 91,54 % de líneas.
+fue 89,90 % de sentencias, 78,16 % de ramas, 93,54 % de funciones y 91,57 % de líneas.
 
 ## Detención y limpieza
 

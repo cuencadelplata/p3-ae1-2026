@@ -36,6 +36,7 @@ export class PrismaDispatchResultProcessor implements DispatchResultProcessor {
           status: assigned ? 'ACTIVADA' : 'FALLIDA',
           dispatchRequestId: event.payload.requestId,
           assignedDriverId,
+          assignmentCriteria: assigned ? 'MEJOR_VALORACION' : null,
           version: { increment: 1 },
         },
       });

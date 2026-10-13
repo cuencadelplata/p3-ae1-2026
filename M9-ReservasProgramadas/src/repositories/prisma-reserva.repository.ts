@@ -200,6 +200,9 @@ export class PrismaReservaRepository implements ReservaRepository {
           ...(cambio.assignedDriverId === undefined
             ? {}
             : { assignedDriverId: cambio.assignedDriverId }),
+          ...(cambio.criterioAsignacion === undefined
+            ? {}
+            : { assignmentCriteria: cambio.criterioAsignacion }),
           ...(cambio.routeSnapshot === undefined
             ? {}
             : {

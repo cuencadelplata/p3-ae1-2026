@@ -102,6 +102,9 @@ export class InMemoryReservaRepository implements ReservaRepository {
     reserva.actualizadoEn = new Date().toISOString();
     if (cambio.idSolicitud !== undefined) reserva.idSolicitud = cambio.idSolicitud;
     if (cambio.assignedDriverId !== undefined) reserva.assignedDriverId = cambio.assignedDriverId;
+    if (cambio.criterioAsignacion !== undefined) {
+      reserva.criterioAsignacion = cambio.criterioAsignacion;
+    }
     if (cambio.routeSnapshot !== undefined) reserva.routeSnapshot = cambio.routeSnapshot;
     return clone(reserva);
   }
