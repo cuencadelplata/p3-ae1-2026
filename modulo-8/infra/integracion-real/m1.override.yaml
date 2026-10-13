@@ -1,0 +1,16 @@
+# Override para el docker-compose.yml de M1 (modulo-1-identidad-acceso/),
+# usado sólo para levantarlo junto a M8 en la misma máquina.
+#
+# Cambia ÚNICAMENTE los puertos publicados en el host, que chocan con los de
+# M8 y M6 (3001, 6379, 5672, 15672). No toca imágenes, comandos, variables ni
+# código de M1. Dentro de su red M1 sigue escuchando en 3001.
+services:
+  m1-identidad-acceso:
+    ports: !override
+      - "${M1_HOST_PORT:-13001}:3001"
+
+  redis:
+    ports: !reset []
+
+  rabbitmq:
+    ports: !reset []
