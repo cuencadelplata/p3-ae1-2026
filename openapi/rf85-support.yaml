@@ -12,6 +12,12 @@ info:
     de AE1; se acepta en la entrada y se devuelve con el mismo valor mientras
     dure la transición.
 
+    **Verificación del viaje.** Al crear un ticket, Support consulta a M6
+    (`GET /api/viajes/{id}`) si el viaje existe. M6 es el dueño del viaje:
+    Support sólo pregunta por su existencia, no lee su estado ni lo modifica.
+    La verificación se habilita con `M6_TRIPS_URL`; sin esa variable no se
+    consulta a M6 y cualquier `tripId` se acepta.
+
     **Errores.** Todas las respuestas de error tienen la forma
     `{ error: { code, message, details? }, correlationId }`.
 
@@ -45,6 +51,26 @@ paths:
         La misma clave con un pedido distinto responde `409`.
 
         Sin la cabecera, cada pedido crea un ticket.
+
+        **Verificación contra M6.** Antes de crear el ticket se verifica que
+        el viaje exista:
+
+        - M6 no conoce el viaje (responde `404`, o `400` por un id con
+          formato inválido): `422 SUPPORT_TRIP_NOT_FOUND`.
+        - M6 no responde a tiempo, está caído o devuelve una respuesta fuera
+          de contrato: `503 SUPPORT_TRIP_SERVICE_UNAVAILABLE` con
+          `Retry-After`.
+
+        En ambos casos no se crea nada. Un reintento con una
+        `Idempotency-Key` que ya creó un ticket lo devuelve sin consultar a
+        M6: responde `200` aunque M6 esté caído.
+
+        **Decisión: falla cerrado.** Si M6 no está disponible el ticket no se
+        crea; el cliente reintenta el mismo pedido con la misma
+        `Idempotency-Key` después de `Retry-After`. Se descartó crear el
+        ticket "sin verificar" y validarlo más tarde: mejora la
+        disponibilidad, pero admite tickets de viajes inexistentes y exige
+        un estado adicional y un proceso de reconciliación.
       parameters:
         - $ref: '#/components/parameters/CorrelationId'
         - $ref: '#/components/parameters/ActorId'
@@ -111,10 +137,12 @@ paths:
                       code: SUPPORT_IDEMPOTENCY_CONFLICT
                       message: La Idempotency-Key ya se usó con un pedido distinto.
                     correlationId: 4f8f6a1e-2b7c-4d7e-9c55-0b6f3c2a9d10
+        '422':
+          $ref: '#/components/responses/ViajeNoEncontrado'
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '503':
-          $ref: '#/components/responses/BaseNoDisponible'
+          $ref: '#/components/responses/DependenciaNoDisponible'
     get:
       tags: [Tickets (RF8.5)]
       summary: Lista tickets, con filtros y paginación
@@ -528,6 +556,14 @@ components:
         resultados.
       schema:
         type: string
+    Retry-After:
+      description: |
+        Segundos a esperar antes de reintentar. Sólo está presente cuando la
+        falla es de M6 (`SUPPORT_TRIP_SERVICE_UNAVAILABLE`).
+      schema:
+        type: integer
+        minimum: 1
+      example: 5
 
   responses:
     ErrorDeValidacion:
@@ -596,6 +632,56 @@ components:
                   code: SUPPORT_DB_UNAVAILABLE
                   message: El servicio de soporte no está disponible en este momento. Reintentá en unos instantes.
                 correlationId: 9b1f3c2d-8e4a-4f6b-b7c9-0d1e2f3a4b5c
+    ViajeNoEncontrado:
+      description: |
+        M6 no tiene un viaje con ese `tripId`. No se creó ningún ticket.
+        Repetir el mismo pedido da el mismo resultado mientras M6 no conozca
+        el viaje.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/X-Correlation-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            viajeInexistente:
+              value:
+                error:
+                  code: SUPPORT_TRIP_NOT_FOUND
+                  message: El viaje indicado no existe.
+                  details:
+                    - field: tripId
+                      reason: M6 no tiene un viaje con ese identificador.
+                correlationId: 6c0d2e4f-7a1b-4c3d-9e5f-1a2b3c4d5e6f
+    DependenciaNoDisponible:
+      description: |
+        Una dependencia necesaria para crear el ticket no está disponible: la
+        base de datos de Support o el servicio de viajes de M6. El pedido no
+        dejó cambios parciales y puede reintentarse con la misma
+        `Idempotency-Key`.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/X-Correlation-Id'
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            baseCaida:
+              value:
+                error:
+                  code: SUPPORT_DB_UNAVAILABLE
+                  message: El servicio de soporte no está disponible en este momento. Reintentá en unos instantes.
+                correlationId: 9b1f3c2d-8e4a-4f6b-b7c9-0d1e2f3a4b5c
+            viajesNoDisponible:
+              value:
+                error:
+                  code: SUPPORT_TRIP_SERVICE_UNAVAILABLE
+                  message: No fue posible verificar el viaje en este momento. Reintentá en unos instantes.
+                correlationId: 2f4a6c8e-0b1d-4e3f-a5c7-9d8e7f6a5b4c
     ErrorInterno:
       description: Error no esperado. El detalle queda en el log, nunca en la respuesta.
       headers:
@@ -758,6 +844,8 @@ components:
                 - SUPPORT_INVALID_TRANSITION
                 - SUPPORT_CONCURRENCY_CONFLICT
                 - SUPPORT_IDEMPOTENCY_CONFLICT
+                - SUPPORT_TRIP_NOT_FOUND
+                - SUPPORT_TRIP_SERVICE_UNAVAILABLE
                 - SUPPORT_DB_UNAVAILABLE
                 - SUPPORT_INTERNAL_ERROR
             message:
