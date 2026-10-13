@@ -4,9 +4,11 @@ import path from 'node:path';
 import YAML from 'yaml';
 import { apiReference } from '@scalar/express-api-reference';
 import { createSupportController, publicarEvento } from './controllers/support.controller.js';
+import { authenticateWithM1 } from './http/authentication.js';
 import { correlationId } from './http/correlation.js';
 import { supportErrorHandler } from './http/error-handler.js';
 import type { SupportReadiness } from './http/readiness.js';
+import type { IdentityVerifier } from './integrations/m1-identity.js';
 import type { TicketService } from './services/ticket.service.js';
 
 export interface SupportAppDeps {
@@ -16,6 +18,8 @@ export interface SupportAppDeps {
   // Estado de las dependencias para /health/ready. Sin él la app no declara
   // dependencias externas y se informa lista.
   readiness?: () => Promise<SupportReadiness>;
+  // Si se indica, las rutas de /tickets exigen un Bearer válido según M1.
+  identityVerifier?: IdentityVerifier;
 }
 
 // Rutas de tickets, relativas a /tickets.
@@ -44,6 +48,9 @@ export function registerSupportRoutes(router: IRouter, deps: SupportAppDeps) {
   const tickets = express.Router();
 
   tickets.use(correlationId);
+  if (deps.identityVerifier) {
+    tickets.use(authenticateWithM1(deps.identityVerifier));
+  }
   for (const { method, path, handler } of TICKET_ROUTES) {
     tickets[method](path, controller[handler]);
   }
