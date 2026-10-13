@@ -262,6 +262,52 @@ export function ticketRepositoryContract(
       });
     });
 
+    describe('buscarPorClave', () => {
+      const idempotencia = { clave: 'clave-1', hash: 'huella-1' };
+
+      it('devuelve undefined si la clave no se usó', async () => {
+        expect(await repository.buscarPorClave(idempotencia)).toBeUndefined();
+      });
+
+      it('con la misma huella devuelve el ticket que creó esa clave', async () => {
+        const { ticket } = await repository.crearConClave('trip-1', 'Demora', idempotencia);
+
+        expect(await repository.buscarPorClave(idempotencia)).toEqual(ticket);
+      });
+
+      it('devuelve el ticket en su estado actual', async () => {
+        const { ticket } = await repository.crearConClave('trip-1', 'Demora', idempotencia);
+        await repository.actualizarEstado(ticket.id, 'EN_PROCESO');
+
+        expect(await repository.buscarPorClave(idempotencia)).toMatchObject({
+          id: ticket.id,
+          estado: 'EN_PROCESO',
+          version: 2,
+        });
+      });
+
+      it('con otra huella lanza IdempotencyKeyConflictError', async () => {
+        await repository.crearConClave('trip-1', 'Demora', idempotencia);
+
+        await expect(repository.buscarPorClave({ clave: 'clave-1', hash: 'huella-2' })).rejects.toBeInstanceOf(
+          IdempotencyKeyConflictError,
+        );
+      });
+
+      it('no crea tickets, historial ni reserva la clave', async () => {
+        await repository.buscarPorClave(idempotencia);
+
+        expect(await repository.listar({ limit: 100 })).toHaveLength(0);
+        expect((await repository.crearConClave('trip-1', 'Demora', idempotencia)).creado).toBe(true);
+      });
+
+      it('no encuentra tickets creados sin clave', async () => {
+        await repository.crear('trip-1', 'Demora');
+
+        expect(await repository.buscarPorClave(idempotencia)).toBeUndefined();
+      });
+    });
+
     describe('listarHistorial', () => {
       it('devuelve las entradas en orden cronológico', async () => {
         const [ticket] = await crearEn(['2026-10-01T10:00:00.000Z']);

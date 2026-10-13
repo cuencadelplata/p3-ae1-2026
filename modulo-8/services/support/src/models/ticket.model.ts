@@ -87,6 +87,17 @@ export class InMemoryTicketRepository implements TicketRepository {
     return { ticket: { ...ticket }, creado: true };
   }
 
+  async buscarPorClave(idempotencia: ClaveDeIdempotencia): Promise<Ticket | undefined> {
+    const existente = this.claves.get(idempotencia.clave);
+    if (!existente) {
+      return undefined;
+    }
+    if (existente.hash !== idempotencia.hash) {
+      throw new IdempotencyKeyConflictError();
+    }
+    return { ...this.tickets.find(ticket => ticket.id === existente.ticketId)! };
+  }
+
   private insertar(tripId: string, motivo: string, opciones: OpcionesDeCreacion): Ticket {
     const ahora = new Date().toISOString();
     const nuevoTicket: Ticket = {

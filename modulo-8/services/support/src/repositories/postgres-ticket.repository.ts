@@ -148,6 +148,20 @@ export class PostgresTicketRepository implements TicketRepository {
     return { ticket: toTicket(rows[0]), creado: false };
   }
 
+  async buscarPorClave(idempotencia: ClaveDeIdempotencia): Promise<Ticket | undefined> {
+    const { rows } = await this.query<TicketRow & { request_hash: string }>(
+      `SELECT t.*, k.request_hash FROM ${this.keys} k JOIN ${this.tickets} t ON t.id = k.ticket_id WHERE k.key = $1`,
+      [idempotencia.clave],
+    );
+    if (rows.length === 0) {
+      return undefined;
+    }
+    if (rows[0].request_hash !== idempotencia.hash) {
+      throw new IdempotencyKeyConflictError();
+    }
+    return toTicket(rows[0]);
+  }
+
   async obtenerPorId(id: string): Promise<Ticket | undefined> {
     if (!UUID.test(id)) {
       return undefined;
