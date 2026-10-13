@@ -31,6 +31,9 @@ export class SupportError extends Error {
     super(message);
     this.name = 'SupportError';
   }
+
+  // Si se indica, la respuesta lleva la cabecera Retry-After.
+  retryAfterSeconds?: number;
 }
 
 export function validationError(details: ErrorDetail[]): SupportError {
@@ -66,6 +69,28 @@ export function databaseUnavailable(cause?: unknown): SupportError {
     'El servicio de soporte no está disponible en este momento. Reintentá en unos instantes.',
   );
   error.cause = cause;
+  return error;
+}
+
+export function tripNotFound(): SupportError {
+  return new SupportError(422, 'SUPPORT_TRIP_NOT_FOUND', 'El viaje indicado no existe.', [
+    { field: 'tripId', reason: 'M6 no tiene un viaje con ese identificador.' },
+  ]);
+}
+
+const TRIP_SERVICE_RETRY_AFTER_SECONDS = 5;
+
+// M6 no pudo confirmar si el viaje existe. El mismo pedido va a funcionar
+// cuando M6 se recupere: por eso 503 con Retry-After. cause conserva el error
+// original; nunca sale en la respuesta.
+export function tripServiceUnavailable(cause?: unknown): SupportError {
+  const error = new SupportError(
+    503,
+    'SUPPORT_TRIP_SERVICE_UNAVAILABLE',
+    'No fue posible verificar el viaje en este momento. Reintentá en unos instantes.',
+  );
+  error.cause = cause;
+  error.retryAfterSeconds = TRIP_SERVICE_RETRY_AFTER_SECONDS;
   return error;
 }
 
