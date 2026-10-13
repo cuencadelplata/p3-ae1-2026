@@ -2,12 +2,15 @@
 // contrato OpenAPI (openapi/rf85-support.yaml); lo verifica el test de contrato.
 export const SUPPORT_ERROR_CODES = [
   'SUPPORT_VALIDATION_ERROR',
+  'SUPPORT_AUTH_REQUIRED',
+  'SUPPORT_INVALID_TOKEN',
   'SUPPORT_TICKET_NOT_FOUND',
   'SUPPORT_INVALID_TRANSITION',
   'SUPPORT_CONCURRENCY_CONFLICT',
   'SUPPORT_IDEMPOTENCY_CONFLICT',
   'SUPPORT_TRIP_NOT_FOUND',
   'SUPPORT_TRIP_SERVICE_UNAVAILABLE',
+  'SUPPORT_IDENTITY_UNAVAILABLE',
   'SUPPORT_DB_UNAVAILABLE',
   'SUPPORT_INTERNAL_ERROR',
 ] as const;
@@ -38,6 +41,14 @@ export class SupportError extends Error {
 
 export function validationError(details: ErrorDetail[]): SupportError {
   return new SupportError(400, 'SUPPORT_VALIDATION_ERROR', 'La solicitud contiene datos inválidos.', details);
+}
+
+export function authRequired(): SupportError {
+  return new SupportError(401, 'SUPPORT_AUTH_REQUIRED', 'Se requiere la cabecera Authorization: Bearer <token>.');
+}
+
+export function invalidToken(): SupportError {
+  return new SupportError(401, 'SUPPORT_INVALID_TOKEN', 'El token de autenticación no es válido.');
 }
 
 export function ticketNotFound(): SupportError {
@@ -91,6 +102,22 @@ export function tripServiceUnavailable(cause?: unknown): SupportError {
   );
   error.cause = cause;
   error.retryAfterSeconds = TRIP_SERVICE_RETRY_AFTER_SECONDS;
+  return error;
+}
+
+const IDENTITY_RETRY_AFTER_SECONDS = 5;
+
+// M1 no pudo confirmar a quién pertenece el token. Falla cerrado: sin
+// identidad confirmada no se atiende el pedido. cause conserva el error
+// original; nunca sale en la respuesta.
+export function identityUnavailable(cause?: unknown): SupportError {
+  const error = new SupportError(
+    503,
+    'SUPPORT_IDENTITY_UNAVAILABLE',
+    'No fue posible validar la identidad en este momento. Reintentá en unos instantes.',
+  );
+  error.cause = cause;
+  error.retryAfterSeconds = IDENTITY_RETRY_AFTER_SECONDS;
   return error;
 }
 
