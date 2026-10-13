@@ -174,7 +174,7 @@ M6 debe acordar el snapshot de viaje que puede entregar a RF8.3. M8 no puede lee
 - **Evidencia:** `GET /api/viajes/{id}` (`obtenerViaje`, "Obtener un viaje para integración") en `modulo6/openapi.yaml` de `origin/ae2/m6-codutti-diez-mordka-mortola`, relevado el 2026-10-13. Responde `200 { id, clienteId, conductorId, estado }`, `404 { error }` y `503 { error }`; no exige autenticación. No está en `origin/M6-Viajes`.
 - **Uso por M8:** sólo existencia. RF8.5 no lee el estado ni los ids de cliente/conductor, no filtra por estado y no modifica el viaje. M6 conserva el lifecycle.
 - **Mapeo en M8:** `404` (y `400`) → `422 SUPPORT_TRIP_NOT_FOUND`; timeout, error de red, `5xx` o cuerpo fuera de contrato → `503 SUPPORT_TRIP_SERVICE_UNAVAILABLE` con `Retry-After`. Falla cerrado: sin confirmación de M6 no se crea el ticket. Contrato en `openapi/rf85-support.yaml`.
-- **Estado en M8:** el cliente está implementado y se habilita con `M6_TRIPS_URL`. Sin esa variable la verificación está desactivada; el Compose de M8 no la define ni incluye un sandbox de M6 hasta cerrar el acuerdo (§21: un mock inventado no habilita integración).
+- **Estado en M8:** el cliente está implementado y se habilita con `M6_TRIPS_URL`. Sin esa variable la verificación está desactivada. M8 no usa sandbox ni mock de M6 (§21: un mock inventado no habilita integración): se conecta con el servicio real de M6 (rama `ae2/m6-codutti-diez-mordka-mortola`).
 
 M6 debe confirmar:
 
