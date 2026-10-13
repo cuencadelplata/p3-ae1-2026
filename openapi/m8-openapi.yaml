@@ -313,7 +313,8 @@ paths:
         '200': { description: Ticket existente por Idempotency-Key. }
         '400': { description: Solicitud inválida. }
         '409': { description: Idempotency-Key usada con otro pedido. }
-        '503': { description: Base de datos no disponible. }
+        '422': { description: El viaje no existe en M6. }
+        '503': { description: Base de datos o servicio de viajes de M6 no disponible; ante M6 incluye Retry-After. }
     get:
       tags: [Support]
       summary: Listar tickets con filtros y paginación
