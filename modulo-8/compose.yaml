@@ -93,6 +93,7 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-m8_admin_local}"
       RECEIPTS_DB_PASSWORD: "${RECEIPTS_DB_PASSWORD:-m8_receipts_local}"
       NOTIFICATIONS_DB_PASSWORD: "${NOTIFICATIONS_DB_PASSWORD:-m8_notifications_local}"
+      NOTIFICATIONS_TEST_DB_NAME: "${NOTIFICATIONS_TEST_DB_NAME:-m8_notifications_test}"
       SUPPORT_DB_PASSWORD: "${SUPPORT_DB_PASSWORD:-m8_support_local}"
       DELIVERY_DB_PASSWORD: "${DELIVERY_DB_PASSWORD:-m8_delivery_local}"
     volumes:

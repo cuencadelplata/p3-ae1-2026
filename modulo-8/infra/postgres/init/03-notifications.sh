@@ -62,3 +62,17 @@ ALTER DEFAULT PRIVILEGES FOR ROLE m8_notifications IN SCHEMA notifications
 ALTER DEFAULT PRIVILEGES FOR ROLE m8_notifications IN SCHEMA notifications
   GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO m8_notifications;
 EOSQL
+
+# La suite de integracion de RF8.1 elimina y recrea el schema de trabajo. Por
+# eso usa una base exclusiva, sin tocar la CommunicationsDB de la aplicacion.
+test_db="${NOTIFICATIONS_TEST_DB_NAME:-m8_notifications_test}"
+
+if ! psql --username "$POSTGRES_USER" --dbname postgres --tuples-only --no-align \
+  --command "SELECT 1 FROM pg_database WHERE datname = '$test_db'" | grep -qx "1"; then
+  createdb --username "$POSTGRES_USER" --owner m8_notifications "$test_db"
+fi
+
+psql -v ON_ERROR_STOP=1 \
+  --username "$POSTGRES_USER" \
+  --dbname postgres \
+  --command "ALTER DATABASE \"$test_db\" OWNER TO m8_notifications;"
