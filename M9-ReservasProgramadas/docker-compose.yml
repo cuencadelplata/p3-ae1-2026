@@ -43,7 +43,8 @@ services:
       NODE_ENV: production
       PORT: ${PORT:-3000}
       DATABASE_URL: postgresql://reservas:reservas_dev@postgres:5432/reservas?schema=public
-      M5_URL: http://m5-stub:3001
+      M5_URL: ${M5_URL:-http://m5-stub:3005}
+      M5_SERVICE_URL: ${M5_SERVICE_URL:-http://m5-stub:3005}
       M7_URL: http://m7-stub:3002
       RESERVATION_JOB_INTERVAL: ${RESERVATION_JOB_INTERVAL:-*/30 * * * * *}
     ports:
@@ -68,12 +69,12 @@ services:
     image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v1.0.0}
     command: ['node', 'dist/stubs/m5/server.js']
     environment:
-      PORT: 3001
+      PORT: 3005
       M5_OFERTAS_ESCENARIO: ${M5_OFERTAS_ESCENARIO:-ACEPTAN}
     expose:
-      - '3001'
+      - '3005'
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3001/health']
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3005/health']
       interval: 5s
       timeout: 3s
       retries: 5
