@@ -1,21 +1,26 @@
 openapi: 3.0.3
 info:
   title: M8 - API integrada
-  version: 2.0.0
+  version: 2.0.1
   description: |
-    Índice de los contratos HTTP reales de la aplicación única M8.
-    Los RF conservan sus rutas y responsabilidades internas, pero se exponen
-    desde un único servicio HTTP.
+    Contrato HTTP integrado de la aplicación única M8.
+    Los RF conservan sus responsabilidades internas, pero todas las rutas se
+    exponen desde un único servicio HTTP. M8 no administra el ciclo de vida
+    del viaje ni modifica estados pertenecientes a M6.
 servers:
   - url: http://localhost:3000
     description: Aplicación integrada del Módulo 8.
 tags:
   - name: Notifications
+    description: RF8.1. Procesamiento de notificaciones lógicas de viaje.
   - name: QR
+    description: RF8.2. QR temporal, vencimiento y consumo de un solo uso.
   - name: Receipts
+    description: RF8.3 y RF8.4. Emisión, consulta, descarga y reenvío de comprobantes.
   - name: Support
     description: RF8.5. Contrato completo en rf85-support.yaml.
   - name: NotificationDelivery
+    description: RF8.7. Registro de dispositivos y auditoría de entregas PUSH.
 paths:
   /health:
     get:
@@ -69,6 +74,12 @@ paths:
         - BearerAuth: []
       servers:
         - url: http://localhost:3000
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceTokenRequest'
       responses:
         '201': { description: Device token registrado. }
         '400': { description: Solicitud inválida. }
@@ -136,20 +147,44 @@ paths:
     post:
       tags: [Notifications]
       summary: Procesar una notificación de viaje
+      description: M8 valida el hecho, genera el mensaje y persiste la notificación lógica. No modifica el estado del viaje.
       servers:
         - url: http://localhost:3000
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRequest'
       responses:
-        '201': { description: Notificación procesada. }
+        '201':
+          description: Notificación procesada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationResponse'
         '400': { description: Solicitud inválida. }
         '415': { description: Content-Type no admitido. }
   /qr:
     post:
       tags: [QR]
       summary: Generar un QR temporal
+      description: Devuelve el QR activo del viaje de forma idempotente. El QR codifica sólo un token opaco.
       servers:
         - url: http://localhost:3000
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QrGenerationRequest'
       responses:
-        '201': { description: QR generado. }
+        '201':
+          description: QR generado o QR activo existente devuelto de forma idempotente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QrGenerationResponse'
         '400': { description: Solicitud inválida. }
         '415': { description: Content-Type no admitido. }
         '500': { description: Error interno al generar el QR. }
@@ -158,10 +193,22 @@ paths:
     post:
       tags: [QR]
       summary: Validar y consumir un QR
+      description: La validación exitosa consume el QR. Ante concurrencia, sólo una validación puede resultar exitosa.
       servers:
         - url: http://localhost:3000
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QrValidationRequest'
       responses:
-        '200': { description: QR válido y consumido. }
+        '200':
+          description: QR válido y consumido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QrValidationResponse'
         '400': { description: Solicitud inválida. }
         '404': { description: QR no encontrado o no corresponde al viaje. }
         '409': { description: QR ya utilizado. }
@@ -173,11 +220,28 @@ paths:
     post:
       tags: [Receipts]
       summary: Emitir un comprobante
+      description: RF8.3. La emisión es idempotente por `tripId` y requiere el snapshot de viaje y pago validado por el servicio.
       servers:
         - url: http://localhost:3000
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReceiptCreationRequest'
       responses:
-        '201': { description: Comprobante creado. }
-        '200': { description: Comprobante existente por idempotencia. }
+        '201':
+          description: Comprobante creado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptResponse'
+        '200':
+          description: Comprobante existente por idempotencia.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptResponse'
   /api/v1/receipts/{tripId}:
     get:
       tags: [Receipts]
@@ -308,9 +372,34 @@ paths:
       summary: Crear un ticket de soporte
       servers:
         - url: http://localhost:3000
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, minLength: 1 }
+        - name: X-Actor-Id
+          in: header
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketCreationRequest'
       responses:
-        '201': { description: Ticket creado. }
-        '200': { description: Ticket existente por Idempotency-Key. }
+        '201':
+          description: Ticket creado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+        '200':
+          description: Ticket existente por Idempotency-Key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
         '400': { description: Solicitud inválida. }
         '409': { description: Idempotency-Key usada con otro pedido. }
         '503': { description: Base de datos no disponible. }
@@ -362,8 +451,23 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: X-Actor-Id
+          in: header
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketStatusChangeRequest'
       responses:
-        '200': { description: Ticket actualizado, o sin efecto si ya estaba en ese estado. }
+        '200':
+          description: Ticket actualizado, o sin efecto si ya estaba en ese estado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
         '400': { description: Solicitud inválida. }
         '404': { description: Ticket no encontrado. }
         '409': { description: Transición no permitida o conflicto de versión. }
@@ -402,6 +506,121 @@ components:
       bearerFormat: JWT
       description: Token JWT emitido por M1.
   schemas:
+    DeviceTokenRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token: { type: string, minLength: 1 }
+        platform: { type: string, enum: [ANDROID, IOS, WEB], default: ANDROID }
+    NotificationRequest:
+      type: object
+      additionalProperties: false
+      required: [tripId, recipientId, eventType, channels]
+      properties:
+        tripId: { type: string, minLength: 1 }
+        recipientId: { type: string, minLength: 1 }
+        eventType:
+          type: string
+          enum: [TRIP_REQUESTED, DRIVER_ASSIGNED, DRIVER_ARRIVED, TRIP_STARTED, TRIP_CANCELLED, TRIP_COMPLETED]
+        channels:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, enum: [PUSH] }
+    NotificationResponse:
+      type: object
+      required: [notificationId, tripId, recipientId, eventType, channels, message, status, createdAt]
+      properties:
+        notificationId: { type: string }
+        tripId: { type: string }
+        recipientId: { type: string }
+        eventType: { type: string }
+        channels: { type: array, items: { type: string } }
+        message: { type: string }
+        status: { type: string, enum: [PROCESSED] }
+        createdAt: { type: string, format: date-time }
+    QrGenerationRequest:
+      type: object
+      additionalProperties: false
+      required: [tripId]
+      properties:
+        tripId: { type: string, minLength: 1 }
+    QrGenerationResponse:
+      type: object
+      additionalProperties: false
+      required: [token, qrDataUrl, expiresAt]
+      properties:
+        token: { type: string, minLength: 1 }
+        qrDataUrl:
+          type: string
+          pattern: '^data:image/png;base64,'
+          description: Data URL PNG que codifica únicamente el token opaco.
+        expiresAt: { type: string, format: date-time }
+    QrValidationRequest:
+      type: object
+      additionalProperties: false
+      required: [tripId, token]
+      properties:
+        tripId: { type: string, minLength: 1 }
+        token: { type: string, minLength: 1 }
+    QrValidationResponse:
+      type: object
+      additionalProperties: false
+      required: [valid]
+      properties:
+        valid: { type: boolean, enum: [true] }
+    ReceiptCreationRequest:
+      type: object
+      description: Snapshot requerido para emitir el comprobante; RF8.3 valida sus campos internos.
+      required: [tripId, customer, driver, trip, fare, payment]
+      properties:
+        tripId: { type: string, minLength: 1 }
+        customerUserId: { type: integer }
+        driverUserId: { type: integer }
+        customer: { type: object }
+        driver: { type: object }
+        trip: { type: object }
+        fare: { type: object }
+        payment: { type: object }
+    ReceiptResponse:
+      type: object
+      description: Comprobante emitido o recuperado por idempotencia.
+      additionalProperties: true
+    TicketCreationRequest:
+      type: object
+      additionalProperties: false
+      required: [motivo]
+      anyOf:
+        - required: [tripId]
+        - required: [viajeId]
+      properties:
+        tripId: { type: string, minLength: 1 }
+        viajeId:
+          type: string
+          minLength: 1
+          deprecated: true
+        motivo: { type: string, minLength: 1 }
+    TicketStatusChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [estado]
+      properties:
+        estado: { type: string, enum: [ABIERTO, EN_PROCESO, RESUELTO] }
+        expectedVersion: { type: integer, minimum: 1 }
+        motivo: { type: string, minLength: 1 }
+    TicketResponse:
+      type: object
+      required: [id, tripId, viajeId, motivo, estado, version, fechaCreacion, fechaActualizacion]
+      properties:
+        id: { type: string, format: uuid }
+        tripId: { type: string }
+        viajeId: { type: string, deprecated: true }
+        motivo: { type: string }
+        estado: { type: string, enum: [ABIERTO, EN_PROCESO, RESUELTO] }
+        version: { type: integer, minimum: 1 }
+        fechaCreacion: { type: string, format: date-time }
+        fechaActualizacion: { type: string, format: date-time }
     ReceiptResendRequest:
       type: object
       properties:
