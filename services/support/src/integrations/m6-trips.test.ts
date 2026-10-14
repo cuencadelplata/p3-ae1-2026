@@ -166,3 +166,23 @@ describe('createM6TripsClient: timeout al leer el cuerpo', () => {
     });
   });
 });
+
+describe('createM6TripsClient: isReachable descarta el cuerpo', () => {
+  it('cancela el cuerpo de /health para liberar la conexión', async () => {
+    const cancel = vi.fn();
+    const cuerpo = new ReadableStream({ cancel });
+
+    expect(await clienteCon(async () => new Response(cuerpo, { status: 200 })).isReachable()).toBe(true);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('si cancelar el cuerpo falla, igual informa el status', async () => {
+    const cuerpo = new ReadableStream({
+      cancel() {
+        throw new Error('no se pudo cancelar');
+      },
+    });
+
+    expect(await clienteCon(async () => new Response(cuerpo, { status: 200 })).isReachable()).toBe(true);
+  });
+});

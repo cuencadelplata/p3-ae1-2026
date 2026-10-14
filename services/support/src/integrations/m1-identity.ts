@@ -109,6 +109,8 @@ export function createM1IdentityClient({ baseUrl, timeoutMs, fetchImpl = fetch }
     async isReachable() {
       try {
         const response = await fetchImpl(`${baseUrl}/health`, { signal: AbortSignal.timeout(timeoutMs) });
+        // Sólo importa el status: el cuerpo se descarta para liberar la conexión.
+        await response.body?.cancel().catch(() => undefined);
         return response.ok;
       } catch {
         return false;
