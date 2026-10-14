@@ -1,63 +1,54 @@
 services:
-  notifications:
+  m8-app:
+    image: "${M8_IMAGE:-modulo-8-m8-app:local}"
     build:
       context: .
-      dockerfile: services/notifications/Dockerfile
+      dockerfile: Dockerfile
     ports:
-      - "3101:3000"
+      - "${M8_HOST_PORT:-3000}:3000"
     environment:
       NODE_ENV: production
       PORT: "3000"
-
-  qr:
-    build:
-      context: .
-      dockerfile: services/qr/Dockerfile
-    ports:
-      - "3103:3000"
-    environment:
-      NODE_ENV: production
-      PORT: "3000"
-      QR_TTL_SECONDS: "${QR_TTL_SECONDS:-300}"
-
-  receipts:
-    build:
-      context: .
-      dockerfile: services/receipts/Dockerfile
-    ports:
-      - "3008:3008"
-    environment:
-      NODE_ENV: production
-      PORT: "3008"
-      PUBLIC_BASE_URL: http://localhost:3008
+      PUBLIC_BASE_URL: "http://localhost:${M8_HOST_PORT:-3000}"
+      NOTIFICATIONS_DATABASE_URL: "postgres://m8_notifications:${NOTIFICATIONS_DB_PASSWORD:-m8_notifications_local}@postgres:5432/${POSTGRES_DB:-m8}"
+      DELIVERY_DATABASE_URL: "postgres://m8_notification_delivery:${DELIVERY_DB_PASSWORD:-m8_delivery_local}@postgres:5432/${POSTGRES_DB:-m8}"
       RECEIPTS_DATABASE_URL: "postgres://m8_receipts:${RECEIPTS_DB_PASSWORD:-m8_receipts_local}@postgres:5432/${POSTGRES_DB:-m8}"
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      SUPPORT_DATABASE_URL: "postgres://m8_support:${SUPPORT_DB_PASSWORD:-m8_support_local}@postgres:5432/${POSTGRES_DB:-m8}"
       REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      QR_TTL_SECONDS: "${QR_TTL_SECONDS:-300}"
+      QR_EXPIRED_GRACE_SECONDS: "${QR_EXPIRED_GRACE_SECONDS:-3600}"
       RECEIPT_LINK_TTL_SECONDS: "${RECEIPT_LINK_TTL_SECONDS:-900}"
+      M1_IDENTITY_URL: "${M1_IDENTITY_URL:-http://m1-identity-sandbox:4011/auth/validar-identidad-y-rol}"
+      M1_TIMEOUT_MS: "${M1_TIMEOUT_MS:-2000}"
+      M1_JWT_SECRET: "${M1_JWT_SECRET:?M1_JWT_SECRET must be configured}"
+      M2_API_URL: "${M2_API_URL:-http://m2-service:3002}"
+      M2_TIMEOUT_MS: "${M2_TIMEOUT_MS:-3000}"
+      M2_INTERNAL_API_KEY: "${M2_INTERNAL_API_KEY:?M2_INTERNAL_API_KEY must be configured}"
       FISCAL_API_URL: http://fiscal-sandbox:4010
-    # Si el proceso termina por cualquier motivo, Docker lo vuelve a levantar.
-    # Una dependencia caida no lo hace terminar: sigue atendiendo en modo
-    # degradado y se reconecta solo (ver /health/ready).
+      M7_PAYMENTS_URL: http://m7-payments-sandbox:4020
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      m1-identity-sandbox:
+        condition: service_healthy
 
-  # Segunda instancia del servicio de comprobantes, para demostrar RNF-09 con
-  # dos replicas que comparten base de datos y cola. Solo se levanta con el
-  # perfil: docker compose --profile replicas up -d --build
-  receipts-replica:
-    extends: receipts
-    profiles: ["replicas"]
-    ports: !override
-      - "3018:3008"
+  m1-identity-sandbox:
+    build:
+      context: ./infra/m1-identity-sandbox
+    environment:
+      PORT: "4011"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4011/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
-  # Servicio externo simulado: autoriza cada comprobante antes de emitirlo.
-  # El modo (normal, slow, down) se cambia en caliente con PUT /admin/mode.
   fiscal-sandbox:
     build:
       context: ./infra/fiscal-sandbox
@@ -66,6 +57,16 @@ services:
     environment:
       FISCAL_MODE: "${FISCAL_MODE:-normal}"
       SLOW_DELAY_MS: "${FISCAL_SLOW_DELAY_MS:-5000}"
+    restart: unless-stopped
+
+  m7-payments-sandbox:
+    build:
+      context: ./infra/m7-payments-sandbox
+    ports:
+      - "${M7_HOST_PORT:-4020}:4020"
+    environment:
+      M7_MODE: "${M7_MODE:-normal}"
+      UNREGISTERED_TRIPS: "${M7_UNREGISTERED_TRIPS:-autorizado}"
     restart: unless-stopped
 
   rabbitmq:
@@ -91,7 +92,10 @@ services:
       POSTGRES_USER: "${POSTGRES_USER:-m8_admin}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-m8_admin_local}"
       RECEIPTS_DB_PASSWORD: "${RECEIPTS_DB_PASSWORD:-m8_receipts_local}"
+      NOTIFICATIONS_DB_PASSWORD: "${NOTIFICATIONS_DB_PASSWORD:-m8_notifications_local}"
+      NOTIFICATIONS_TEST_DB_NAME: "${NOTIFICATIONS_TEST_DB_NAME:-m8_notifications_test}"
       SUPPORT_DB_PASSWORD: "${SUPPORT_DB_PASSWORD:-m8_support_local}"
+      DELIVERY_DB_PASSWORD: "${DELIVERY_DB_PASSWORD:-m8_delivery_local}"
     volumes:
       - m8-postgres:/var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -110,24 +114,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  support:
-    build:
-      context: .
-      dockerfile: services/support/Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      NODE_ENV: production
-      PORT: "3000"
-      RABBITMQ_URL: amqp://rabbitmq:5672
-      SUPPORT_DATABASE_URL: "postgres://m8_support:${SUPPORT_DB_PASSWORD:-m8_support_local}@postgres:5432/${POSTGRES_DB:-m8}"
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
 
 volumes:
   m8-postgres:

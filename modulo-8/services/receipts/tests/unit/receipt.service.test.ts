@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { before, describe, it } from 'node:test';
-
+import { after, before, describe, it } from 'node:test';
+import { closeRedis, connectRedis } from '../../src/cache/redis';
 import { runMigrations } from '../../src/db/migrations';
 import type { ReceiptRequest } from '../../src/models/receipt';
 import * as receiptService from '../../src/services/receipt.service';
@@ -47,6 +47,11 @@ const sampleRequest: ReceiptRequest = {
 describe('Receipt Service (Unit)', () => {
   before(async () => {
     await runMigrations();
+    await connectRedis();
+  });
+
+  after(async () => {
+    await closeRedis();
   });
 
   it('debe emitir un nuevo comprobante y generar el PDF (RF-8.3)', async () => {

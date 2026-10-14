@@ -118,6 +118,18 @@ class PayloadReader {
     return roundToCents(value);
   }
 
+  optionalPositiveInteger(source: Payload | null, field: string, path: string): number | undefined {
+    const raw = source?.[field];
+    if (raw === undefined || raw === null || raw === '') {
+      return undefined;
+    }
+    if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < 1) {
+      this.errors.push(`${path} debe ser un entero positivo`);
+      return undefined;
+    }
+    return raw;
+  }
+
   oneOf<T extends string>(
     source: Payload | null,
     field: string,
@@ -177,6 +189,9 @@ export function validateReceiptRequest(body: unknown): ValidationResult<ReceiptR
 
   const tripId = reader.text(payload, 'tripId', 'tripId', { maxLength: 64, pattern: TRIP_ID_PATTERN });
   const issuedAt = reader.timestamp(payload, 'issuedAt', 'issuedAt', false);
+  // Son referencias explícitas a M1: no se derivan de customer.id ni driver.id.
+  const customerUserId = reader.optionalPositiveInteger(payload, 'customerUserId', 'customerUserId');
+  const driverUserId = reader.optionalPositiveInteger(payload, 'driverUserId', 'driverUserId');
 
   const customerPayload = reader.nested(payload, 'customer', 'customer');
   const customer = {
@@ -263,7 +278,7 @@ export function validateReceiptRequest(body: unknown): ValidationResult<ReceiptR
 
   return {
     ok: true,
-    value: { tripId, issuedAt: optional(issuedAt), customer, driver, trip, fare, payment },
+    value: { tripId, issuedAt: optional(issuedAt), customerUserId, driverUserId, customer, driver, trip, fare, payment },
   };
 }
 

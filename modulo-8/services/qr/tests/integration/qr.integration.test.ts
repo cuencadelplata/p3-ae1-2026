@@ -5,11 +5,7 @@
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../../src/app";
-
-function buildApp() {
-  return createApp();
-}
+import { buildApp } from "../helpers/build-app";
 
 describe("POST /qr", () => {
   it("responde 201 con token, qrDataUrl PNG y expiresAt en ISO 8601", async () => {

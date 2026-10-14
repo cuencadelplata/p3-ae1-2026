@@ -1,5 +1,7 @@
 export const VEHICLE_TYPES = ['AUTO', 'MOTO'] as const;
-export const PAYMENT_METHODS = ['EFECTIVO', 'TARJETA', 'BILLETERA'] as const;
+// TRANSFERENCIA corresponde al tipo "transferencia" de M7. BILLETERA no existe en
+// M7: se conserva por compatibilidad con los comprobantes y contratos anteriores.
+export const PAYMENT_METHODS = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'BILLETERA'] as const;
 export const PAYMENT_STATUSES = ['APROBADO', 'PENDIENTE', 'RECHAZADO'] as const;
 export const DELIVERY_CHANNELS = ['EMAIL', 'SMS', 'PUSH'] as const;
 
@@ -64,6 +66,10 @@ export interface FiscalAuthorization {
 export interface ReceiptRequest {
   tripId: string;
   issuedAt?: string;
+  /** Identificador canónico numérico de M1; no reemplaza customer.id. */
+  customerUserId?: number;
+  /** Identificador canónico numérico de M1; no reemplaza driver.id. */
+  driverUserId?: number;
   customer: Customer;
   driver: Driver;
   trip: TripDetail;
@@ -84,6 +90,9 @@ export interface Receipt {
   receiptNumber: string;
   tripId: string;
   issuedAt: string;
+  /** IDs canónicos de M1 usados exclusivamente para autorización RF8.4. */
+  customerUserId?: number;
+  driverUserId?: number;
   customer: Customer;
   driver: Driver;
   trip: TripDetail;

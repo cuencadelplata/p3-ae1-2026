@@ -25,18 +25,30 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 const MODULE_DIR = fileURLToPath(new URL("../..", import.meta.url));
-const RECEIPTS = process.env.RECEIPTS_URL ?? "http://localhost:3008";
+const RECEIPTS = process.env.RECEIPTS_URL ?? process.env.M8_URL ?? "http://localhost:3000";
 const FISCAL = process.env.FISCAL_URL ?? "http://localhost:4010";
 const RABBIT_API = process.env.RABBITMQ_API_URL ?? "http://localhost:15672/api";
 const RABBIT_AUTH = `Basic ${Buffer.from(process.env.RABBITMQ_API_CREDENTIALS ?? "guest:guest").toString("base64")}`;
 const POSTGRES_USER = process.env.POSTGRES_USER ?? "m8_admin";
 const POSTGRES_DB = process.env.POSTGRES_DB ?? "m8";
 const DLQ = "m8.receipts.payment-confirmed.dlq";
+const RECEIPTS_AUTHORIZATION = process.env.RECEIPTS_AUTHORIZATION ?? "Bearer e2e-operator";
 
 const run = `e2e-res-${Date.now()}`;
 
 function compose(...args) {
-  return execFileSync("docker", ["compose", ...args], { cwd: MODULE_DIR, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  return execFileSync("docker", ["compose", ...args], {
+    cwd: MODULE_DIR,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    // Delivery no se inicia en esta suite, pero Compose valida su configuración
+    // al detener o reiniciar dependencias de Receipts.
+    env: {
+      ...process.env,
+      M1_JWT_SECRET: process.env.M1_JWT_SECRET ?? "e2e-placeholder-not-for-production",
+      M2_INTERNAL_API_KEY: process.env.M2_INTERNAL_API_KEY ?? "e2e-placeholder-not-for-production",
+    },
+  });
 }
 
 /** Consulta de solo lectura con el rol administrador, para inspeccionar la bandeja de salida. */
@@ -70,11 +82,25 @@ async function withStopped(service, fn) {
 
 async function ready() {
   const response = await fetch(`${RECEIPTS}/health/ready`);
-  return { status: response.status, body: await response.json() };
+  const body = await response.json();
+  const receipts = body.modules?.receipts ?? body;
+  return { status: receipts.status === "unavailable" ? 503 : 200, body: receipts };
 }
 
 async function waitAllAvailable() {
   await waitFor(async () => (await ready()).body.status === "ok", { timeoutMs: 60000, what: "que todas las dependencias vuelvan" });
+  await waitFor(
+    async () => (await receiptFetch(`/api/v1/receipts/${run}-identity-check`)).status === 404,
+    { timeoutMs: 15000, what: "la validacion de identidad de M1" },
+  );
+}
+
+/** Espera solo la dependencia recuperada por el escenario en curso. */
+async function waitForReceiptDependency(name) {
+  await waitFor(
+    async () => (await ready()).body.dependencies[name]?.status === "available",
+    { timeoutMs: 60000, what: `que ${name} vuelva a estar disponible` },
+  );
 }
 
 async function rabbit(method, path, body) {
@@ -154,8 +180,14 @@ function issue(tripId) {
   });
 }
 
+function receiptFetch(path, options = {}) {
+  const headers = new Headers(options.headers);
+  headers.set("authorization", RECEIPTS_AUTHORIZATION);
+  return fetch(`${RECEIPTS}${path}`, { ...options, headers });
+}
+
 async function receiptExists(tripId) {
-  return (await fetch(`${RECEIPTS}/api/v1/receipts/${tripId}`)).status === 200;
+  return (await receiptFetch(`/api/v1/receipts/${tripId}`)).status === 200;
 }
 
 test("punto de partida: todas las dependencias disponibles y el circuito cerrado", async () => {
@@ -181,7 +213,7 @@ test("sin Redis: se siguen emitiendo comprobantes y solo fallan los enlaces temp
     assert.equal((await reference.json()).error.code, "DOWNLOAD_LINKS_UNAVAILABLE");
   });
 
-  await waitAllAvailable();
+  await waitForReceiptDependency("redis");
   const reference = await fetch(`${RECEIPTS}/internal/receipts/${tripId}/delivery-reference`);
   assert.equal(reference.status, 200);
 });
@@ -203,7 +235,7 @@ test("sin RabbitMQ: la API sigue y receipt.issued espera en la bandeja de salida
     assert.equal(pending(), 1, "el evento debe quedar pendiente mientras RabbitMQ esta caido");
   });
 
-  await waitAllAvailable();
+  await waitForReceiptDependency("rabbitmq");
   await waitFor(async () => pending() === 0, { what: "la publicacion del evento pendiente" });
 
   // El consumidor tambien se reconecto: un pago nuevo se procesa.
@@ -271,7 +303,7 @@ test("autorizador fiscal caido: el circuito se abre, los pagos esperan sin ir a 
   });
 
   await waitFor(() => receiptExists(paid), { timeoutMs: 60000, what: "la emision del pago que esperaba" });
-  const receipt = (await (await fetch(`${RECEIPTS}/api/v1/receipts/${paid}`)).json()).data;
+  const receipt = (await (await receiptFetch(`/api/v1/receipts/${paid}`)).json()).data;
   assert.match(receipt.fiscal.authorizationCode, /^\d{14}$/);
   assert.equal(await inDlq(event.messageId), false);
   await waitFor(async () => (await ready()).body.circuits.fiscal === "closed", { what: "el cierre del circuito" });
@@ -291,7 +323,7 @@ test("sin PostgreSQL: el proceso sigue vivo, la API responde 503 y los pagos se 
     assert.equal(status, 503);
     assert.equal(body.dependencies.postgres.status, "unavailable");
 
-    const response = await fetch(`${RECEIPTS}/api/v1/receipts/${issued}`);
+    const response = await fetch(`${RECEIPTS}/internal/receipts/${issued}/delivery-reference`);
     assert.equal(response.status, 503, "una base caida no debe responder 500");
     assert.equal((await response.json()).error.code, "DATABASE_UNAVAILABLE");
     assert.ok(response.headers.get("retry-after"));
@@ -300,7 +332,7 @@ test("sin PostgreSQL: el proceso sigue vivo, la API responde 503 y los pagos se 
     await pause(8000);
   });
 
-  await waitAllAvailable();
+  await waitForReceiptDependency("postgres");
   await waitFor(() => receiptExists(paid), { timeoutMs: 60000, what: "la emision del pago que esperaba" });
   assert.equal(await inDlq(event.messageId), false);
   assert.equal(await receiptExists(issued), true);
@@ -308,7 +340,7 @@ test("sin PostgreSQL: el proceso sigue vivo, la API responde 503 y los pagos se 
 
 test("PostgreSQL caido al arrancar: el servicio inicia igual y se recupera cuando la base vuelve", async () => {
   await withStopped("postgres", async () => {
-    compose("restart", "receipts");
+    compose("restart", "m8-app");
 
     const live = await waitFor(async () => (await fetch(`${RECEIPTS}/health/live`)).ok, {
       what: "que el servicio arranque sin la base",
@@ -319,7 +351,7 @@ test("PostgreSQL caido al arrancar: el servicio inicia igual y se recupera cuand
     assert.equal(body.dependencies.postgres.status, "unavailable");
   });
 
-  await waitAllAvailable();
+  await waitForReceiptDependency("postgres");
   const paid = `${run}-arranque`;
   await publishPayment(paid);
   await waitFor(() => receiptExists(paid), { what: "la emision despues de recuperar la base" });

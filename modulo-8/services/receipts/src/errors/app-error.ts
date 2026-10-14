@@ -31,8 +31,20 @@ export class AppError extends Error {
     return new AppError(409, code, message);
   }
 
+  static unauthorized(code: string, message: string): AppError {
+    return new AppError(401, code, message);
+  }
+
+  static forbidden(code: string, message: string): AppError {
+    return new AppError(403, code, message);
+  }
+
   static gone(code: string, message: string): AppError {
     return new AppError(410, code, message);
+  }
+
+  static tooManyRequests(code: string, message: string, details?: unknown): AppError {
+    return new AppError(429, code, message, details);
   }
 
   static unavailable(code: string, message: string): AppError {

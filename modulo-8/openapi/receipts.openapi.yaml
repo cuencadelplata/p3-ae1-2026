@@ -1,11 +1,11 @@
-﻿openapi: 3.0.3
+openapi: 3.0.3
 info:
   title: M8 - Notificaciones, Documentos y Soporte (Comprobantes PDF)
   description: |
     Microservicio de la **Plataforma Distribuida de Movilidad Urbana (ISI - Paradigmas 3)**.
     Responsable de la **emisión, consulta, descarga y reenvío de comprobantes de viaje en PDF**.
 
-    **Versión 2.1.0: evolución individual AE2 (Juan Gualtieri) sobre la versión 1.0.0 del Grupo 14 (AE1).**
+    **Versión 2.3.0: evolución individual AE2 (Juan Gualtieri) sobre la versión 1.0.0 del Grupo 14 (AE1).**
     - **RF-8.3:** Comprobante PDF. Además de `POST /receipts`, se emite de forma asincrónica al consumir
       `payment.confirmed` (RabbitMQ). Persistencia en PostgreSQL (esquema `receipts`).
     - **RF-8.4:** Reenvío de comprobante (entrega simulada) y descarga mediante enlace temporal (Redis).
@@ -13,11 +13,14 @@ info:
       `UNIQUE` de la base aun con varias réplicas del servicio.
     - **Autorización fiscal (2.1.0):** antes de emitir, el comprobante se autoriza ante un servicio externo
       (simulado), con timeout de 2 s y circuit breaker. El código queda en `fiscal` e impreso en el PDF.
+    - **Pago verificado en M7 (2.2.0):** antes de emitir se consulta `GET /metodo-pago/{viajeId}` de M7.
+      Solo un pago `autorizado` genera comprobante, y el medio de pago se toma de M7.
+    - **Importe de M7 (2.3.0):** el total y la moneda del comprobante se toman de M7 cuando los informa.
     - **Dependencias caídas:** responden `503` con `Retry-After` (nunca `500`); el servicio sigue atendiendo.
 
     Los contratos asincrónicos (`payment.confirmed`, `receipt.issued`) y el contrato interno con Receipts
     Delivery están en `contracts/events/catalogo-eventos-v1.md`; no forman parte de esta API pública.
-  version: 2.1.0
+  version: 2.3.0
   contact:
     name: Grupo 14 - M8 Comprobantes
 servers:
@@ -26,8 +29,8 @@ servers:
   - url: /api/v1
     description: Servidor relativo
 
-# Sin autenticacion propia: la identidad y los permisos son responsabilidad de la
-# plataforma (M1 - Identidad), fuera del alcance de este servicio en AE2.
+# M8 no administra credenciales propias. Las operaciones RF-8.4 que corresponden
+# a un usuario validan el Bearer mediante M1 - Identidad.
 security: []
 
 tags:
@@ -44,7 +47,7 @@ paths:
       summary: Emite el comprobante PDF de un viaje finalizado (RF-8.3)
       description: |
         Recibe los datos del viaje completado (M6) y del pago liquidado (M7) y genera el archivo PDF correspondiente.
-        
+
         **Idempotencia (RNF-08):** Si ya existe un comprobante para el `tripId` enviado, la API responde `200 OK`
         con los datos del comprobante vigente en lugar de duplicar el archivo. Si es nuevo responde `201 Created`.
 
@@ -52,6 +55,17 @@ paths:
         (timeout de 2 s, circuit breaker). Si no responde o su circuito está abierto, responde
         `503 FISCAL_SERVICE_UNAVAILABLE` con `Retry-After` y no se persiste nada: el pedido se puede repetir.
         Si lo rechaza, responde `422 FISCAL_AUTHORIZATION_REJECTED`.
+
+        **Pago verificado en M7 (2.2.0):** M7 es la fuente de verdad del pago. Antes de emitir se consulta
+        `GET /metodo-pago/{viajeId}` de M7 (timeout de 2 s):
+        - `autorizado`: se emite; `payment.status` queda `APROBADO` y `payment.method` se toma de M7
+          (`efectivo`, `tarjeta`, `transferencia` → `EFECTIVO`, `TARJETA`, `TRANSFERENCIA`), aunque la entrada
+          informe otro valor. Si M7 informa `total` y `moneda` (2.3.0), `fare.total` y `fare.currency` se toman
+          de M7; el desglose de `fare` se conserva solo si suma ese total, y si no queda solo el total.
+        - `pendiente` o sin pago registrado: `409 PAYMENT_PENDING` / `409 PAYMENT_NOT_FOUND` con `Retry-After`.
+          No se persiste nada y el pedido se puede repetir cuando M7 autorice el pago.
+        - `rechazado`: `422 PAYMENT_REJECTED`. Ese pago no genera comprobante.
+        - M7 sin respuesta: `503 PAYMENTS_SERVICE_UNAVAILABLE` con `Retry-After`.
       operationId: createReceipt
       requestBody:
         required: true
@@ -61,6 +75,8 @@ paths:
               $ref: '#/components/schemas/ReceiptRequest'
             example:
               tripId: "trip-2026-000123"
+              customerUserId: 91
+              driverUserId: 457
               customer:
                 id: "cli-0091"
                 fullName: "Lucia Fernandez"
@@ -111,10 +127,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: |
+            M7 todavía no autorizó el pago (`PAYMENT_PENDING`) o no tiene un pago registrado para el viaje
+            (`PAYMENT_NOT_FOUND`). No se emite nada; el pedido se puede repetir después de `Retry-After`.
+          headers:
+            Retry-After:
+              description: Segundos sugeridos antes de reintentar.
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: PAYMENT_PENDING
+                  message: El pago del viaje trip-2026-000123 esta pendiente de autorizacion en M7
+                  path: /api/v1/receipts
+                  timestamp: "2026-10-05T18:42:12.000Z"
         '422':
           description: |
-            Error de validación en los campos del comprobante (`VALIDATION_ERROR`), o el autorizador fiscal
-            rechazó el comprobante (`FISCAL_AUTHORIZATION_REJECTED`, con el motivo en `details`).
+            Error de validación en los campos del comprobante (`VALIDATION_ERROR`), M7 rechazó el pago
+            (`PAYMENT_REJECTED`), o el autorizador fiscal rechazó el comprobante
+            (`FISCAL_AUTHORIZATION_REJECTED`, con el motivo en `details`).
           content:
             application/json:
               schema:
@@ -140,6 +177,14 @@ paths:
                       path: /api/v1/receipts
                       timestamp: "2026-10-05T18:42:12.000Z"
                       details: { code: AMOUNT_LIMIT_EXCEEDED, message: "El importe supera el maximo autorizable (10000000)" }
+                pagoRechazado:
+                  summary: Pago rechazado por M7
+                  value:
+                    error:
+                      code: PAYMENT_REJECTED
+                      message: M7 rechazo el pago del viaje trip-2026-000123
+                      path: /api/v1/receipts
+                      timestamp: "2026-10-05T18:42:12.000Z"
         '500':
           description: Error interno del servidor
         '503':
@@ -152,8 +197,10 @@ paths:
       summary: Consulta los metadatos y enlaces de descarga del comprobante
       description: >-
         Devuelve la información detallada del comprobante emitido, su historial de entregas y los enlaces de descarga.
-        Ruta de uso interno y de operación: no tiene control de acceso hasta la integración con M1 en AE4 (ver ADR-003, decisión 5).
+        Requiere un Bearer de usuario validado por M1 y autorización sobre el comprobante.
       operationId: getReceipt
+      security:
+        - BearerAuth: []
       parameters:
         - name: tripId
           in: path
@@ -174,7 +221,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: No existe un comprobante para el tripId indicado
           content:
@@ -191,9 +242,11 @@ paths:
       summary: Descarga directa del archivo PDF del comprobante (RF-8.3)
       description: >-
         Retorna el flujo binario del archivo PDF generado, con encabezado `Content-Disposition: attachment`.
-        Ruta de uso interno y de operación: no tiene control de acceso hasta la integración con M1 en AE4.
+        Requiere un Bearer de usuario validado por M1 y autorización sobre el comprobante.
         La entrega al cliente se hace con el enlace temporal (`/receipts/downloads/{token}`); ver ADR-003, decisión 5.
       operationId: downloadReceiptPdf
+      security:
+        - BearerAuth: []
       parameters:
         - name: tripId
           in: path
@@ -215,7 +268,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: Comprobante no encontrado
           content:
@@ -281,6 +338,64 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /receipts/resend:
+    post:
+      tags:
+        - Comprobantes (RF-8.3 / RF-8.4)
+      summary: Reenvío de comprobante de viaje por body (RF-8.4)
+      description: |
+        Vuelve a solicitar el envío del comprobante enviando el tripId en el cuerpo de la petición JSON.
+      operationId: resendReceiptWithBody
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendRequest'
+            example:
+              tripId: "trip-2026-000123"
+              channel: "EMAIL"
+              destination: "lucia.fernandez@example.com"
+      responses:
+        '202':
+          description: Reenvío aceptado y registrado en el historial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResendEnvelope'
+        '400':
+          description: Formato de tripId inválido
+          content:
+            application/json:
+              schema:
+              $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Comprobante no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: El comprobante existe pero su archivo PDF no está disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Destino o canal de envío inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+
   /receipts/{tripId}/resend:
     post:
       tags:
@@ -290,6 +405,8 @@ paths:
         Vuelve a solicitar el envío del comprobante por correo electrónico, SMS o notificación push.
         Si no se indica destino en el cuerpo, utiliza el email registrado del cliente.
       operationId: resendReceipt
+      security:
+        - BearerAuth: []
       parameters:
         - name: tripId
           in: path
@@ -319,9 +436,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: Comprobante no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: El comprobante existe pero su archivo PDF no está disponible
           content:
             application/json:
               schema:
@@ -369,13 +496,14 @@ paths:
         - Salud
       summary: Disponibilidad del servicio y de cada dependencia
       description: |
-        Verifica PostgreSQL, Redis, RabbitMQ y el autorizador fiscal (cada uno con un limite de 2 s)
+        Verifica PostgreSQL, Redis, RabbitMQ, el autorizador fiscal y la API de pagos de M7 (`payments`),
+        cada uno con un limite de 2 s,
         e informa el estado de los circuit breakers (`closed`, `open`, `half_open`).
 
         - `ok`: todas las dependencias disponibles.
         - `degraded` (200): falta Redis (no se generan enlaces temporales), RabbitMQ
           (no se consumen pagos ni se publican eventos, que esperan en la bandeja de salida) o el
-          autorizador fiscal (no se emiten comprobantes nuevos; los pagos esperan en la cola).
+          autorizador fiscal o M7 (no se emiten comprobantes nuevos; los pagos esperan en la cola).
           La API REST sigue funcionando.
         - `unavailable` (503): falta PostgreSQL, la unica dependencia critica. El proceso sigue vivo
           (`/health/live` en 200) y se recupera solo cuando la base vuelve.
@@ -396,13 +524,14 @@ paths:
               example:
                 status: unavailable
                 service: m8-documentos
-                version: 2.1.0
+                version: 2.3.0
                 uptimeSeconds: 42
                 dependencies:
                   postgres: { status: unavailable, critical: true }
                   redis: { status: available, critical: false }
                   rabbitmq: { status: available, critical: false }
                   fiscal: { status: available, critical: false }
+                  payments: { status: available, critical: false }
                 circuits:
                   fiscal: closed
 
@@ -433,12 +562,31 @@ paths:
                 $ref: '#/components/schemas/ReadinessResponse'
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Bearer del usuario validado por M1 mediante su endpoint de identidad.
   responses:
+    Unauthorized:
+      description: Falta el Bearer o M1 no lo reconoce.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: El usuario autenticado no es dueño del comprobante ni operador autorizado.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     DependencyUnavailable:
       description: |
-        Una dependencia no está disponible: la base de datos (`DATABASE_UNAVAILABLE`) o el autorizador
-        fiscal (`FISCAL_SERVICE_UNAVAILABLE`, sin respuesta o con el circuito abierto). El pedido se
-        puede repetir después del tiempo indicado en `Retry-After`.
+        Una dependencia no está disponible: la base de datos (`DATABASE_UNAVAILABLE`), el autorizador
+        fiscal (`FISCAL_SERVICE_UNAVAILABLE`, sin respuesta o con el circuito abierto), la API de pagos
+        de M7 (`PAYMENTS_SERVICE_UNAVAILABLE`), o el generador de enlaces (`DOWNLOAD_LINKS_UNAVAILABLE`).
+        El pedido se puede repetir después del tiempo indicado en `Retry-After`.
       headers:
         Retry-After:
           description: Segundos sugeridos antes de reintentar.
@@ -469,7 +617,7 @@ components:
           example: m8-documentos
         version:
           type: string
-          example: 2.1.0
+          example: 2.3.0
         uptimeSeconds:
           type: integer
           example: 42
@@ -498,13 +646,13 @@ components:
           example: m8-documentos
         version:
           type: string
-          example: 2.1.0
+          example: 2.3.0
         uptimeSeconds:
           type: integer
           example: 42
         dependencies:
           type: object
-          required: [postgres, redis, rabbitmq, fiscal]
+          required: [postgres, redis, rabbitmq, fiscal, payments]
           properties:
             postgres:
               $ref: '#/components/schemas/DependencyStatus'
@@ -513,6 +661,8 @@ components:
             rabbitmq:
               $ref: '#/components/schemas/DependencyStatus'
             fiscal:
+              $ref: '#/components/schemas/DependencyStatus'
+            payments:
               $ref: '#/components/schemas/DependencyStatus'
         circuits:
           type: object
@@ -537,6 +687,18 @@ components:
           type: string
           pattern: '^[A-Za-z0-9_-]{1,64}$'
           example: "trip-2026-000123"
+        customerUserId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Identificador canónico numérico del cliente en M1. Se conserva para autorizar consultas y reenvíos de RF-8.4.
+          example: 91
+        driverUserId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Identificador canónico numérico del conductor en M1. Se conserva para autorizar consultas y reenvíos de RF-8.4.
+          example: 457
         customer:
           $ref: '#/components/schemas/Customer'
         driver:
@@ -678,7 +840,10 @@ components:
       properties:
         method:
           type: string
-          enum: [EFECTIVO, TARJETA, BILLETERA]
+          enum: [EFECTIVO, TARJETA, TRANSFERENCIA, BILLETERA]
+          description: |
+            Al emitir se toma de M7. `TRANSFERENCIA` corresponde a `transferencia` de M7; `BILLETERA` no existe
+            en M7 y se conserva por compatibilidad.
           example: "TARJETA"
         status:
           type: string
@@ -781,6 +946,10 @@ components:
     ResendRequest:
       type: object
       properties:
+        tripId:
+          type: string
+          description: "Opcional. Identificador del viaje (si se envía por el cuerpo en lugar de la URL)."
+          example: "trip-2026-000123"
         channel:
           type: string
           enum: [EMAIL, SMS, PUSH]
@@ -799,7 +968,17 @@ components:
             - type: object
               properties:
                 lastDelivery:
-                  $ref: '#/components/schemas/DeliveryRecord'
+                  allOf:
+                    - $ref: '#/components/schemas/DeliveryRecord'
+                    - type: object
+                      properties:
+                        url:
+                          type: string
+                          example: "http://localhost:3008/api/v1/receipts/downloads/random-token-here"
+                        expiresAt:
+                          type: string
+                          format: date-time
+                          example: "2026-08-28T14:37:00.000Z"
 
     ErrorResponse:
       type: object

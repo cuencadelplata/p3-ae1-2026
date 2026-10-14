@@ -1,0 +1,3 @@
+# Artefactos generados en tiempo de ejecución (PDFs, metadata, etc.)
+# Estos archivos son producidos por el servicio de recibos y no deben versionarse.
+storage/

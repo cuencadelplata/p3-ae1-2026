@@ -1,6 +1,6 @@
 {
   "name": "m8-documentos",
-  "version": "2.1.0",
+  "version": "2.3.0",
   "description": "M8 - Notificaciones, Documentos y Soporte. Emision y consulta de comprobantes de viaje en PDF.",
   "main": "dist/index.js",
   "private": true,
@@ -13,7 +13,7 @@
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "typecheck:test": "tsc -p tsconfig.test.json",
-    "test": "tsx --test tests/**/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 tests/**/*.test.ts",
     "prueba:concurrencia": "node scripts/prueba-concurrencia.mjs",
     "prueba:replicas": "node scripts/prueba-concurrencia.mjs http://localhost:3008 http://localhost:3018",
     "demo:pago": "node scripts/publicar-pago-confirmado.mjs",

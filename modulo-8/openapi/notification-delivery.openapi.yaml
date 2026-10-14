@@ -1,0 +1,121 @@
+openapi: 3.0.3
+info:
+  title: M8 - Notification Delivery API (RF-8.7)
+  version: 1.0.0
+  description: |
+    API para la gestión de Device Tokens y auditoría de entregas PUSH de notificaciones de viaje.
+    Los endpoints de dispositivos están protegidos mediante JWT canónico emitido por M1.
+servers:
+  - url: http://localhost:3107
+    description: Servicio de Entrega de Notificaciones
+paths:
+  /health:
+    get:
+      summary: Alias de disponibilidad del servicio
+      responses:
+        '200':
+          description: Dependencias listas.
+        '503':
+          description: Una dependencia crítica no está disponible.
+  /health/live:
+    get:
+      summary: Health check de vitalidad
+      responses:
+        '200':
+          description: Servicio vivo.
+  /health/ready:
+    get:
+      summary: Health check de disponibilidad
+      responses:
+        '200':
+          description: Dependencias listas.
+
+  /devices/tokens:
+    post:
+      summary: Registrar o actualizar Device Token
+      description: |
+        Asocia un device token (FCM/APNs) al usuario canónico autenticado derivado de M1.
+        Nunca se envía el userId por el cuerpo; se extrae estrictamente del JWT.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  example: fcm_device_token_abc123
+                platform:
+                  type: string
+                  enum: [ANDROID, IOS, WEB]
+                  default: ANDROID
+      responses:
+        '201':
+          description: Token registrado con éxito.
+        '400':
+          description: Token inválido o datos malformados.
+        '401':
+          description: No autenticado ante M1.
+    get:
+      summary: Listar Device Tokens activos del usuario
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lista de tokens activos del usuario.
+        '401':
+          description: No autenticado.
+
+  /devices/tokens/{token}:
+    delete:
+      summary: Desactivar Device Token
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Token desactivado con éxito.
+        '401':
+          description: No autenticado.
+        '404':
+          description: Token no encontrado o no pertenece al usuario.
+
+  /internal/deliveries/{notificationId}:
+    get:
+      summary: Consultar estado y auditoría de una entrega
+      description: Solo el destinatario de la entrega o un operador autenticado puede consultarla. La respuesta no expone el device token.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Registro maestro e historial de intentos con latencias, sin device token.
+        '401':
+          description: No autenticado ante M1.
+        '403':
+          description: El usuario autenticado no puede consultar la entrega.
+        '404':
+          description: Notificación no encontrada.
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT provisto por el Módulo 1 (Identidad y Acceso).

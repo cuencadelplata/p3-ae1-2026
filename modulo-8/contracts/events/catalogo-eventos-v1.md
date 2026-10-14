@@ -19,6 +19,9 @@ evidencia del estado heredado de AE1.
 | 2026-09-29 | Referencia de descarga temporal para reenvíos | Lucas Cremaschi (RF-8.4) | Acordado |
 | 2026-09-30 | Contenido de `payment.confirmed` | Grupo M7 | Respondido sin cubrir los datos del comprobante; se mantiene la alternativa 1 de forma provisoria (ver 5.1) |
 | 2026-10-04 | Congelar contrato de entrada RF8.6 → RF8.1 (6 eventos de viaje, sobre, deduplicación, queue/bindings) y Outbox RF8.1 → RF8.7 | Damián Caminos (RF-8.6) / Invaldi (M8) | **CONGELADO Y CONFIRMADO** |
+| 2026-10-04 | Forma de integración de M7 con Comprobantes | M7 (RF-7.3) / Invaldi (M8) | M7 se integra solo por REST y no publicará `payment.confirmed`. Comprobantes consulta `GET /metodo-pago/{viajeId}` de M7 y emite solo con el pago autorizado (ver 5.1). Importe y moneda: consulta pendiente a M7 |
+| 2026-10-05 | Importe cobrado en la respuesta de M7 | M7 (RF-7.3) | M7 agregó `total` y `moneda` a `GET /metodo-pago/{viajeId}`, guardados al autorizar (commit `063e112` de M7). Comprobantes los usa desde la versión 2.3.0 (ver 5.1) |
+| 2026-10-04 | El reenvío devuelve el enlace temporal de la sección 6 | Lucas Cremaschi (RF-8.4) | Acordado sin cambios en el contrato |
 
 
 ## 2. Topología
@@ -133,7 +136,7 @@ como estado heredado que se integrará sin degradar sus decisiones funcionales.
 | Versión | 1 |
 | Productor | M7 — Tarifas, Pagos y Liquidaciones |
 | Consumidores | M8 — Comprobantes (`m8.receipts.payment-confirmed`) |
-| Estado | **Provisorio**: M7 respondió el 2026-09-30 sin cubrir estos datos (ver "Respuesta de M7") |
+| Estado | **Provisorio, sin productor real**: M7 informó el 2026-10-04 que se integra por API (ver "Actualización de M7") |
 
 Efecto en M8: emite el comprobante del viaje y genera su PDF (RF-8.3).
 
@@ -223,6 +226,45 @@ queda para la integración de AE4, por alguno de estos caminos: que M7 agregue
 importes y sobre al evento, o la alternativa 2 (consumir además `trip.completed`
 de M6). En ambos casos solo cambia la traducción del evento
 (`src/messaging/payment-confirmed.ts`), no la emisión.
+
+**Actualización de M7 (2026-10-04).** M7 (RF-7.3) informó que no publicará este
+evento: se integra solo por REST, porque en AE4 debe usar la API de Mercado Pago
+(en AE2 la simula) y no quiere cambiar la forma de integración dos veces. M7 no
+llama a M8: expone el estado del pago para que lo consulte quien lo necesite.
+
+Contrato REST de M7 que consume Comprobantes (openapi.yaml de M7, RF-7.2 y RF-7.3):
+
+```
+GET /metodo-pago/{viajeId}
+200 { pagoId, clienteId, viajeId, tipo, detalle, fecha, estado, total?, moneda? }
+404 { mensaje }   (el viaje no tiene un pago registrado)
+```
+
+| M7 | Modelo de Comprobantes | Efecto en la emisión |
+| --- | --- | --- |
+| `estado: autorizado` | `APROBADO` | Se emite. |
+| `estado: pendiente` o `404` | `PENDIENTE` / sin pago | No se emite. Reintentable: `409 PAYMENT_PENDING` o `PAYMENT_NOT_FOUND` por REST; reintento con descuento de intentos en el consumidor. |
+| `estado: rechazado` | `RECHAZADO` | No se emite. Terminal: `422 PAYMENT_REJECTED` por REST; DLQ sin reintentos en el consumidor. |
+| Sin respuesta, `5xx` o fuera de contrato | — | Dependencia no disponible: `503 PAYMENTS_SERVICE_UNAVAILABLE`; el mensaje espera sin descontar intentos. |
+| `tipo: efectivo` / `tarjeta` / `transferencia` | `EFECTIVO` / `TARJETA` / `TRANSFERENCIA` | El medio de pago del comprobante se toma de M7. |
+| `total`, `moneda` (por defecto `ARS`), desde 2026-10-05 | `fare.total`, `fare.currency` | El importe del comprobante se toma de M7. El desglose de la entrada se conserva solo si está en la misma moneda y suma ese total (tolerancia de un centavo); si no, el comprobante muestra solo el total. Sin `total`, se usa la tarifa de la entrada. |
+
+En consecuencia:
+
+- Comprobantes consulta a M7 antes de emitir, tanto en `POST /api/v1/receipts`
+  como al consumir este evento. El cliente REST no depende de un evento
+  disparador: el disparador definitivo (por ejemplo `trip.completed` de M6 vía
+  RF-8.6) se define al cerrar el contrato con M6.
+- M7 agregó `total` y `moneda` a su respuesta el 2026-10-05, a pedido de
+  Comprobantes; se informan recién al autorizar el pago. El desglose de la tarifa
+  no es de M7: sigue llegando en la entrada y solo se muestra si cierra con el
+  total cobrado.
+- Cliente, conductor y recorrido se mantienen como están hasta cerrar los
+  contratos con M1, M2, M3 y M6.
+- Este evento se conserva como entrada asíncrona, con productor simulado en AE2
+  (`scripts/publicar-pago-confirmado.mjs`).
+- Para pruebas reproducibles, M7 se simula en `infra/m7-payments-sandbox` con su
+  mismo contrato.
 
 ### 5.2 `receipt.issued`
 
@@ -390,6 +432,25 @@ Su finalidad es solicitar la entrega de una notificación lógica ya creada por 
 | **Inválido / Esquema Erróneo** | Falta `messageId`, `tripId`, `recipientId` o `eventType` desconocido | No ingresa a la DB ni al Outbox. Se descarta. | `NACK` (`requeue=false`) → DLQ |
 | **Fallo DB / Transitorio** | Pérdida temporal de conexión a PostgreSQL / Timeout | Reencola a `m8.notifications.trip-events.retry` incrementando `x-retry-count`. Si es >= 3 reintentos, va a la DLQ. | `NACK` con reencolado / Retry queue |
 
+### 5.5 `documento.registrado` (M3 → RF8.1)
+
+M3 acordó publicar el hecho externo `DriverDocumentRegistered` en el exchange
+`m3.eventos`, con routing key `documento.registrado`. RF8.6 administrará la
+cola propia `m8.notificaciones.documento-registrado` y entregará el evento
+validado a RF8.1.
+
+RF8.1 crea una notificación lógica con el mensaje “Tu documento fue registrado
+correctamente.” y la persiste con su Outbox. El destinatario es `driverId`, que
+debe ser el `userId` numérico canónico de M1. Mientras M3 emita un UUID interno
+en ese campo, no se habilita la entrega PUSH.
+
+La variante de `NotificationRequested` no incluye `tripId` y usa
+`DRIVER_DOCUMENT_REGISTERED`; RF8.7 debe ampliar su validador contractual para
+aceptarla antes de activar la entrega integrada.
+
+El contrato completo está en
+[`m3-driver-document-registered.contract.md`](./m3-driver-document-registered.contract.md).
+
 
 
 ## 6. Contrato REST interno con Receipts Delivery
@@ -427,6 +488,10 @@ El enlace usa un token opaco (32 bytes aleatorios en base64url) que no
 contiene ni deriva del `tripId`. Vence según `RECEIPT_LINK_TTL_SECONDS` (por
 defecto 900 s). Cada llamada genera un enlace nuevo; los anteriores siguen
 vigentes hasta su vencimiento.
+
+Receipts Delivery devuelve `url` y `expiresAt` sin modificarlos en la respuesta
+del reenvío (acordado el 2026-10-04). No arma la URL por su cuenta: su base sale
+de `PUBLIC_BASE_URL` y cambia según el despliegue.
 
 Al descargar, `GET /api/v1/receipts/downloads/{token}` responde el PDF o
 `410 DOWNLOAD_LINK_EXPIRED` si el enlace no existe o ya venció. Redis no

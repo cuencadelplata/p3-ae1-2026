@@ -43,7 +43,7 @@ const port = readPort('PORT', 3008);
 export const env = {
   nodeEnv: readText('NODE_ENV', 'development'),
   serviceName: 'm8-documentos',
-  serviceVersion: readText('SERVICE_VERSION', '2.1.0'),
+  serviceVersion: readText('SERVICE_VERSION', '2.3.0'),
   port,
 
   /** Prefijo de la API REST versionada. */
@@ -106,9 +106,37 @@ export const env = {
   /** Tiempo que el circuito permanece abierto antes de probar de nuevo, en milisegundos. */
   fiscalCircuitOpenMs: readPositiveInt('FISCAL_CIRCUIT_OPEN_MS', 10000),
 
+  /**
+   * API de pagos de M7 (GET /metodo-pago/{viajeId}), fuente de verdad del estado
+   * del pago. Simulada en modulo-8/infra/m7-payments-sandbox.
+   */
+  m7PaymentsUrl: readText('M7_PAYMENTS_URL', 'http://localhost:4020').replace(/\/+$/, ''),
+
+  /** Tiempo maximo de espera de una consulta a M7, en milisegundos. */
+  m7TimeoutMs: readPositiveInt('M7_TIMEOUT_MS', 2000),
+
   /** Datos de presentacion del emisor dentro del PDF. */
   issuerName: readText('RECEIPT_ISSUER_NAME', 'Plataforma de Movilidad Urbana'),
   issuerTeam: readText('RECEIPT_ISSUER_TEAM', 'Grupo 14 - Modulo 8'),
   timezone: readText('RECEIPT_TIMEZONE', 'America/Argentina/Buenos_Aires'),
   locale: readText('RECEIPT_LOCALE', 'es-AR'),
+
+  /** RF-8.4 (Lucas Cremaschi): TTL para la cache de metadatos en Redis (segundos). */
+  receiptCacheTtlSeconds: readPositiveInt('RECEIPT_CACHE_TTL_SECONDS', 300),
+
+  /** RF-8.4: TTL del lock distribuido de reenvio en Redis (milisegundos). */
+  resendLockTtlMs: readPositiveInt('RESEND_LOCK_TTL_MS', 5000),
+
+  /** RF-8.4: Maximo de solicitudes de reenvio permitidas por ventana (rate limiting). */
+  resendRateLimitMax: readPositiveInt('RESEND_RATE_LIMIT_MAX', 3),
+
+  /** RF-8.4: Ventana de tiempo para el rate limiting de reenvios, en segundos. */
+  resendRateLimitWindowSeconds: readPositiveInt('RESEND_RATE_LIMIT_WINDOW_SECONDS', 60),
+
+  /**
+   * RF-8.4 / M1: endpoint canónico que valida el Bearer recibido del usuario.
+   * No se configura una clave compartida ni un mecanismo M2M no acordado.
+   */
+  m1IdentityUrl: readText('M1_IDENTITY_URL', '').replace(/\/+$/, ''),
+  m1TimeoutMs: readPositiveInt('M1_TIMEOUT_MS', 2000),
 } as const;

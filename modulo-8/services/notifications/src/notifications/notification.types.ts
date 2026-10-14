@@ -9,6 +9,54 @@ export const EVENT_TYPES = [ // los eventos que puede recibir la notificacion
 
 export type EventType = (typeof EVENT_TYPES)[number];
 
+export const TRIP_NOTIFICATION_EVENT_TYPES = [
+  "TripRequested",
+  "TripAssigned",
+  "DriverArrived",
+  "TripStarted",
+  "TripCancelled",
+  "TripCompleted",
+] as const;
+
+export type TripNotificationEventType = (typeof TRIP_NOTIFICATION_EVENT_TYPES)[number];
+
+export const DOCUMENT_NOTIFICATION_EVENT_TYPES = ["DriverDocumentRegistered"] as const;
+
+export type DocumentNotificationEventType = (typeof DOCUMENT_NOTIFICATION_EVENT_TYPES)[number];
+
+export type NotificationBusinessEventType = TripNotificationEventType | DocumentNotificationEventType;
+
+export const DELIVERY_NOTIFICATION_EVENT_TYPES = [
+  ...EVENT_TYPES,
+  "DRIVER_DOCUMENT_REGISTERED",
+] as const;
+
+export type DeliveryNotificationEventType = (typeof DELIVERY_NOTIFICATION_EVENT_TYPES)[number];
+
+export const HTTP_EVENT_TYPE_TO_TRIP_NOTIFICATION_EVENT_TYPE: Record<
+  EventType,
+  TripNotificationEventType
+> = {
+  TRIP_REQUESTED: "TripRequested",
+  DRIVER_ASSIGNED: "TripAssigned",
+  DRIVER_ARRIVED: "DriverArrived",
+  TRIP_STARTED: "TripStarted",
+  TRIP_CANCELLED: "TripCancelled",
+  TRIP_COMPLETED: "TripCompleted",
+};
+
+export const TRIP_NOTIFICATION_EVENT_TYPE_TO_EVENT_TYPE: Record<
+  TripNotificationEventType,
+  EventType
+> = {
+  TripRequested: "TRIP_REQUESTED",
+  TripAssigned: "DRIVER_ASSIGNED",
+  DriverArrived: "DRIVER_ARRIVED",
+  TripStarted: "TRIP_STARTED",
+  TripCancelled: "TRIP_CANCELLED",
+  TripCompleted: "TRIP_COMPLETED",
+};
+
 export const NOTIFICATION_CHANNELS = ["PUSH"] as const; // los canales por los que se puede enviar la notificacion
 
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
@@ -41,6 +89,42 @@ export interface Notification {//tipos de la notificacion que devuelve el servid
   createdAt: string;
 }
 
+export interface NormalizedRideRequestedNotificationEvent {
+  messageId: string;
+  eventType: "TripRequested";
+  rideRequestId: string;
+  recipientId: number;
+  correlationId: string;
+  occurredAt: string;
+}
+
+export interface NormalizedTripLifecycleNotificationEvent {
+  messageId: string;
+  eventType: Exclude<TripNotificationEventType, "TripRequested">;
+  tripId: string;
+  recipientId: string;
+  correlationId: string;
+  occurredAt: string;
+}
+
+export type NormalizedTripNotificationEvent =
+  | NormalizedRideRequestedNotificationEvent
+  | NormalizedTripLifecycleNotificationEvent;
+
+export interface LogicalNotification {
+  notificationId: string;
+  sourceMessageId: string;
+  tripId: string | null;
+  rideRequestId: string | null;
+  recipientId: string | number;
+  eventType: NotificationBusinessEventType;
+  title: string;
+  message: string;
+  correlationId: string;
+  occurredAt: string;
+  createdAt: string;
+}
+
 export interface ErrorDetail {//tipos de detalle del error
   field: string;
   reason: string;
@@ -68,8 +152,10 @@ export const TRIP_EVENT_TYPE_MAP = {
 export type AmqpTripEventType = keyof typeof TRIP_EVENT_TYPE_MAP;
 
 export interface TripEventData {
-  tripId: string;
-  recipientId: string;
+  tripId?: string;
+  recipientId?: string;
+  rideRequestId?: string;
+  clientUserId?: number;
   details?: Record<string, unknown>;
 }
 
@@ -83,13 +169,26 @@ export interface TripEventEnvelope {
   data: TripEventData;
 }
 
+// --- Contrato RF8.6 -> RF8.1: documento registrado por M3 ---
+
+export interface DriverDocumentRegisteredNotificationEvent {
+  messageId: string;
+  eventType: "DriverDocumentRegistered";
+  documentId: string;
+  driverId: number;
+  tipoDocumento: string;
+  correlationId: string;
+  occurredAt: string;
+}
+
 // --- Contrato Congelado RF8.1 -> RF8.7 (Outbox NotificationRequested) ---
 
 export interface NotificationRequestedData {
   notificationId: string;
-  tripId: string;
-  recipientId: string;
-  eventType: EventType;
+  tripId?: string;
+  rideRequestId?: string;
+  recipientId: string | number;
+  eventType: DeliveryNotificationEventType;
   channel: NotificationChannel;
   message: string;
   createdAt: string;
@@ -104,4 +203,3 @@ export interface NotificationRequestedEnvelope {
   producer: "m8-notifications";
   data: NotificationRequestedData;
 }
-

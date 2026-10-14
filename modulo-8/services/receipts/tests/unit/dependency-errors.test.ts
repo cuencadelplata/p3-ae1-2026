@@ -6,6 +6,7 @@ import type { Request, Response } from 'express';
 import { isDatabaseUnavailable } from '../../src/db/errors';
 import { DependencyUnavailableError } from '../../src/errors/dependency-unavailable.error';
 import { FiscalAuthorizationRejectedError } from '../../src/integrations/fiscal-authorizer';
+import { PaymentNotAuthorizedError } from '../../src/integrations/m7-payments';
 import { errorHandler } from '../../src/middlewares/error.middleware';
 
 function withCode(message: string, code: string): Error {
@@ -81,5 +82,34 @@ describe('Respuesta HTTP ante dependencias caidas (Unit)', () => {
     assert.equal(res.status, 422);
     assert.equal(res.body?.error.code, 'FISCAL_AUTHORIZATION_REJECTED');
     assert.deepEqual(res.body?.error.details, { code: 'AMOUNT_LIMIT_EXCEEDED', message: 'importe excesivo' });
+  });
+
+  it('la API de pagos de M7 caida debe responder 503 PAYMENTS_SERVICE_UNAVAILABLE', () => {
+    const res = respond(new DependencyUnavailableError('payments', 'sin respuesta'));
+    assert.equal(res.status, 503);
+    assert.equal(res.body?.error.code, 'PAYMENTS_SERVICE_UNAVAILABLE');
+    assert.equal(res.headers['retry-after'], '5');
+  });
+});
+
+describe('Respuesta HTTP segun el estado del pago en M7 (Unit)', () => {
+  it('un pago pendiente debe responder 409 PAYMENT_PENDING con Retry-After', () => {
+    const res = respond(new PaymentNotAuthorizedError('PAYMENT_PENDING', 'trip-1', 'pendiente'));
+    assert.equal(res.status, 409);
+    assert.equal(res.body?.error.code, 'PAYMENT_PENDING');
+    assert.equal(res.headers['retry-after'], '5');
+  });
+
+  it('un pago sin registrar en M7 debe responder 409 PAYMENT_NOT_FOUND', () => {
+    const res = respond(new PaymentNotAuthorizedError('PAYMENT_NOT_FOUND', 'trip-1', 'sin pago'));
+    assert.equal(res.status, 409);
+    assert.equal(res.body?.error.code, 'PAYMENT_NOT_FOUND');
+  });
+
+  it('un pago rechazado debe responder 422 PAYMENT_REJECTED sin Retry-After', () => {
+    const res = respond(new PaymentNotAuthorizedError('PAYMENT_REJECTED', 'trip-1', 'rechazado'));
+    assert.equal(res.status, 422);
+    assert.equal(res.body?.error.code, 'PAYMENT_REJECTED');
+    assert.equal(res.headers['retry-after'], undefined);
   });
 });

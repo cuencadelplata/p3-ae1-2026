@@ -36,6 +36,7 @@ export function formatDuration(durationMin: number): string {
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   EFECTIVO: 'Efectivo',
   TARJETA: 'Tarjeta',
+  TRANSFERENCIA: 'Transferencia',
   BILLETERA: 'Billetera virtual',
 };
 
