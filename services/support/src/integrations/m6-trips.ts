@@ -22,6 +22,23 @@ function describir(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function esTimeout(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+}
+
+// Un cuerpo que no es JSON queda como null (fuera de contrato), pero un
+// timeout mientras se lee el cuerpo sigue siendo un timeout.
+async function leerJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch (error) {
+    if (esTimeout(error)) {
+      throw error;
+    }
+    return null;
+  }
+}
+
 // Cliente REST de M6 (GET /api/viajes/{id}) con timeout por llamada.
 //
 // - 200 con el mismo id: el viaje existe.
@@ -42,10 +59,9 @@ export function createM6TripsClient({ baseUrl, timeoutMs, fetchImpl = fetch }: M
         response = await fetchImpl(`${baseUrl}/api/viajes/${encodeURIComponent(tripId)}`, {
           signal: AbortSignal.timeout(timeoutMs),
         });
-        body = await response.json().catch(() => null);
+        body = await leerJson(response);
       } catch (error) {
-        const vencido = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
-        throw noDisponible(tripId, vencido ? `sin respuesta en ${timeoutMs} ms` : describir(error), error);
+        throw noDisponible(tripId, esTimeout(error) ? `sin respuesta en ${timeoutMs} ms` : describir(error), error);
       }
 
       if (response.status === 404 || response.status === 400) {

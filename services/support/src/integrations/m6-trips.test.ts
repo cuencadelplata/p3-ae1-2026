@@ -131,3 +131,38 @@ describe('createM6TripsClient: isReachable', () => {
     expect(await cliente.isReachable()).toBe(false);
   });
 });
+
+describe('createM6TripsClient: timeout al leer el cuerpo', () => {
+  // M6 manda las cabeceras y se cuelga a mitad del cuerpo: la señal del
+  // timeout corta la lectura, como hace fetch.
+  const cuerpoColgado: typeof fetch = async (_url, init) =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"id":'));
+          init?.signal?.addEventListener('abort', () => controller.error(init.signal?.reason));
+        },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  it('se informa como timeout, no como formato inesperado', async () => {
+    const error = await clienteCon(cuerpoColgado, 20)
+      .existe(TRIP_ID)
+      .catch((e: unknown) => e);
+
+    expect(error).toMatchObject({ status: 503, code: 'SUPPORT_TRIP_SERVICE_UNAVAILABLE', retryAfterSeconds: 5 });
+    expect(console.warn).toHaveBeenCalledWith(expect.any(String), { tripId: TRIP_ID, motivo: 'sin respuesta en 20 ms' });
+  });
+
+  it('un cuerpo que no es JSON sigue siendo formato inesperado', async () => {
+    await clienteCon(async () => new Response('no es json', { status: 200 }))
+      .existe(TRIP_ID)
+      .catch(() => undefined);
+
+    expect(console.warn).toHaveBeenCalledWith(expect.any(String), {
+      tripId: TRIP_ID,
+      motivo: 'respuesta con formato inesperado',
+    });
+  });
+});

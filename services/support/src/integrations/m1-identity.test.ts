@@ -151,3 +151,31 @@ describe('createM1IdentityClient: isReachable', () => {
     ).toBe(false);
   });
 });
+
+describe('createM1IdentityClient: timeout al leer el cuerpo', () => {
+  // M1 manda las cabeceras y se cuelga a mitad del cuerpo: la señal del
+  // timeout corta la lectura, como hace fetch.
+  const cuerpoColgado: typeof fetch = async (_url, init) =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"valid":'));
+          init?.signal?.addEventListener('abort', () => controller.error(init.signal?.reason));
+        },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  it('se informa como timeout, no como formato inesperado', async () => {
+    const error = await fallo(clienteCon(cuerpoColgado, 20).verificar(AUTHORIZATION));
+
+    expect(error).toMatchObject({ status: 503, code: 'SUPPORT_IDENTITY_UNAVAILABLE', retryAfterSeconds: 5 });
+    expect(console.warn).toHaveBeenCalledWith(expect.any(String), { motivo: 'sin respuesta en 20 ms' });
+  });
+
+  it('un cuerpo que no es JSON sigue siendo formato inesperado', async () => {
+    await fallo(clienteCon(async () => new Response('no es json', { status: 200 })).verificar(AUTHORIZATION));
+
+    expect(console.warn).toHaveBeenCalledWith(expect.any(String), { motivo: 'respuesta con formato inesperado' });
+  });
+});

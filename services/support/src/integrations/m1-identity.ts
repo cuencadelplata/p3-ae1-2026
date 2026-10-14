@@ -31,6 +31,23 @@ function describir(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function esTimeout(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+}
+
+// Un cuerpo que no es JSON queda como null (fuera de contrato), pero un
+// timeout mientras se lee el cuerpo sigue siendo un timeout.
+async function leerJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch (error) {
+    if (esTimeout(error)) {
+      throw error;
+    }
+    return null;
+  }
+}
+
 function esObjeto(body: unknown): body is Record<string, unknown> {
   return typeof body === 'object' && body !== null && !Array.isArray(body);
 }
@@ -58,10 +75,9 @@ export function createM1IdentityClient({ baseUrl, timeoutMs, fetchImpl = fetch }
           headers: { Authorization: authorization },
           signal: AbortSignal.timeout(timeoutMs),
         });
-        body = await response.json().catch(() => null);
+        body = await leerJson(response);
       } catch (error) {
-        const vencido = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
-        throw noDisponible(vencido ? `sin respuesta en ${timeoutMs} ms` : describir(error), error);
+        throw noDisponible(esTimeout(error) ? `sin respuesta en ${timeoutMs} ms` : describir(error), error);
       }
 
       if (response.status === 401 || response.status === 403) {
