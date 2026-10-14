@@ -16,7 +16,7 @@ const reservaService = new ReservaService(
 );
 const activacionService = new ActivacionReservaService(
   repository,
-  new HttpDespachoClient(env.M5_URL),
+  new HttpDespachoClient(env.M5_SERVICE_URL),
 );
 const scheduler = new ReservasScheduler(
   repository,
