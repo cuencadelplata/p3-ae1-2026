@@ -15,7 +15,7 @@ const migrations = [
          trip_id text NOT NULL,
          recipient_id text NOT NULL,
          event_type text NOT NULL CHECK (event_type IN (
-           'TripRequested', 'TripAssigned', 'DriverArrived',
+           'TripRequested', 'TripAssigned', 'DriverAssigned', 'DriverArrived',
            'TripStarted', 'TripCancelled', 'TripCompleted'
          )),
          title text NOT NULL,
@@ -65,6 +65,9 @@ const migrations = [
          IF to_regclass('notifications.outbox_events') IS NOT NULL
             AND to_regclass('notifications.outbox_deliveries') IS NULL THEN
            ALTER TABLE notifications.outbox_events RENAME TO outbox_deliveries;
+         ELSIF to_regclass('notifications.outbox_events') IS NOT NULL
+            AND to_regclass('notifications.outbox_deliveries') IS NOT NULL THEN
+           DROP TABLE notifications.outbox_events;
          END IF;
        END $$`,
       `DO $$
@@ -150,7 +153,9 @@ const migrations = [
              CHECK (
                (event_type = 'TripRequested' AND ride_request_id IS NOT NULL AND trip_id IS NULL)
                OR
-               (event_type <> 'TripRequested' AND trip_id IS NOT NULL)
+               (event_type = 'DriverDocumentRegistered' AND ride_request_id IS NULL AND trip_id IS NULL)
+               OR
+               (event_type NOT IN ('TripRequested', 'DriverDocumentRegistered') AND trip_id IS NOT NULL)
              );
          END IF;
        END $$`,
@@ -165,7 +170,7 @@ const migrations = [
       `ALTER TABLE notifications.notifications
          ADD CONSTRAINT notifications_event_type_check
          CHECK (event_type IN (
-           'TripRequested', 'TripAssigned', 'DriverArrived',
+           'TripRequested', 'TripAssigned', 'DriverAssigned', 'DriverArrived',
            'TripStarted', 'TripCancelled', 'TripCompleted',
            'DriverDocumentRegistered'
          ))`,

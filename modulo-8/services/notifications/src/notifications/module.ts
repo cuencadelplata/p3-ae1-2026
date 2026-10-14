@@ -30,7 +30,8 @@ export function createNotificationsModule(): NotificationsModule {
     try {
       await runtime.initialize();
       available = true;
-    } catch {
+    } catch (error) {
+      console.error('[RF8.1][Notifications] Error inicializando runtime de notificaciones:', error);
       available = false;
       if (!closing) {
         retryTimer = setTimeout(() => {
