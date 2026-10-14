@@ -42,11 +42,14 @@ export async function checkSupportReadiness({ database, legacyBroker, trips, ide
   if (legacyBroker) {
     checks.rabbitmq = { status: legacyBroker() ? 'available' : 'unavailable', critical: false };
   }
+  // M6 y M1 se consultan a la vez: si los dos tardan, la espera es la del más
+  // lento y no la suma.
+  const [tripsDisponible, identityDisponible] = await Promise.all([trips?.(), identity?.()]);
   if (trips) {
-    checks.trips = { status: (await trips()) ? 'available' : 'unavailable', critical: false };
+    checks.trips = { status: tripsDisponible ? 'available' : 'unavailable', critical: false };
   }
   if (identity) {
-    checks.identity = { status: (await identity()) ? 'available' : 'unavailable', critical: false };
+    checks.identity = { status: identityDisponible ? 'available' : 'unavailable', critical: false };
   }
 
   if (checks.postgres?.status === 'unavailable' || checks.migrations?.status === 'pending') {
