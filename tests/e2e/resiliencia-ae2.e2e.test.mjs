@@ -95,6 +95,14 @@ async function waitAllAvailable() {
   );
 }
 
+/** Espera solo la dependencia recuperada por el escenario en curso. */
+async function waitForReceiptDependency(name) {
+  await waitFor(
+    async () => (await ready()).body.dependencies[name]?.status === "available",
+    { timeoutMs: 60000, what: `que ${name} vuelva a estar disponible` },
+  );
+}
+
 async function rabbit(method, path, body) {
   const response = await fetch(`${RABBIT_API}${path}`, {
     method,
@@ -205,7 +213,7 @@ test("sin Redis: se siguen emitiendo comprobantes y solo fallan los enlaces temp
     assert.equal((await reference.json()).error.code, "DOWNLOAD_LINKS_UNAVAILABLE");
   });
 
-  await waitAllAvailable();
+  await waitForReceiptDependency("redis");
   const reference = await fetch(`${RECEIPTS}/internal/receipts/${tripId}/delivery-reference`);
   assert.equal(reference.status, 200);
 });
@@ -227,7 +235,7 @@ test("sin RabbitMQ: la API sigue y receipt.issued espera en la bandeja de salida
     assert.equal(pending(), 1, "el evento debe quedar pendiente mientras RabbitMQ esta caido");
   });
 
-  await waitAllAvailable();
+  await waitForReceiptDependency("rabbitmq");
   await waitFor(async () => pending() === 0, { what: "la publicacion del evento pendiente" });
 
   // El consumidor tambien se reconecto: un pago nuevo se procesa.
@@ -324,7 +332,7 @@ test("sin PostgreSQL: el proceso sigue vivo, la API responde 503 y los pagos se 
     await pause(8000);
   });
 
-  await waitAllAvailable();
+  await waitForReceiptDependency("postgres");
   await waitFor(() => receiptExists(paid), { timeoutMs: 60000, what: "la emision del pago que esperaba" });
   assert.equal(await inDlq(event.messageId), false);
   assert.equal(await receiptExists(issued), true);
@@ -343,7 +351,7 @@ test("PostgreSQL caido al arrancar: el servicio inicia igual y se recupera cuand
     assert.equal(body.dependencies.postgres.status, "unavailable");
   });
 
-  await waitAllAvailable();
+  await waitForReceiptDependency("postgres");
   const paid = `${run}-arranque`;
   await publishPayment(paid);
   await waitFor(() => receiptExists(paid), { what: "la emision despues de recuperar la base" });
