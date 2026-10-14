@@ -2,7 +2,9 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { authRequired, invalidToken } from '../errors/support-error.js';
 import type { IdentityVerifier } from '../integrations/m1-identity.js';
 
-const BEARER = /^Bearer\s+\S+$/;
+// El esquema no distingue mayúsculas (RFC 7235); un solo espacio y un token
+// sin espacios.
+const BEARER = /^bearer (\S+)$/i;
 
 // Actor que queda en el historial cuando el pedido está autenticado por M1.
 export function actorDeM1(userId: number): string {
@@ -18,11 +20,13 @@ export function authenticateWithM1(identityVerifier: IdentityVerifier): RequestH
       throw authRequired();
     }
     // Un formato que no es Bearer no se consulta a M1.
-    if (!BEARER.test(authorization)) {
+    const token = BEARER.exec(authorization)?.[1];
+    if (!token) {
       throw invalidToken();
     }
 
-    const usuario = await identityVerifier.verificar(authorization);
+    // M1 sólo acepta "Bearer" con mayúscula inicial: se reenvía normalizado.
+    const usuario = await identityVerifier.verificar(`Bearer ${token}`);
     res.locals.usuarioAutenticado = usuario;
     res.locals.actor = actorDeM1(usuario.userId);
     next();
