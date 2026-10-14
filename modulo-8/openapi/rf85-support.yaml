@@ -313,8 +313,9 @@ paths:
         cuando se pide el mismo estado. Sin `expectedVersion`, dos cambios
         simultáneos tampoco se aplican los dos: uno responde `409`.
 
-        Cada cambio real agrega una entrada al historial, con el autor tomado
-        de `X-Actor-Id`.
+        Cada cambio real agrega una entrada al historial. El autor es
+        `m1:<userId>` si la autenticación con M1 está habilitada; si no, el
+        valor de `X-Actor-Id`.
       parameters:
         - $ref: '#/components/parameters/TicketId'
         - $ref: '#/components/parameters/CorrelationId'
@@ -901,7 +902,10 @@ components:
         cambiadoPor:
           type: string
           nullable: true
-          description: Valor de `X-Actor-Id` del pedido que hizo el cambio; `null` si no se envió.
+          description: |
+            Autor del cambio. Con la autenticación con M1 habilitada es
+            `m1:<userId>`; si no, el valor de `X-Actor-Id` del pedido, o `null`
+            si no se envió.
         motivo:
           type: string
           nullable: true
