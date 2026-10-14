@@ -4,10 +4,12 @@ import { resolve } from "node:path";
 
 import { defineConfig } from "vitest/config";
 
-const envPath = resolve(__dirname, "../..", ".env");
+const localEnvPath = resolve(__dirname, "../..", ".env");
+const exampleEnvPath = resolve(__dirname, "../..", ".env.example");
+const envPath = existsSync(localEnvPath) ? localEnvPath : exampleEnvPath;
 
 if (!existsSync(envPath)) {
-  throw new Error("Falta modulo-8/.env. Crear el archivo a partir de .env.example antes de ejecutar pruebas de integracion.");
+  throw new Error("Falta modulo-8/.env y modulo-8/.env.example; no se pueden ejecutar pruebas de integracion.");
 }
 
 loadEnvFile(envPath);
