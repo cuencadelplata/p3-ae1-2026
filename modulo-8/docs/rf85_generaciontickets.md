@@ -171,3 +171,32 @@ Si ya no se necesita el entorno:
 ```powershell
 docker compose --env-file .env down --remove-orphans
 ```
+
+## 6. Con integraciones M6 y M1
+
+Todo lo anterior corresponde al modo normal de `compose.yaml`, donde Support
+no consulta a otros módulos. Con las integraciones habilitadas cambian dos
+cosas: el viaje se verifica contra M6 y las rutas de `/tickets` exigen un
+token de M1.
+
+| Variable | Por defecto | Efecto |
+| --- | --- | --- |
+| `M6_TRIPS_URL` | sin definir | URL base de M6. Si está definida, `POST /tickets` verifica que el viaje exista (`GET /api/viajes/{id}`). |
+| `M6_TIMEOUT_MS` | `2000` | Espera máxima de cada consulta a M6. |
+| `SUPPORT_M1_IDENTITY_URL` | sin definir | URL base de M1. Si está definida, todas las rutas de `/tickets` exigen `Authorization: Bearer <token>`, que se valida con `GET /auth/validar-identidad-y-rol`. |
+| `M1_TIMEOUT_MS` | `2000` | Espera máxima de cada consulta a M1. |
+
+Con autenticación, el autor que queda en el historial es `m1:<userId>` y
+`X-Actor-Id` se ignora. El `tripId` tiene que ser el id de un viaje real de
+M6: un valor inventado, como el de la demostración anterior, responde `422`.
+
+| Código | Respuesta | Cuándo |
+| --- | --- | --- |
+| `401` | `SUPPORT_AUTH_REQUIRED` | Falta la cabecera `Authorization`. Incluye `WWW-Authenticate: Bearer`. |
+| `401` | `SUPPORT_INVALID_TOKEN` | La cabecera no es `Bearer <token>`, o M1 no acepta el token. Incluye `WWW-Authenticate: Bearer`. |
+| `422` | `SUPPORT_TRIP_NOT_FOUND` | M6 no tiene un viaje con ese `tripId`. No se crea el ticket. |
+| `503` | `SUPPORT_TRIP_SERVICE_UNAVAILABLE` | M6 no responde a tiempo o está caído. Incluye `Retry-After: 5`. No se crea el ticket. |
+| `503` | `SUPPORT_IDENTITY_UNAVAILABLE` | M1 no responde a tiempo o está caído. Incluye `Retry-After: 5`. |
+
+Cómo levantar M8 junto a los servicios reales de M6 y M1, y obtener un viaje y
+un token reales: [`infra/integracion-real/README.md`](../infra/integracion-real/README.md).
