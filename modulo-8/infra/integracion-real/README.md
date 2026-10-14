@@ -92,12 +92,17 @@ Responde `201` con el viaje. Su `id` es el `tripId` para Support.
 ```bash
 curl -s -X POST http://localhost:13001/auth/registrar-usuario \
   -H "content-type: application/json" \
-  -d '{"nombre":"Ana","apellido":"Paz","dni":"30111222","telefono":"3794000000","email":"ana@example.com","password":"Clave-Segura-123","rol":"CLIENTE"}'
+  -d '{"nombre":"<NOMBRE>","apellido":"<APELLIDO>","dni":"<DNI>","telefono":"<TELEFONO>","email":"<EMAIL>","password":"<CONTRASEÑA>","rol":"CLIENTE"}'
 
 curl -s -X POST http://localhost:13001/auth/iniciar-sesion \
   -H "content-type: application/json" \
-  -d '{"email":"ana@example.com","password":"Clave-Segura-123"}'
+  -d '{"email":"<EMAIL>","password":"<CONTRASEÑA>"}'
 ```
+
+Los valores entre `< >` son marcadores: reemplazarlos por valores de prueba
+cualquiera, nunca por datos ni contraseñas reales. M1 exige que el email y el
+DNI no estén registrados; la contraseña tiene que cumplir sus reglas de
+validación.
 
 El login responde `{ token, tokenType: "Bearer", expiresIn: "1h", usuario }`.
 El registro público sólo admite los roles `CLIENTE` y `CONDUCTOR`.

@@ -86,7 +86,7 @@ describe('autenticación con M1 habilitada: token rechazado', () => {
     expect(res.headers['retry-after']).toBeUndefined();
   });
 
-  it.each(['Basic dXNlcjpwYXNz', 'Bearer', 'token-suelto', 'Bearer dos partes'])(
+  it.each(['Basic no-es-bearer', 'Bearer', 'token-suelto', 'Bearer dos partes'])(
     'Authorization "%s" no es un Bearer: 401 SUPPORT_INVALID_TOKEN sin consultar a M1',
     async (authorization) => {
       const res = await request(app).get('/tickets').set('Authorization', authorization);

@@ -23,7 +23,7 @@ function identidad(cambios: Record<string, unknown> = {}) {
     userId: 7,
     role: 'CLIENTE',
     authMethod: 'password',
-    usuario: { id: 7, rol: 'CLIENTE', email: 'ana@example.com', nombre: 'Ana', apellido: 'Paz', estado: 'ACTIVO' },
+    usuario: { id: 7, rol: 'CLIENTE', email: 'usuario@example.invalid', nombre: 'Nombre', apellido: 'Apellido', estado: 'ACTIVO' },
     ...cambios,
   };
 }
@@ -126,11 +126,11 @@ describe('createM1IdentityClient: verificar', () => {
 
   it('no registra el token ni lo incluye en el error', async () => {
     const error = (await fallo(
-      clienteCon(async () => respuesta(500)).verificar('Bearer secreto-123'),
+      clienteCon(async () => respuesta(500)).verificar('Bearer token-que-no-debe-aparecer'),
     )) as SupportError;
 
-    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain('secreto-123');
-    expect(error.message).not.toContain('secreto-123');
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain('token-que-no-debe-aparecer');
+    expect(error.message).not.toContain('token-que-no-debe-aparecer');
   });
 });
 

@@ -29,7 +29,7 @@ describe('WWW-Authenticate en las respuestas 401', () => {
   });
 
   it('401 SUPPORT_INVALID_TOKEN por formato lleva WWW-Authenticate: Bearer', async () => {
-    const res = await request(app()).get('/tickets').set('Authorization', 'Basic dXNlcg');
+    const res = await request(app()).get('/tickets').set('Authorization', 'Basic no-es-bearer');
 
     expect(res.status).toBe(401);
     expect(res.headers['www-authenticate']).toBe('Bearer');

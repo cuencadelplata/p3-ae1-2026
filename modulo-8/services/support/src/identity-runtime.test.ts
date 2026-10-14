@@ -6,7 +6,7 @@ import type { IdentityVerifier } from './integrations/m1-identity.js';
 import { InMemoryTicketRepository } from './models/ticket.model.js';
 import { buildSupportFromEnv, createSupportRuntime } from './support-runtime.js';
 
-const DATABASE_URL = 'postgres://m8_support:secreto@127.0.0.1:1/m8';
+const DATABASE_URL = 'postgres://m8_support@127.0.0.1:1/m8';
 const CONFIG = { port: 0, rabbitUrl: 'amqp://test', legacyEvents: false };
 
 function database(available: boolean, migrationsApplied: boolean) {

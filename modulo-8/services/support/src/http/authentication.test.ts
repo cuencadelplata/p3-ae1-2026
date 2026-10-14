@@ -36,7 +36,7 @@ describe('authenticateWithM1: esquema Bearer', () => {
     ['espacios dentro del token', 'Bearer abc def'],
     // Node recorta los espacios del final del valor: llega como "Bearer".
     ['sin token', 'Bearer '],
-    ['otro esquema', 'Basic dXNlcg'],
+    ['otro esquema', 'Basic no-es-bearer'],
   ])('rechaza %s con 401 SUPPORT_INVALID_TOKEN sin consultar a M1', async (_caso, authorization) => {
     const res = await request(app).get('/protegido').set('Authorization', authorization);
 
