@@ -157,6 +157,17 @@ El `compose.yaml` de M8 no define `SUPPORT_M1_IDENTITY_URL`; lo hace
   cualquier usuario autenticado puede consultar cualquier ticket, pero el
   ticket queda a nombre de quien usó la clave primero. Los clientes deben
   generar claves únicas (por ejemplo un UUID por pedido).
+- **En la app integrada, un JSON malformado no usa el formato de error de
+  Support.** Un `POST` o `PATCH` a `/tickets` con un cuerpo que no es JSON
+  válido responde `400` con el formato de error de QR
+  (`{ "error": { "code": "VALIDATION_ERROR", ... } }`, sin `correlationId`),
+  en lugar de `SUPPORT_VALIDATION_ERROR` como documenta el contrato. Ocurre
+  antes de la autenticación, así que el `400` llega aunque falte el Bearer.
+  La causa es el `express.json()` global que registra QR en
+  `services/qr/src/module.ts`: QR se monta antes que Support en la app común,
+  el cuerpo se parsea ahí y el error lo atiende su manejador. La app
+  standalone de Support no tiene este problema. Se corrige en QR (RF8.2) o en
+  la app común, no en Support.
 
 ### Base de Datos (CommunicationsDB)
 
