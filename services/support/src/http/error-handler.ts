@@ -9,6 +9,10 @@ function sendError(res: Response, error: SupportError) {
   if (error.retryAfterSeconds !== undefined) {
     res.setHeader('Retry-After', String(error.retryAfterSeconds));
   }
+  // RFC 7235: todo 401 indica el esquema con el que hay que autenticarse.
+  if (error.status === 401) {
+    res.setHeader('WWW-Authenticate', 'Bearer');
+  }
   res.status(error.status).json({
     error: {
       code: error.code,
