@@ -23,7 +23,6 @@
     "ioredis": "^5.4.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
     "jest": "^30.5.2"
   },
   "jest": {

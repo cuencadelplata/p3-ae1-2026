@@ -35,7 +35,6 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
     "@swc/core": "^1.16.1",
     "@swc/jest": "^0.2.39",
     "@types/amqplib": "^0.10.8",
