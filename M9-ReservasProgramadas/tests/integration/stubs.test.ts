@@ -54,8 +54,11 @@ describe('stubs M5 y M7', () => {
     };
 
     reserva.asignacion = await new HttpAsignacionClient(m5Url).asignar(reserva);
-    const response = await new HttpDespachoClient(m5Url).crearSolicitud(reserva);
+    const client = new HttpDespachoClient(m5Url);
+    const response = await client.crearSolicitud(reserva);
+    const repeatedResponse = await client.crearSolicitud(reserva);
     expect(response.estado).toBe('CREADA');
     expect(response.solicitudId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(repeatedResponse).toEqual(response);
   });
 });

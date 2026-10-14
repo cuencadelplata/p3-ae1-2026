@@ -17,8 +17,8 @@ describe('clientes HTTP de servicios externos', () => {
 
     vi.stubGlobal('fetch', fetchMock);
 
-    const client = new HttpDespachoClient('http://m5:3001');
-    const result = await client.crearSolicitud({
+    const client = new HttpDespachoClient('http://m5:3005');
+    const reserva = {
       id: '11111111-1111-4111-8111-111111111111',
       clienteId: '22222222-2222-4222-8222-222222222222',
       origen: 'A',
@@ -33,20 +33,37 @@ describe('clientes HTTP de servicios externos', () => {
       idSolicitud: null,
       creadoEn: '2099-01-01T12:00:00.000Z',
       actualizadoEn: '2099-01-01T12:00:00.000Z',
-    });
+    };
+    const result = await client.crearSolicitud(reserva);
 
     expect(result).toEqual({
       solicitudId: '123e4567-e89b-12d3-a456-426614174000',
       estado: 'CREADA',
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL('/api/v1/ride-requests', 'http://m5:3005'),
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'Idempotency-Key': reserva.id,
+          'x-client-id': reserva.clienteId,
+        },
+        body: JSON.stringify({
+          origin: { latitude: -27.4606, longitude: -58.9838, address: 'A' },
+          destination: { latitude: -27.4712, longitude: -58.9915, address: 'B' },
+          vehicleType: 'AUTO',
+        }),
+      }),
+    );
   });
 
   it('lanza AppError si M5 falla', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 503 });
     vi.stubGlobal('fetch', fetchMock);
 
-    const client = new HttpDespachoClient('http://m5:3001');
+    const client = new HttpDespachoClient('http://m5:3005');
 
     await expect(
       client.crearSolicitud({

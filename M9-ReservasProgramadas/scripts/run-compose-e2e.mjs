@@ -61,7 +61,7 @@ try {
   await waitForHealth();
   run(
     'docker',
-    ['compose', 'exec', '-T', 'm9-reservas', 'wget', '-qO-', 'http://m5-stub:3001/health'],
+    ['compose', 'exec', '-T', 'm9-reservas', 'wget', '-qO-', 'http://m5-stub:3005/health'],
     dockerEnvironment,
   );
   run(
