@@ -1,11 +1,6 @@
-// BORRA ESTAS LÍNEAS VIEJAS:
-const repository = await import("../../m3-vehiculos/src/vehiculos/vehiculo-repository.js");
-const { registrarVehiculo, listarVehiculos, obtenerVehiculo, activarVehiculo } =
-  await import("../../m3-vehiculos/src/vehiculos/vehiculo-service.js");
-const { AppError } = await import("../../m3-vehiculos/src/errors/AppError.js");
-const { TipoServicio } = await import("../../m3-vehiculos/src/vehiculos/vehiculo-model.js");
+import { describe, jest, beforeEach, it, expect } from "@jest/globals";
 
-jest.mock("../../m3-vehiculos/src/vehiculos/vehiculo-repository.js", () => ({
+jest.unstable_mockModule("../../m3-vehiculos/src/vehiculos/vehiculo-repository.js", () => ({
   existePatente: jest.fn(),
   insertarVehiculo: jest.fn(),
   listarVehiculosPorConductor: jest.fn(),
@@ -13,7 +8,11 @@ jest.mock("../../m3-vehiculos/src/vehiculos/vehiculo-repository.js", () => ({
   activarVehiculoEnBD: jest.fn(),
 }));
 
-
+const repository = await import("../../m3-vehiculos/src/vehiculos/vehiculo-repository.js");
+const { registrarVehiculo, listarVehiculos, obtenerVehiculo, activarVehiculo } =
+  await import("../../m3-vehiculos/src/vehiculos/vehiculo-service.js");
+const { AppError } = await import("../../m3-vehiculos/src/errors/AppError.js");
+const { TipoServicio } = await import("../../m3-vehiculos/src/vehiculos/vehiculo-model.js");
 
 describe("Vehiculo Service Tests", () => {
   const driverId = "driver-abc-123";
@@ -36,7 +35,7 @@ describe("Vehiculo Service Tests", () => {
 
   describe("registrarVehiculo", () => {
     it("debe registrar un vehículo correctamente cuando los datos son válidos", async () => {
-      (repository.insertarVehiculo as jest.Mock).mockResolvedValue(
+      jest.mocked(repository.insertarVehiculo).mockResolvedValue(
         mockVehiculoValido,
       );
 
@@ -61,7 +60,7 @@ describe("Vehiculo Service Tests", () => {
     });
 
     it("debe propagar 409 si la patente ya existe en la BD", async () => {
-      (repository.insertarVehiculo as jest.Mock).mockRejectedValue(
+      jest.mocked(repository.insertarVehiculo).mockRejectedValue(
         new AppError("Ya existe un vehículo con esa patente", 409),
       );
 
@@ -108,7 +107,7 @@ describe("Vehiculo Service Tests", () => {
 
   describe("listarVehiculos", () => {
     it("debe retornar la lista de vehículos de un conductor", async () => {
-      (repository.listarVehiculosPorConductor as jest.Mock).mockResolvedValue([
+      jest.mocked(repository.listarVehiculosPorConductor).mockResolvedValue([
         mockVehiculoValido,
       ]);
 
@@ -124,7 +123,7 @@ describe("Vehiculo Service Tests", () => {
 
   describe("obtenerVehiculo", () => {
     it("debe retornar el vehículo si pertenece al conductor", async () => {
-      (repository.buscarVehiculoDeConductor as jest.Mock).mockResolvedValue(
+      jest.mocked(repository.buscarVehiculoDeConductor).mockResolvedValue(
         mockVehiculoValido,
       );
 
@@ -138,7 +137,7 @@ describe("Vehiculo Service Tests", () => {
     });
 
     it("debe lanzar 404 si el vehículo no existe para ese conductor", async () => {
-      (repository.buscarVehiculoDeConductor as jest.Mock).mockResolvedValue(
+      jest.mocked(repository.buscarVehiculoDeConductor).mockResolvedValue(
         null,
       );
 
@@ -152,10 +151,10 @@ describe("Vehiculo Service Tests", () => {
     it("debe activar el vehículo correctamente si existe", async () => {
       const mockVehiculoActivo = { ...mockVehiculoValido, activo: true };
 
-      (repository.buscarVehiculoDeConductor as jest.Mock).mockResolvedValue(
+      jest.mocked(repository.buscarVehiculoDeConductor).mockResolvedValue(
         mockVehiculoValido,
       );
-      (repository.activarVehiculoEnBD as jest.Mock).mockResolvedValue(
+      jest.mocked(repository.activarVehiculoEnBD).mockResolvedValue(
         mockVehiculoActivo,
       );
 
@@ -169,7 +168,7 @@ describe("Vehiculo Service Tests", () => {
     });
 
     it("debe lanzar 404 al intentar activar un vehículo inexistente", async () => {
-      (repository.buscarVehiculoDeConductor as jest.Mock).mockResolvedValue(
+      jest.mocked(repository.buscarVehiculoDeConductor).mockResolvedValue(
         null,
       );
 
