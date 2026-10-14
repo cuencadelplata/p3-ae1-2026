@@ -72,35 +72,6 @@ services:
       rabbitmq:
         condition: service_healthy
 
-  # Consumidor de ejemplo de los eventos de M3 (logs: docker compose logs -f consumer)
-  consumer:
-    image: p3-m3-api
-    container_name: p3-m3-consumer
-    restart: unless-stopped
-    command: ["npm", "run", "consumer"]
-    environment:
-      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
-      RABBITMQ_EXCHANGE: m3.conductores.events
-      RABBITMQ_EXAMPLE_QUEUE: m3.ejemplo.driver-events
-    depends_on:
-      api:
-        condition: service_started
-      rabbitmq:
-        condition: service_healthy
-
-  # Frontend Web - Módulo 3 (Test Runner & Swagger UI)
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.client
-    image: p3-m3-frontend
-    container_name: p3-m3-frontend
-    restart: unless-stopped
-    ports:
-      - "4000:80"
-    depends_on:
-      - api
-
 networks:
   p3-shared:
     name: p3-shared

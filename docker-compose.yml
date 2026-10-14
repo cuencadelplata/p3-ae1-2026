@@ -90,10 +90,6 @@ services:
       RABBITMQ_EXCHANGE: m3.conductores.events
     ports:
       - "5000:3000"
-    networks:
-      default:
-        aliases:
-          - api   # nginx.conf del frontend hace proxy_pass a http://api:3000
     depends_on:
       redis:
         condition: service_healthy
@@ -105,40 +101,6 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
- 
-  # Consumidor de ejemplo de los eventos de conductores
-  # (ver logs: docker compose logs -f m3-conductor-consumer)
-  m3-conductor-consumer:
-    # Mismo código que la API (sale de cache, no recompila nada), con otro comando
-    build:
-      context: ./M3-Conductor
-      dockerfile: Dockerfile
-    container_name: m3-conductor-consumer
-    restart: unless-stopped
-    command: ["npm", "run", "consumer"]
-    environment:
-      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
-      RABBITMQ_EXCHANGE: m3.conductores.events
-      RABBITMQ_EXAMPLE_QUEUE: m3.ejemplo.driver-events
-    depends_on:
-      m3-conductor-api:
-        condition: service_started
-      rabbitmq:
-        condition: service_healthy
- 
-  # Frontend de pruebas (nginx). Hace proxy de /api/ hacia "api:3000",
-  # que resuelve gracias al alias de red "api" de m3-conductor-api.
-  m3-conductor-frontend:
-    build:
-      context: ./M3-Conductor
-      dockerfile: Dockerfile.client
-    image: m3-conductor-frontend
-    container_name: m3-conductor-frontend
-    restart: unless-stopped
-    ports:
-      - "4000:80"
-    depends_on:
-      - m3-conductor-api
  
 networks:
   p3-shared:
