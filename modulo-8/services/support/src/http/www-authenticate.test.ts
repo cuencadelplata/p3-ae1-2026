@@ -59,3 +59,17 @@ describe('WWW-Authenticate en las respuestas 401', () => {
     }
   });
 });
+
+describe('contrato OpenAPI: WWW-Authenticate', () => {
+  it('la respuesta NoAutenticado declara la cabecera WWW-Authenticate: Bearer', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const YAML = (await import('yaml')).default;
+    const contract = YAML.parse(fs.readFileSync(path.resolve(process.cwd(), '../../openapi/rf85-support.yaml'), 'utf8'));
+
+    expect(contract.components.responses.NoAutenticado.headers['WWW-Authenticate'].$ref).toBe(
+      '#/components/headers/WWW-Authenticate',
+    );
+    expect(contract.components.headers['WWW-Authenticate'].schema.enum).toEqual(['Bearer']);
+  });
+});
