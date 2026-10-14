@@ -2,14 +2,14 @@ import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 const mode = process.argv[2];
-const envFile = ".env";
+const envFile = existsSync(".env") ? ".env" : ".env.example";
 
 if (mode !== "dependencies" && mode !== "stack") {
   throw new Error("Uso: node scripts/ensure-test-infrastructure.mjs <dependencies|stack>");
 }
 
 if (!existsSync(envFile)) {
-  throw new Error("Falta modulo-8/.env. Crear el archivo a partir de .env.example antes de ejecutar pruebas.");
+  throw new Error("Falta modulo-8/.env y modulo-8/.env.example; no se puede iniciar la infraestructura de pruebas.");
 }
 
 function runDocker(args) {
