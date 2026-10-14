@@ -25,10 +25,26 @@ export class HttpDespachoClient implements DespachoClient {
 
   public async crearSolicitud(reserva: Reserva): Promise<SolicitudDespachoCreada> {
     try {
-      const response = await fetch(new URL('/solicitudes', this.baseUrl), {
+      const response = await fetch(new URL('/api/v1/ride-requests', this.baseUrl), {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ reserva }),
+        headers: {
+          'content-type': 'application/json',
+          'Idempotency-Key': reserva.id,
+          'x-client-id': reserva.clienteId,
+        },
+        body: JSON.stringify({
+          origin: {
+            latitude: -27.4606,
+            longitude: -58.9838,
+            address: reserva.origen,
+          },
+          destination: {
+            latitude: -27.4712,
+            longitude: -58.9915,
+            address: reserva.destino,
+          },
+          vehicleType: reserva.vehiculo,
+        }),
         signal: AbortSignal.timeout(this.timeoutMs),
       });
 
