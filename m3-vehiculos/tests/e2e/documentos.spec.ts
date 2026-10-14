@@ -1,12 +1,16 @@
 import { test, expect } from "@playwright/test";
+import { randomInt } from "node:crypto";
 
 function driverIdUnico() {
   return `driver-test-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 }
 
+// Genera una patente válida y distinta en cada llamada (formato AAA000),
+// para no toparse con el unique de la base entre tests.
 function patenteUnica() {
-  const n = Date.now() % 1000;
-  return `ZZ${n.toString().padStart(3, "0")}ZZ`;
+  const L = () => String.fromCharCode(65 + randomInt(26));
+  const n = randomInt(1000).toString().padStart(3, "0");
+  return `${L()}${L()}${L()}${n}`;
 }
 
 // La fecha de vencimiento tiene que ser futura, así que la generamos
