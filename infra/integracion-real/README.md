@@ -85,7 +85,15 @@ curl -s -X POST http://localhost:13000/api/viajes \
   -d '{"clienteId":"cliente-1","origen":"Origen 123","destino":"Destino 456"}'
 ```
 
-Responde `201` con el viaje. Su `id` es el `tripId` para Support.
+Responde `201` con el viaje. Su `id` es el `tripId` para Support. Se puede
+copiar de la respuesta o guardar en una variable:
+
+```bash
+TRIP_ID=$(curl -s -X POST http://localhost:13000/api/viajes \
+  -H "content-type: application/json" \
+  -d '{"clienteId":"cliente-1","origen":"Origen 123","destino":"Destino 456"}' \
+  | node -e "process.stdin.on('data', d => console.log(JSON.parse(d).id))")
+```
 
 ## 5. Obtener un token real (M1)
 
@@ -106,6 +114,20 @@ validación.
 
 El login responde `{ token, tokenType: "Bearer", expiresIn: "1h", usuario }`.
 El registro público sólo admite los roles `CLIENTE` y `CONDUCTOR`.
+
+Para guardar el token en una variable, en lugar de copiarlo:
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:13001/auth/iniciar-sesion \
+  -H "content-type: application/json" \
+  -d '{"email":"<EMAIL>","password":"<CONTRASEÑA>"}' \
+  | node -e "process.stdin.on('data', d => console.log(JSON.parse(d).token))")
+```
+
+El token vence a la hora: después, volver a iniciar sesión. Registrar dos
+veces el mismo email o DNI responde `409`; en una segunda corrida sobre el
+mismo stack, saltear el registro e iniciar sesión directamente, o usar otros
+datos.
 
 ## 6. Crear un ticket
 
@@ -141,10 +163,50 @@ docker compose -p m1-integracion \
 
 git worktree remove --force "$TMP/m6"
 git worktree remove --force "$TMP/m1"
+rm -rf "$TMP"
+```
+
+Opcional, para liberar espacio: borrar las imágenes construidas en el paso 2.
+
+```bash
+docker rmi p3-ae1-2026-modulo6:local p3-ae1-2026-modulo6-db:local matsir/m1-identidad-acceso:latest
+```
+
+El paso 3 reconstruye `modulo-8-m8-app:local` con el código de la rama. Si
+antes `m8-app` corría una imagen publicada, volver a ella sin construir:
+
+```bash
+cd modulo-8
+M8_IMAGE=juanmainval/m8-notificaciones-qr:2.0.1 docker compose --env-file .env up -d --no-build --wait
 ```
 
 `down -v` se usa sólo sobre los proyectos `m6-integracion` y `m1-integracion`,
 cuyos volúmenes son descartables. **No usarlo sobre M8.**
+
+## Variables opcionales
+
+Se pueden definir en `modulo-8/.env` o en la línea de comandos. Ninguna es
+obligatoria: los valores por defecto corresponden a estos pasos.
+
+| Variable | Por defecto | Dónde se usa |
+| --- | --- | --- |
+| `M6_VIAJES_HOST` | `viajes` | Host de M6 para `m8-app` |
+| `M1_HOST` | `m1-identidad-acceso` | Host de M1 para `m8-app` |
+| `M6_TIMEOUT_MS` | `2000` | Espera máxima de cada consulta a M6 |
+| `M6_NETWORK` | `m6_viajes_default` | Red externa de M6 |
+| `M1_NETWORK` | `m1-integracion_default` | Red externa de M1 |
+| `M6_VIAJES_HOST_PORT` | `13000` | Puerto del host para `viajes` (override de M6) |
+| `M1_HOST_PORT` | `13001` | Puerto del host para M1 (override de M1) |
+
+La espera máxima de cada consulta a M1 es `M1_TIMEOUT_MS`, la misma variable
+que usa Receipts (`2000` por defecto en `compose.yaml`).
+
+## Tildes en Git Bash sobre Windows
+
+`curl -d` en Git Bash puede mandar el cuerpo con la codificación de la
+consola en lugar de UTF-8, y un `motivo` con tildes o eñes se guarda mal. Para
+estas pruebas, usar texto sin acentos, o escribir el cuerpo en un archivo
+UTF-8 y enviarlo con `--data-binary @archivo.json`.
 
 ## Alcance
 
