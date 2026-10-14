@@ -615,6 +615,12 @@ components:
         type: integer
         minimum: 1
       example: 5
+    WWW-Authenticate:
+      description: Esquema con el que hay que autenticarse. Presente en todo `401`.
+      schema:
+        type: string
+        enum: [Bearer]
+      example: Bearer
 
   responses:
     ErrorDeValidacion:
@@ -673,6 +679,8 @@ components:
       headers:
         X-Correlation-Id:
           $ref: '#/components/headers/X-Correlation-Id'
+        WWW-Authenticate:
+          $ref: '#/components/headers/WWW-Authenticate'
       content:
         application/json:
           schema:
