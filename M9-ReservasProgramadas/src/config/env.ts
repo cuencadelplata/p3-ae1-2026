@@ -21,7 +21,8 @@ const envSchema = z.object({
     .string()
     .url()
     .default('postgresql://reservas:reservas_dev@localhost:5432/reservas?schema=public'),
-  M5_URL: urlWithDefault('http://localhost:3001'),
+  M5_URL: urlWithDefault('http://localhost:3005'),
+  M5_SERVICE_URL: urlWithDefault('http://localhost:3005'),
   M7_URL: urlWithDefault('http://localhost:3002'),
   RESERVATION_JOB_INTERVAL: stringWithDefault('*/30 * * * * *'),
 });
