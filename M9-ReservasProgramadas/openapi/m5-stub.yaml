@@ -9,7 +9,7 @@ info:
     una hora. Solo una oferta aceptada vigente produce asignación. Los datos e
     idempotencia se conservan únicamente durante la vida del proceso.
 servers:
-  - url: http://m5-stub:3001
+  - url: http://m5-stub:3005
 security: []
 paths:
   /health:
@@ -118,6 +118,40 @@ paths:
                   oferta: { $ref: '#/components/schemas/Oferta' }
         '400': { $ref: '#/components/responses/Invalida' }
         '409': { $ref: '#/components/responses/Conflicto' }
+  /api/v1/ride-requests:
+    post:
+      summary: Activar una reserva con la asignación vigente
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+        - name: x-client-id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RideRequest' }
+            example:
+              origin: { latitude: -27.4606, longitude: -58.9838, address: 'Av. Costanera 1234, Resistencia' }
+              destination: { latitude: -27.4712, longitude: -58.9915, address: 'San Juan 500, Resistencia' }
+              vehicleType: AUTO
+      responses:
+        '201':
+          description: Solicitud creada o recuperada idempotentemente
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [solicitudId, estado]
+                properties:
+                  solicitudId: { type: string, format: uuid }
+                  estado: { type: string, enum: [CREADA] }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '409': { $ref: '#/components/responses/Conflicto' }
   /solicitudes:
     post:
       summary: Activar despacho con asignación previamente aceptada
@@ -170,6 +204,22 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
   schemas:
+    RideRequest:
+      type: object
+      additionalProperties: false
+      required: [origin, destination, vehicleType]
+      properties:
+        origin: { $ref: '#/components/schemas/RideRequestLocation' }
+        destination: { $ref: '#/components/schemas/RideRequestLocation' }
+        vehicleType: { type: string, enum: [AUTO, MOTO] }
+    RideRequestLocation:
+      type: object
+      additionalProperties: false
+      required: [latitude, longitude, address]
+      properties:
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        address: { type: string, minLength: 1 }
     Error:
       type: object
       required: [error]
@@ -177,9 +227,10 @@ components:
         error: { type: string }
     Reserva:
       type: object
-      required: [id, origen, destino, vehiculo, fechaHoraProgramada, criterioAsignacion]
+      required: [id, clienteId, origen, destino, vehiculo, fechaHoraProgramada, criterioAsignacion]
       properties:
         id: { type: string, format: uuid }
+        clienteId: { type: string, format: uuid }
         origen: { type: string, minLength: 1 }
         destino: { type: string, minLength: 1 }
         vehiculo: { type: string, enum: [AUTO, MOTO] }
@@ -187,6 +238,7 @@ components:
         criterioAsignacion: { type: string, enum: [MEJOR_CALIFICACION] }
       example:
         id: '10000000-0000-4000-8000-000000000001'
+        clienteId: '20000000-0000-4000-8000-000000000001'
         origen: Terminal
         destino: Aeropuerto
         vehiculo: AUTO
