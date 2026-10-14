@@ -148,6 +148,16 @@ El `compose.yaml` de M8 no define `SUPPORT_M1_IDENTITY_URL`; lo hace
 `compose.integracion-real.yaml`, que conecta con el M1 real (rama
 `integration/m1-ae2`). Los pasos están en `infra/integracion-real/README.md`.
 
+### Limitaciones conocidas
+
+- **La `Idempotency-Key` es global, no por usuario.** Con la autenticación
+  habilitada, si un usuario repite la misma clave y el mismo pedido que ya usó
+  otro, recibe `200` con el ticket que creó el primero, y no se crea ninguno a
+  su nombre; con otro pedido recibe `409`. No expone información nueva, porque
+  cualquier usuario autenticado puede consultar cualquier ticket, pero el
+  ticket queda a nombre de quien usó la clave primero. Los clientes deben
+  generar claves únicas (por ejemplo un UUID por pedido).
+
 ### Base de Datos (CommunicationsDB)
 
 Support guarda los tickets, su historial y las claves de idempotencia en el
