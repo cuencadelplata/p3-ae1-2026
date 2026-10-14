@@ -31,6 +31,9 @@ const EXTERNAL_EVENT_TYPE_MAP: Record<string, string> = {
   'receipt.issued': 'ReceiptIssued',
   'notification_requested': 'NotificationRequested',
   'notification.requested': 'NotificationRequested',
+  'documento.registrado': 'DriverDocumentRegistered',
+  'driver_document_registered': 'DriverDocumentRegistered',
+  'driverdocumentregistered': 'DriverDocumentRegistered',
 };
 
 function isObject(val: unknown): val is Record<string, unknown> {

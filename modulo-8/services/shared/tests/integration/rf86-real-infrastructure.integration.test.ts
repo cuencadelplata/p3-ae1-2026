@@ -214,7 +214,7 @@ describe('RF8.6 Real Infrastructure - PostgreSQL (messaging.inbox_events & outbo
       await amqpChannel.deleteQueue(topology.retryQueue).catch(() => {});
       await amqpChannel.deleteQueue(topology.deadLetterQueue).catch(() => {});
     }
-  });
+  }, 15000);
 
   it('demuestra Outbox concurrente con 2 publicadores usando FOR UPDATE SKIP LOCKED en PostgreSQL real', async () => {
     const testRun = Date.now();

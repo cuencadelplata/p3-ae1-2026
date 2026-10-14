@@ -17,6 +17,7 @@ export const EVENT_TYPE_TO_ROUTING_KEY: Record<string, string> = {
   PaymentConfirmed: 'payment.confirmed',
   ReceiptIssued: 'receipt.issued',
   NotificationRequested: 'notification.requested',
+  DriverDocumentRegistered: 'documento.registrado',
 };
 
 /** Mapeo inverso de routingKey AMQP a eventType. */
@@ -29,6 +30,7 @@ export const ROUTING_KEY_TO_EVENT_TYPE: Record<string, string> = {
   'trip.requested': 'TripRequested',
   'trip.assigned': 'DriverAssigned',
   'trip.driver-arrived': 'DriverArrived',
+  'documento.registrado': 'DriverDocumentRegistered',
 };
 
 

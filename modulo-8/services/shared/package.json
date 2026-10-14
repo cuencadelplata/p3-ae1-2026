@@ -8,7 +8,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run tests/unit tests/integration/rf86-messaging.integration.test.ts",
-    "test:integration:real": "vitest run tests/integration/rf86-real-infrastructure.integration.test.ts"
+    "test:integration:real": "vitest run tests/integration/rf86-real-infrastructure.integration.test.ts tests/integration/rf86-notification-outbox.integration.test.ts"
   },
   "dependencies": {
     "amqplib": "^0.10.4",

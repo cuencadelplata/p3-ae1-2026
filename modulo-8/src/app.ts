@@ -17,6 +17,13 @@ export interface M8Application {
   stop(): Promise<void>;
 }
 
+export interface M8ApplicationOptions {
+  outboxRelay?: {
+    start(): void | Promise<void>;
+    stop(): Promise<void>;
+  };
+}
+
 export interface M8ApplicationModules {
   receipts: ReceiptsModule;
   qr: QrModule;
@@ -31,11 +38,23 @@ export async function createM8Application(): Promise<M8Application> {
   const support = await loadSupportModule();
   const notifications = await loadNotificationsModule();
   const delivery = await loadDeliveryModule();
-  return createM8ApplicationFromModules({ receipts, qr, support, notifications, delivery });
+
+  let outboxRelay;
+  try {
+    const { createNotificationOutboxRelay } = await import('@m8/shared');
+    outboxRelay = createNotificationOutboxRelay();
+  } catch (err) {
+    console.warn('[M8] No se pudo inicializar NotificationOutboxRelay:', err);
+  }
+
+  return createM8ApplicationFromModules({ receipts, qr, support, notifications, delivery }, { outboxRelay });
 }
 
 /** Construye la app común a partir de módulos ya creados; facilita pruebas sin infraestructura externa. */
-export function createM8ApplicationFromModules(modules: M8ApplicationModules): M8Application {
+export function createM8ApplicationFromModules(
+  modules: M8ApplicationModules,
+  options?: M8ApplicationOptions
+): M8Application {
   const { receipts, qr, support, notifications, delivery } = modules;
   const app = express();
 
@@ -84,7 +103,7 @@ export function createM8ApplicationFromModules(modules: M8ApplicationModules): M
     response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Ruta no encontrada.' } });
   });
 
-  return createApplicationLifecycle(app, receipts, qr, support, notifications, delivery);
+  return createApplicationLifecycle(app, receipts, qr, support, notifications, delivery, options?.outboxRelay);
 }
 
 function registerDocumentation(app: Express): void {
@@ -101,7 +120,15 @@ function registerDocumentation(app: Express): void {
   );
 }
 
-function createApplicationLifecycle(app: Express, receipts: ReceiptsModule, qr: QrModule, support: SupportModule, notifications: NotificationsModule, delivery: DeliveryModule): M8Application {
+function createApplicationLifecycle(
+  app: Express,
+  receipts: ReceiptsModule,
+  qr: QrModule,
+  support: SupportModule,
+  notifications: NotificationsModule,
+  delivery: DeliveryModule,
+  outboxRelay?: { start(): void | Promise<void>; stop(): Promise<void> }
+): M8Application {
   return {
     app,
     start(): void {
@@ -110,9 +137,17 @@ function createApplicationLifecycle(app: Express, receipts: ReceiptsModule, qr: 
       support.start();
       notifications.start();
       delivery.start();
+      void outboxRelay?.start();
     },
     async stop(): Promise<void> {
-      await Promise.all([receipts.stop(), qr.stop(), support.stop(), notifications.stop(), delivery.stop()]);
+      await Promise.all([
+        receipts.stop(),
+        qr.stop(),
+        support.stop(),
+        notifications.stop(),
+        delivery.stop(),
+        outboxRelay ? outboxRelay.stop() : Promise.resolve(),
+      ]);
     },
   };
 }
