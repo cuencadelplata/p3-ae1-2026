@@ -38,11 +38,22 @@ export const CHOFERES_DEMO: ChoferStub[] = [
 
 const reservaSchema = z.object({
   id: z.string().uuid(),
+  clienteId: z.string().uuid(),
   origen: z.string().min(1),
   destino: z.string().min(1),
   vehiculo: z.enum(['AUTO', 'MOTO']),
   fechaHoraProgramada: z.string().datetime({ offset: true }),
   criterioAsignacion: z.literal('MEJOR_CALIFICACION'),
+});
+const rideRequestLocationSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  address: z.string().min(1),
+});
+const rideRequestSchema = z.object({
+  origin: rideRequestLocationSchema,
+  destination: rideRequestLocationSchema,
+  vehicleType: z.enum(['AUTO', 'MOTO']),
 });
 type DatosReserva = z.infer<typeof reservaSchema>;
 interface Ocupacion {
@@ -128,6 +139,34 @@ export const createM5StubApp = (
   app.disable('x-powered-by');
   app.use(express.json());
   app.get('/health', (_request, response) => response.status(200).json({ status: 'ok' }));
+  app.post('/api/v1/ride-requests', (request, response) => {
+    const idempotencyKey = z.string().uuid().safeParse(request.header('Idempotency-Key'));
+    const clientId = z.string().uuid().safeParse(request.header('x-client-id'));
+    const rideRequest = rideRequestSchema.safeParse(request.body);
+    if (!idempotencyKey.success || !clientId.success || !rideRequest.success) {
+      response.status(400).json({ error: 'Solicitud de viaje inválida.' });
+      return;
+    }
+
+    const ocupacion = ocupaciones.get(idempotencyKey.data);
+    if (
+      ocupacion === undefined ||
+      ocupacion.reserva.clienteId !== clientId.data ||
+      ocupacion.reserva.origen !== rideRequest.data.origin.address ||
+      ocupacion.reserva.destino !== rideRequest.data.destination.address ||
+      ocupacion.reserva.vehiculo !== rideRequest.data.vehicleType
+    ) {
+      response.status(409).json({ error: 'La asignación no está vigente para este viaje.' });
+      return;
+    }
+
+    let solicitud = solicitudes.get(idempotencyKey.data);
+    if (solicitud === undefined) {
+      solicitud = { solicitudId: randomUUID(), estado: 'CREADA' };
+      solicitudes.set(idempotencyKey.data, solicitud);
+    }
+    response.status(201).json(solicitud);
+  });
   app.get('/asignaciones/:id/ofertas', (request, response) => {
     response.json({ ofertas: ofertas.listar(request.params.id) });
   });

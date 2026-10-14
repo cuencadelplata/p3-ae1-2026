@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { CHOFERES_DEMO, createM5StubApp } from './app.js';
 import type { RespuestaSimulada } from './ofertas.js';
 
-const port = Number(process.env.PORT ?? 3001);
+const port = Number(process.env.PORT ?? 3005);
 
 const escenario = z
   .enum(['ACEPTAN', 'RECHAZA_MEJOR', 'VENCE_MEJOR', 'RECHAZAN_TODOS'])
