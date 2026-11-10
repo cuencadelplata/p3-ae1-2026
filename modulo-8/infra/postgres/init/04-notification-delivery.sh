@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS notification_delivery.delivery_requests (
     delivery_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     notification_id VARCHAR(64) NOT NULL,
     message_id VARCHAR(64) NOT NULL UNIQUE,
-    trip_id VARCHAR(64) NOT NULL,
+    trip_id VARCHAR(64),
     user_id BIGINT NOT NULL,
     event_type VARCHAR(64) NOT NULL,
     channel VARCHAR(32) NOT NULL DEFAULT 'PUSH',
@@ -69,6 +69,9 @@ CREATE TABLE IF NOT EXISTS notification_delivery.delivery_requests (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE notification_delivery.delivery_requests
+    ALTER COLUMN trip_id DROP NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_delivery_requests_notification
     ON notification_delivery.delivery_requests (notification_id);

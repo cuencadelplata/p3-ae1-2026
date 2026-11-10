@@ -11,7 +11,7 @@ import type {
 export interface CreateDeliveryParams {
   notificationId: string;
   messageId: string;
-  tripId: string;
+  tripId?: string;
   userId: number;
   eventType: DeliveryRequest['eventType'];
   channel: 'PUSH';
@@ -139,7 +139,7 @@ export class PgDeliveryRepository implements DeliveryRepository {
       [
         params.notificationId,
         params.messageId,
-        params.tripId,
+        params.tripId ?? null,
         params.userId,
         params.eventType,
         params.channel,
@@ -247,7 +247,7 @@ export class PgDeliveryRepository implements DeliveryRepository {
       deliveryId: row.delivery_id,
       notificationId: row.notification_id,
       messageId: row.message_id,
-      tripId: row.trip_id,
+      tripId: row.trip_id ?? undefined,
       userId: Number(row.user_id),
       eventType: row.event_type,
       channel: row.channel,
