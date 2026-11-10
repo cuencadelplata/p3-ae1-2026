@@ -11,6 +11,7 @@ const VALID_EVENT_TYPES: Set<DeliveryEventType> = new Set([
   'TRIP_STARTED',
   'TRIP_CANCELLED',
   'TRIP_COMPLETED',
+  'DRIVER_DOCUMENT_REGISTERED',
 ]);
 
 const ENVELOPE_PROPERTIES = new Set([
@@ -26,6 +27,7 @@ const ENVELOPE_PROPERTIES = new Set([
 const DATA_PROPERTIES = new Set([
   'notificationId',
   'tripId',
+  'rideRequestId',
   'recipientId',
   'eventType',
   'channel',
@@ -110,10 +112,6 @@ export function validateNotificationRequestedEnvelope(
     throw new ContractValidationError('data.notificationId es obligatorio y debe ser un UUID válido.');
   }
 
-  if (typeof data.tripId !== 'string' || data.tripId.trim() === '') {
-    throw new ContractValidationError('data.tripId es obligatorio.');
-  }
-
   if (
     typeof data.recipientId !== 'number' ||
     !Number.isInteger(data.recipientId) ||
@@ -126,8 +124,26 @@ export function validateNotificationRequestedEnvelope(
 
   if (!VALID_EVENT_TYPES.has(data.eventType as DeliveryEventType)) {
     throw new ContractValidationError(
-      `data.eventType inválido: '${data.eventType}'. Debe ser uno de los eventos de viaje soportados.`
+      `data.eventType inválido: '${data.eventType}'. Debe ser uno de los eventos soportados.`
     );
+  }
+
+  if (data.eventType === 'DRIVER_DOCUMENT_REGISTERED') {
+    if (data.tripId !== undefined && (typeof data.tripId !== 'string' || data.tripId.trim() === '')) {
+      throw new ContractValidationError('data.tripId debe ser texto no vacío cuando se informa.');
+    }
+  } else if (data.eventType === 'TRIP_REQUESTED') {
+    if (data.tripId !== undefined && (typeof data.tripId !== 'string' || data.tripId.trim() === '')) {
+      throw new ContractValidationError('data.tripId debe ser texto no vacío cuando se informa.');
+    }
+  } else {
+    if (typeof data.tripId !== 'string' || data.tripId.trim() === '') {
+      throw new ContractValidationError('data.tripId es obligatorio.');
+    }
+  }
+
+  if (data.rideRequestId !== undefined && (typeof data.rideRequestId !== 'string' || data.rideRequestId.trim() === '')) {
+    throw new ContractValidationError('data.rideRequestId debe ser texto no vacío cuando se informa.');
   }
 
   if (data.channel !== 'PUSH') {
@@ -158,7 +174,8 @@ export function validateNotificationRequestedEnvelope(
 
   const validatedData: NotificationRequestedData = {
     notificationId: data.notificationId,
-    tripId: data.tripId,
+    tripId: typeof data.tripId === 'string' ? data.tripId : undefined,
+    rideRequestId: typeof data.rideRequestId === 'string' ? data.rideRequestId : undefined,
     recipientId: data.recipientId,
     eventType: data.eventType as DeliveryEventType,
     channel: 'PUSH',

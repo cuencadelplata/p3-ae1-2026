@@ -17,6 +17,7 @@ const CANONICAL_TITLES: Record<DeliveryEventType, string> = {
   TRIP_STARTED: 'Viaje en curso',
   TRIP_CANCELLED: 'Viaje cancelado',
   TRIP_COMPLETED: 'Viaje finalizado',
+  DRIVER_DOCUMENT_REGISTERED: 'Documento registrado',
 };
 
 export const CONSUMER_ID = 'm8.delivery.notification-requested';

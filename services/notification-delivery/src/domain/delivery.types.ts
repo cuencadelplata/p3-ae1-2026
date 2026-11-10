@@ -4,7 +4,8 @@ export type DeliveryEventType =
   | 'DRIVER_ARRIVED'
   | 'TRIP_STARTED'
   | 'TRIP_CANCELLED'
-  | 'TRIP_COMPLETED';
+  | 'TRIP_COMPLETED'
+  | 'DRIVER_DOCUMENT_REGISTERED';
 
 export type DeliveryChannel = 'PUSH';
 
@@ -30,7 +31,8 @@ export interface InboxClaimResult {
 
 export interface NotificationRequestedData {
   notificationId: string;
-  tripId: string;
+  tripId?: string;
+  rideRequestId?: string;
   recipientId: number; // Corresponde al userId canónico numérico de M1 (BIGINT >= 1)
   eventType: DeliveryEventType;
   channel: DeliveryChannel;
@@ -65,7 +67,7 @@ export interface DeliveryRequest {
   deliveryId: string;
   notificationId: string;
   messageId: string;
-  tripId: string;
+  tripId?: string;
   userId: number;
   eventType: DeliveryEventType;
   channel: DeliveryChannel;
@@ -95,7 +97,7 @@ export interface DeliveryWithAttempts extends DeliveryRequest {
 
 export interface PushSendRequest {
   notificationId: string;
-  tripId: string;
+  tripId?: string;
   recipientId: number;
   deviceToken: string;
   title: string;
