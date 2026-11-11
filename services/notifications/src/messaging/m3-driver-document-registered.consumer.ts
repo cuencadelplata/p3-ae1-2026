@@ -19,6 +19,7 @@ type RabbitMqChannel = Parameters<EventConsumer["start"]>[0];
 export interface RabbitMqConnection {
   createConfirmChannel(): Promise<RabbitMqChannel>;
   close(): Promise<void>;
+  on?(event: string, listener: (...args: any[]) => void): unknown;
 }
 
 interface DriverDocumentRegisteredData {
@@ -31,6 +32,7 @@ export interface M3DriverDocumentRegisteredConsumerOptions {
   connection: RabbitMqConnection;
   inboxStore: TechnicalInboxStore;
   deliverToRf81(value: unknown): Promise<ProcessDriverDocumentRegisteredEventResult>;
+  onDisconnected?: () => void;
   maxRetries?: number;
   retryDelayMs?: number;
 }
@@ -132,6 +134,15 @@ export class M3DriverDocumentRegisteredConsumer {
     if (this.running) return;
 
     const channel = await this.options.connection.createConfirmChannel();
+    let channelClosed = false;
+    channel.on?.('close', () => {
+      channelClosed = true;
+      this.running = false;
+      this.options.onDisconnected?.();
+    });
+    channel.on?.('error', (error: unknown) => {
+      console.warn('[RF8.6] Error en el canal M3.', error);
+    });
     const topology = buildQueueTopology({
       exchange: M3_DOCUMENTS_EXCHANGE,
       queue: M3_DOCUMENT_REGISTERED_QUEUE,
@@ -164,6 +175,7 @@ export class M3DriverDocumentRegisteredConsumer {
     });
 
     await consumer.start(channel);
+    if (channelClosed) throw new Error('El canal RabbitMQ se cerró durante el arranque del consumer M3.');
     this.channel = channel;
     this.consumer = consumer;
     this.running = true;

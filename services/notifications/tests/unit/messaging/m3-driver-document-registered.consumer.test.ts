@@ -33,7 +33,9 @@ function success() {
 
 function createBroker() {
   let callback: ((message: any) => void) | undefined;
+  const listeners = new Map<string, () => void>();
   const channel = {
+    on: vi.fn((name: string, listener: () => void) => { listeners.set(name, listener); }),
     assertExchange: vi.fn().mockResolvedValue({}),
     assertQueue: vi.fn().mockResolvedValue({}),
     bindQueue: vi.fn().mockResolvedValue({}),
@@ -50,7 +52,7 @@ function createBroker() {
     }),
     waitForConfirms: vi.fn().mockResolvedValue(undefined),
   };
-  return { channel, get callback() { return callback; } };
+  return { channel, emit(name: string) { listeners.get(name)?.(); }, get callback() { return callback; } };
 }
 
 async function deliver(callback: ((message: any) => void) | undefined, payload: unknown): Promise<void> {
@@ -63,6 +65,22 @@ async function deliver(callback: ((message: any) => void) | undefined, payload: 
 }
 
 describe("RF8.6 - consumidor M3 documento.registrado", () => {
+  it("marca el consumer como no disponible al cerrarse el canal", async () => {
+    const broker = createBroker();
+    const onDisconnected = vi.fn();
+    const consumer = new M3DriverDocumentRegisteredConsumer({
+      connection: { createConfirmChannel: vi.fn().mockResolvedValue(broker.channel) } as any,
+      inboxStore: new InMemoryTechnicalInbox(),
+      deliverToRf81: vi.fn().mockResolvedValue(success()),
+      onDisconnected,
+    });
+    await consumer.start();
+    expect(consumer.isReady()).toBe(true);
+    broker.emit("close");
+    expect(consumer.isReady()).toBe(false);
+    expect(onDisconnected).toHaveBeenCalledOnce();
+  });
+
   it("declara el exchange, la cola y el binding externos acordados", async () => {
     const broker = createBroker();
     const consumer = new M3DriverDocumentRegisteredConsumer({
