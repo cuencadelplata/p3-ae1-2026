@@ -25,7 +25,7 @@ test('Infraestructura Real - PostgreSQL + RabbitMQ E2E (RF8.7 + RF8.6)', async (
     await pgPool.query('SELECT 1');
   } catch (err) {
     if (pgPool) await pgPool.end().catch(() => {});
-    t.skip(`PostgreSQL real no disponible en ${POSTGRES_URL} (omitida en entorno sin contenedores activos)`);
+    t.skip('PostgreSQL real no disponible (omitida en entorno sin contenedores activos)');
     return;
   }
 
@@ -34,7 +34,7 @@ test('Infraestructura Real - PostgreSQL + RabbitMQ E2E (RF8.7 + RF8.6)', async (
     amqpConn = await amqp.connect(RABBITMQ_URL);
   } catch (err) {
     if (pgPool) await pgPool.end().catch(() => {});
-    t.skip(`RabbitMQ real no disponible en ${RABBITMQ_URL} (omitida en entorno sin contenedores activos)`);
+    t.skip('RabbitMQ real no disponible (omitida en entorno sin contenedores activos)');
     return;
   }
 

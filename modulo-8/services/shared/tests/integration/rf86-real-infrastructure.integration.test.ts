@@ -44,7 +44,7 @@ describe('RF8.6 Real Infrastructure - PostgreSQL (messaging.inbox_events & outbo
       await pgPool.query('SELECT 1');
     } catch (err) {
       throw new Error(
-        `[RF8.6 Real Infra Error] No se pudo conectar a PostgreSQL real en ${POSTGRES_URL}.\n` +
+        `[RF8.6 Real Infra Error] No se pudo conectar a PostgreSQL real (revisar POSTGRES_URL).\n` +
         `Asegurate de haber iniciado los contenedores con 'docker compose up -d postgres rabbitmq'. Error: ${(err as Error).message}`
       );
     }
@@ -56,7 +56,7 @@ describe('RF8.6 Real Infrastructure - PostgreSQL (messaging.inbox_events & outbo
     } catch (err) {
       if (pgPool) await pgPool.end().catch(() => {});
       throw new Error(
-        `[RF8.6 Real Infra Error] No se pudo conectar a RabbitMQ real en ${RABBITMQ_URL}.\n` +
+        `[RF8.6 Real Infra Error] No se pudo conectar a RabbitMQ real (revisar RABBITMQ_URL).\n` +
         `Asegurate de haber iniciado los contenedores con 'docker compose up -d postgres rabbitmq'. Error: ${(err as Error).message}`
       );
     }
