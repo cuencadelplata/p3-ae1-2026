@@ -28,8 +28,7 @@ export class HttpM2PreferencesClient implements M2PreferencesClient {
 
       if (!response.ok) {
         if (response.status === 404) {
-          // Si el usuario no tiene preferencias explicitas en M2, por defecto asumimos activadas
-          return { userId, notificationsEnabled: true, pushEnabled: true };
+          throw new Error('M2 no encontró preferencias para el usuario; no se autoriza PUSH sin contrato confirmado.');
         }
         throw new Error(`M2 retornó error HTTP ${response.status}: ${response.statusText}`);
       }
