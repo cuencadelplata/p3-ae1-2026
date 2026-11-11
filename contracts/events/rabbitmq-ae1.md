@@ -11,8 +11,8 @@ Este documento describe únicamente el comportamiento ejecutable actual de
 - Bindings: `viaje.#` y `ticket.#`
 - Prefetch del consumidor: `1`
 
-Support se conecta mediante `RABBITMQ_URL` (por defecto
-`amqp://localhost:5672`), declara esa topología y consume de la cola.
+Support se conecta mediante `RABBITMQ_URL` configurada en el entorno, declara
+esa topología y consume de la cola.
 
 ## Publicación HTTP de AE1
 

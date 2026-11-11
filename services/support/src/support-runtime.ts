@@ -44,6 +44,7 @@ export function createSupportRuntime(
     // Inicia el consumo asíncrono (RF-8.6) sólo si lo heredado de AE1 está habilitado.
     async startLegacyEvents() {
       if (!config.legacyEvents) return;
+      if (!config.rabbitUrl) throw new Error('RABBITMQ_URL es obligatoria para los eventos heredados de Support.');
       await RabbitMQConsumer.connect(config.rabbitUrl);
     },
   };
