@@ -7,6 +7,14 @@ function readText(name: string, fallback: string): string {
   return raw === undefined || raw.trim() === '' ? fallback : raw.trim();
 }
 
+function readRequiredText(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Falta la variable de entorno ${name}.`);
+  }
+  return value;
+}
+
 function readPort(name: string, fallback: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw.trim() === '') {
@@ -59,10 +67,7 @@ export const env = {
    * Conexion a PostgreSQL con el rol propio del servicio, que solo tiene
    * permisos sobre el esquema "receipts" (RNF-04).
    */
-  databaseUrl: readText(
-    'RECEIPTS_DATABASE_URL',
-    'postgres://m8_receipts:m8_receipts_local@localhost:5432/m8',
-  ),
+  databaseUrl: readRequiredText('RECEIPTS_DATABASE_URL'),
 
   /** Redis guarda solo datos efimeros: los enlaces temporales de descarga. */
   redisUrl: readText('REDIS_URL', 'redis://localhost:6379'),
