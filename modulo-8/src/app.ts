@@ -51,11 +51,19 @@ export function createM8ApplicationFromModules(modules: M8ApplicationModules): M
   });
 
   const ready = async (_request: Request, response: Response): Promise<void> => {
-    const receiptReadiness = await receipts.readiness();
-    const qrReadiness = await qr.readiness();
-    const supportReadiness = await support.readiness();
-    const notificationsReadiness = await notifications.readiness();
-    const deliveryReadiness = await delivery.readiness();
+    const checks = await Promise.allSettled([
+      receipts.readiness(),
+      qr.readiness(),
+      support.readiness(),
+      notifications.readiness(),
+      delivery.readiness(),
+    ]);
+    const unavailable = { status: 'unavailable' };
+    const receiptReadiness = checks[0].status === 'fulfilled' ? checks[0].value : unavailable;
+    const qrReadiness = checks[1].status === 'fulfilled' ? checks[1].value : unavailable;
+    const supportReadiness = checks[2].status === 'fulfilled' ? checks[2].value : unavailable;
+    const notificationsReadiness = checks[3].status === 'fulfilled' ? checks[3].value : unavailable;
+    const deliveryReadiness = checks[4].status === 'fulfilled' ? checks[4].value : unavailable;
     const moduleReadiness = {
       receipts: receiptReadiness,
       qr: qrReadiness,
