@@ -26,7 +26,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - RABBITMQ_URL=amqp://rabbitmq:5672
+      - RABBITMQ_URL=${RABBITMQ_URL:?RABBITMQ_URL must be configured}
     depends_on:
       rabbitmq:
         condition: service_healthy
