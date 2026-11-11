@@ -146,25 +146,13 @@ paths:
   /notifications:
     post:
       tags: [Notifications]
-      summary: Procesar una notificación de viaje por la ruta heredada AE1
-      description: Ruta HTTP de compatibilidad que valida el hecho y usa un proveedor simulado. La persistencia e idempotencia de RF8.1 se ejecutan por el flujo RabbitMQ de RF8.6. M8 no modifica el estado del viaje.
+      deprecated: true
+      summary: Ruta heredada de notificación deshabilitada
+      description: Ruta heredada de AE1. En la aplicación integrada devuelve 410 y no genera ni entrega notificaciones. La app independiente de AE1 conserva una simulación para desarrollo. El flujo real de RF8.1 se inicia mediante RabbitMQ y conserva persistencia e idempotencia.
       servers:
         - url: http://localhost:3000
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NotificationRequest'
       responses:
-        '201':
-          description: Notificación procesada.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NotificationResponse'
-        '400': { description: Solicitud inválida. }
-        '415': { description: Content-Type no admitido. }
+        '410': { description: Ruta heredada deshabilitada en la aplicación integrada; usar la integración RabbitMQ. }
   /qr:
     post:
       tags: [QR]
@@ -487,17 +475,6 @@ paths:
         '200': { description: Historial en orden cronológico. }
         '404': { description: Ticket no encontrado. }
         '503': { description: Base de datos no disponible. }
-  /events/publish:
-    post:
-      tags: [Support]
-      deprecated: true
-      summary: Publicar eventos AE1 en RabbitMQ
-      description: Heredado de AE1; sólo con SUPPORT_LEGACY_EVENTS=on. Se retira con la extracción a RF8.6.
-      servers:
-        - url: http://localhost:3000
-      responses:
-        '200': { description: Evento publicado. }
-        '400': { description: Solicitud inválida. }
 components:
   securitySchemes:
     BearerAuth:
