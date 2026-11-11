@@ -5,7 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "${M8_HOST_PORT:-3000}:3000"
+      - "127.0.0.1:${M8_HOST_PORT:-3000}:3000"
     environment:
       NODE_ENV: production
       PORT: "3000"
@@ -68,7 +68,7 @@ services:
     build:
       context: ./infra/fiscal-sandbox
     ports:
-      - "${FISCAL_HOST_PORT:-4010}:4010"
+      - "127.0.0.1:${FISCAL_HOST_PORT:-4010}:4010"
     environment:
       FISCAL_MODE: "${FISCAL_MODE:-normal}"
       SLOW_DELAY_MS: "${FISCAL_SLOW_DELAY_MS:-5000}"
@@ -78,7 +78,7 @@ services:
     build:
       context: ./infra/m7-payments-sandbox
     ports:
-      - "${M7_HOST_PORT:-4020}:4020"
+      - "127.0.0.1:${M7_HOST_PORT:-4020}:4020"
     environment:
       M7_MODE: "${M7_MODE:-normal}"
       UNREGISTERED_TRIPS: "${M7_UNREGISTERED_TRIPS:-autorizado}"
@@ -87,8 +87,8 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: "${RABBITMQ_USER:?RABBITMQ_USER must be configured}"
       RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be configured}"
@@ -101,7 +101,7 @@ services:
   postgres:
     image: postgres:17-alpine
     ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: "${POSTGRES_DB:-m8}"
       POSTGRES_USER: "${POSTGRES_USER:-m8_admin}"
@@ -123,7 +123,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "${REDIS_HOST_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
