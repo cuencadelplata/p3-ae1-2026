@@ -10,10 +10,10 @@ services:
       NODE_ENV: production
       PORT: "3000"
       PUBLIC_BASE_URL: "http://localhost:${M8_HOST_PORT:-3000}"
-      NOTIFICATIONS_DATABASE_URL: "postgres://m8_notifications:${NOTIFICATIONS_DB_PASSWORD:-m8_notifications_local}@postgres:5432/${POSTGRES_DB:-m8}"
-      DELIVERY_DATABASE_URL: "postgres://m8_notification_delivery:${DELIVERY_DB_PASSWORD:-m8_delivery_local}@postgres:5432/${POSTGRES_DB:-m8}"
-      RECEIPTS_DATABASE_URL: "postgres://m8_receipts:${RECEIPTS_DB_PASSWORD:-m8_receipts_local}@postgres:5432/${POSTGRES_DB:-m8}"
-      SUPPORT_DATABASE_URL: "postgres://m8_support:${SUPPORT_DB_PASSWORD:-m8_support_local}@postgres:5432/${POSTGRES_DB:-m8}"
+      NOTIFICATIONS_DATABASE_URL: "postgres://m8_notifications:${NOTIFICATIONS_DB_PASSWORD:?NOTIFICATIONS_DB_PASSWORD must be configured}@postgres:5432/${POSTGRES_DB:-m8}"
+      DELIVERY_DATABASE_URL: "postgres://m8_notification_delivery:${DELIVERY_DB_PASSWORD:?DELIVERY_DB_PASSWORD must be configured}@postgres:5432/${POSTGRES_DB:-m8}"
+      RECEIPTS_DATABASE_URL: "postgres://m8_receipts:${RECEIPTS_DB_PASSWORD:?RECEIPTS_DB_PASSWORD must be configured}@postgres:5432/${POSTGRES_DB:-m8}"
+      SUPPORT_DATABASE_URL: "postgres://m8_support:${SUPPORT_DB_PASSWORD:?SUPPORT_DB_PASSWORD must be configured}@postgres:5432/${POSTGRES_DB:-m8}"
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: "${M8_RABBITMQ_URL:?M8_RABBITMQ_URL must be configured}"
       QR_TTL_SECONDS: "${QR_TTL_SECONDS:-300}"
@@ -105,12 +105,12 @@ services:
     environment:
       POSTGRES_DB: "${POSTGRES_DB:-m8}"
       POSTGRES_USER: "${POSTGRES_USER:-m8_admin}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-m8_admin_local}"
-      RECEIPTS_DB_PASSWORD: "${RECEIPTS_DB_PASSWORD:-m8_receipts_local}"
-      NOTIFICATIONS_DB_PASSWORD: "${NOTIFICATIONS_DB_PASSWORD:-m8_notifications_local}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be configured}"
+      RECEIPTS_DB_PASSWORD: "${RECEIPTS_DB_PASSWORD:?RECEIPTS_DB_PASSWORD must be configured}"
+      NOTIFICATIONS_DB_PASSWORD: "${NOTIFICATIONS_DB_PASSWORD:?NOTIFICATIONS_DB_PASSWORD must be configured}"
       NOTIFICATIONS_TEST_DB_NAME: "${NOTIFICATIONS_TEST_DB_NAME:-m8_notifications_test}"
-      SUPPORT_DB_PASSWORD: "${SUPPORT_DB_PASSWORD:-m8_support_local}"
-      DELIVERY_DB_PASSWORD: "${DELIVERY_DB_PASSWORD:-m8_delivery_local}"
+      SUPPORT_DB_PASSWORD: "${SUPPORT_DB_PASSWORD:?SUPPORT_DB_PASSWORD must be configured}"
+      DELIVERY_DB_PASSWORD: "${DELIVERY_DB_PASSWORD:?DELIVERY_DB_PASSWORD must be configured}"
     volumes:
       - m8-postgres:/var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
