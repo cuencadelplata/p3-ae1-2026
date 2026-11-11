@@ -22,7 +22,7 @@ services:
       M1_IDENTITY_URL: "${M1_IDENTITY_URL:-http://m1-identity-sandbox:4011/auth/validar-identidad-y-rol}"
       M1_TIMEOUT_MS: "${M1_TIMEOUT_MS:-2000}"
       M1_JWT_SECRET: "${M1_JWT_SECRET:?M1_JWT_SECRET must be configured}"
-      M2_API_URL: "${M2_API_URL:-http://m2-service:3002}"
+      M2_API_URL: "${M2_API_URL:-http://m2-preferences-sandbox:4012}"
       M2_TIMEOUT_MS: "${M2_TIMEOUT_MS:-3000}"
       M2_INTERNAL_API_KEY: "${M2_INTERNAL_API_KEY:?M2_INTERNAL_API_KEY must be configured}"
       FISCAL_API_URL: http://fiscal-sandbox:4010
@@ -37,6 +37,21 @@ services:
         condition: service_healthy
       m1-identity-sandbox:
         condition: service_healthy
+      m2-preferences-sandbox:
+        condition: service_healthy
+
+  m2-preferences-sandbox:
+    image: node:24-alpine
+    working_dir: /app
+    command: ["node", "server.mjs"]
+    volumes:
+      - ./infra/m2-preferences-sandbox:/app:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4012/internal/preferences/42').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
 
   m1-identity-sandbox:
     build:
