@@ -1,5 +1,10 @@
 # Módulo 8: Notificaciones, Documentos y Soporte (m8-soporte)
 
+> Guía histórica del servicio independiente de Soporte (AE1). La aplicación
+> integrada de AE2 se inicia desde `modulo-8/` con su `compose.yaml` y se
+> documenta en `modulo-8/docs/RUNBOOK.md`. Este Compose independiente requiere
+> `RABBITMQ_DEFAULT_USER`, `RABBITMQ_DEFAULT_PASS` y `RABBITMQ_URL` externos.
+
 Microservicio encargado de la gestión de tickets de soporte, notificaciones y consumo asíncrono de eventos mediante RabbitMQ para la plataforma distribuida de movilidad urbana.
 
 ---
@@ -40,8 +45,7 @@ docker compose up --build -d
 
 - **Estado del Servicio / API Raíz:** [http://localhost:3000](http://localhost:3000)
 - **Documentación Interactiva OpenAPI (Scalar):** [http://localhost:3000/api-docs](http://localhost:3000/api-docs)
-- **Panel de Administración RabbitMQ (Management):** [http://localhost:15672](http://localhost:15672)  
-  *(Credenciales por defecto: Usuario: `guest` | Contraseña: `guest`)*
+- **Panel de Administración RabbitMQ (Management):** [http://localhost:15672](http://localhost:15672). Usar las credenciales configuradas para este entorno.
 - **Broker RabbitMQ (Puerto AMQP):** `amqp://localhost:5672`
 
 ### Variables de Entorno
@@ -52,7 +56,7 @@ docker compose up --build -d
 | `SUPPORT_DATABASE_URL` | — (obligatoria) | Conexión a CommunicationsDB con el rol `m8_support`. Sin ella el servicio no arranca: no hay almacenamiento alternativo. |
 | `SUPPORT_DB_SCHEMA` | `support` | Schema propio de Support. Debe ser un identificador simple. |
 | `SUPPORT_DB_RETRY_MS` | `5000` | Espera entre intentos de aplicar las migraciones al arrancar. |
-| `RABBITMQ_URL` | `amqp://localhost:5672` | Broker usado por el consumer heredado de AE1. |
+| `RABBITMQ_URL` | Obligatoria para el consumer heredado | Broker configurado por el entorno. |
 | `SUPPORT_LEGACY_EVENTS` | `on` | `on`: conecta el consumer RabbitMQ de AE1, publica `ticket.creado` / `ticket.actualizado` y expone `POST /events/publish`. `off`: Support no se conecta al broker y la API de tickets funciona igual. Cualquier otro valor impide el arranque. |
 
 ### Base de Datos (CommunicationsDB)
