@@ -9,6 +9,7 @@ type ConfirmChannel = Parameters<typeof publishWithConfirm>[0];
 export class NotificationOutboxRelay {
   private timer?: NodeJS.Timeout;
   private stopped = true;
+  private lastPollSuccessful = false;
 
   constructor(
     private readonly pool: Pool,
@@ -18,7 +19,10 @@ export class NotificationOutboxRelay {
   ) {}
 
   async publishPending(): Promise<number> {
-    const client = await this.pool.connect();
+    const client = await this.pool.connect().catch((error: unknown) => {
+      this.lastPollSuccessful = false;
+      throw error;
+    });
     try {
       await client.query("BEGIN");
       const pending = await this.outbox.claimPendingForPublish(client, 25);
@@ -34,8 +38,10 @@ export class NotificationOutboxRelay {
         if (!marked) throw new Error(`No se pudo marcar el Outbox ${envelope.messageId} como publicado.`);
       }
       await client.query("COMMIT");
+      this.lastPollSuccessful = true;
       return pending.length;
     } catch (error) {
+      this.lastPollSuccessful = false;
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
     } finally {
@@ -46,6 +52,7 @@ export class NotificationOutboxRelay {
   start(): void {
     if (!this.stopped) return;
     this.stopped = false;
+    this.lastPollSuccessful = false;
     const poll = async (): Promise<void> => {
       if (this.stopped) return;
       try {
@@ -61,6 +68,11 @@ export class NotificationOutboxRelay {
 
   stop(): void {
     this.stopped = true;
+    this.lastPollSuccessful = false;
     if (this.timer) clearTimeout(this.timer);
+  }
+
+  isReady(): boolean {
+    return !this.stopped && this.lastPollSuccessful;
   }
 }

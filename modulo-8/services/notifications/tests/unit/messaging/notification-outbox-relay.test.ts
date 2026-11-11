@@ -38,6 +38,23 @@ function fixture(confirmError?: Error) {
 }
 
 describe("RF8.6 - relay NotificationRequested", () => {
+  it("readiness refleja fallas del Outbox y vuelve a ok al recuperarse", async () => {
+    const { client, relay } = fixture();
+    expect(relay.isReady()).toBe(false);
+    relay.start();
+    try {
+      await vi.waitFor(() => expect(relay.isReady()).toBe(true));
+      client.query.mockRejectedValueOnce(new Error("PostgreSQL no disponible"));
+      await expect(relay.publishPending()).rejects.toThrow("PostgreSQL no disponible");
+      expect(relay.isReady()).toBe(false);
+      await relay.publishPending();
+      expect(relay.isReady()).toBe(true);
+    } finally {
+      relay.stop();
+    }
+    expect(relay.isReady()).toBe(false);
+  });
+
   it("publica en mobility.events y marca el Outbox después del confirm", async () => {
     const { client, outbox, channel, relay } = fixture();
 
