@@ -1,7 +1,8 @@
 /**
  * Demostracion del consumo asincronico de payment.confirmed (RF-8.3 / RF-8.6).
  *
- * Publica en mobility.events, tal como lo haria M7:
+ * Publica un evento de demostración en mobility.events. El contrato actual
+ * con M7 es REST; M7 no publica payment.confirmed.
  *   1. un pago confirmado valido               -> se emite el comprobante
  *   2. el mismo mensaje otra vez (mismo id)    -> se descarta como repetido
  *   3. un mensaje que no respeta el sobre      -> va a la DLQ sin reintentos
@@ -15,18 +16,18 @@
  * restriccion UNIQUE por viaje ("comprobante ya existente").
  *
  * Uso: con el stack levantado (docker compose up -d en modulo-8), ejecutar
- * `pnpm run demo:pago` y revisar `docker compose logs receipts` y la consola
- * de RabbitMQ en http://localhost:15672 (guest / guest).
+ * configurar RABBITMQ_URL en el entorno antes de ejecutar este script.
  */
 import { randomUUID } from 'node:crypto';
 
 import amqp from 'amqplib';
 
-const URL = process.env.RABBITMQ_URL ?? 'amqp://guest:guest@localhost:5672';
+const URL = process.env.RABBITMQ_URL;
+if (!URL) throw new Error('RABBITMQ_URL debe configurarse en el entorno.');
 const EXCHANGE = process.env.EVENTS_EXCHANGE ?? 'mobility.events';
 const ROUTING_KEY = 'payment.confirmed';
 const ISSUED_ROUTING_KEY = 'receipt.issued';
-const BASE = process.env.BASE_URL ?? 'http://localhost:3008';
+const BASE = process.env.BASE_URL ?? 'http://localhost:3000';
 const LINEA = '='.repeat(72);
 
 const tripId = `trip-demo-${Date.now()}`;
