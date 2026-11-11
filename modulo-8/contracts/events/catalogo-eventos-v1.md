@@ -465,6 +465,10 @@ GET /internal/receipts/{tripId}/delivery-reference
 
 Devuelve un enlace de descarga temporal del PDF. Receipts Delivery no accede a
 la base de datos ni al almacenamiento del servicio de comprobantes.
+En la aplicación integrada de AE2, la ruta HTTP exige Bearer validado por M1
+y permiso sobre el comprobante (cliente, conductor u operador), igual que la
+consulta y descarga. RF8.4 usa directamente la función interna cuando corre
+en el mismo proceso; no necesita una credencial entre servicios inventada.
 
 Respuesta `200`:
 
@@ -482,6 +486,8 @@ Respuesta `200`:
 | Código | `error.code` | Caso |
 | --- | --- | --- |
 | 400 | `INVALID_TRIP_ID` | `tripId` con formato inválido. |
+| 401 | `AUTH_REQUIRED` / `INVALID_AUTH_TOKEN` | Falta el Bearer o M1 lo rechaza. |
+| 403 | `INSUFFICIENT_PERMISSIONS` | El usuario no puede acceder al comprobante. |
 | 404 | `RECEIPT_NOT_FOUND` | No hay comprobante emitido para ese viaje. |
 | 409 | `RECEIPT_PDF_UNAVAILABLE` | El comprobante existe pero su PDF no. |
 | 503 | `DOWNLOAD_LINKS_UNAVAILABLE` | Redis no está disponible; reintentar más tarde. |
