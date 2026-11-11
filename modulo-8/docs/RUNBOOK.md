@@ -13,7 +13,10 @@ Copy-Item .env.example .env
 ```
 
 El archivo `.env` es local y no debe versionarse. Sus valores de M1 y M2 son
-placeholders exclusivos de desarrollo.
+placeholders exclusivos de desarrollo. Antes de iniciar M8, reemplazar
+`M1_JWT_SECRET` y `M2_INTERNAL_API_KEY` por valores locales propios; la app
+rechaza los textos `replace-with-...`. Para integrar M1 y M2 reales, configurar
+las credenciales acordadas con esos servicios fuera del repositorio.
 
 ## Inicio y comprobación
 
