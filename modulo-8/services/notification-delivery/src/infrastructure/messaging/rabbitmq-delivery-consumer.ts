@@ -21,6 +21,7 @@ export interface RabbitMqDeliveryConsumerOptions {
   deliveryService: NotificationDeliveryService;
   maxRetries?: number;
   retryDelayMs?: number;
+  onDisconnected?: () => void;
 }
 
 export class RabbitMqDeliveryConsumer {
@@ -36,6 +37,15 @@ export class RabbitMqDeliveryConsumer {
     // Canal con soporte de Publisher Confirms exigido por RF8.6
     const confirmChannel = await this.options.connection.createConfirmChannel();
     this.channel = confirmChannel;
+    let channelClosed = false;
+    confirmChannel.on('error', (error) => {
+      StructuredLogger.warn({ event: 'AMQP_CHANNEL_ERROR', messageId: 'consumer', error: String(error) });
+    });
+    confirmChannel.on('close', () => {
+      channelClosed = true;
+      this.isRunning = false;
+      this.options.onDisconnected?.();
+    });
 
     const topology = buildQueueTopology({
       queue: DELIVERY_QUEUE,
@@ -96,11 +106,12 @@ export class RabbitMqDeliveryConsumer {
     });
 
     await this.consumer.start(this.channel);
+    if (channelClosed) throw new Error('El canal RabbitMQ se cerró durante el arranque de RF8.7.');
     this.isRunning = true;
   }
 
   async stop(): Promise<void> {
-    if (!this.isRunning || !this.channel) return;
+    if (!this.channel) return;
     if (this.consumer) {
       await this.consumer.stop(this.channel).catch(() => {});
     }
