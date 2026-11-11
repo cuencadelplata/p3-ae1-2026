@@ -12,10 +12,10 @@ export class RabbitMQConsumer {
   private static readonly EXCHANGE_NAME = 'viajes_exchange';
   private static readonly RECONNECT_DELAY_MS = 5000;
 
-  static async connect(url: string = 'amqp://localhost:5672') {
+  static async connect(url: string) {
     let connection: any = null;
     try {
-      console.log(`[RabbitMQ] Conectando a ${url}...`);
+      console.log('[RabbitMQ] Conectando al broker configurado...');
       connection = await amqp.connect(url);
       // Sin listener de 'error', Node termina el proceso cuando el broker se cae.
       connection.on('error', (error: unknown) => console.error('[RabbitMQ] Error en la conexión:', error));

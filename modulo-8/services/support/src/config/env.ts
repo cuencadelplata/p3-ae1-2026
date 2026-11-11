@@ -13,7 +13,7 @@ export function loadSupportConfig(env: NodeJS.ProcessEnv = process.env): Support
 
   return {
     port: env.PORT || 3000,
-    rabbitUrl: env.RABBITMQ_URL || 'amqp://localhost:5672',
+    rabbitUrl: env.RABBITMQ_URL?.trim() ?? '',
     legacyEvents: legacyEvents === 'on',
   };
 }
