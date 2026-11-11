@@ -121,7 +121,9 @@ Para RF8.7 también quedan pendientes owner, alta, actualización, revocación y
 
 ## 7. M2 ↔ M8
 
-**PENDIENTE DE ACUERDO:** la auditoría no resolvió si M2 es owner del perfil de cliente ni detectó contrato HTTP de M2. Antes de que Notifications o Receipts consulten datos se debe acordar ID, datos mínimos y si llegan como snapshot o HTTP. No se crea dependencia sin evidencia.
+**Auditoría de la rama publicada `integration/m2-ae2` (`7dde90c`):** M2 expone perfiles de cliente y la preferencia `notificationChannel: email|push` en su OpenAPI. No se encontró `GET /internal/preferences/{userId}` ni los campos `notificationsEnabled` y `pushEnabled` que espera el cliente HTTP actual de RF8.7. El simulador de M8 sólo prueba su propio flujo; no acredita integración con M2 real ni preferencias de conductores.
+
+**PENDIENTE DE ACUERDO CON M2:** confirmar si M2 administra preferencias de conductores, qué ruta autenticada puede consultar M8, cómo se traduce `notificationChannel` y qué significa un perfil ausente (`404`). Hasta acordarlo, M8 no interpreta `404` ni un formato desconocido como autorización de PUSH. No se crea una ruta ficticia en M2 ni se consulta su base de datos.
 
 ## 8. M3 ↔ M8
 
