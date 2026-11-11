@@ -28,6 +28,11 @@ jobs:
       RABBITMQ_PASSWORD: guest
       M8_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
       RABBITMQ_URL: amqp://guest:guest@localhost:5672
+      POSTGRES_PASSWORD: m8_admin_local
+      RECEIPTS_DB_PASSWORD: m8_receipts_local
+      NOTIFICATIONS_DB_PASSWORD: m8_notifications_local
+      SUPPORT_DB_PASSWORD: m8_support_local
+      DELIVERY_DB_PASSWORD: m8_delivery_local
     defaults:
       run:
         working-directory: modulo-8
