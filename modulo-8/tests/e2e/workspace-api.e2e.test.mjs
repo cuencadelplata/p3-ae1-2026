@@ -30,7 +30,7 @@ test("health de la aplicacion M8 integrada informa sus modulos", async () => {
   }
 });
 
-test("Notifications procesa una solicitud valida", async () => {
+test("Notifications no presenta la ruta simulada como entrega real en la app integrada", async () => {
   const { response, body } = await postJson(`${M8}/notifications`, {
     tripId: `${gateId}-notification`,
     recipientId: `${gateId}-recipient`,
@@ -38,8 +38,8 @@ test("Notifications procesa una solicitud valida", async () => {
     channels: ["PUSH"],
   });
 
-  assert.equal(response.status, 201);
-  assert.equal(body.status, "PROCESSED");
+  assert.equal(response.status, 410);
+  assert.equal(body.error.code, "LEGACY_NOTIFICATION_DISABLED");
 });
 
 test("QR se crea, valida y no se puede reutilizar", async () => {
@@ -112,13 +112,13 @@ test("Support crea un ticket", async () => {
   assert.equal(body.viajeId, `${gateId}-ticket`);
 });
 
-test("Support publica un evento historico valido en RabbitMQ", async () => {
+test("Support no expone la publicación histórica de eventos AE1 en la app integrada", async () => {
   const { response, body } = await postJson(`${M8}/events/publish`, {
     routingKey: "viaje.completado",
     payload: { viajeId: `${gateId}-rabbit`, importe: 2500 },
     count: 1,
   });
 
-  assert.equal(response.status, 200);
-  assert.ok(body.enviadosExitosamente >= 1);
+  assert.equal(response.status, 404);
+  assert.equal(body.error.code, "NOT_FOUND");
 });
