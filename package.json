@@ -10,7 +10,7 @@
     "ensure:dependencies": "node scripts/ensure-test-infrastructure.mjs dependencies",
     "ensure:stack": "node scripts/ensure-test-infrastructure.mjs stack",
     "test": "pnpm run ensure:dependencies && pnpm -r --workspace-concurrency=1 --if-present run test && pnpm run build && pnpm run test:unified && pnpm run test:notifications:integration",
-    "test:unified": "node --test tests/integration/m8-application.test.mjs",
+    "test:unified": "node --test tests/integration/m8-application.test.mjs tests/integration/runtime-config.test.mjs",
     "test:notifications": "pnpm --filter @m8/notifications-processing run test",
     "test:notifications:integration": "pnpm --filter @m8/notifications-processing run test:integration",
     "test:qr": "pnpm --filter @m8/qr run test",
