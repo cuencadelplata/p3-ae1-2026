@@ -111,6 +111,19 @@ export const getDeliveryReference: RequestHandler = async (req, res, next) => {
   }
 };
 
+/** La app única protege la referencia con la misma identidad y permisos del PDF. */
+export const getAuthorizedDeliveryReference: RequestHandler = async (req, res, next) => {
+  try {
+    const tripId = readTripId(req.params['tripId']);
+    const receipt = await receiptService.getReceipt(tripId);
+    authorizeReceiptPermission(receipt, req.usuarioAutenticado);
+    const reference = await receiptService.getDeliveryReference(tripId);
+    res.status(200).json({ data: reference });
+  } catch (error) {
+    next(error);
+  }
+};
+
 /**
  * POST /receipts/:tripId/resend
  * Vuelve a solicitar el envio del comprobante (RF-8.4 - Lucas Cremaschi).
