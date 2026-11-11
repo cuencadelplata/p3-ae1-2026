@@ -23,6 +23,12 @@ export function validateM8RuntimeConfig(env: NodeJS.ProcessEnv = process.env): v
     throw new Error(`Configuración incompleta de M8: ${missing.join(', ')}.`);
   }
 
+  for (const name of requiredSecrets) {
+    if (env[name]!.trim().toLowerCase().startsWith('replace-with-')) {
+      throw new Error(`La variable ${name} conserva un valor de ejemplo; reemplazarla antes de iniciar M8.`);
+    }
+  }
+
   for (const [name, schemes] of Object.entries(requiredUrls)) {
     let parsed: URL;
     try {

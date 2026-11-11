@@ -29,6 +29,13 @@ test('la app única falla antes de abrir el puerto si falta una credencial', () 
   );
 });
 
+test('la app única rechaza secretos de ejemplo sin mostrar su valor', () => {
+  assert.throws(
+    () => validateM8RuntimeConfig({ ...configured, M1_JWT_SECRET: 'replace-with-local-dev-jwt-secret' }),
+    (error) => error.message.includes('M1_JWT_SECRET') && !error.message.includes('replace-with-local-dev-jwt-secret'),
+  );
+});
+
 test('un error de URL identifica la variable sin mostrar su contraseña', () => {
   assert.throws(
     () => validateM8RuntimeConfig({ ...configured, RABBITMQ_URL: 'http://user:private-value@rabbitmq' }),
