@@ -187,8 +187,8 @@ descontar intentos y no llega a la DLQ.
 | --- | --- | --- |
 | `PORT` | `3008` | Puerto HTTP |
 | `PUBLIC_BASE_URL` | `http://localhost:3008` | Base de los enlaces devueltos |
-| `RECEIPTS_DATABASE_URL` | `postgres://m8_receipts:...@localhost:5432/m8` | PostgreSQL con el rol del servicio |
-| `RABBITMQ_URL` | `amqp://guest:guest@localhost:5672` | RabbitMQ |
+| `RECEIPTS_DATABASE_URL` | Obligatoria | PostgreSQL con el rol del servicio; el ejemplo local está en `.env.example` |
+| `RABBITMQ_URL` | Sin valor predeterminado | RabbitMQ configurado por el entorno |
 | `REDIS_URL` | `redis://localhost:6379` | Redis |
 | `RECEIPT_LINK_TTL_SECONDS` | `900` | Vigencia del enlace de descarga |
 | `CONSUMER_MAX_RETRIES` / `CONSUMER_RETRY_DELAY_MS` | `3` / `5000` | Reintentos del consumidor |
