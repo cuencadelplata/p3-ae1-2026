@@ -18,6 +18,14 @@ const validRequest = {
 };
 
 describe("RF-8.1 — POST /notifications", () => {
+  it("no informa una entrega simulada en la app integrada", async () => {
+    const send = vi.fn();
+    const response = await request(createApp({ send }, false)).post("/notifications").send(validRequest);
+    expect(response.status).toBe(410);
+    expect(response.body.error.code).toBe("LEGACY_NOTIFICATION_DISABLED");
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("responde 201 ante una solicitud válida con charset JSON", async () => {
     const response = await request(createApp(successfulPushProvider))
       .post("/notifications")
