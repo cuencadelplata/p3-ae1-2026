@@ -7,6 +7,7 @@ import type { TechnicalInboxStore } from './inbox';
 import { buildQueueTopology, QueueTopology, QueueTopologyOptions } from './topology';
 
 export type EventHandler<TData = Record<string, unknown>> = (event: EventEnvelope<TData>) => Promise<void>;
+export type EventParser = (content: Buffer, routingKey?: string) => EventEnvelope<any>;
 
 export interface EventConsumerOptions {
   consumerId: string;
@@ -14,6 +15,11 @@ export interface EventConsumerOptions {
   inboxStore: TechnicalInboxStore;
   maxRetries?: number;
   retryDelayMs?: number;
+  /**
+   * Parser de frontera opcional. Los productores externos con contrato estricto
+   * pueden rechazar el mensaje antes de que el adaptador genérico lo normalice.
+   */
+  parseEvent?: EventParser;
   logger?: {
     info(msg: string, meta?: unknown): void;
     warn(msg: string, meta?: unknown): void;
@@ -70,6 +76,7 @@ export class EventConsumer {
   private readonly retryDelayMs: number;
   private readonly handlers = new Map<string, EventHandler<any>>();
   private readonly logger: NonNullable<EventConsumerOptions['logger']>;
+  private readonly parseEvent: EventParser;
   private consumerTag?: string;
 
   constructor(options: EventConsumerOptions) {
@@ -78,6 +85,7 @@ export class EventConsumer {
     this.inboxStore = options.inboxStore;
     this.maxRetries = options.maxRetries ?? 3;
     this.retryDelayMs = options.retryDelayMs ?? 5000;
+    this.parseEvent = options.parseEvent ?? adaptExternalEvent;
     this.logger = options.logger ?? {
       info: (msg, meta) => console.log(`[RF8.6][${this.consumerId}] INFO: ${msg}`, meta ?? ''),
       warn: (msg, meta) => console.warn(`[RF8.6][${this.consumerId}] WARN: ${msg}`, meta ?? ''),
@@ -125,7 +133,7 @@ export class EventConsumer {
 
     let envelope: EventEnvelope;
     try {
-      envelope = adaptExternalEvent(msg.content, msg.fields.routingKey);
+      envelope = this.parseEvent(msg.content, msg.fields.routingKey);
     } catch (err) {
       this.logger.error('Mensaje invalido o corrupto recibido. Enviando a DLQ.', { error: err });
       await this.sendToDLQ(channel, msg, String((err as Error).message || err));
@@ -146,8 +154,15 @@ export class EventConsumer {
     try {
       claimed = await this.inboxStore.claim(this.consumerId, envelope.messageId, envelope.eventType);
       if (!claimed) {
-        this.logger.info(`Mensaje ${envelope.messageId} ya reclamado/procesado por ${this.consumerId}. ACK sin re-ejecutar.`);
-        channel.ack(msg);
+        if (await this.inboxStore.isCompleted(this.consumerId, envelope.messageId)) {
+          this.logger.info(`Mensaje ${envelope.messageId} ya procesado por ${this.consumerId}. ACK sin re-ejecutar.`);
+          channel.ack(msg);
+        } else {
+          // Un claim PENDING puede pertenecer a un worker que acaba de morir.
+          // No confirmar esa copia: volverá a intentar cuando venza el lease.
+          this.logger.info(`Mensaje ${envelope.messageId} sigue PENDING. Se aplaza sin consumir reintentos.`);
+          await this.scheduleRetry(channel, msg, retryCount);
+        }
         return;
       }
     } catch (err) {

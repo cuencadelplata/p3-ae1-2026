@@ -274,6 +274,13 @@ describe('RF8.6 - EventConsumer AMQP (ACK, Concurrencia, Retry, DLQ, Publisher C
 
     expect(executionCount).toBe(1);
     expect(channel.ack).toHaveBeenCalledTimes(2);
+    expect(channel.publish).toHaveBeenCalledWith(
+      '',
+      'm8.test-queue.retry',
+      msg2.content,
+      expect.objectContaining({ headers: expect.objectContaining({ 'x-retry-count': 0 }) }),
+      expect.any(Function),
+    );
   });
 
   it('debe prevenir ejecucion duplicada para redelivery de ride.requested con mismo messageId', async () => {
@@ -321,6 +328,43 @@ describe('RF8.6 - EventConsumer AMQP (ACK, Concurrencia, Retry, DLQ, Publisher C
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(channel.ack).toHaveBeenCalledTimes(2);
+  });
+
+  it('no descarta una redelivery cuyo claim sigue PENDING tras caer otro worker', async () => {
+    const inbox = new InMemoryTechnicalInbox();
+    const channel = createMockConfirmChannel();
+    const consumer = new EventConsumer({
+      consumerId: 'm8.test-consumer',
+      topology: { queue: 'm8.test-queue', routingKey: 'trip.completed' },
+      inboxStore: inbox,
+    });
+    const handler = vi.fn().mockResolvedValue(undefined);
+    consumer.registerHandler('TripCompleted', handler);
+    const payload = {
+      messageId: '78190866-c477-4ff8-ae29-aec5273daf20',
+      eventType: 'TripCompleted',
+      version: 1,
+      occurredAt: '2026-10-04T12:00:00Z',
+      correlationId: 'trip-1',
+      producer: 'm6',
+      data: { tripId: 'trip-1' },
+    };
+    const msg = {
+      content: Buffer.from(JSON.stringify(payload)),
+      fields: { routingKey: 'trip.completed' },
+      properties: { headers: {} },
+    } as any;
+
+    await inbox.claim('m8.test-consumer', payload.messageId, payload.eventType);
+    await consumer.processMessage(channel, msg);
+    expect(handler).not.toHaveBeenCalled();
+    expect(channel.publish).toHaveBeenCalledWith('', 'm8.test-queue.retry', msg.content, expect.any(Object), expect.any(Function));
+    expect(await inbox.isCompleted('m8.test-consumer', payload.messageId)).toBe(false);
+
+    await inbox.releaseClaim('m8.test-consumer', payload.messageId);
+    await consumer.processMessage(channel, msg);
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(await inbox.isCompleted('m8.test-consumer', payload.messageId)).toBe(true);
   });
 
   it('debe enviar a DLQ un ride.requested rechazado por validacion de negocio', async () => {
