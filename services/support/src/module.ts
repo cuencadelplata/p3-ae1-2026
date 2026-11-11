@@ -15,7 +15,8 @@ export interface SupportModule {
 export function createSupportModule(): SupportModule {
   // La app común aporta health, documentación y 404 globales; Support monta
   // solamente sus rutas y no necesita cargar una especificación propia.
-  const support = buildSupportFromEnv(process.env, false);
+  // El publicador HTTP y el consumer de AE1 no forman parte de la app AE2.
+  const support = buildSupportFromEnv({ ...process.env, SUPPORT_LEGACY_EVENTS: 'off' }, false);
   const router = Router();
   registerSupportRoutes(router, {
     ticketService: support.ticketService,
