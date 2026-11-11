@@ -146,8 +146,8 @@ paths:
   /notifications:
     post:
       tags: [Notifications]
-      summary: Procesar una notificación de viaje
-      description: M8 valida el hecho, genera el mensaje y persiste la notificación lógica. No modifica el estado del viaje.
+      summary: Procesar una notificación de viaje por la ruta heredada AE1
+      description: Ruta HTTP de compatibilidad que valida el hecho y usa un proveedor simulado. La persistencia e idempotencia de RF8.1 se ejecutan por el flujo RabbitMQ de RF8.6. M8 no modifica el estado del viaje.
       servers:
         - url: http://localhost:3000
       requestBody:
