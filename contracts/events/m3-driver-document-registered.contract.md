@@ -74,10 +74,35 @@ M3 publica documento.registrado
 → RF8.7 intenta la entrega PUSH al conductor
 ```
 
-## Pendiente de RF8.7
+## Estado de RF8.7
 
 RF8.1 ya prepara `NotificationRequested` con
 `data.eventType = DRIVER_DOCUMENT_REGISTERED` y sin `tripId`, porque el hecho
-se refiere a un documento y no a un viaje. RF8.7 debe extender su validador y
-su contrato interno para aceptar esa variante antes de habilitar la entrega
-PUSH de este evento en un entorno integrado.
+se refiere a un documento y no a un viaje. RF8.7 acepta esta variante y usa
+el `recipientId` numérico para resolver el device token. La entrega mediante
+el proveedor sandbox se verificó con un productor M3 simulado y RabbitMQ y
+PostgreSQL reales; sigue pendiente verificar al productor M3 real y su relación
+`driverId` ↔ `userId` de M1.
+
+## Auditoría del productor M3 publicado
+
+Revisión de solo lectura de `m3-Conductores--Vehículos` en el commit
+`3ee6c94388e9576a69235a046e09a16d4c191403` y de `integration/m1-ae2`
+en `970f4332e82efbdb6970fbdadf42c5aa464f28ff`:
+
+- M3 declara `m3.eventos` como exchange `topic` durable, usa
+  `documento.registrado` y lee `RABBITMQ_URL` del entorno. Esa topología
+  coincide con el contrato.
+- `documents.events.ts` publica un JSON plano con `documentId`, `driverId`,
+  `tipoDocumento` y `timestamp`. Faltan `messageId`, `eventType`, `version`,
+  `occurredAt`, `correlationId`, `producer` y el objeto `data`.
+- El `driverId` sale de `:driverId` en la ruta HTTP de M3, se almacena como
+  `string` y se publica sin convertirlo ni comprobar su vínculo con M1. Sus
+  pruebas usan valores como `driver-test-...`. M1 identifica al usuario con
+  `userId` numérico en el token y en su contrato HTTP.
+
+Por esos dos desajustes, el publicador M3 de ese commit no supera la
+validación de RF8.6. El mensaje se envía a DLQ y no se crea una notificación
+ni se intenta PUSH. La prueba integrada con publicador simulado acredita el
+flujo de M8, pero la prueba conjunta con M3 real sigue pendiente hasta que M3
+publique el envelope acordado y el `userId` numérico canónico de M1.

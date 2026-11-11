@@ -435,18 +435,20 @@ Su finalidad es solicitar la entrega de una notificación lógica ya creada por 
 ### 5.5 `documento.registrado` (M3 → RF8.1)
 
 M3 acordó publicar el hecho externo `DriverDocumentRegistered` en el exchange
-`m3.eventos`, con routing key `documento.registrado`. RF8.6 administrará la
-cola propia `m8.notificaciones.documento-registrado` y entregará el evento
-validado a RF8.1.
+`m3.eventos`, con routing key `documento.registrado`. RF8.6 administra la
+cola propia `m8.notificaciones.documento-registrado` y entrega únicamente el
+envelope validado a RF8.1. Usa `messageId` para el Inbox técnico, confirma
+después de RF8.1 y deriva errores a retry o DLQ según corresponda.
 
 RF8.1 crea una notificación lógica con el mensaje “Tu documento fue registrado
 correctamente.” y la persiste con su Outbox. El destinatario es `driverId`, que
-debe ser el `userId` numérico canónico de M1. Mientras M3 emita un UUID interno
-en ese campo, no se habilita la entrega PUSH.
+debe ser el `userId` numérico canónico de M1. El productor M3 auditado aún
+publica JSON plano con `driverId` de tipo texto. Ese mensaje no cumple el
+contrato y se envía a DLQ sin notificación ni PUSH.
 
 La variante de `NotificationRequested` no incluye `tripId` y usa
-`DRIVER_DOCUMENT_REGISTERED`; RF8.7 debe ampliar su validador contractual para
-aceptarla antes de activar la entrega integrada.
+`DRIVER_DOCUMENT_REGISTERED`; el validador de RF8.7 ya acepta esa variante.
+Su proveedor actual es sandbox y la E2E con M3 real sigue pendiente.
 
 El contrato completo está en
 [`m3-driver-document-registered.contract.md`](./m3-driver-document-registered.contract.md).
