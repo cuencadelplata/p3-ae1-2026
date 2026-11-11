@@ -106,6 +106,12 @@ importers:
 
   services/notifications:
     dependencies:
+      '@m8/shared':
+        specifier: workspace:*
+        version: link:../shared
+      amqplib:
+        specifier: ^0.10.9
+        version: 0.10.9
       express:
         specifier: ^5.2.1
         version: 5.2.1
