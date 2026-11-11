@@ -341,7 +341,9 @@ paths:
     get:
       tags: [Receipts]
       summary: Obtener una referencia interna de entrega de comprobante
-      description: Ruta interna de coordinación para obtener el enlace temporal y su vencimiento; no pertenece a la API pública.
+      description: Ruta de coordinación de M8. Requiere Bearer validado por M1 y acceso al comprobante como cliente, conductor u operador. RF8.4 usa la función interna cuando corre en la misma aplicación.
+      security:
+        - BearerAuth: []
       servers:
         - url: http://localhost:3000
       parameters:
@@ -352,6 +354,8 @@ paths:
       responses:
         '200': { description: Referencia temporal disponible. }
         '400': { description: Identificador de viaje inválido. }
+        '401': { description: Bearer de M1 ausente o inválido. }
+        '403': { description: El usuario no tiene permiso sobre el comprobante. }
         '404': { description: Comprobante no encontrado. }
         '503': { description: Dependencia requerida no disponible. }
   /tickets:
