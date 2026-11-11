@@ -21,8 +21,8 @@ info:
       forma atómica.
 
 servers:
-  - url: http://localhost:3103
-    description: Servicio QR publicado por Compose.
+  - url: http://localhost:3000
+    description: Aplicación única de M8 publicada por Compose.
 
 tags:
   - name: Health

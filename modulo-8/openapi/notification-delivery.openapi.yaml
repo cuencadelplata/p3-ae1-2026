@@ -6,8 +6,8 @@ info:
     API para la gestión de Device Tokens y auditoría de entregas PUSH de notificaciones de viaje.
     Los endpoints de dispositivos están protegidos mediante JWT canónico emitido por M1.
 servers:
-  - url: http://localhost:3107
-    description: Servicio de Entrega de Notificaciones
+  - url: http://localhost:3000
+    description: Aplicación única de M8
 paths:
   /health:
     get:
@@ -29,6 +29,8 @@ paths:
       responses:
         '200':
           description: Dependencias listas.
+        '503':
+          description: Una dependencia crítica no está disponible.
 
   /devices/tokens:
     post:

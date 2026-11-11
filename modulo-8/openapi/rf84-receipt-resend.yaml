@@ -16,8 +16,8 @@ info:
   contact:
     name: Lucas Cremaschi - M8 RF-8.4
 servers:
-  - url: http://localhost:3008/api/v1
-    description: Servidor Local Receipts (M8)
+  - url: http://localhost:3000/api/v1
+    description: Aplicación única de M8
   - url: /api/v1
     description: Servidor relativo
 
