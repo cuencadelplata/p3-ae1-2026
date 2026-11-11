@@ -95,3 +95,30 @@ test('expone unavailable cuando un módulo crítico no está disponible', async 
     await server.close();
   }
 });
+
+test('readiness informa 503 si una consulta de módulo falla, sin afectar liveness', async () => {
+  const notifications = createModule('notifications');
+  notifications.readiness = async () => { throw new Error('Outbox no disponible'); };
+  const application = createM8ApplicationFromModules({
+    receipts: createModule('receipts'),
+    qr: createModule('qr'),
+    support: createModule('support'),
+    notifications,
+    delivery: createModule('delivery'),
+  });
+  const server = await startApplication(application);
+
+  try {
+    const ready = await fetch(`${server.url}/health/ready`);
+    assert.equal(ready.status, 503);
+    const body = await ready.json();
+    assert.equal(body.status, 'unavailable');
+    assert.equal(body.modules.notifications.status, 'unavailable');
+    assert.equal(JSON.stringify(body).includes('Outbox no disponible'), false);
+    const live = await fetch(`${server.url}/health/live`);
+    assert.equal(live.status, 200);
+  } finally {
+    await application.stop();
+    await server.close();
+  }
+});
