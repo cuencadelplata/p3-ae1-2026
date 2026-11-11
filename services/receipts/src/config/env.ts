@@ -71,7 +71,7 @@ export const env = {
   receiptLinkTtlSeconds: readPositiveInt('RECEIPT_LINK_TTL_SECONDS', 900),
 
   /** Mensajeria segun el catalogo de eventos v1 (modulo-8/contracts/events). */
-  rabbitmqUrl: readText('RABBITMQ_URL', 'amqp://guest:guest@localhost:5672'),
+  rabbitmqUrl: readText('RABBITMQ_URL', ''),
   eventsExchange: readText('EVENTS_EXCHANGE', 'mobility.events'),
   deadLetterExchange: readText('EVENTS_DEAD_LETTER_EXCHANGE', 'mobility.events.dlx'),
   paymentConfirmedQueue: readText('PAYMENT_CONFIRMED_QUEUE', 'm8.receipts.payment-confirmed'),
