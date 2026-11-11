@@ -15,6 +15,7 @@ export interface TechnicalInboxStore {
   claim(consumerId: string, messageId: string, eventType: string): Promise<boolean>;
   markAsCompleted(consumerId: string, messageId: string): Promise<void>;
   releaseClaim(consumerId: string, messageId: string): Promise<void>;
+  isCompleted(consumerId: string, messageId: string): Promise<boolean>;
   hasBeenProcessed(consumerId: string, messageId: string): Promise<boolean>;
   markAsProcessed(consumerId: string, messageId: string, eventType: string): Promise<void>;
 }
@@ -79,6 +80,10 @@ export class InMemoryTechnicalInbox implements TechnicalInboxStore {
     return !isExpired;
   }
 
+  async isCompleted(consumerId: string, messageId: string): Promise<boolean> {
+    return this.entries.get(this.makeKey(consumerId, messageId))?.status === 'PROCESSED';
+  }
+
   async markAsProcessed(consumerId: string, messageId: string, _eventType: string): Promise<void> {
     this.entries.set(this.makeKey(consumerId, messageId), { status: 'PROCESSED', claimedAt: Date.now() });
   }
@@ -139,6 +144,15 @@ export class PostgresTechnicalInbox implements TechnicalInboxStore {
   async hasBeenProcessed(consumerId: string, messageId: string): Promise<boolean> {
     const res = await this.client.query(
       `SELECT 1 FROM messaging.inbox_events WHERE consumer_id = $1 AND message_id = $2 LIMIT 1`,
+      [consumerId, messageId]
+    );
+    return res.rows.length > 0;
+  }
+
+  async isCompleted(consumerId: string, messageId: string): Promise<boolean> {
+    const res = await this.client.query(
+      `SELECT 1 FROM messaging.inbox_events
+       WHERE consumer_id = $1 AND message_id = $2 AND status = 'PROCESSED' LIMIT 1`,
       [consumerId, messageId]
     );
     return res.rows.length > 0;
