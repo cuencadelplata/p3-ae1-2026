@@ -208,13 +208,17 @@ test("sin Redis: se siguen emitiendo comprobantes y solo fallan los enlaces temp
 
     assert.equal((await issue(tripId)).status, 201);
 
-    const reference = await fetch(`${RECEIPTS}/internal/receipts/${tripId}/delivery-reference`);
+    const reference = await fetch(`${RECEIPTS}/internal/receipts/${tripId}/delivery-reference`, {
+      headers: { authorization: RECEIPTS_AUTHORIZATION },
+    });
     assert.equal(reference.status, 503);
     assert.equal((await reference.json()).error.code, "DOWNLOAD_LINKS_UNAVAILABLE");
   });
 
   await waitForReceiptDependency("redis");
-  const reference = await fetch(`${RECEIPTS}/internal/receipts/${tripId}/delivery-reference`);
+  const reference = await fetch(`${RECEIPTS}/internal/receipts/${tripId}/delivery-reference`, {
+    headers: { authorization: RECEIPTS_AUTHORIZATION },
+  });
   assert.equal(reference.status, 200);
 });
 
@@ -312,6 +316,11 @@ test("autorizador fiscal caido: el circuito se abre, los pagos esperan sin ir a 
 test("sin PostgreSQL: el proceso sigue vivo, la API responde 503 y los pagos se emiten al volver", async () => {
   const issued = `${run}-pg-previo`;
   assert.equal((await issue(issued)).status, 201);
+  const referenceResponse = await fetch(`${RECEIPTS}/internal/receipts/${issued}/delivery-reference`, {
+    headers: { authorization: RECEIPTS_AUTHORIZATION },
+  });
+  assert.equal(referenceResponse.status, 200);
+  const referenceUrl = (await referenceResponse.json()).data.url;
   const paid = `${run}-pg-pago`;
   let event;
 
@@ -323,7 +332,7 @@ test("sin PostgreSQL: el proceso sigue vivo, la API responde 503 y los pagos se 
     assert.equal(status, 503);
     assert.equal(body.dependencies.postgres.status, "unavailable");
 
-    const response = await fetch(`${RECEIPTS}/internal/receipts/${issued}/delivery-reference`);
+    const response = await fetch(referenceUrl);
     assert.equal(response.status, 503, "una base caida no debe responder 500");
     assert.equal((await response.json()).error.code, "DATABASE_UNAVAILABLE");
     assert.ok(response.headers.get("retry-after"));
