@@ -99,6 +99,8 @@ Los valores siguientes son los defaults de desarrollo; las credenciales reales d
 | `M1_JWT_SECRET` | Solo default de desarrollo del stub | Secreto HS256 del stub de M1; no usar el default en un entorno compartido. |
 | `SOPORTE_SECRET_KEY` | `secret-m2` | Clave de servicio que M2 envía a Soporte (header `X-Secret-Key`). |
 | `STATUS_SECRET_KEY` | `secret-status` | Clave que aceptan módulos internos en `GET /status` (header `X-Secret-Key`). |
+| `INTERNAL_API_KEY` | `internal-dev` en docker-compose; sin valor responde `401` | Clave que M8 envía en `x-api-key` a `GET /internal/preferences/{userId}`. Debe ser igual a `M2_INTERNAL_API_KEY` de M8. |
+| `INTERNAL_PREFERENCES_DEADLINE_MS` | `1800` | Plazo máximo de `GET /internal/preferences/{userId}`; al vencer responde `503`. |
 | `PENALIZACIONES_TEMPORAL` | `2` | Penalizaciones vigentes para disparar `BLOQUEADO_TEMPORAL`. |
 | `PENALIZACIONES_PERMANENTE` | `3` | Penalizaciones vigentes para disparar `BLOQUEADO_PERMANENTE`. |
 | `SERVICE_RETRY_AFTER_SECONDS` | `10` | Valor de `Retry-After` para un `503`. |
@@ -188,6 +190,20 @@ Regla de desbloqueo automático: solo los bloqueos con `blockOrigin = AUTOMATICO
 El estado de cuenta vive solo en la tabla `AccountStatus`; el perfil lo lee con un `JOIN`. Las consultas de estado comparten el circuit breaker de PostgreSQL.
 
 ---
+
+## Preferencias de notificación para M8 (RF8.7)
+
+`GET /internal/preferences/{userId}` es servicio a servicio: exige `x-api-key: <INTERNAL_API_KEY>` (un Bearer de usuario no sirve). `userId` es el id numérico de M1. Si llega `x-correlation-id`, se registra en los logs y se devuelve en la respuesta.
+
+| Respuesta | Significado |
+|---|---|
+| `200` | `{ userId, notificationsEnabled, pushEnabled, notificationChannel }`. `pushEnabled` es `true` solo si `notificationChannel` es `"push"` (el default `"email"` implica `false`). `notificationsEnabled` es `false` solo si la cuenta está `INACTIVO`. |
+| `400` | `userId` no es un entero positivo. |
+| `401` | Falta `x-api-key`, es incorrecta o `INTERNAL_API_KEY` no está configurada. |
+| `404` `{"error":"CustomerNotFound"}` | El usuario no tiene perfil de cliente en M2 (M8 omite la entrega). Un `404` con `"error":"NotFound"` es una ruta mal configurada. |
+| `503` + `Retry-After` | PostgreSQL no disponible o se venció `INTERNAL_PREFERENCES_DEADLINE_MS` (1800 ms), por debajo del timeout de 3000 ms de M8. |
+
+M2 solo tiene perfiles de clientes: M8 no consulta este endpoint para conductores. Los device tokens PUSH los gestiona M8.
 
 ## Historial de viajes (RF-2.3)
 

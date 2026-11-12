@@ -254,6 +254,40 @@ export const openApiSpec = {
         }
       }
     },
+    '/internal/preferences/{userId}': {
+      get: {
+        summary: 'Preferencias de notificación para M8 (RF8.7)',
+        description: 'Servicio a servicio. pushEnabled es true solo si notificationChannel es "push" (el default "email" implica false). notificationsEnabled es false solo si la cuenta está INACTIVO. Responde en menos de 1800 ms (INTERNAL_PREFERENCES_DEADLINE_MS) o devuelve 503.',
+        security: [{ internalApiKey: [] }],
+        parameters: [
+          { name: 'userId', in: 'path', required: true, description: 'Id numérico del usuario en M1', schema: { type: 'integer', minimum: 1 } },
+          { name: 'x-correlation-id', in: 'header', required: false, description: 'Se registra en los logs y se devuelve en la respuesta', schema: { type: 'string' } }
+        ],
+        responses: {
+          '200': {
+            description: 'Preferencias del cliente',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['userId', 'notificationsEnabled', 'pushEnabled', 'notificationChannel'],
+                  properties: {
+                    userId: { type: 'integer', example: 91 },
+                    notificationsEnabled: { type: 'boolean', example: true },
+                    pushEnabled: { type: 'boolean', example: true },
+                    notificationChannel: { type: 'string', enum: ['email', 'push'], example: 'push' }
+                  }
+                }
+              }
+            }
+          },
+          '400': { description: 'userId no es un entero positivo' },
+          '401': { description: 'Falta x-api-key, es incorrecta o INTERNAL_API_KEY no está configurada' },
+          '404': { description: '{"error":"CustomerNotFound"}: el usuario no tiene perfil de cliente en M2' },
+          '503': { description: 'PostgreSQL no disponible o plazo vencido; incluye Retry-After' }
+        }
+      }
+    },
     '/health': {
       get: {
         summary: 'Estado de salud del módulo',
@@ -297,6 +331,12 @@ export const openApiSpec = {
         in: 'header',
         name: 'X-Secret-Key',
         description: 'Clave de servicio a servicio para que módulos internos consulten el estado de cuenta sin un token de usuario.'
+      },
+      internalApiKey: {
+        type: 'apiKey',
+        in: 'header',
+        name: 'x-api-key',
+        description: 'Clave de servicio (INTERNAL_API_KEY) para las rutas /internal consumidas por M8.'
       }
     },
     schemas: {

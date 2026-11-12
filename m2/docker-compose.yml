@@ -41,6 +41,8 @@ services:
       # Claves de servicio a servicio
       SOPORTE_SECRET_KEY: "secret-m2"
       STATUS_SECRET_KEY: "secret-status"
+      # Clave que M8 envía en x-api-key a /internal/preferences (= M2_INTERNAL_API_KEY de M8)
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-internal-dev}
       # Umbrales de bloqueo automático por penalizaciones (RF-2.5)
       PENALIZACIONES_TEMPORAL: "2"
       PENALIZACIONES_PERMANENTE: "3"
