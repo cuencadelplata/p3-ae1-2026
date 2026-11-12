@@ -8,7 +8,8 @@ import { accountStatusController } from './controllers/account-status.controller
 import { tripsController } from './controllers/trips.controller.js';
 import { asyncHandler } from './middlewares/async-handler.js';
 import { errorHandler } from './middlewares/error-handler.js';
-import { requireAuth, requireAuthOrServiceKey } from './middlewares/auth.middleware.js';
+import { requireAuth, requireAuthOrServiceKey, requireInternalApiKey } from './middlewares/auth.middleware.js';
+import { internalPreferencesController } from './controllers/internal-preferences.controller.js';
 import { metricsHandler, httpMetricsMiddleware } from './observability/metrics.js';
 import { healthHandler, registerHealthCheck } from './health/registry.js';
 import { prisma } from './config/prisma.js';
@@ -97,6 +98,9 @@ app.put('/v1/customers/:id/status', requireAuth(), asyncHandler(accountStatusCon
 
 // RF-2.3: Historial de viajes (Leandro) — requiere token de usuario (se reenvía a M6)
 app.get('/v1/customers/:id/trips', requireAuth(), asyncHandler(tripsController.getCustomerTrips));
+
+// Contrato con M8 (RF8.7): preferencias de notificación por userId de M1, con clave de servicio
+app.get('/internal/preferences/:userId', requireInternalApiKey(), asyncHandler(internalPreferencesController.getPreferences));
 
 // RF-2.2 (direcciones frecuentes) y RF-2.4 (calificación del conductor)
 app.use('/api/v1', ae2Api);
