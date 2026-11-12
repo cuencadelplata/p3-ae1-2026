@@ -37,16 +37,20 @@ El script [`modulo-8/infra/postgres/init/04-notification-delivery.sh`](file:///d
 - Autenticación: header `x-api-key: ${M2_INTERNAL_API_KEY}` configurado por variable de entorno externa (nunca hardcodeado).
 - **Contrato Propuesto a M2:**
   - **Endpoint:** `GET /internal/preferences/{userId}`
-  - **Headers:** `x-api-key: <secret>`, `x-correlation-id: <tripId>`
+  - **Headers:** `x-api-key: <secret>`, `x-correlation-id: <correlationId>`
   - **Respuesta esperada:**
     ```json
     {
-      "userId": "usr-0091",
+      "userId": 91,
       "notificationsEnabled": true,
-      "pushEnabled": true
+      "pushEnabled": true,
+      "notificationChannel": "push"
     }
     ```
 - **Comportamiento si preferencia es OFF:** Se omite el envío PUSH, se registra en base de datos como `SKIPPED_PREFERENCE_OFF` con motivo `M2_PREFERENCE_DISABLED`, se audita y se emite `ACK` a RabbitMQ.
+- El canal predeterminado de M2 es `email`, por lo que `pushEnabled` es `false`. Una cuenta `INACTIVO` devuelve `notificationsEnabled: false`.
+- `404 CustomerNotFound` omite la entrega sin reintentar (`SKIPPED_NO_CUSTOMER_PROFILE`); `404 NotFound`, `401` y respuestas inválidas indican configuración errónea y van a DLQ. `503`, timeout y errores de red se reintentan.
+- M2 no tiene perfiles de conductores. `DRIVER_DOCUMENT_REGISTERED` identifica al conductor y se entrega usando su token activo de M8 sin consultar M2. Para otros eventos de viaje falta acordar el rol explícito del destinatario.
 
 ### Decisión 4: Sanitización Estricta de Logs (RNF-13)
 - En cumplimiento de las políticas de seguridad: **nunca se imprimen device tokens, JWT ni API keys** en los logs.
