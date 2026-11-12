@@ -52,12 +52,33 @@ export function requireAuth(options: RequireAuthOptions = {}): RequestHandler {
   };
 }
 
-function isValidServiceKey(provided: string | undefined): boolean {
-  const expected = process.env.STATUS_SECRET_KEY;
+/** Compara en tiempo constante; sin clave configurada no acepta ninguna. */
+function matchesSecret(provided: string | undefined, expected: string | undefined): boolean {
   if (!expected || provided === undefined) return false;
   const actualBytes = Buffer.from(provided);
   const expectedBytes = Buffer.from(expected);
   return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
+}
+
+function isValidServiceKey(provided: string | undefined): boolean {
+  return matchesSecret(provided, process.env.STATUS_SECRET_KEY);
+}
+
+/**
+ * Rutas /internal (consumidas por M8): exige `x-api-key` igual a INTERNAL_API_KEY.
+ * Si la variable no está configurada, rechaza todo con 401 (falla cerrada).
+ */
+export function requireInternalApiKey(): RequestHandler {
+  return (req, res, next) => {
+    if (matchesSecret(req.header('x-api-key'), process.env.INTERNAL_API_KEY)) {
+      next();
+      return;
+    }
+    res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Se requiere una clave de servicio válida en el header x-api-key'
+    });
+  };
 }
 
 export function requireAuthOrServiceKey(): RequestHandler {
