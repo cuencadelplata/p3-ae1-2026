@@ -174,6 +174,10 @@ async function sendSimulationResult(
     });
     return;
   }
+  if (result.actionTaken === 'SKIPPED_NO_CUSTOMER_PROFILE') {
+    response.status(200).json({ message: 'Entrega omitida: M2 no tiene perfil de cliente para el destinatario.', data: result });
+    return;
+  }
   if (result.actionTaken === 'FAILED') {
     response.status(502).json({
       error: { code: 'DELIVERY_FAILED', message: result.error },

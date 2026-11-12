@@ -53,7 +53,7 @@ test('RF8.7 — Entrega PUSH para Notificación de Documento Registrado', async 
 
       // Dispositivo registrado para el conductor 42
       await tokenRepo.upsertToken(driverId, 'fcm_token_driver_42', 'ANDROID');
-      m2Client.setPreferences(driverId, { notificationsEnabled: true, pushEnabled: true });
+      m2Client.setShouldFail(true); // M2 no administra conductores y no debe ser consultado.
 
       // Dispositivo registrado para otro usuario 99
       await tokenRepo.upsertToken(otherUserId, 'fcm_token_other_99', 'IOS');

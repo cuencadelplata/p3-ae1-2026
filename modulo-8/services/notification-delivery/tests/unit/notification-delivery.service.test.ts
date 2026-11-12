@@ -4,7 +4,8 @@ import { NotificationDeliveryService } from '../../src/services/notification-del
 import { InMemoryMessagingInboxRepository } from '../../src/infrastructure/database/inbox.repository.js';
 import { InMemoryDeliveryRepository } from '../../src/infrastructure/database/delivery.repository.js';
 import { InMemoryDeviceTokenRepository } from '../../src/infrastructure/database/device-token.repository.js';
-import { MockM2PreferencesClient } from '../../src/infrastructure/clients/m2-preferences.client.js';
+import { MockM2PreferencesClient, M2PreferencesError } from '../../src/infrastructure/clients/m2-preferences.client.js';
+import { NonRetryableMessagingError } from '@m8/shared';
 import { SandboxPushProvider } from '../../src/infrastructure/provider/sandbox-push-provider.js';
 import type { NotificationRequestedEnvelope } from '../../src/domain/delivery.types.js';
 
@@ -288,4 +289,32 @@ test('NotificationDeliveryService - Suite de Casos Obligatorios RF8.7', async (t
     assert.equal(result.actionTaken, 'DELIVERED', 'El nuevo consumidor debe recuperar el claim y completar la entrega');
     assert.equal(provider.getSentPushes().length, 1);
   });
+});
+
+test('CustomerNotFound omite PUSH, registra el resultado y completa Inbox sin reintento', async () => {
+  const inbox = new InMemoryMessagingInboxRepository();
+  const deliveries = new InMemoryDeliveryRepository();
+  const tokens = new InMemoryDeviceTokenRepository();
+  const provider = new SandboxPushProvider({ mode: 'NORMAL', simulatedDelayMs: 0 });
+  const m2Client = { getPreferences: async () => { throw new M2PreferencesError('CUSTOMER_NOT_FOUND', 'Sin perfil'); } };
+  await tokens.upsertToken(91, 'token-91', 'ANDROID');
+  const service = new NotificationDeliveryService(inbox, deliveries, tokens, m2Client, provider);
+  const result = await service.processNotificationRequest(createMockEnvelope('msg-customer-404', 'notif-customer-404'));
+  assert.equal(result.status, 'SKIPPED_NO_CUSTOMER_PROFILE');
+  assert.equal(result.skipReason, 'CUSTOMER_NOT_FOUND');
+  assert.equal(provider.getSentPushes().length, 0);
+  assert.equal((await deliveries.getByMessageId('msg-customer-404'))?.status, 'SKIPPED_NO_CUSTOMER_PROFILE');
+  assert.equal((await inbox.getRecord('m8.delivery.notification-requested', 'msg-customer-404'))?.status, 'PROCESSED');
+});
+
+test('una ruta o clave M2 incorrecta no consume reintentos', async () => {
+  const inbox = new InMemoryMessagingInboxRepository();
+  const service = new NotificationDeliveryService(
+    inbox,
+    new InMemoryDeliveryRepository(),
+    new InMemoryDeviceTokenRepository(),
+    { getPreferences: async () => { throw new M2PreferencesError('CONFIGURATION', 'NotFound'); } },
+    new SandboxPushProvider({ mode: 'NORMAL', simulatedDelayMs: 0 }),
+  );
+  await assert.rejects(service.processNotificationRequest(createMockEnvelope('msg-config-404', 'notif-config-404')), NonRetryableMessagingError);
 });

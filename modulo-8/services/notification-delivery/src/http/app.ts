@@ -262,6 +262,10 @@ export function createApp(deps: AppDependencies = {}): http.RequestListener {
             });
             return;
           }
+          if (result.actionTaken === 'SKIPPED_NO_CUSTOMER_PROFILE') {
+            sendJson(200, { message: 'Entrega omitida: M2 no tiene perfil de cliente para el destinatario.', data: result });
+            return;
+          }
 
           if (result.actionTaken === 'FAILED') {
             sendJson(502, {

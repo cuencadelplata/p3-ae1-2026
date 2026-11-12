@@ -16,6 +16,7 @@ export type DeliveryStatus =
   | 'DELIVERED'
   | 'FAILED'
   | 'SKIPPED_PREFERENCE_OFF'
+  | 'SKIPPED_NO_CUSTOMER_PROFILE'
   | 'FAILED_NO_DEVICE_TOKEN';
 
 export type AttemptStatus = 'SUCCESS' | 'FAILED';
@@ -124,7 +125,7 @@ export interface UserPreferences {
 export interface DeliveryProcessingResult {
   messageId: string;
   notificationId: string;
-  actionTaken: 'DELIVERED' | 'SKIPPED_PREFERENCE_OFF' | 'FAILED' | 'ACK_DUPLICATE' | 'IGNORED_LEASE_ACTIVE';
+  actionTaken: 'DELIVERED' | 'SKIPPED_PREFERENCE_OFF' | 'SKIPPED_NO_CUSTOMER_PROFILE' | 'FAILED' | 'ACK_DUPLICATE' | 'IGNORED_LEASE_ACTIVE';
   status: DeliveryStatus | 'ALREADY_PROCESSED';
   attemptsCount: number;
   deliveredAt?: string;
