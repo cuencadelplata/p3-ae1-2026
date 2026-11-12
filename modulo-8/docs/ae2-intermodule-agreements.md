@@ -121,11 +121,26 @@ Para RF8.7 también quedan pendientes owner, alta, actualización, revocación y
 
 ## 7. M2 ↔ M8
 
-**Auditoría de la rama publicada `integration/m2-ae2` (`7dde90c`):** M2 expone perfiles de cliente y la preferencia `notificationChannel: email|push` en su OpenAPI. No se encontró `GET /internal/preferences/{userId}` ni los campos `notificationsEnabled` y `pushEnabled` que espera el cliente HTTP actual de RF8.7. El simulador de M8 sólo prueba su propio flujo; no acredita integración con M2 real ni preferencias de conductores.
+**Contrato publicado por M2:** La referencia `origin/integration/m2-ae2` en
+`15a48f9` contiene la ruta, su autenticación, OpenAPI y pruebas de integración
+en los commits `02bbc03`, `696606b` y `15a48f9`. Se verificó el código de esa
+referencia; todavía no se ejecutó una prueba HTTP entre los servicios reales.
 
-El endpoint de preferencias todavía no existe en la rama M2 auditada. El contrato siguiente se basa en la propuesta posterior del equipo M2 y no acredita una prueba entre servicios reales.
-
-**Acuerdo propuesto por el equipo M2, pendiente de publicar y probar:** M2 sólo administra perfiles de clientes. Su `userId` es el identificador numérico de M1 y no almacena device tokens. Implementará `GET /internal/preferences/{userId}` en su API del puerto 3000, protegida por `x-api-key` compartida mediante variables de entorno y con `x-correlation-id` para trazabilidad. La respuesta 200 contendrá `userId`, `notificationsEnabled`, `pushEnabled` y `notificationChannel`. El canal predeterminado `email` implica `pushEnabled: false`; una cuenta `INACTIVO` implica `notificationsEnabled: false`. `404 CustomerNotFound` significa que no hay perfil de cliente y M8 omite PUSH sin reintentar; `404 NotFound` significa ruta mal configurada. `401` y respuestas mal formadas son fallas de configuración que van a DLQ sin reintentos; `503`, timeout y fallas de red conservan retry y DLQ al agotarse. En el Compose conjunto, `M2_API_URL` debe apuntar al servicio M2 en el puerto 3000 y la clave debe coincidir en ambos contenedores sin publicarse en Git.
+- M2 sólo administra perfiles de clientes. Su `userId` es el identificador
+  numérico de M1 y no almacena device tokens.
+- Expone `GET /internal/preferences/{userId}` en el puerto 3000. Protege la
+  ruta con `x-api-key`, cuyo valor lee de `INTERNAL_API_KEY`, y acepta
+  `x-correlation-id` para trazabilidad.
+- La respuesta 200 contiene `userId`, `notificationsEnabled`, `pushEnabled` y
+  `notificationChannel`. El canal predeterminado `email` implica
+  `pushEnabled: false`; una cuenta `INACTIVO` implica
+  `notificationsEnabled: false`.
+- `404 CustomerNotFound` omite PUSH sin reintentar. `404 NotFound` significa
+  ruta mal configurada. `400`, `401` y respuestas mal formadas van a DLQ sin
+  reintentos; `503`, timeout y fallas de red conservan retry y DLQ al agotarse.
+- En el Compose conjunto, `M2_API_URL` debe apuntar al servicio M2 en el
+  puerto 3000. `M2_INTERNAL_API_KEY` de M8 debe coincidir con
+  `INTERNAL_API_KEY` de M2. La clave no se publica en Git.
 
 Para `DRIVER_DOCUMENT_REGISTERED`, RF8.7 identifica al destinatario como conductor por el tipo de hecho, omite la consulta a M2 y usa el token activo de M8 asociado al `userId` numérico. Esto sólo se probará con M3 real cuando M3 publique ese identificador canónico; el proveedor actual sigue siendo sandbox. Los hechos de viaje destinados a conductores aún requieren que M6/RF8.1 transmitan explícitamente el rol del destinatario: el `eventType` de viaje por sí solo no lo determina. Hasta cerrar ese contrato, un `CustomerNotFound` de M2 omite la entrega y no se interpreta como permiso para PUSH.
 
