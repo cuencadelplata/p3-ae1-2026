@@ -35,7 +35,7 @@ El script [`modulo-8/infra/postgres/init/04-notification-delivery.sh`](file:///d
 
 ### Decisión 3: Integración Desacoplada con M2 (Preferencias)
 - Autenticación: header `x-api-key: ${M2_INTERNAL_API_KEY}` configurado por variable de entorno externa (nunca hardcodeado).
-- **Contrato Propuesto a M2:**
+- **Contrato publicado por M2 en `integration/m2-ae2` (`15a48f9`):**
   - **Endpoint:** `GET /internal/preferences/{userId}`
   - **Headers:** `x-api-key: <secret>`, `x-correlation-id: <correlationId>`
   - **Respuesta esperada:**
