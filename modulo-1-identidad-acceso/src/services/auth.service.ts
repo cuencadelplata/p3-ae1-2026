@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { getJwtSecret } from "../config/env";
 import {
     createUser,
     findUserByDni,
@@ -121,9 +122,7 @@ export async function loginUser(
         );
     }
 
-    const jwtSecret =
-        process.env.JWT_SECRET ||
-        "clave-local-desarrollo-m1-cambiar-en-produccion";
+    const jwtSecret = getJwtSecret();
 
     const token = jwt.sign(
         {

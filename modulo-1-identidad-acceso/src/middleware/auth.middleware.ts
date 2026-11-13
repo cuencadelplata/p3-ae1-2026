@@ -5,6 +5,7 @@ import {
 } from "express";
 import jwt from "jsonwebtoken";
 import { UserRole } from "../types/user.types";
+import { getJwtSecret } from "../config/env";
 
 export interface AuthenticatedRequest
     extends Request {
@@ -47,9 +48,17 @@ export function authenticateToken(
         return;
     }
 
-    const jwtSecret =
-        process.env.JWT_SECRET ||
-        "clave-local-desarrollo-m1-cambiar-en-produccion";
+    let jwtSecret: string;
+    try {
+        jwtSecret = getJwtSecret();
+    } catch {
+        res.status(500).json({
+            valid: false,
+            error: "Error en configuración de seguridad del servidor",
+            code: "server_misconfiguration"
+        });
+        return;
+    }
 
     try {
         const decoded = jwt.verify(

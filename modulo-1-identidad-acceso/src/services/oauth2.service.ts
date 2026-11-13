@@ -7,6 +7,7 @@ import {
 import { UserRole, OAuth2Provider } from "../types/user.types";
 import { AuthError } from "./auth.service";
 import jwt from "jsonwebtoken";
+import { getJwtSecret } from "../config/env";
 
 /**
  * RF-1.5: Integración Estándar
@@ -140,9 +141,7 @@ function generateOAuth2Token(
     email: string,
     role: UserRole
 ): OAuth2TokenResponse {
-    const jwtSecret =
-        process.env.JWT_SECRET ||
-        "clave-local-desarrollo-m1-cambiar-en-produccion";
+    const jwtSecret = getJwtSecret();
 
     const token = jwt.sign(
         {
