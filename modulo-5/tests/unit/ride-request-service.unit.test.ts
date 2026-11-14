@@ -171,26 +171,58 @@ describe('RideRequestService', () => {
   });
 
   // ==========================================================================
-  //  RF-5.3: Oferta con vencimiento
+  //  RF-5.3: Oferta con vencimiento (Matriz de cátedra CP-5.3-01 a 03)
   // ==========================================================================
   describe('RF-5.3 — sendOffersForRequest', () => {
-    it('debe crear ofertas con TTL para conductores candidatos', async () => {
+    it('CP-5.3-01: Sobre una solicitud vigente, enviar una oferta a un conductor válido -> Crea oferta con vencimiento', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+      const result = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101'],
+        ttlSeconds: 30,
+      });
+
+      expect(result.requestId).toBe(request.id);
+      expect(result.offersSentCount).toBe(1);
+      const offer = result.offers[0];
+      expect(offer.driverId).toBe('drv_101');
+      expect(offer.status).toBe('PENDING');
+      expect(offer.ttlSeconds).toBe(30);
+      expect(new Date(offer.expiresAt).getTime()).toBeGreaterThan(Date.now());
+    });
+
+    it('CP-5.3-02: Sobre una solicitud vigente, enviar ofertas a dos conductores válidos -> Cada uno recibe su propia oferta para la misma solicitud', async () => {
       const request = await service.createRideRequest('client_1', 'key_1', validDTO);
       const result = await service.sendOffersForRequest(request.id, 'client_1', {
         driverIds: ['drv_101', 'drv_102'],
         ttlSeconds: 30,
       });
 
-      expect(result.requestId).toBe(request.id);
       expect(result.offersSentCount).toBe(2);
-      expect(result.offers).toHaveLength(2);
+      expect(result.offers[0].requestId).toBe(request.id);
+      expect(result.offers[1].requestId).toBe(request.id);
+      expect(result.offers[0].driverId).toBe('drv_101');
+      expect(result.offers[1].driverId).toBe('drv_102');
+      expect(result.offers[0].id).not.toBe(result.offers[1].id);
+    });
 
-      result.offers.forEach((offer) => {
-        expect(offer.status).toBe('PENDING');
-        expect(offer.ttlSeconds).toBe(30);
-        expect(offer.driverId).toBeDefined();
-        expect(new Date(offer.expiresAt).getTime()).toBeGreaterThan(Date.now());
+    it('CP-5.3-03: Intentar ofertar a un ID de conductor que M3/M4 no reconoce como candidato válido -> No se crea ni envía oferta a ese destinatario', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+
+      // Conductor inexistente/no reconocido
+      await expect(
+        service.sendOffersForRequest(request.id, 'client_1', {
+          driverIds: ['drv_desconocido_no_valido'],
+          ttlSeconds: 30,
+        })
+      ).rejects.toThrow(NotFoundError);
+
+      // Si se envía uno válido y uno inválido, solo se crea para el válido
+      const mixed = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101', 'drv_desconocido_no_valido'],
+        ttlSeconds: 30,
       });
+      expect(mixed.offersSentCount).toBe(1);
+      expect(mixed.offers[0].driverId).toBe('drv_101');
     });
 
     it('debe transicionar el estado de la solicitud a OFFERED', async () => {

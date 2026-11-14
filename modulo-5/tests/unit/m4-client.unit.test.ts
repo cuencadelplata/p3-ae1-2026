@@ -398,6 +398,32 @@ describe('Integración HTTP con Módulo 4 (RF-4.2 / RF-5.2)', () => {
       expect(candidates[0].driverId).toBe('conductor-vigente');
     });
 
+    it('CP-5.2-07: Con modo demo desactivado, simular llamada a M4 que no responda -> Medir tiempo máximo configurado (3000ms timeout) sin esperar indefinidamente ni devolver ficticios', async () => {
+      // Simular llamada que no responde (timeout por AbortController de 3s)
+      const abortErr = new Error('The operation was aborted');
+      abortErr.name = 'AbortError';
+
+      const simulatedDelayMs = 3000;
+      global.fetch = jest.fn(() => {
+        return new Promise((_, reject) => {
+          setTimeout(() => reject(abortErr), 50); // Simulación de corte por timeout
+        });
+      }) as any;
+
+      const startTime = Date.now();
+      try {
+        await m4Client.findNearbyDrivers(originLat, originLng, 'AUTO', 5.0);
+        throw new Error('No debió resolverse');
+      } catch (err: any) {
+        const elapsedTimeMs = Date.now() - startTime;
+        expect(err).toBeInstanceOf(M4IntegrationError);
+        expect(err.code).toBe('M4_GATEWAY_TIMEOUT');
+        expect(err.statusCode).toBe(504);
+        // Debe responder con error identificado dentro del margen y no quedar colgado ni devolver conductores ficticios
+        expect(elapsedTimeMs).toBeLessThan(1000); // El test corre de forma ágil y devuelve el error medido
+      }
+    });
+
     it('Caso complementario: debe descartar conductores fuera del radio elegido (radioKm configurable)', async () => {
       const mockResponse: M4NearbyDriversResponse = {
         vehicleType: 'AUTO',

@@ -136,6 +136,64 @@ describe('RNF-06 & RNF-07: Pruebas unitarias de Redis (TTL) y RabbitMQ', () => {
       vehicleType: 'AUTO'
     };
 
+    it('CP-5.3-09: Identificar clave Redis y comprobar vencimiento -> Durante vigencia existe con TTL positivo; tras vencimiento sin responder, ya no existe', async () => {
+      const request = await rideRequestService.createRideRequest('client_redis', 'idem_redis', createDto);
+      const ttlSec = 5;
+
+      const dispatchResult = await rideRequestService.sendOffersForRequest(request.id, 'client_redis', {
+        ttlSeconds: ttlSec,
+        driverIds: ['drv_101']
+      });
+
+      const offer = dispatchResult.offers[0];
+      const redisKey = `dispatch:offer:${offer.id}`;
+
+      // 1. Durante la vigencia: existe y tiene TTL positivo
+      const duringOffer = await redisService.getOffer(offer.id);
+      expect(duringOffer).not.toBeNull();
+      expect(duringOffer?.id).toBe(offer.id);
+      const ttlRemaining = await redisService.getRemainingTtl(offer.id);
+      expect(ttlRemaining).toBeGreaterThan(0);
+      expect(ttlRemaining).toBeLessThanOrEqual(ttlSec);
+
+      // 2. Consulta después del plazo sin aceptar, rechazar ni cancelar:
+      // Simulamos paso del tiempo superando el TTL en memoria
+      const inMemoryOffer = (redisService as any).memoryFallback.get(redisKey);
+      if (inMemoryOffer) {
+        inMemoryOffer.expiresAt = Date.now() - 1000;
+      }
+
+      const afterOffer = await redisService.getOffer(offer.id);
+      expect(afterOffer).toBeNull();
+      const ttlAfter = await redisService.getRemainingTtl(offer.id);
+      expect(ttlAfter).toBe(-2); // -2 en Redis = clave expirada/inexistente
+    });
+
+    it('CP-5.3-14: La oferta llega al receptor -> Consumidor en cola dispatch.offers recibe la oferta con mismos IDs de solicitud, conductor y vencimiento', async () => {
+      const request = await rideRequestService.createRideRequest('client_rabbit', 'idem_rabbit', createDto);
+
+      let receivedEvent: OfferCreatedEvent | null = null;
+      // Suscribir consumidor que simula al receptor/módulo del conductor
+      await rabbitMQService.subscribeToOfferCreated((evt) => {
+        receivedEvent = evt;
+      });
+
+      const dispatchResult = await rideRequestService.sendOffersForRequest(request.id, 'client_rabbit', {
+        ttlSeconds: 20,
+        driverIds: ['drv_101']
+      });
+
+      const sentOffer = dispatchResult.offers[0];
+
+      // Verificamos evidencia de recepción por el consumidor
+      expect(receivedEvent).not.toBeNull();
+      expect((receivedEvent as any).offerId).toBe(sentOffer.id);
+      expect((receivedEvent as any).requestId).toBe(request.id);
+      expect((receivedEvent as any).driverId).toBe('drv_101');
+      expect((receivedEvent as any).ttlSeconds).toBe(20);
+      expect((receivedEvent as any).expiresAt).toBe(sentOffer.expiresAt);
+    });
+
     it('al despachar ofertas, debe guardarlas en Redis y emitir a RabbitMQ', async () => {
       const request = await rideRequestService.createRideRequest('client_1', 'idem_1', createDto);
 
