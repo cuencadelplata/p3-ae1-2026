@@ -142,7 +142,7 @@ referencia; todavía no se ejecutó una prueba HTTP entre los servicios reales.
   puerto 3000. `M2_INTERNAL_API_KEY` de M8 debe coincidir con
   `INTERNAL_API_KEY` de M2. La clave no se publica en Git.
 
-Para `DRIVER_DOCUMENT_REGISTERED`, RF8.7 identifica al destinatario como conductor por el tipo de hecho, omite la consulta a M2 y usa el token activo de M8 asociado al `userId` numérico. Esto sólo se probará con M3 real cuando M3 publique ese identificador canónico; el proveedor actual sigue siendo sandbox. Los hechos de viaje destinados a conductores aún requieren que M6/RF8.1 transmitan explícitamente el rol del destinatario: el `eventType` de viaje por sí solo no lo determina. Hasta cerrar ese contrato, un `CustomerNotFound` de M2 omite la entrega y no se interpreta como permiso para PUSH.
+Para `DRIVER_DOCUMENT_REGISTERED`, RF8.7 identifica al destinatario como conductor por el tipo de hecho, omite la consulta a M2 y usa el token activo de M8 asociado al `userId` numérico. M3 ya mostró un mensaje real con el envelope y `driverId` numérico; falta acreditar que ese número corresponde al conductor de M1 y probar que M8 consumió el mensaje. El proveedor actual sigue siendo sandbox. Los hechos de viaje destinados a conductores aún requieren que M6/RF8.1 transmitan explícitamente el rol del destinatario: el `eventType` de viaje por sí solo no lo determina. Hasta cerrar ese contrato, un `CustomerNotFound` de M2 omite la entrega y no se interpreta como permiso para PUSH.
 
 ## 8. M3 ↔ M8
 

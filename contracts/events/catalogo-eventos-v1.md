@@ -442,9 +442,11 @@ después de RF8.1 y deriva errores a retry o DLQ según corresponda.
 
 RF8.1 crea una notificación lógica con el mensaje “Tu documento fue registrado
 correctamente.” y la persiste con su Outbox. El destinatario es `driverId`, que
-debe ser el `userId` numérico canónico de M1. El productor M3 auditado aún
-publica JSON plano con `driverId` de tipo texto. Ese mensaje no cumple el
-contrato y se envía a DLQ sin notificación ni PUSH.
+debe ser el `userId` numérico canónico de M1. El productor M3 publicado en
+`b11a471` ya emite el envelope con `driverId` numérico. M3 mostró un mensaje
+real que pasa el validador de M8; queda pendiente comprobar que el número
+identifique al conductor autenticado en M1 y que ese mensaje haya recorrido
+M3 → RabbitMQ → M8 → proveedor PUSH.
 
 La variante de `NotificationRequested` no incluye `tripId` y usa
 `DRIVER_DOCUMENT_REGISTERED`; el validador de RF8.7 ya acepta esa variante.

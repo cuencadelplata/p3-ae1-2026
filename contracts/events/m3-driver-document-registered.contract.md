@@ -3,7 +3,7 @@
 **Productor:** M3 — Conductores y documentos
 **Consumidor técnico:** RF8.6 — Mensajería M8
 **Consumidor de negocio:** RF8.1 — Notificaciones
-**Estado:** acordado; la entrega PUSH queda condicionada a que M3 emita `driverId` como `userId` numérico canónico de M1.
+**Estado:** M3 ya publicó el envelope con `driverId` numérico; falta demostrar que el número corresponde al conductor autenticado en M1 y ejecutar la prueba conjunta con M8.
 
 ## Propósito
 
@@ -101,8 +101,29 @@ en `970f4332e82efbdb6970fbdadf42c5aa464f28ff`:
   pruebas usan valores como `driver-test-...`. M1 identifica al usuario con
   `userId` numérico en el token y en su contrato HTTP.
 
-Por esos dos desajustes, el publicador M3 de ese commit no supera la
-validación de RF8.6. El mensaje se envía a DLQ y no se crea una notificación
-ni se intenta PUSH. La prueba integrada con publicador simulado acredita el
-flujo de M8, pero la prueba conjunta con M3 real sigue pendiente hasta que M3
-publique el envelope acordado y el `userId` numérico canónico de M1.
+Ese commit anterior no superaba la validación de RF8.6. La prueba integrada
+con un productor simulado acredita el flujo de M8, pero no sustituye una
+prueba conjunta con el servicio M3 real.
+
+### Actualización del publicador M3
+
+La referencia remota `m3-Conductores--Vehículos` en `b11a471` contiene un
+publicador actualizado. El equipo M3 mostró un mensaje real en RabbitMQ con
+`messageId` también en las propiedades AMQP, `driverId: 101` numérico,
+`correlationId` igual a `data.documentId`, `delivery_mode: 2`, exchange
+`m3.eventos` y routing key `documento.registrado`. El valor
+`tipoDocumento: LICENCIA_CONDUCIR` es válido para M8: el contrato exige texto
+no vacío, sin restringirlo a `LICENCIA`.
+
+El código publicado genera `messageId` con `randomUUID()` y construye el
+envelope acordado. El evento mostrado supera las validaciones de RF8.6 y
+RF8.1. Aún no demuestra que `101` sea el `userId` del conductor autenticado
+en M1: M3 toma `driverId` del parámetro de la ruta y comprueba que sea
+numérico, sin verificar su vínculo con M1 en esa ruta. Tampoco hay evidencia
+de que M8 haya consumido ese `messageId`, creado una notificación e intentado
+el PUSH para un token del conductor.
+
+La publicación actual se inicia después de guardar el documento; si falla,
+M3 registra el error y devuelve el documento sin un mecanismo visible de
+republicación. Esto se debe probar y resolver para no perder avisos cuando
+RabbitMQ esté caído. No se modifica M3 desde M8.
