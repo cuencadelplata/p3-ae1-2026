@@ -3,10 +3,13 @@ import { randomInt } from "node:crypto";
 
 // Cada test usa su propio driverId único, para no chocar entre corridas
 // ni depender del orden en que se ejecutan.
-function driverIdUnico() {
+/*function driverIdUnico() {
   return `driver-test-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-}
+}*/
 
+function driverIdUnico() {
+  return String(Date.now() % 1_000_000_000);
+}
 // Genera una patente válida y distinta en cada llamada (formato AAA000),
 // para no toparse con el unique de la base entre tests.
 function patenteUnica() {
