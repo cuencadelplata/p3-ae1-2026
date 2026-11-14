@@ -20,7 +20,9 @@ import { RideRequestValidator } from '../schemas/ride-request.schema';
 import { randomUUID } from 'node:crypto';
 import { RedisService } from './redis.service';
 import { RabbitMQService, DriverCancellationEvent } from './rabbitmq.service';
-import { M4ClientService } from './m4-client.service';
+import { M4ClientService, M4IntegrationError } from './m4-client.service';
+
+export { M4IntegrationError } from './m4-client.service';
 
 export class ConflictError extends Error {
   public code: string;

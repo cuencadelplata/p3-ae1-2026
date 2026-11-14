@@ -1,13 +1,15 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { RedisService } from '../../src/services/redis.service';
 import { RabbitMQService, OfferCreatedEvent } from '../../src/services/rabbitmq.service';
 import { RideRequestService } from '../../src/services/ride-request.service';
+import { M4ClientService } from '../../src/services/m4-client.service';
 import { CreateRideRequestDTO, RideOffer } from '../../src/types/ride-request.types';
 
 describe('RNF-06 & RNF-07: Pruebas unitarias de Redis (TTL) y RabbitMQ', () => {
   let redisService: RedisService;
   let rabbitMQService: RabbitMQService;
   let rideRequestService: RideRequestService;
+  let m4Client: M4ClientService;
 
   const sampleLocation = {
     latitude: -27.4678,
@@ -25,10 +27,24 @@ describe('RNF-06 & RNF-07: Pruebas unitarias de Redis (TTL) y RabbitMQ', () => {
     // Forzar modo fallback en memoria para pruebas rápidas y deterministas
     process.env.DISABLE_REDIS = 'true';
     process.env.DISABLE_RABBITMQ = 'true';
+    process.env.M4_MOCK = 'true';
 
     redisService = new RedisService();
     rabbitMQService = new RabbitMQService();
-    rideRequestService = new RideRequestService(redisService, rabbitMQService);
+
+    // Corrección RF-5.2: Se usan mocks sembrados explícitamente (aprobados)
+    m4Client = new M4ClientService();
+    m4Client.seedMockDrivers([
+      { driverId: 'drv_101', latitude: -27.468, longitude: -58.834, vehicleType: 'AUTO', available: true, distanceKm: 1.2, rating: 4.8 },
+      { driverId: 'drv_102', latitude: -27.470, longitude: -58.832, vehicleType: 'AUTO', available: true, distanceKm: 2.1, rating: 4.7 },
+    ]);
+
+    rideRequestService = new RideRequestService(redisService, rabbitMQService, m4Client);
+  });
+
+  afterEach(() => {
+    delete process.env.M4_MOCK;
+    m4Client.clearMockDrivers();
   });
 
   describe('RedisService - Almacenamiento y TTL de Ofertas', () => {

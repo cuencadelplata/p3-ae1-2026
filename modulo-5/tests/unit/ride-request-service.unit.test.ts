@@ -1,5 +1,7 @@
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { RideRequestService, ConflictError, NotFoundError, ValidationError } from '../../src/services/ride-request.service';
 import { CreateRideRequestDTO } from '../../src/types/ride-request.types';
+import { M4ClientService } from '../../src/services/m4-client.service';
 
 /**
  * Tests Unitarios — RideRequestService
@@ -9,6 +11,7 @@ import { CreateRideRequestDTO } from '../../src/types/ride-request.types';
  */
 describe('RideRequestService', () => {
   let service: RideRequestService;
+  let m4Client: M4ClientService;
 
   const validDTO: CreateRideRequestDTO = {
     origin: { latitude: -34.6037, longitude: -58.3816, address: 'Av. 9 de Julio y Corrientes (Obelisco)' },
@@ -17,7 +20,20 @@ describe('RideRequestService', () => {
   };
 
   beforeEach(() => {
-    service = new RideRequestService();
+    // Corrección RF-5.2: Se usan mocks sembrados explícitamente (aprobados) en vez de fallback silencioso
+    m4Client = new M4ClientService();
+    m4Client.seedMockDrivers([
+      { driverId: 'drv_101', latitude: -34.604, longitude: -58.382, vehicleType: 'AUTO', available: true, distanceKm: 1.2, rating: 4.8 },
+      { driverId: 'drv_102', latitude: -34.607, longitude: -58.385, vehicleType: 'AUTO', available: true, distanceKm: 2.1, rating: 4.7 },
+      { driverId: 'drv_201', latitude: -34.604, longitude: -58.382, vehicleType: 'MOTO', available: true, distanceKm: 1.5, rating: 4.6 },
+    ]);
+    process.env.M4_MOCK = 'true';
+    service = new RideRequestService(undefined, undefined, m4Client);
+  });
+
+  afterEach(() => {
+    delete process.env.M4_MOCK;
+    m4Client.clearMockDrivers();
   });
 
   // ==========================================================================

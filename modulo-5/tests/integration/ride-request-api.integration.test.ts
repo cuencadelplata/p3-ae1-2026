@@ -1,5 +1,6 @@
+import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
-import { app } from '../../src/index';
+import { app, rideRequestService } from '../../src/index';
 
 /**
  * Tests de Integración HTTP (Supertest) — M5 Solicitud y Despacho
@@ -14,6 +15,20 @@ import { app } from '../../src/index';
  * - RF-5.7: Sin disponibilidad (Filtro sin candidatos o rechazo total)
  */
 describe('M5 Dispatch Service — API Integration Tests', () => {
+  beforeAll(() => {
+    // Simulación declarada y aprobada por cátedra (AE2 p.11)
+    process.env.M4_MOCK = 'true';
+    rideRequestService.getM4ClientService().seedMockDrivers([
+      { driverId: 'drv_101', latitude: -34.604, longitude: -58.382, vehicleType: 'AUTO', available: true, distanceKm: 1.2, rating: 4.8 },
+      { driverId: 'drv_102', latitude: -34.607, longitude: -58.385, vehicleType: 'AUTO', available: true, distanceKm: 2.1, rating: 4.7 },
+      { driverId: 'drv_201', latitude: -34.604, longitude: -58.382, vehicleType: 'MOTO', available: true, distanceKm: 1.5, rating: 4.6 }
+    ]);
+  });
+
+  afterAll(() => {
+    delete process.env.M4_MOCK;
+    rideRequestService.getM4ClientService().clearMockDrivers();
+  });
   const getUniqueClientId = (prefix = 'client') => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const getUniqueKey = () => `key_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
@@ -483,6 +498,34 @@ describe('M5 Dispatch Service — API Integration Tests', () => {
         .get(`/api/v1/ride-requests/${createRes.body.id}`)
         .set('x-user-id', clientId);
       expect(getRes.body.status).toBe('NO_DRIVERS_AVAILABLE');
+    });
+
+    it('debe responder 503 M4_CONNECTION_FAILED y NO 404 NO_DRIVERS_AVAILABLE ante caída de conexión de M4 (RNF-05)', async () => {
+      const clientId = getUniqueClientId();
+      const createRes = await request(app)
+        .post('/api/v1/ride-requests')
+        .set('x-user-id', clientId)
+        .set('Idempotency-Key', getUniqueKey())
+        .send(validPayload);
+
+      // Desactivamos temporalmente simulación para probar fallo de red real
+      delete process.env.M4_MOCK;
+      rideRequestService.getM4ClientService().clearMockDrivers();
+
+      const candRes = await request(app)
+        .post(`/api/v1/ride-requests/${createRes.body.id}/candidates`)
+        .set('x-user-id', clientId)
+        .send({ radiusKm: 5 });
+
+      // Restauramos mocks
+      process.env.M4_MOCK = 'true';
+      rideRequestService.getM4ClientService().seedMockDrivers([
+        { driverId: 'drv_101', latitude: -34.604, longitude: -58.382, vehicleType: 'AUTO', available: true, distanceKm: 1.2, rating: 4.8 }
+      ]);
+
+      expect(candRes.status).toBe(503);
+      expect(candRes.body.code).toBe('M4_CONNECTION_FAILED');
+      expect(candRes.body.code).not.toBe('NO_DRIVERS_AVAILABLE');
     });
   });
 });

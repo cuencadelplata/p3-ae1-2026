@@ -3,7 +3,8 @@ import {
   RideRequestService,
   ConflictError,
   NotFoundError,
-  ValidationError
+  ValidationError,
+  M4IntegrationError
 } from '../services/ride-request.service';
 import { CreateRideRequestDTO, CancelRideRequestDTO } from '../types/ride-request.types';
 
@@ -290,6 +291,15 @@ export class RideRequestController {
 
     if (error instanceof NotFoundError) {
       res.status(404).json({
+        code: error.code,
+        message: error.message,
+        timestamp
+      });
+      return;
+    }
+
+    if (error instanceof M4IntegrationError) {
+      res.status(error.statusCode).json({
         code: error.code,
         message: error.message,
         timestamp

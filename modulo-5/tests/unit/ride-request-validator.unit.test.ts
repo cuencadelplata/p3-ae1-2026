@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { RideRequestValidator } from '../../src/schemas/ride-request.schema';
 import { CreateRideRequestDTO, GeoLocation } from '../../src/types/ride-request.types';
 
