@@ -19,6 +19,9 @@ export async function registrarDocumento(
 ): Promise<Documento> {
   const tipo = String(datos.tipoDocumento).toUpperCase();
   const tiposValidos = Object.values(TipoDocumento) as string[];
+  if (!/^\d+$/.test(driverId)) {
+    throw new AppError("driverId debe ser el userId numérico de M1", 400);
+  }
   if (!tiposValidos.includes(tipo)) {
     throw new AppError("Tipo de documento inválido");
   }

@@ -4,35 +4,15 @@ import {
   actualizarEstadoDocumento,
 } from "./documents-repository.js";
 
-const QUEUE_NOTIFICACIONES = "documentos.notificaciones";
 const QUEUE_VALIDACION = "documentos.validacion";
 
 export async function iniciarConsumidores(): Promise<void> {
   const channel = getChannel();
 
-  // --- Flujo 1: simular notificación ---
-  await channel.assertQueue(QUEUE_NOTIFICACIONES, { durable: true });
-  await channel.bindQueue(
-    QUEUE_NOTIFICACIONES,
-    EXCHANGE,
-    "documento.registrado",
-  );
+  // La notificación al conductor no se consume acá: la hace M8 escuchando
+  // "documento.registrado" desde su propia cola.
 
-  channel.consume(QUEUE_NOTIFICACIONES, async (msg) => {
-    if (!msg) return;
-    try {
-      const evento = JSON.parse(msg.content.toString());
-      console.log(
-        `[notificación simulada] Documento ${evento.documentId} registrado — se avisaría al conductor ${evento.driverId}`,
-      );
-      channel.ack(msg);
-    } catch (err) {
-      console.error("Error procesando notificación:", err);
-      channel.nack(msg, false, false); // no reintenta infinito: descarta el mensaje malformado
-    }
-  });
-
-  // --- Flujo 2: simular validación externa ---
+  // --- Validación externa (simulada) ---
   await channel.assertQueue(QUEUE_VALIDACION, { durable: true });
   await channel.bindQueue(
     QUEUE_VALIDACION,
@@ -46,7 +26,6 @@ export async function iniciarConsumidores(): Promise<void> {
       const evento = JSON.parse(msg.content.toString());
 
       // Idempotencia: si el documento ya no está PENDIENTE, no lo reprocesamos
-      // evita que un reintento pise un estado ya definitivo!!!!!
       const documento = await buscarDocumentoDeConductor(
         evento.driverId,
         evento.documentId,
@@ -61,7 +40,7 @@ export async function iniciarConsumidores(): Promise<void> {
       channel.ack(msg);
     } catch (err) {
       console.error("Error procesando validación:", err);
-      channel.nack(msg, false, true); // este sí reintenta
+      channel.nack(msg, false, true);
     }
   });
 }

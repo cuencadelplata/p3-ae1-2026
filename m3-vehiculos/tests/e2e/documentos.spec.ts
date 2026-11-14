@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { randomInt } from "node:crypto";
 
 function driverIdUnico() {
-  return `driver-test-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  return String(Date.now() % 1_000_000_000);
 }
 
 // Genera una patente válida y distinta en cada llamada (formato AAA000),
