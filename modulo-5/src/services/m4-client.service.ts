@@ -140,12 +140,28 @@ export class M4ClientService {
         );
       }
 
-      // Corrección RF-5.2:
-      // 1. Filtrar por disponibilidad, tipo de vehículo y distancia <= radio elegido
-      // 2. Ordenar ascendentemente por distancia ANTES de limitar
-      // 3. Aplicar límite (maxCandidates)
+      // Corrección RF-5.2 / CP-5.2-06:
+      // 1. Filtrar por disponibilidad, tipo de vehículo y frescura de ubicación (no vieja / no expirada)
+      // 2. Filtrar por distancia <= radio elegido
+      // 3. Ordenar ascendentemente por distancia ANTES de limitar (CP-5.2-04)
+      // 4. Aplicar límite (maxCandidates)
+      const now = Date.now();
       return data.drivers
-        .filter((d) => d.available === true && d.vehicleType === vehicleType)
+        .filter((d) => {
+          if (d.available !== true) return false;
+          if (d.vehicleType !== vehicleType) return false;
+
+          // CP-5.2-06: Descartar ubicaciones viejas / expiradas
+          // Si M4 envía expiresAt, debe ser posterior al momento actual
+          if (d.expiresAt && new Date(d.expiresAt).getTime() < now) {
+            return false;
+          }
+          // Si M4 envía updatedAt pero no expiresAt, consideramos vieja una ubicación > 5 minutos (300.000 ms)
+          if (d.updatedAt && !d.expiresAt && now - new Date(d.updatedAt).getTime() > 5 * 60 * 1000) {
+            return false;
+          }
+          return true;
+        })
         .map((d) => {
           const distanceKm =
             typeof d.distanceKm === 'number'
@@ -207,10 +223,19 @@ export class M4ClientService {
   ): NearbyDriverStub[] {
     if (this.mockDrivers.size > 0) {
       const candidates: NearbyDriverStub[] = [];
+      const now = Date.now();
 
       for (const driver of this.mockDrivers.values()) {
         if (driver.available !== true) continue;
         if (driver.vehicleType !== vehicleType) continue;
+
+        // CP-5.2-06: Descartar ubicaciones viejas / expiradas en simulación
+        if (driver.expiresAt && new Date(driver.expiresAt).getTime() < now) {
+          continue;
+        }
+        if (driver.updatedAt && !driver.expiresAt && now - new Date(driver.updatedAt).getTime() > 5 * 60 * 1000) {
+          continue;
+        }
 
         const distance =
           typeof driver.distanceKm === 'number' && driver.distanceKm > 0

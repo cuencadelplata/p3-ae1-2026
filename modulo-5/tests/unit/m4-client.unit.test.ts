@@ -31,12 +31,13 @@ describe('Integración HTTP con Módulo 4 (RF-4.2 / RF-5.2)', () => {
 
   it('debe consumir el endpoint GET /api/v1/drivers/nearby con los query params exactos del contrato de M4', async () => {
     let capturedUrl = '';
+    const now = Date.now();
 
     const mockResponse: M4NearbyDriversResponse = {
       vehicleType: 'AUTO',
       searchRadiusKm: 5,
       candidatesCount: 1,
-      searchTimestamp: '2026-10-05T20:00:00.000Z',
+      searchTimestamp: new Date(now).toISOString(),
       count: 1,
       drivers: [
         {
@@ -45,8 +46,8 @@ describe('Integración HTTP con Módulo 4 (RF-4.2 / RF-5.2)', () => {
           longitude: -58.382,
           vehicleType: 'AUTO',
           available: true,
-          updatedAt: '2026-10-05T19:59:30.000Z',
-          expiresAt: '2026-10-05T20:00:30.000Z',
+          updatedAt: new Date(now - 10000).toISOString(),
+          expiresAt: new Date(now + 60000).toISOString(),
           distanceKm: 0.8,
           estimatedEtaMinutes: 2
         }
@@ -254,15 +255,150 @@ describe('Integración HTTP con Módulo 4 (RF-4.2 / RF-5.2)', () => {
   });
 
   // =========================================================================================
-  // CASOS EXIGIDOS POR CONSIGNA (AE2 pp.11-12; RNF-17):
-  // 1. Fuera del radio elegido
-  // 2. No disponibles
-  // 3. Otro tipo de vehículo
-  // 4. Respuesta vacía de M4 (coordinada con RF-5.7)
-  // 5. Caída / Demora de M4
+  // CASOS EXIGIDOS POR CONSIGNA Y MATRIZ DE CÁTEDRA (AE2 pp.11-12; RNF-17):
+  // CP-5.2-01: Auto disponible, Auto ocupado y Moto disponible -> Solo Auto disponible
+  // CP-5.2-04: Límite 2 con distancias 3 km, 2 km y 1 km -> Seleccionar 1 km y 2 km
+  // CP-5.2-05: M4 lista vacía -> Informar que no hay candidatos sin inventar
+  // CP-5.2-06: Acordar ubicación vieja -> Solo considerar candidato con ubicación vigente
   // =========================================================================================
   describe('Matriz de casos de prueba RF-5.2 (AE2 pp.11-12 / RNF-17)', () => {
-    it('Caso 1: debe descartar conductores fuera del radio elegido (radioKm configurable)', async () => {
+    it('CP-5.2-01: Pedir Auto. M4 devuelve Auto disponible, Auto ocupado y Moto disponible -> Solo Auto disponible', async () => {
+      const mockResponse: M4NearbyDriversResponse = {
+        vehicleType: 'AUTO',
+        searchRadiusKm: 5,
+        candidatesCount: 3,
+        searchTimestamp: new Date().toISOString(),
+        count: 3,
+        drivers: [
+          { driverId: 'auto-disp', latitude: -34.604, longitude: -58.382, vehicleType: 'AUTO', available: true, distanceKm: 1.0 },
+          { driverId: 'auto-ocup', latitude: -34.605, longitude: -58.383, vehicleType: 'AUTO', available: false, distanceKm: 0.8 },
+          { driverId: 'moto-disp', latitude: -34.606, longitude: -58.384, vehicleType: 'MOTO', available: true, distanceKm: 0.5 }
+        ]
+      };
+
+      global.fetch = jest.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse
+        } as any)
+      ) as any;
+
+      const candidates = await m4Client.findNearbyDrivers(originLat, originLng, 'AUTO', 5.0);
+      expect(candidates).toHaveLength(1);
+      expect(candidates[0].driverId).toBe('auto-disp');
+      expect(candidates[0].vehicleType).toBe('AUTO');
+    });
+
+    it('CP-5.2-04: Con límite 2 y tres candidatos válidos a 3 km, 2 km y 1 km en ese orden -> Selecciona 1 km y 2 km', async () => {
+      const mockResponse: M4NearbyDriversResponse = {
+        vehicleType: 'AUTO',
+        searchRadiusKm: 5,
+        candidatesCount: 3,
+        searchTimestamp: new Date().toISOString(),
+        count: 3,
+        drivers: [
+          { driverId: 'cand-3km', latitude: -34.63, longitude: -58.41, vehicleType: 'AUTO', available: true, distanceKm: 3.0 },
+          { driverId: 'cand-2km', latitude: -34.62, longitude: -58.40, vehicleType: 'AUTO', available: true, distanceKm: 2.0 },
+          { driverId: 'cand-1km', latitude: -34.61, longitude: -58.39, vehicleType: 'AUTO', available: true, distanceKm: 1.0 }
+        ]
+      };
+
+      global.fetch = jest.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse
+        } as any)
+      ) as any;
+
+      // Pide maxCandidates = 2 con radio 5 km
+      const candidates = await m4Client.findNearbyDrivers(originLat, originLng, 'AUTO', 5.0, 2);
+      expect(candidates).toHaveLength(2);
+      expect(candidates[0].driverId).toBe('cand-1km');
+      expect(candidates[0].distanceKm).toBe(1.0);
+      expect(candidates[1].driverId).toBe('cand-2km');
+      expect(candidates[1].distanceKm).toBe(2.0);
+    });
+
+    it('CP-5.2-05: Hacer que M4 devuelva lista vacía para solicitud válida -> Informa sin candidatos, no inventa', async () => {
+      const mockEmptyResponse: M4NearbyDriversResponse = {
+        vehicleType: 'AUTO',
+        searchRadiusKm: 5,
+        candidatesCount: 0,
+        searchTimestamp: new Date().toISOString(),
+        count: 0,
+        drivers: []
+      };
+
+      global.fetch = jest.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => mockEmptyResponse
+        } as any)
+      ) as any;
+
+      m4Client.seedMockDrivers([
+        { driverId: 'temp', latitude: originLat, longitude: originLng, vehicleType: 'AUTO', available: true, distanceKm: 1 }
+      ]);
+      const req = await rideRequestService.createRideRequest('client_vacio', 'idem_vacio', validDTO);
+      m4Client.clearMockDrivers();
+
+      await expect(
+        rideRequestService.searchCandidatesForRequest(req.id, 'client_vacio', { radiusKm: 5.0 })
+      ).rejects.toThrow(NotFoundError);
+
+      const updated = await rideRequestService.getRideRequestById(req.id, 'client_vacio');
+      expect(updated.status).toBe('NO_DRIVERS_AVAILABLE');
+    });
+
+    it('CP-5.2-06: Acordar con M4 cuándo una ubicación es vieja; devolver uno vigente y otro con ubicación vencida -> Solo considera vigente', async () => {
+      const now = Date.now();
+      const mockResponse: M4NearbyDriversResponse = {
+        vehicleType: 'AUTO',
+        searchRadiusKm: 5,
+        candidatesCount: 2,
+        searchTimestamp: new Date(now).toISOString(),
+        count: 2,
+        drivers: [
+          {
+            driverId: 'conductor-vigente',
+            latitude: -34.604,
+            longitude: -58.382,
+            vehicleType: 'AUTO',
+            available: true,
+            distanceKm: 1.0,
+            updatedAt: new Date(now - 10000).toISOString(), // Actualizado hace 10 seg
+            expiresAt: new Date(now + 60000).toISOString()  // Expira en 60 seg
+          },
+          {
+            driverId: 'conductor-ubicacion-vieja',
+            latitude: -34.605,
+            longitude: -58.383,
+            vehicleType: 'AUTO',
+            available: true,
+            distanceKm: 0.8,
+            updatedAt: new Date(now - 600000).toISOString(), // Actualizado hace 10 minutos
+            expiresAt: new Date(now - 30000).toISOString()   // Expiró hace 30 seg
+          }
+        ]
+      };
+
+      global.fetch = jest.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse
+        } as any)
+      ) as any;
+
+      const candidates = await m4Client.findNearbyDrivers(originLat, originLng, 'AUTO', 5.0);
+      expect(candidates).toHaveLength(1);
+      expect(candidates[0].driverId).toBe('conductor-vigente');
+    });
+
+    it('Caso complementario: debe descartar conductores fuera del radio elegido (radioKm configurable)', async () => {
       const mockResponse: M4NearbyDriversResponse = {
         vehicleType: 'AUTO',
         searchRadiusKm: 3,
@@ -283,103 +419,13 @@ describe('Integración HTTP con Módulo 4 (RF-4.2 / RF-5.2)', () => {
         } as any)
       ) as any;
 
-      // Radio configurado en 3.0 km
       const candidates = await m4Client.findNearbyDrivers(originLat, originLng, 'AUTO', 3.0);
       expect(candidates).toHaveLength(1);
       expect(candidates[0].driverId).toBe('dentro-radio');
       expect(candidates[0].distanceKm).toBeLessThanOrEqual(3.0);
     });
 
-    it('Caso 2: debe descartar conductores no disponibles (available: false)', async () => {
-      const mockResponse: M4NearbyDriversResponse = {
-        vehicleType: 'AUTO',
-        searchRadiusKm: 5,
-        candidatesCount: 2,
-        searchTimestamp: new Date().toISOString(),
-        count: 2,
-        drivers: [
-          { driverId: 'disponible', latitude: -34.604, longitude: -58.382, vehicleType: 'AUTO', available: true, distanceKm: 1.0 },
-          { driverId: 'ocupado', latitude: -34.605, longitude: -58.383, vehicleType: 'AUTO', available: false, distanceKm: 0.8 }
-        ]
-      };
-
-      global.fetch = jest.fn(() =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => mockResponse
-        } as any)
-      ) as any;
-
-      const candidates = await m4Client.findNearbyDrivers(originLat, originLng, 'AUTO', 5.0);
-      expect(candidates).toHaveLength(1);
-      expect(candidates[0].driverId).toBe('disponible');
-    });
-
-    it('Caso 3: debe descartar conductores de otro tipo de vehículo (ej: MOTO cuando se busca AUTO)', async () => {
-      const mockResponse: M4NearbyDriversResponse = {
-        vehicleType: 'AUTO',
-        searchRadiusKm: 5,
-        candidatesCount: 2,
-        searchTimestamp: new Date().toISOString(),
-        count: 2,
-        drivers: [
-          { driverId: 'conductor-auto', latitude: -34.604, longitude: -58.382, vehicleType: 'AUTO', available: true, distanceKm: 1.1 },
-          { driverId: 'conductor-moto', latitude: -34.605, longitude: -58.383, vehicleType: 'MOTO', available: true, distanceKm: 0.5 }
-        ]
-      };
-
-      global.fetch = jest.fn(() =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => mockResponse
-        } as any)
-      ) as any;
-
-      const candidates = await m4Client.findNearbyDrivers(originLat, originLng, 'AUTO', 5.0);
-      expect(candidates).toHaveLength(1);
-      expect(candidates[0].driverId).toBe('conductor-auto');
-      expect(candidates[0].vehicleType).toBe('AUTO');
-    });
-
-    it('Caso 4: respuesta vacía de M4 debe coordinar con RF-5.7 (retorna 404 NO_DRIVERS_AVAILABLE)', async () => {
-      const mockEmptyResponse: M4NearbyDriversResponse = {
-        vehicleType: 'AUTO',
-        searchRadiusKm: 5,
-        candidatesCount: 0,
-        searchTimestamp: new Date().toISOString(),
-        count: 0,
-        drivers: []
-      };
-
-      global.fetch = jest.fn(() =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => mockEmptyResponse
-        } as any)
-      ) as any;
-
-      // Primero creamos solicitud sembrando un mock temporal
-      m4Client.seedMockDrivers([
-        { driverId: 'temp', latitude: originLat, longitude: originLng, vehicleType: 'AUTO', available: true, distanceKm: 1 }
-      ]);
-      const req = await rideRequestService.createRideRequest('client_vacio', 'idem_vacio', validDTO);
-      m4Client.clearMockDrivers();
-
-      // Cuando M4 responde vacío en la búsqueda de candidatos
-      await expect(
-        rideRequestService.searchCandidatesForRequest(req.id, 'client_vacio', { radiusKm: 5.0 })
-      ).rejects.toThrow(NotFoundError);
-
-      const updated = await rideRequestService.getRideRequestById(req.id, 'client_vacio');
-      // Coordinación con RF-5.7: el estado pasa legítimamente a NO_DRIVERS_AVAILABLE
-      expect(updated.status).toBe('NO_DRIVERS_AVAILABLE');
-    });
-
-    it('Caso 5: caída o demora de M4 NO debe confundirse con NO_DRIVERS_AVAILABLE (lanza M4IntegrationError)', async () => {
-      // 1. Simular caída de M4
+    it('Caso complementario: caída o demora de M4 NO debe confundirse con NO_DRIVERS_AVAILABLE (lanza M4IntegrationError)', async () => {
       global.fetch = jest.fn(() => Promise.reject(new Error('ECONNREFUSED'))) as any;
 
       m4Client.seedMockDrivers([
@@ -388,13 +434,11 @@ describe('Integración HTTP con Módulo 4 (RF-4.2 / RF-5.2)', () => {
       const req = await rideRequestService.createRideRequest('client_fallo', 'idem_fallo', validDTO);
       m4Client.clearMockDrivers();
 
-      // Al buscar candidatos con M4 caído, NO debe lanzar NotFoundError (RF-5.7), sino M4IntegrationError
       await expect(
         rideRequestService.searchCandidatesForRequest(req.id, 'client_fallo', { radiusKm: 5.0 })
       ).rejects.toThrow(M4IntegrationError);
 
       const updated = await rideRequestService.getRideRequestById(req.id, 'client_fallo');
-      // No debe marcarse erróneamente como NO_DRIVERS_AVAILABLE
       expect(updated.status).not.toBe('NO_DRIVERS_AVAILABLE');
     });
   });
