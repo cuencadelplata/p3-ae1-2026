@@ -7,6 +7,8 @@ import {
   EstimatedFare,
   NearbyDriverStub,
   OfferAction,
+  OfferAuditEntry,
+  OfferAuditEvent,
   RespondOfferDTO,
   RespondOfferResponseDTO,
   RideOffer,
@@ -62,6 +64,11 @@ export class RideRequestService {
   private idempotencyStore: Map<string, RideRequest> = new Map();
   private offers: Map<string, RideOffer> = new Map();
 
+  // RF-5.8: Registro de trazabilidad de ofertas y timeouts (RNF-04)
+  // Se persisten en memoria los eventos mínimos para reconstruir el historial.
+  // En producción se volcarian a DispatchDB o sistema de logs centralizado.
+  private offerAuditLog: OfferAuditEntry[] = [];
+
   // Servicios de soporte para AE2 (RNF-06 y RNF-07)
   private redisService: RedisService;
   private rabbitMQService: RabbitMQService;
@@ -90,6 +97,101 @@ export class RideRequestService {
 
   public getM4ClientService(): M4ClientService {
     return this.m4ClientService;
+  }
+
+  // =========================================================================
+  //  RF-5.8: Trazabilidad de ofertas y timeout (AE2 p.29; RNF-04)
+  // =========================================================================
+
+  /**
+   * Registra un evento de auditoría en el log de trazabilidad de ofertas.
+   */
+  private logOfferEvent(
+    event: OfferAuditEvent,
+    requestId: string,
+    details: string,
+    extra?: { offerId?: string; driverId?: string; previousStatus?: string; newStatus?: string }
+  ): void {
+    this.offerAuditLog.push({
+      timestamp: new Date().toISOString(),
+      event,
+      requestId,
+      offerId: extra?.offerId,
+      driverId: extra?.driverId,
+      previousStatus: extra?.previousStatus,
+      newStatus: extra?.newStatus,
+      details
+    });
+  }
+
+  /**
+   * Consulta el log de auditoría de ofertas (RF-5.8).
+   * Permite filtrar por requestId para obtener la trazabilidad de una solicitud específica.
+   */
+  public getOfferAuditLog(requestId?: string): OfferAuditEntry[] {
+    if (requestId) return this.offerAuditLog.filter((e) => e.requestId === requestId);
+    return [...this.offerAuditLog];
+  }
+
+  /**
+   * RF-5.3 / RF-5.7 / RF-5.8: Verifica si toda la tanda de ofertas de una solicitud venció.
+   * - Si el plazo de búsqueda (expiresAt) NO pasó → vuelve a SEARCHING (nueva ronda permitida).
+   * - Si el plazo de búsqueda SÍ pasó → EXPIRED + registra SEARCH_TIMEOUT.
+   * Se llama de forma lazy al consultar ofertas.
+   */
+  private checkBatchExpiration(requestId: string): void {
+    const request = this.requests.get(requestId);
+    if (!request || (request.status !== 'OFFERED')) return;
+
+    const relatedOffers = Array.from(this.offers.values()).filter((o) => o.requestId === requestId);
+    if (relatedOffers.length === 0) return;
+
+    const now = Date.now();
+
+    // Lazy-expire ofertas PENDING cuyo TTL venció sin respuesta
+    for (const offer of relatedOffers) {
+      if (offer.status === 'PENDING' && new Date(offer.expiresAt).getTime() < now) {
+        offer.status = 'EXPIRED';
+        this.offers.set(offer.id, offer);
+        this.logOfferEvent('OFFER_EXPIRED', requestId, `Oferta expirada por TTL sin respuesta del conductor`, {
+          offerId: offer.id,
+          driverId: offer.driverId,
+          previousStatus: 'PENDING',
+          newStatus: 'EXPIRED'
+        });
+      }
+    }
+
+    // ¿Todas las ofertas de la tanda finalizaron (ninguna PENDING)?
+    const allDone = relatedOffers.every((o) => o.status !== 'PENDING');
+    if (!allDone) return;
+
+    const searchDeadlinePassed = new Date(request.expiresAt).getTime() < now;
+    const prevStatus = request.status;
+
+    if (searchDeadlinePassed) {
+      // Plazo de búsqueda agotado → cerrar definitivamente
+      request.status = 'EXPIRED';
+      request.updatedAt = new Date().toISOString();
+      this.requests.set(requestId, request);
+      this.logOfferEvent('SEARCH_TIMEOUT', requestId,
+        'Plazo de búsqueda agotado. Todas las ofertas finalizaron sin asignación.', {
+          previousStatus: prevStatus,
+          newStatus: 'EXPIRED'
+        });
+      console.log(`[RF-5.8] SEARCH_TIMEOUT: Solicitud ${requestId} expirada (plazo de búsqueda agotado).`);
+    } else {
+      // Plazo de búsqueda vigente → permitir nueva ronda (no cerrar la búsqueda)
+      request.status = 'SEARCHING';
+      request.updatedAt = new Date().toISOString();
+      this.requests.set(requestId, request);
+      this.logOfferEvent('BATCH_TIMEOUT', requestId,
+        'Tanda de ofertas vencida sin asignación. Solicitud regresa a SEARCHING para nueva ronda.', {
+          previousStatus: prevStatus,
+          newStatus: 'SEARCHING'
+        });
+      console.log(`[RF-5.3] BATCH_TIMEOUT: Tanda vencida para solicitud ${requestId}. Nueva ronda habilitada.`);
+    }
   }
 
 
@@ -444,6 +546,14 @@ export class RideRequestService {
       this.offers.set(offer.id, offer);
       createdOffers.push(offer);
 
+      // RF-5.8: Registrar creación de oferta en log de trazabilidad
+      this.logOfferEvent('OFFER_CREATED', request.id,
+        `Oferta creada para conductor ${driverId} con TTL ${ttlSeconds}s`, {
+          offerId: offer.id,
+          driverId,
+          newStatus: 'PENDING'
+        });
+
       // RF-5.3 / RNF-06: Persistir oferta en Redis con expiración automática (TTL)
       await this.redisService.saveOfferWithTtl(offer, ttlSeconds);
 
@@ -493,9 +603,18 @@ export class RideRequestService {
         // Expirar ofertas pasadas de TTL de forma dinámica si aún figuraban PENDING
         if (offer.status === 'PENDING' && new Date(offer.expiresAt).getTime() < now) {
           offer.status = 'EXPIRED';
+          this.logOfferEvent('OFFER_EXPIRED', requestId, `Oferta expirada por TTL (lazy check)`, {
+            offerId: offer.id,
+            driverId: offer.driverId,
+            previousStatus: 'PENDING',
+            newStatus: 'EXPIRED'
+          });
         }
         return offer;
       });
+
+    // RF-5.3 / RF-5.7: Verificar si toda la tanda expiró para definir siguiente estado
+    this.checkBatchExpiration(requestId);
 
     return requestOffers;
   }
@@ -542,6 +661,13 @@ export class RideRequestService {
       offer.status = 'EXPIRED';
       this.offers.set(offerId, offer);
       await this.redisService.deleteOffer(offerId);
+      this.logOfferEvent('OFFER_EXPIRED', offer.requestId,
+        `Intento de respuesta tardía sobre oferta expirada (TTL o plazo vencido)`, {
+          offerId,
+          driverId: targetDriverId,
+          previousStatus: 'PENDING',
+          newStatus: 'EXPIRED'
+        });
       throw new ConflictError(
         'La oferta ha expirado y ya no está vigente',
         'OFFER_EXPIRED'
@@ -568,7 +694,15 @@ export class RideRequestService {
       // Eliminar de Redis ya que no está disponible
       await this.redisService.deleteOffer(offerId);
 
-      // Si todas las ofertas para esta solicitud fueron rechazadas o expiraron
+      this.logOfferEvent('OFFER_REJECTED', request.id,
+        `Oferta rechazada por el conductor ${offer.driverId}`, {
+          offerId: offer.id,
+          driverId: offer.driverId,
+          previousStatus: 'PENDING',
+          newStatus: 'REJECTED'
+        });
+
+      // Si todas las ofertas para esta solicitud fueron rechazadas o expiraron, verificar si toda la tanda terminó
       const relatedOffers = Array.from(this.offers.values()).filter(
         (o) => o.requestId === request.id
       );
@@ -576,9 +710,27 @@ export class RideRequestService {
         (o) => o.status === 'REJECTED' || o.status === 'EXPIRED'
       );
       if (allDone && request.status === 'OFFERED') {
-        request.status = 'NO_DRIVERS_AVAILABLE';
-        request.updatedAt = now.toISOString();
-        this.requests.set(request.id, request);
+        const searchDeadlinePassed = new Date(request.expiresAt).getTime() < nowTime;
+        if (searchDeadlinePassed) {
+          request.status = 'EXPIRED';
+          request.updatedAt = now.toISOString();
+          this.requests.set(request.id, request);
+          this.logOfferEvent('SEARCH_TIMEOUT', request.id,
+            'Plazo de búsqueda agotado tras rechazo/expiración de todas las ofertas.', {
+              previousStatus: 'OFFERED',
+              newStatus: 'EXPIRED'
+            });
+        } else {
+          // Si aún tiene plazo de búsqueda, regresa a SEARCHING para permitir nueva ronda o candidatos (RF-5.3/5.7)
+          request.status = 'SEARCHING';
+          request.updatedAt = now.toISOString();
+          this.requests.set(request.id, request);
+          this.logOfferEvent('BATCH_TIMEOUT', request.id,
+            'Tanda de ofertas rechazada en su totalidad. Regresa a SEARCHING para permitir nueva ronda.', {
+              previousStatus: 'OFFERED',
+              newStatus: 'SEARCHING'
+            });
+        }
       }
 
       return {
@@ -636,6 +788,14 @@ export class RideRequestService {
     request.updatedAt = now.toISOString();
     this.requests.set(request.id, request);
 
+    this.logOfferEvent('OFFER_ACCEPTED', request.id,
+      `Oferta ${offer.id} aceptada por conductor ${offer.driverId}. Viaje asignado.`, {
+        offerId: offer.id,
+        driverId: offer.driverId,
+        previousStatus: 'PENDING',
+        newStatus: 'ACCEPTED'
+      });
+
     // 9. Cancelar / expirar automáticamente las demás ofertas pendientes para esta misma solicitud
     for (const otherOffer of Array.from(this.offers.values()).filter(
       (o) => o.requestId === request.id && o.id !== offer.id && o.status === 'PENDING'
@@ -643,6 +803,13 @@ export class RideRequestService {
       otherOffer.status = 'EXPIRED';
       this.offers.set(otherOffer.id, otherOffer);
       await this.redisService.deleteOffer(otherOffer.id);
+      this.logOfferEvent('OFFER_EXPIRED', request.id,
+        `Oferta revocada por asignación concurrente a ${offer.driverId}`, {
+          offerId: otherOffer.id,
+          driverId: otherOffer.driverId,
+          previousStatus: 'PENDING',
+          newStatus: 'EXPIRED'
+        });
     }
 
     console.log(
@@ -719,6 +886,13 @@ export class RideRequestService {
       pendingOffer.status = 'EXPIRED';
       this.offers.set(pendingOffer.id, pendingOffer);
       await this.redisService.deleteOffer(pendingOffer.id);
+      this.logOfferEvent('OFFER_EXPIRED', request.id,
+        'Oferta expirada/revocada por cancelación previa del viaje', {
+          offerId: pendingOffer.id,
+          driverId: pendingOffer.driverId,
+          previousStatus: 'PENDING',
+          newStatus: 'EXPIRED'
+        });
     }
 
     console.log(

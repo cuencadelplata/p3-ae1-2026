@@ -552,15 +552,39 @@ describe('RideRequestService', () => {
   });
 
   // ==========================================================================
-  //  RF-5.7: Sin disponibilidad
+  //  RF-5.7: Sin disponibilidad y ciclo de tandas
   // ==========================================================================
-  describe('RF-5.7 — Sin disponibilidad', () => {
-    it('cuando todos los conductores rechazan, el estado vuelve a NO_DRIVERS_AVAILABLE', async () => {
+  describe('RF-5.7 — Sin disponibilidad y ciclo de tandas', () => {
+    it('cuando todos los conductores rechazan y aún hay plazo de búsqueda, regresa a SEARCHING para nueva ronda', async () => {
       const request = await service.createRideRequest('client_1', 'key_1', validDTO);
       const offers = await service.sendOffersForRequest(request.id, 'client_1', {
         driverIds: ['drv_101', 'drv_102'],
         ttlSeconds: 60,
       });
+
+      // Rechazar todas las ofertas de la tanda
+      for (const offer of offers.offers) {
+        await service.respondToOffer(offer.id, offer.driverId, {
+          action: 'REJECT',
+          driverId: offer.driverId,
+        });
+      }
+
+      const updated = await service.getRideRequestById(request.id, 'client_1');
+      // Corrección RF-5.3/5.7: No cerrar toda la búsqueda por vencer una tanda si el plazo de búsqueda sigue vigente
+      expect(updated.status).toBe('SEARCHING');
+    });
+
+    it('cuando todos los conductores rechazan y el plazo de búsqueda expiró, pasa a EXPIRED (RF-5.8 timeout)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+      const offers = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101', 'drv_102'],
+        ttlSeconds: 60,
+      });
+
+      // Forzar que el plazo de búsqueda (expiresAt) ya venció
+      const storedReq = await service.getRideRequestById(request.id, 'client_1');
+      (storedReq as any).expiresAt = new Date(Date.now() - 1000).toISOString();
 
       // Rechazar todas las ofertas
       for (const offer of offers.offers) {
@@ -571,7 +595,11 @@ describe('RideRequestService', () => {
       }
 
       const updated = await service.getRideRequestById(request.id, 'client_1');
-      expect(updated.status).toBe('NO_DRIVERS_AVAILABLE');
+      expect(updated.status).toBe('EXPIRED');
+
+      // Trazabilidad de timeout registrada
+      const audit = service.getOfferAuditLog(request.id);
+      expect(audit.some((e) => e.event === 'SEARCH_TIMEOUT')).toBe(true);
     });
   });
 
@@ -628,6 +656,91 @@ describe('RideRequestService', () => {
 
     it('debe lanzar NotFoundError para oferta inexistente', async () => {
       await expect(service.getOfferById('nonexistent')).rejects.toThrow(NotFoundError);
+    });
+
+    // ========================================================================
+    //  RF-5.3 / RF-5.8: Casos solicitados por cátedra (Trazabilidad, Timeout, Reinicios)
+    // ========================================================================
+    it('debe vencer tanda sin consultas y permitir nueva ronda (reinicio) si plazo está vigente', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+      const batch1 = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101'],
+        ttlSeconds: 15,
+      });
+
+      // Simular vencimiento de oferta sin respuesta del conductor (vencimiento sin consultas)
+      const offer = await service.getOfferById(batch1.offers[0].id);
+      (offer as any).expiresAt = new Date(Date.now() - 1000).toISOString();
+
+      // Consulta de ofertas detona lazy expiration y verificación de tanda
+      const offersAfter = await service.getOffersByRequestId(request.id, 'client_1');
+      expect(offersAfter[0].status).toBe('EXPIRED');
+
+      // Solicitud regresa a SEARCHING porque plazo de búsqueda sigue vigente
+      const updatedReq = await service.getRideRequestById(request.id, 'client_1');
+      expect(updatedReq.status).toBe('SEARCHING');
+
+      // Trazabilidad registra BATCH_TIMEOUT
+      const audit = service.getOfferAuditLog(request.id);
+      expect(audit.some((e) => e.event === 'BATCH_TIMEOUT')).toBe(true);
+
+      // Ahora se puede emitir una nueva ronda (reinicio de ofertas) con otro candidato
+      const batch2 = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_102'],
+        ttlSeconds: 30,
+      });
+      expect(batch2.offersSentCount).toBe(1);
+      expect(batch2.offers[0].driverId).toBe('drv_102');
+      const reqInBatch2 = await service.getRideRequestById(request.id, 'client_1');
+      expect(reqInBatch2.status).toBe('OFFERED');
+    });
+
+    it('debe permitir aceptar oferta cerca del límite de expiración (RF-5.4 coordinación con RF-5.3)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+      const batch = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101'],
+        ttlSeconds: 30,
+      });
+      const offerId = batch.offers[0].id;
+
+      // Oferta configurada con 500ms restantes antes del límite
+      const offer = await service.getOfferById(offerId);
+      (offer as any).expiresAt = new Date(Date.now() + 500).toISOString();
+
+      // Aceptación antes del límite exacto debe proceder correctamente
+      const res = await service.respondToOffer(offerId, 'drv_101', {
+        action: 'ACCEPT',
+        driverId: 'drv_101',
+      });
+      expect(res.status).toBe('ACCEPTED');
+      expect(res.requestStatus).toBe('ASSIGNED');
+
+      // Registro de trazabilidad
+      const audit = service.getOfferAuditLog(request.id);
+      expect(audit.some((e) => e.event === 'OFFER_ACCEPTED')).toBe(true);
+    });
+
+    it('debe rechazar aceptación si el límite exacto ya fue superado por milisegundos', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+      const batch = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101'],
+        ttlSeconds: 30,
+      });
+      const offerId = batch.offers[0].id;
+
+      // Forzar que el límite acaba de expirar (10ms en el pasado)
+      const offer = await service.getOfferById(offerId);
+      (offer as any).expiresAt = new Date(Date.now() - 10).toISOString();
+
+      await expect(
+        service.respondToOffer(offerId, 'drv_101', {
+          action: 'ACCEPT',
+          driverId: 'drv_101',
+        })
+      ).rejects.toThrow(ConflictError);
+
+      const audit = service.getOfferAuditLog(request.id);
+      expect(audit.some((e) => e.event === 'OFFER_EXPIRED')).toBe(true);
     });
   });
 });

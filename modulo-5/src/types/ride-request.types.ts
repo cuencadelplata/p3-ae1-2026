@@ -193,6 +193,33 @@ export interface CancelRideRequestResponseDTO {
   message: string;
 }
 
+/**
+ * RF-5.8: Trazabilidad de oferta y timeout
+ * Registro de auditoría para cada evento relevante del ciclo de vida de ofertas.
+ * Se persiste en memoria (simulación aprobada); en producción iría a DispatchDB/logs.
+ * Justificación (RNF-04): se conservan los datos mínimos necesarios para reconstruir
+ * el historial de una oferta — no todo dato efímero, solo transiciones de estado.
+ */
+export type OfferAuditEvent =
+  | 'OFFER_CREATED'
+  | 'OFFER_EXPIRED'
+  | 'OFFER_ACCEPTED'
+  | 'OFFER_REJECTED'
+  | 'BATCH_TIMEOUT'
+  | 'SEARCH_TIMEOUT'
+  | 'REQUEST_STATE_CHANGE';
+
+export interface OfferAuditEntry {
+  timestamp: string;
+  event: OfferAuditEvent;
+  requestId: string;
+  offerId?: string;
+  driverId?: string;
+  previousStatus?: string;
+  newStatus?: string;
+  details: string;
+}
+
 
 
 
