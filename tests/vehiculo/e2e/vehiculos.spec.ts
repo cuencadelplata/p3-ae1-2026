@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { randomInt } from "node:crypto";
 
 // Cada test usa su propio driverId único, para no chocar entre corridas
 // ni depender del orden en que se ejecutan.
@@ -9,8 +10,9 @@ function driverIdUnico() {
 // Genera una patente válida y distinta en cada llamada (formato AAA000),
 // para no toparse con el unique de la base entre tests.
 function patenteUnica() {
-  const n = Date.now() % 1000;
-  return `ZZZ${n.toString().padStart(3, "0")}`;
+  const L = () => String.fromCharCode(65 + randomInt(26));
+  const n = randomInt(1000).toString().padStart(3, "0");
+  return `${L()}${L()}${L()}${n}`;
 }
 
 test.describe("POST /drivers/:driverId/vehicles — RF-3.2 registrar vehículo", () => {

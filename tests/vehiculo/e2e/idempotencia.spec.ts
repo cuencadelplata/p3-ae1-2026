@@ -1,13 +1,16 @@
 import { test, expect } from "@playwright/test";
-
+import { randomInt } from "node:crypto";
 // Mismos helpers que ya usás en vehiculos.spec.ts
 function driverIdUnico() {
   return `driver-test-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 }
 
+// Genera una patente válida y distinta en cada llamada (formato AAA000),
+// para no toparse con el unique de la base entre tests.
 function patenteUnica() {
-  const n = Date.now() % 1000;
-  return `ZZZ${n.toString().padStart(3, "0")}`;
+  const L = () => String.fromCharCode(65 + randomInt(26));
+  const n = randomInt(1000).toString().padStart(3, "0");
+  return `${L()}${L()}${L()}${n}`;
 }
 
 // Genera una key de idempotencia distinta en cada llamada al helper,
