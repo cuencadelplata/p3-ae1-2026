@@ -342,6 +342,18 @@ export class RideRequestService {
     // 2. Obtener solicitud de viaje y verificar estado
     const request = await this.getRideRequestById(requestId, clientId);
 
+    // RF-5.3 / RNF-09: Verificar si la solicitud ha expirado por tiempo antes de generar ofertas
+    const nowCheck = Date.now();
+    if (new Date(request.expiresAt).getTime() < nowCheck) {
+      request.status = 'EXPIRED';
+      request.updatedAt = new Date().toISOString();
+      this.requests.set(requestId, request);
+      throw new ConflictError(
+        'La solicitud de viaje ha expirado y no permite generar nuevas ofertas',
+        'REQUEST_EXPIRED'
+      );
+    }
+
     const validOfferStatuses = ['PENDING', 'SEARCHING', 'OFFERED', 'NO_DRIVERS_AVAILABLE'];
     if (!validOfferStatuses.includes(request.status)) {
       throw new ConflictError(
@@ -359,12 +371,53 @@ export class RideRequestService {
         maxCandidates: 3
       });
       targetDriverIds = candidatesResult.candidates.map((c) => c.driverId);
+    } else {
+      // RF-5.3 Fix 1: driverIds explícitos NO deben saltear la validación de elegibilidad.
+      // Validar contra M4 (o simulación aprobada) que sean candidatos disponibles (RF-5.2/5.3).
+      targetDriverIds = [...new Set(targetDriverIds)]; // Fix 3: Deduplicar IDs
+
+      const nearbyDrivers = await this.fetchNearbyDriversFromM4(
+        request.origin.latitude,
+        request.origin.longitude,
+        request.vehicleType
+      );
+      const eligibleDriverIds = new Set(nearbyDrivers.map((d) => d.driverId));
+
+      const invalidIds = targetDriverIds.filter((id) => !eligibleDriverIds.has(id));
+      if (invalidIds.length > 0) {
+        console.warn(
+          `[RF-5.3] driverIds explícitos descartados (no elegibles/disponibles en M4): ${invalidIds.join(', ')}`
+        );
+      }
+
+      targetDriverIds = targetDriverIds.filter((id) => eligibleDriverIds.has(id));
     }
 
     if (targetDriverIds.length === 0) {
       throw new NotFoundError(
         'No se encontraron conductores candidatos para despachar la oferta',
         'NO_DRIVERS_AVAILABLE'
+      );
+    }
+
+    // RF-5.3 Fix 3: Evitar ofertas duplicadas — descartar conductores que ya tienen oferta PENDING
+    const existingPendingDriverIds = new Set(
+      Array.from(this.offers.values())
+        .filter((o) => o.requestId === requestId && o.status === 'PENDING')
+        .map((o) => o.driverId)
+    );
+    const duplicateIds = targetDriverIds.filter((id) => existingPendingDriverIds.has(id));
+    if (duplicateIds.length > 0) {
+      console.warn(
+        `[RF-5.3] driverIds con oferta PENDING existente descartados: ${duplicateIds.join(', ')}`
+      );
+    }
+    targetDriverIds = targetDriverIds.filter((id) => !existingPendingDriverIds.has(id));
+
+    if (targetDriverIds.length === 0) {
+      throw new ConflictError(
+        'Todos los conductores indicados ya poseen una oferta pendiente para esta solicitud',
+        'DUPLICATE_OFFERS'
       );
     }
 

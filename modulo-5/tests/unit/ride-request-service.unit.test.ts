@@ -227,6 +227,103 @@ describe('RideRequestService', () => {
         service.sendOffersForRequest(request.id, 'client_1', { driverIds: ['drv_101'] })
       ).rejects.toThrow(ConflictError);
     });
+
+    // ---- Correcciones RF-5.3 ----
+
+    it('debe rechazar driverIds explícitos que no son elegibles/disponibles en M4 (Fix 1)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+
+      // 'drv_fantasma' no existe en los mocks sembrados → debe ser descartado
+      // Si todos son inválidos, lanza NotFoundError (NO_DRIVERS_AVAILABLE)
+      await expect(
+        service.sendOffersForRequest(request.id, 'client_1', {
+          driverIds: ['drv_fantasma', 'drv_inexistente'],
+          ttlSeconds: 30,
+        })
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it('debe filtrar driverIds no elegibles y crear ofertas solo para los válidos (Fix 1)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+
+      // 'drv_101' existe y es elegible, 'drv_fantasma' no
+      const result = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101', 'drv_fantasma'],
+        ttlSeconds: 30,
+      });
+
+      expect(result.offersSentCount).toBe(1);
+      expect(result.offers[0].driverId).toBe('drv_101');
+    });
+
+    it('no debe generar ofertas para solicitud cuyo plazo expiró (Fix 2 — RNF-09)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+
+      // Forzar expiración manipulando el expiresAt en el pasado
+      const storedRequest = await service.getRideRequestById(request.id, 'client_1');
+      (storedRequest as any).expiresAt = new Date(Date.now() - 1000).toISOString();
+
+      await expect(
+        service.sendOffersForRequest(request.id, 'client_1', {
+          driverIds: ['drv_101'],
+          ttlSeconds: 30,
+        })
+      ).rejects.toThrow(ConflictError);
+
+      // Verificar que el estado pasó a EXPIRED
+      const updated = await service.getRideRequestById(request.id, 'client_1');
+      expect(updated.status).toBe('EXPIRED');
+    });
+
+    it('debe deduplicar driverIds repetidos y crear una sola oferta por conductor (Fix 3)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+
+      const result = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101', 'drv_101', 'drv_101'],
+        ttlSeconds: 30,
+      });
+
+      // Solo 1 oferta aunque se pasó 3 veces el mismo ID
+      expect(result.offersSentCount).toBe(1);
+      expect(result.offers[0].driverId).toBe('drv_101');
+    });
+
+    it('no debe crear ofertas duplicadas si el conductor ya tiene oferta PENDING (Fix 3)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+
+      // Primer envío: drv_101 recibe oferta
+      await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101'],
+        ttlSeconds: 60,
+      });
+
+      // Segundo envío: drv_101 ya tiene oferta PENDING → debe ser descartado
+      // Solo drv_102 debería recibir oferta nueva
+      const result2 = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101', 'drv_102'],
+        ttlSeconds: 60,
+      });
+
+      expect(result2.offersSentCount).toBe(1);
+      expect(result2.offers[0].driverId).toBe('drv_102');
+    });
+
+    it('debe lanzar DUPLICATE_OFFERS si todos los driverIds ya tienen oferta PENDING (Fix 3)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+
+      await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101', 'drv_102'],
+        ttlSeconds: 60,
+      });
+
+      // Segundo envío con los mismos IDs → todos ya tienen PENDING
+      await expect(
+        service.sendOffersForRequest(request.id, 'client_1', {
+          driverIds: ['drv_101', 'drv_102'],
+          ttlSeconds: 60,
+        })
+      ).rejects.toThrow(ConflictError);
+    });
   });
 
   // ==========================================================================
