@@ -34,6 +34,7 @@ describe('RideRequestService', () => {
   afterEach(() => {
     delete process.env.M4_MOCK;
     m4Client.clearMockDrivers();
+    service.stopExpirationWorker();
   });
 
   // ==========================================================================
@@ -773,6 +774,35 @@ describe('RideRequestService', () => {
 
       const audit = service.getOfferAuditLog(request.id);
       expect(audit.some((e) => e.event === 'OFFER_EXPIRED')).toBe(true);
+    });
+
+    it('RF-5.3: El worker en segundo plano debe expirar ofertas y cerrar búsquedas automáticamente sin necesidad de consultas ni respuestas', async () => {
+      const request = await service.createRideRequest('client_worker', 'key_worker', validDTO);
+      const batch = await service.sendOffersForRequest(request.id, 'client_worker', {
+        driverIds: ['drv_101'],
+        ttlSeconds: 30,
+      });
+      const offerId = batch.offers[0].id;
+
+      // Manipulamos el expiresAt de la oferta directamente en el almacén de ofertas para simular que pasó el tiempo sin ninguna consulta
+      const offer = (service as any).offers.get(offerId);
+      offer.expiresAt = new Date(Date.now() - 1000).toISOString();
+
+      // Corremos el ciclo activo de vencimiento autónomo (o esperamos el tick del worker)
+      service.processActiveExpirations();
+
+      // Verificamos que la oferta se expiró autónomamente
+      const updatedOffer = (service as any).offers.get(offerId);
+      expect(updatedOffer.status).toBe('EXPIRED');
+
+      // Verificamos que la solicitud regresó a SEARCHING para permitir nueva ronda
+      const updatedReq = (service as any).requests.get(request.id);
+      expect(updatedReq.status).toBe('SEARCHING');
+
+      // Verificamos que el log de auditoría registró el vencimiento autónomo
+      const audit = service.getOfferAuditLog(request.id);
+      expect(audit.some((e) => e.event === 'OFFER_EXPIRED')).toBe(true);
+      expect(audit.some((e) => e.event === 'BATCH_TIMEOUT')).toBe(true);
     });
   });
 });

@@ -74,10 +74,14 @@ export class RideRequestService {
   private rabbitMQService: RabbitMQService;
   private m4ClientService: M4ClientService;
 
+  // RF-5.3: Timer en segundo plano para revisar activamente vencimientos de ofertas y solicitudes
+  private expirationInterval: NodeJS.Timeout | null = null;
+
   constructor(
     redisService?: RedisService,
     rabbitMQService?: RabbitMQService,
-    m4ClientService?: M4ClientService
+    m4ClientService?: M4ClientService,
+    enableBackgroundWorker: boolean = true
   ) {
     this.redisService = redisService || new RedisService();
     this.rabbitMQService = rabbitMQService || new RabbitMQService();
@@ -85,6 +89,86 @@ export class RideRequestService {
 
     // Suscribirse a la cola despacho.reabrir para atender cancelaciones de conductor (integración con módulo de cancelaciones)
     this.rabbitMQService.subscribeToReopenDispatch((event) => this.handleDriverCancellation(event));
+
+    // RF-5.3: Iniciar proceso periódico en segundo plano para cerrar ofertas y solicitudes vencidas
+    if (enableBackgroundWorker) {
+      this.startExpirationWorker();
+    }
+  }
+
+  /**
+   * RF-5.3: Proceso periódico en segundo plano que revisa vencimientos
+   * Permite que las ofertas y búsquedas vencidas se cierren de forma autónoma
+   * sin requerir que un cliente haga una consulta o respuesta.
+   */
+  public startExpirationWorker(intervalMs: number = 1000): void {
+    if (this.expirationInterval) return;
+
+    this.expirationInterval = setInterval(() => {
+      this.processActiveExpirations();
+    }, intervalMs);
+
+    // Evitar que el timer impida que Node.js finalice limpiamente
+    if (this.expirationInterval.unref) {
+      this.expirationInterval.unref();
+    }
+  }
+
+  /**
+   * Detiene el worker de expiración en segundo plano (para limpieza o tests)
+   */
+  public stopExpirationWorker(): void {
+    if (this.expirationInterval) {
+      clearInterval(this.expirationInterval);
+      this.expirationInterval = null;
+    }
+  }
+
+  /**
+   * Ejecuta una pasada activa de expiración sobre todas las solicitudes y ofertas activas (RF-5.3 / RF-5.8)
+   */
+  public processActiveExpirations(): void {
+    const now = Date.now();
+
+    // 1. Expirar solicitudes activas cuyo plazo total de búsqueda venció
+    for (const request of this.requests.values()) {
+      if (
+        (request.status === 'PENDING' || request.status === 'SEARCHING' || request.status === 'OFFERED') &&
+        new Date(request.expiresAt).getTime() < now
+      ) {
+        const prevStatus = request.status;
+        request.status = 'EXPIRED';
+        request.updatedAt = new Date().toISOString();
+        this.logOfferEvent('SEARCH_TIMEOUT', request.id,
+          'Plazo total de búsqueda agotado por worker en segundo plano.', {
+            previousStatus: prevStatus,
+            newStatus: 'EXPIRED'
+          });
+        console.log(`[RF-5.8] BackgroundWorker: Solicitud ${request.id} expirada por timeout.`);
+      }
+
+      // Si la solicitud estaba en OFFERED, chequear si toda su tanda de ofertas venció
+      if (request.status === 'OFFERED') {
+        this.checkBatchExpiration(request.id);
+      }
+    }
+
+    // 2. Expirar ofertas individuales en estado PENDING cuyo TTL venció
+    for (const offer of this.offers.values()) {
+      if (offer.status === 'PENDING' && new Date(offer.expiresAt).getTime() < now) {
+        offer.status = 'EXPIRED';
+        this.offers.set(offer.id, offer);
+        this.redisService.deleteOffer(offer.id).catch(() => {});
+        this.logOfferEvent('OFFER_EXPIRED', offer.requestId,
+          'Oferta expirada activamente por worker en segundo plano (sin respuesta del conductor)', {
+            offerId: offer.id,
+            driverId: offer.driverId,
+            previousStatus: 'PENDING',
+            newStatus: 'EXPIRED'
+          });
+        console.log(`[RF-5.3] BackgroundWorker: Oferta ${offer.id} expirada activamente por TTL.`);
+      }
+    }
   }
 
   public getRedisService(): RedisService {
