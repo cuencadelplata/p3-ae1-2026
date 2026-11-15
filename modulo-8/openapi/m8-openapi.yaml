@@ -146,25 +146,13 @@ paths:
   /notifications:
     post:
       tags: [Notifications]
-      summary: Procesar una notificación de viaje
-      description: M8 valida el hecho, genera el mensaje y persiste la notificación lógica. No modifica el estado del viaje.
+      deprecated: true
+      summary: Ruta heredada de notificación deshabilitada
+      description: Ruta heredada de AE1. En la aplicación integrada devuelve 410 y no genera ni entrega notificaciones. La app independiente de AE1 conserva una simulación para desarrollo. El flujo real de RF8.1 se inicia mediante RabbitMQ y conserva persistencia e idempotencia.
       servers:
         - url: http://localhost:3000
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NotificationRequest'
       responses:
-        '201':
-          description: Notificación procesada.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NotificationResponse'
-        '400': { description: Solicitud inválida. }
-        '415': { description: Content-Type no admitido. }
+        '410': { description: Ruta heredada deshabilitada en la aplicación integrada; usar la integración RabbitMQ. }
   /qr:
     post:
       tags: [QR]
@@ -353,7 +341,9 @@ paths:
     get:
       tags: [Receipts]
       summary: Obtener una referencia interna de entrega de comprobante
-      description: Ruta interna de coordinación para obtener el enlace temporal y su vencimiento; no pertenece a la API pública.
+      description: Ruta de coordinación de M8. Requiere Bearer validado por M1 y acceso al comprobante como cliente, conductor u operador. RF8.4 usa la función interna cuando corre en la misma aplicación.
+      security:
+        - BearerAuth: []
       servers:
         - url: http://localhost:3000
       parameters:
@@ -364,6 +354,8 @@ paths:
       responses:
         '200': { description: Referencia temporal disponible. }
         '400': { description: Identificador de viaje inválido. }
+        '401': { description: Bearer de M1 ausente o inválido. }
+        '403': { description: El usuario no tiene permiso sobre el comprobante. }
         '404': { description: Comprobante no encontrado. }
         '503': { description: Dependencia requerida no disponible. }
   /tickets:
@@ -508,17 +500,6 @@ paths:
         '200': { description: Historial en orden cronológico. }
         '404': { description: Ticket no encontrado. }
         '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
-  /events/publish:
-    post:
-      tags: [Support]
-      deprecated: true
-      summary: Publicar eventos AE1 en RabbitMQ
-      description: Heredado de AE1; sólo con SUPPORT_LEGACY_EVENTS=on. Se retira con la extracción a RF8.6.
-      servers:
-        - url: http://localhost:3000
-      responses:
-        '200': { description: Evento publicado. }
-        '400': { description: Solicitud inválida. }
 components:
   securitySchemes:
     BearerAuth:

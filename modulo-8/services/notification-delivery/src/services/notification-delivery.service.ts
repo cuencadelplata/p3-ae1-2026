@@ -8,6 +8,8 @@ import type { MessagingInboxRepository } from '../infrastructure/database/inbox.
 import type { DeliveryRepository } from '../infrastructure/database/delivery.repository.js';
 import type { DeviceTokenRepository } from '../infrastructure/database/device-token.repository.js';
 import type { M2PreferencesClient } from '../infrastructure/clients/m2-preferences.client.js';
+import { M2PreferencesError } from '../infrastructure/clients/m2-preferences.client.js';
+import { NonRetryableMessagingError } from '@m8/shared';
 import { StructuredLogger } from '../infrastructure/logging/logger.js';
 
 const CANONICAL_TITLES: Record<DeliveryEventType, string> = {
@@ -17,6 +19,7 @@ const CANONICAL_TITLES: Record<DeliveryEventType, string> = {
   TRIP_STARTED: 'Viaje en curso',
   TRIP_CANCELLED: 'Viaje cancelado',
   TRIP_COMPLETED: 'Viaje finalizado',
+  DRIVER_DOCUMENT_REGISTERED: 'Documento registrado',
 };
 
 export const CONSUMER_ID = 'm8.delivery.notification-requested';
@@ -102,7 +105,8 @@ export class NotificationDeliveryService {
       }
     }
 
-    // 2. Consulta de preferencias en M2
+    // M2 sólo administra perfiles de clientes. Este hecho identifica inequívocamente a un conductor.
+    if (data.eventType !== 'DRIVER_DOCUMENT_REGISTERED') {
     try {
       const preferences = await this.m2Client.getPreferences(userId, correlationId);
       if (!preferences.notificationsEnabled || !preferences.pushEnabled) {
@@ -145,6 +149,27 @@ export class NotificationDeliveryService {
         };
       }
     } catch (m2Err: unknown) {
+      if (m2Err instanceof M2PreferencesError && m2Err.code === 'CUSTOMER_NOT_FOUND') {
+        const record = await this.deliveryRepo.createDelivery({
+          notificationId: data.notificationId,
+          messageId,
+          tripId: data.tripId,
+          userId,
+          eventType: data.eventType,
+          channel: 'PUSH',
+          message: data.message,
+        });
+        await this.deliveryRepo.updateStatus(record.deliveryId, 'SKIPPED_NO_CUSTOMER_PROFILE', 'CUSTOMER_NOT_FOUND');
+        if (!options.skipInboxClaim) await this.inboxRepo.markProcessed(CONSUMER_ID, messageId);
+        return {
+          messageId,
+          notificationId: data.notificationId,
+          actionTaken: 'SKIPPED_NO_CUSTOMER_PROFILE',
+          status: 'SKIPPED_NO_CUSTOMER_PROFILE',
+          skipReason: 'CUSTOMER_NOT_FOUND',
+          attemptsCount: 0,
+        };
+      }
       const errMessage = m2Err instanceof Error ? m2Err.message : 'Error en M2';
       StructuredLogger.error({
         event: 'M2_PREFERENCES_ERROR',
@@ -154,8 +179,11 @@ export class NotificationDeliveryService {
         correlationId,
         error: errMessage,
       });
-      // Si falla M2 por error de red transitorio, relanzar para activar política de reintentos
+      if (m2Err instanceof M2PreferencesError && m2Err.code === 'CONFIGURATION') {
+        throw new NonRetryableMessagingError(errMessage);
+      }
       throw m2Err;
+    }
     }
 
     // 3. Resolución de Device Token en M8

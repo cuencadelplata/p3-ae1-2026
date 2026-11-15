@@ -13,7 +13,10 @@ Copy-Item .env.example .env
 ```
 
 El archivo `.env` es local y no debe versionarse. Sus valores de M1 y M2 son
-placeholders exclusivos de desarrollo.
+placeholders exclusivos de desarrollo. Antes de iniciar M8, reemplazar
+`M1_JWT_SECRET` y `M2_INTERNAL_API_KEY` por valores locales propios; la app
+rechaza los textos `replace-with-...`. Para integrar M1 y M2 reales, configurar
+las credenciales acordadas con esos servicios fuera del repositorio.
 
 ## Inicio y comprobación
 
@@ -77,6 +80,39 @@ La prueba comprueba PostgreSQL y los schemas lógicos `receipts`,
 `notifications`, `support`, `notification_delivery` y `messaging`; realiza
 `PING` a Redis; y verifica en RabbitMQ los exchanges `mobility.events` y
 `mobility.events.dlx`.
+
+## Prueba integrada de documento registrado
+
+Esta prueba usa un publicador M3 simulado y un stub temporal de preferencias
+M2. Recorre RabbitMQ real, el Inbox de RF8.6, la notificación y Outbox de
+RF8.1, el relay y la entrega PUSH sandbox de RF8.7. Repite `messageId`, envía
+un evento inválido y verifica que un evento posterior se entregue. No acredita
+que el M3 desplegado emita el `userId` canónico de M1 ni un PUSH externo real.
+
+Desde `modulo-8/`, con `.env` configurado:
+
+```powershell
+docker compose -f compose.yaml -f tests/e2e/compose-m3-document.yaml up -d --build m8-app m2-preferences-sandbox
+$composeConfig = docker compose -f compose.yaml -f tests/e2e/compose-m3-document.yaml config --format json | ConvertFrom-Json
+$env:RABBITMQ_URL = $composeConfig.services.'m8-app'.environment.RABBITMQ_URL.Replace('@rabbitmq:', '@localhost:')
+node tests/e2e/m3-document-flow.mjs
+Remove-Item Env:RABBITMQ_URL
+```
+
+Si el volumen PostgreSQL fue creado antes de integrar M3/RF8.7, aplicar una
+vez los scripts idempotentes de permisos y de la columna `trip_id` nullable:
+
+```powershell
+docker compose exec -T postgres sh /docker-entrypoint-initdb.d/03-notifications.sh
+docker compose exec -T postgres sh /docker-entrypoint-initdb.d/04-notification-delivery.sh
+```
+
+Para volver a la configuración normal de M8 después de la prueba:
+
+```powershell
+docker compose up -d m8-app
+docker compose -f compose.yaml -f tests/e2e/compose-m3-document.yaml stop m2-preferences-sandbox
+```
 
 ## Ejecutar la imagen publicada
 

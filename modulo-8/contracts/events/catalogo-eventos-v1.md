@@ -435,18 +435,22 @@ Su finalidad es solicitar la entrega de una notificación lógica ya creada por 
 ### 5.5 `documento.registrado` (M3 → RF8.1)
 
 M3 acordó publicar el hecho externo `DriverDocumentRegistered` en el exchange
-`m3.eventos`, con routing key `documento.registrado`. RF8.6 administrará la
-cola propia `m8.notificaciones.documento-registrado` y entregará el evento
-validado a RF8.1.
+`m3.eventos`, con routing key `documento.registrado`. RF8.6 administra la
+cola propia `m8.notificaciones.documento-registrado` y entrega únicamente el
+envelope validado a RF8.1. Usa `messageId` para el Inbox técnico, confirma
+después de RF8.1 y deriva errores a retry o DLQ según corresponda.
 
 RF8.1 crea una notificación lógica con el mensaje “Tu documento fue registrado
 correctamente.” y la persiste con su Outbox. El destinatario es `driverId`, que
-debe ser el `userId` numérico canónico de M1. Mientras M3 emita un UUID interno
-en ese campo, no se habilita la entrega PUSH.
+debe ser el `userId` numérico canónico de M1. El productor M3 publicado en
+`b11a471` ya emite el envelope con `driverId` numérico. M3 mostró un mensaje
+real que pasa el validador de M8; queda pendiente comprobar que el número
+identifique al conductor autenticado en M1 y que ese mensaje haya recorrido
+M3 → RabbitMQ → M8 → proveedor PUSH.
 
 La variante de `NotificationRequested` no incluye `tripId` y usa
-`DRIVER_DOCUMENT_REGISTERED`; RF8.7 debe ampliar su validador contractual para
-aceptarla antes de activar la entrega integrada.
+`DRIVER_DOCUMENT_REGISTERED`; el validador de RF8.7 ya acepta esa variante.
+Su proveedor actual es sandbox y la E2E con M3 real sigue pendiente.
 
 El contrato completo está en
 [`m3-driver-document-registered.contract.md`](./m3-driver-document-registered.contract.md).
@@ -463,6 +467,10 @@ GET /internal/receipts/{tripId}/delivery-reference
 
 Devuelve un enlace de descarga temporal del PDF. Receipts Delivery no accede a
 la base de datos ni al almacenamiento del servicio de comprobantes.
+En la aplicación integrada de AE2, la ruta HTTP exige Bearer validado por M1
+y permiso sobre el comprobante (cliente, conductor u operador), igual que la
+consulta y descarga. RF8.4 usa directamente la función interna cuando corre
+en el mismo proceso; no necesita una credencial entre servicios inventada.
 
 Respuesta `200`:
 
@@ -480,6 +488,8 @@ Respuesta `200`:
 | Código | `error.code` | Caso |
 | --- | --- | --- |
 | 400 | `INVALID_TRIP_ID` | `tripId` con formato inválido. |
+| 401 | `AUTH_REQUIRED` / `INVALID_AUTH_TOKEN` | Falta el Bearer o M1 lo rechaza. |
+| 403 | `INSUFFICIENT_PERMISSIONS` | El usuario no puede acceder al comprobante. |
 | 404 | `RECEIPT_NOT_FOUND` | No hay comprobante emitido para ese viaje. |
 | 409 | `RECEIPT_PDF_UNAVAILABLE` | El comprobante existe pero su PDF no. |
 | 503 | `DOWNLOAD_LINKS_UNAVAILABLE` | Redis no está disponible; reintentar más tarde. |
