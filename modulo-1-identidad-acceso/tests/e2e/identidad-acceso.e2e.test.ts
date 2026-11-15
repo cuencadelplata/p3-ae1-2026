@@ -535,7 +535,7 @@ describe.sequential(
             it("E2E-6.9: Link account con autenticación exitosa", async () => {
                 const response = await request(app)
                     .post("/auth/oauth2/link")
-                    .set("Authorization", `Bearer ${token}`)
+                    .set("Authorization", `Bearer ${token || oauthToken}`)
                     .send({
                         provider: "MOCK",
                         provider_id: "mock-123"

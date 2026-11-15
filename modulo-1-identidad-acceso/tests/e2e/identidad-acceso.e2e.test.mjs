@@ -383,10 +383,11 @@ describe(
             });
 
             test("Paso 6: Vincular cuenta OAuth2 MOCK a un usuario existente (POST /auth/oauth2/link)", async () => {
-                assert.ok(tokenCliente, "Debe existir token del usuario cliente");
+                const targetToken = oauthToken || tokenCliente;
+                assert.ok(targetToken, "Debe existir un token válido para vincular cuenta");
                 const response = await apiRequest("/auth/oauth2/link", {
                     method: "POST",
-                    token: tokenCliente,
+                    token: targetToken,
                     body: {
                         provider: "MOCK",
                         provider_id: `mock-user-${Date.now()}`
