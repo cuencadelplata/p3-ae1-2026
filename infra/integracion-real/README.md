@@ -1,5 +1,10 @@
 # Integración real de Support (RF8.5) con M6 y M1
 
+Esta guía prepara la prueba entre servicios para la futura rama integrada del
+curso. Los cambios de QR en M8 se verificaron localmente; la prueba conjunta
+M6 → M8 y la mensajería de viajes siguen pendientes de ese entorno común y de
+los ajustes del cliente QR de M6 indicados abajo.
+
 Pasos para levantar M8 junto a los servicios **reales** de M6 (viajes) y M1
 (identidad) en una misma máquina. No hay sandboxes ni mocks de esos módulos:
 se construyen desde sus ramas.
@@ -7,12 +12,12 @@ se construyen desde sus ramas.
 | Archivo | Para qué |
 | --- | --- |
 | `../../compose.integracion-real.yaml` | Se suma a `compose.yaml`. Une `m8-app` a las redes de M6 y M1 y define `M6_TRIPS_URL` y `SUPPORT_M1_IDENTITY_URL`. |
-| `m6.override.yaml` | Se suma al `docker-compose.yml` de M6. Sólo cambia puertos publicados. |
+| `m6.override.yaml` | Se suma al `docker-compose.yml` de M6. Cambia los puertos publicados y apunta el cliente QR de M6 a `m8-app:3000`. |
 | `m1.override.yaml` | Se suma al `docker-compose.yml` de M1. Sólo cambia puertos publicados. |
 
-Los overrides existen porque los tres módulos publican los mismos puertos en
-el host (3000, 3001, 5432, 6379, 5672, 15672). No tocan imágenes, comandos,
-variables ni código de M6 o M1.
+Los overrides resuelven los puertos que chocan en el host (3000, 3001, 5432,
+6379, 5672, 15672). El de M6 también reemplaza `M8_URL` y pasa la clave QR
+mediante una variable de entorno; no modifica código de M6 o M1.
 
 | Servicio | Puerto en el host | Dentro de Docker |
 | --- | --- | --- |
@@ -47,7 +52,7 @@ OVR="$PWD/modulo-8/infra/integracion-real"
 ## 2. Levantar M6 y M1
 
 ```bash
-docker compose -p m6-integracion \
+docker compose -p m6-integracion --env-file "$PWD/modulo-8/.env" \
   -f "$TMP/m6/modulo6/docker-compose.yml" -f "$OVR/m6.override.yaml" \
   up -d --build --wait
 
@@ -60,6 +65,13 @@ Los nombres de proyecto importan: `compose.integracion-real.yaml` espera las
 redes `m6_viajes_default` (la fija el compose de M6) y
 `m1-integracion_default` (la red por defecto del proyecto `m1-integracion`).
 Si se usan otros nombres, definir `M6_NETWORK` y `M1_NETWORK`.
+
+**QR con M6 real:** la rama de M6 consultada aún no envía `x-api-key` ni
+`Idempotency-Key`. El override ya configura `M8_URL` y `M8_QR_API_KEY`, pero
+M6 debe leer la clave y enviarla en ambas rutas QR. Al validar, debe enviar
+un UUID de operación estable en `Idempotency-Key` y repetirlo sin cambios si
+se pierde la respuesta. Hasta que M6 publique ese cambio, su llamada al M8
+real recibirá 401. La clave local está en `modulo-8/.env`, nunca en Git.
 
 ## 3. Levantar M8 conectado a ellos
 
@@ -156,10 +168,10 @@ cd modulo-8
 docker compose --env-file .env up -d --wait
 cd ..
 
-docker compose -p m6-integracion \
-  -f "$TMP/m6/modulo6/docker-compose.yml" -f "$OVR/m6.override.yaml" down -v
+docker compose -p m6-integracion --env-file "$PWD/modulo-8/.env" \
+  -f "$TMP/m6/modulo6/docker-compose.yml" -f "$OVR/m6.override.yaml" down
 docker compose -p m1-integracion \
-  -f "$TMP/m1/modulo-1-identidad-acceso/docker-compose.yml" -f "$OVR/m1.override.yaml" down -v
+  -f "$TMP/m1/modulo-1-identidad-acceso/docker-compose.yml" -f "$OVR/m1.override.yaml" down
 
 git worktree remove --force "$TMP/m6"
 git worktree remove --force "$TMP/m1"
@@ -180,8 +192,8 @@ cd modulo-8
 M8_IMAGE=juanmainval/m8-notificaciones-qr:2.0.1 docker compose --env-file .env up -d --no-build --wait
 ```
 
-`down -v` se usa sólo sobre los proyectos `m6-integracion` y `m1-integracion`,
-cuyos volúmenes son descartables. **No usarlo sobre M8.**
+`down` detiene estos proyectos sin borrar sus volúmenes. No usar `down -v`
+sobre datos que se quieran conservar.
 
 ## Variables opcionales
 
@@ -210,9 +222,9 @@ UTF-8 y enviarlo con `--data-binary @archivo.json`.
 
 ## Alcance
 
-- Este modo sólo cambia la configuración de Support. Los demás RF de M8
-  siguen como en `compose.yaml`; Receipts, por ejemplo, sigue validando contra
-  `m1-identity-sandbox`.
+- Este modo configura Support y prepara la URL y clave para que M6 llame al QR
+  de M8. Los demás RF de M8 siguen como en `compose.yaml`; Receipts, por
+  ejemplo, sigue validando contra `m1-identity-sandbox`.
 - Con este modo activo, `POST /tickets` exige un Bearer y un viaje real. Las
   pruebas E2E de M8 (`pnpm test:e2e`) están escritas para el modo normal y no
   deben correrse contra este stack.
