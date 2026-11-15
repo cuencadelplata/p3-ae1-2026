@@ -1,4 +1,5 @@
 import express from 'express';
+import { resolve } from 'node:path';
 import viajesRoutes from './routes/viajes.routes.js';
 import clientesRoutes from './routes/clientes.routes.js';
 
@@ -11,6 +12,8 @@ app.use(express.json());
 app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok' });
 });
+
+app.use(express.static(resolve(process.cwd(), 'frontend')));
 
 // Enlazamos las rutas del modulo
 app.use('/api/viajes', viajesRoutes);

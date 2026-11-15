@@ -229,4 +229,63 @@ describe('RF-6.3: Inicio Validado - Validacion con QR', () => {
     expect(rows[0].estado).toBe('ARRIBADO');
   });
 
+  it('no renueva el QR si M8 devuelve IDEMPOTENCY_CONFLICT', async () => {
+    const created = mockResponse();
+    await solicitarViaje(mockRequest({ clienteId: 'cliente-1', origen: 'A', destino: 'B' }) as any, created as any);
+    const viajeId = created.data.id;
+    await asignarConductor(mockRequest({ conductorId: 'conductor-1' }, { id: viajeId }) as any, mockResponse() as any);
+    const arrival = mockResponse();
+    await registrarArribo(mockRequest({}, { id: viajeId }) as any, arrival as any);
+
+    const qrService = await import('../../../src/rf-6.1-6.2-6.3/services/qr.service.js');
+    vi.mocked(qrService.generarQR).mockClear();
+    vi.mocked(qrService.validarQR).mockRejectedValueOnce(
+      new qrService.M8ApiError(409, 'IDEMPOTENCY_CONFLICT'),
+    );
+
+    const response = mockResponse();
+    await iniciarViaje(mockRequest({ token: arrival.data.qr.token }, { id: viajeId }) as any, response as any);
+
+    expect(response.statusCode).toBe(409);
+    expect(response.data.error.code).toBe('IDEMPOTENCY_CONFLICT');
+    expect(qrService.generarQR).not.toHaveBeenCalled();
+  });
+
+  it('inicia concurrentemente una sola vez y publica un solo evento', async () => {
+    const created = mockResponse();
+    await solicitarViaje(mockRequest({ clienteId: 'cliente-1', origen: 'A', destino: 'B' }) as any, created as any);
+    const viajeId = created.data.id;
+    await asignarConductor(mockRequest({ conductorId: 'conductor-1' }, { id: viajeId }) as any, mockResponse() as any);
+    const arrival = mockResponse();
+    await registrarArribo(mockRequest({}, { id: viajeId }) as any, arrival as any);
+
+    const qrService = await import('../../../src/rf-6.1-6.2-6.3/services/qr.service.js');
+    const rabbitService = await import('../../../src/rf-6.1-6.2-6.3/services/rabbitmq.service.js');
+    let releaseValidations!: () => void;
+    const bothValidating = new Promise<void>((resolve) => { releaseValidations = resolve; });
+    let validationCount = 0;
+    vi.mocked(qrService.validarQR).mockImplementation(async () => {
+      validationCount += 1;
+      if (validationCount === 2) releaseValidations();
+      await bothValidating;
+      return { valid: true };
+    });
+    vi.mocked(rabbitService.publicarEvento).mockClear();
+
+    const first = mockResponse();
+    const second = mockResponse();
+    await Promise.all([
+      iniciarViaje(mockRequest({ token: arrival.data.qr.token }, { id: viajeId }) as any, first as any),
+      iniciarViaje(mockRequest({ token: arrival.data.qr.token }, { id: viajeId }) as any, second as any),
+    ]);
+
+    expect([first.statusCode, second.statusCode].sort()).toEqual([200, 400]);
+    expect(rabbitService.publicarEvento).toHaveBeenCalledTimes(1);
+    const { rows } = await pool.query(
+      'SELECT COUNT(*)::int AS total FROM viaje_transiciones WHERE viaje_id = $1 AND estado_nuevo = $2',
+      [viajeId, 'EN_CURSO'],
+    );
+    expect(rows[0].total).toBe(1);
+  });
+
 });

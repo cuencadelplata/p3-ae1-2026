@@ -458,7 +458,10 @@ export const iniciarViaje = async (req: Request, res: Response): Promise<any> =>
         }
     } catch (error) {
         if (error instanceof M8ApiError) {
-            if (error.status === 409 || error.status === 410) {
+            const qrNeedsRefresh =
+                (error.status === 409 && error.code === 'QR_ALREADY_USED') ||
+                (error.status === 410 && error.code === 'QR_EXPIRED');
+            if (qrNeedsRefresh) {
                 let viajeActual: Viaje | null;
                 try {
                     viajeActual = await viajeRepo.buscarPorId(id);
@@ -489,12 +492,18 @@ export const iniciarViaje = async (req: Request, res: Response): Promise<any> =>
     }
 
     try {
-        await viajeRepo.actualizarEstado(id, EstadoViaje.EN_CURSO);
+        const iniciado = await viajeRepo.iniciarSiArribado(id);
+        if (!iniciado) {
+            const estadoActual = await viajeRepo.buscarPorId(id);
+            if (!estadoActual) return res.status(404).json({ error: 'Viaje no encontrado' });
+            return res.status(400).json({
+                error: `No puedes iniciar el viaje en este momento. Estado actual: ${estadoActual.estado}`,
+            });
+        }
+        viaje = iniciado;
     } catch (error) {
         return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
     }
-
-    viaje.estado = EstadoViaje.EN_CURSO;
 
     try {
         await publicarEvento('viajes_exchange', 'viaje.iniciado', {
