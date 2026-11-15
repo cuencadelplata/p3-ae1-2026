@@ -94,6 +94,10 @@ function validate(token: string) {
   return request(app).post("/qr/validate").send({ tripId: TRIP_ID, token });
 }
 
+function validateWithKey(token: string, operationId: string) {
+  return request(app).post("/qr/validate").set("Idempotency-Key", operationId).send({ tripId: TRIP_ID, token });
+}
+
 async function timed<T>(run: () => Promise<T>): Promise<{ result: T; elapsedMs: number }> {
   const startedAt = performance.now();
   const result = await run();
@@ -182,6 +186,22 @@ describe("resiliencia del QR ante fallas de Redis", () => {
     const retried = await validate(token);
     expect(retried.status).toBe(409);
     expect(retried.body).toEqual({ error: { code: "QR_ALREADY_USED", message: "El QR ya fue utilizado." } });
+  });
+
+  it("4b. respuesta perdida: la misma operacion recupera el 200; otra operacion recibe 409", async () => {
+    const token = await generateToken();
+    const operationId = "56d936d4-126f-4429-9a52-d62410769a62";
+    await proxy.setMode("drop-responses");
+
+    expect((await validateWithKey(token, operationId)).status).toBe(503);
+
+    await proxy.setMode("open");
+    await waitUntilReady();
+    expect((await validateWithKey(token, operationId)).body).toEqual({ valid: true });
+    expect((await validateWithKey(token, "1e9676c3-b857-48dd-87cc-64cb6d44c0e2")).status).toBe(409);
+    const conflicting = await validateWithKey("otro-token", operationId);
+    expect(conflicting.status).toBe(409);
+    expect(conflicting.body.error.code).toBe("IDEMPOTENCY_CONFLICT");
   });
 
   // Recuperación automática: tras una caída, el mismo proceso y el mismo cliente vuelven a

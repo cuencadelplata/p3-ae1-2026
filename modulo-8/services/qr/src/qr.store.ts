@@ -1,6 +1,6 @@
 import type { QrRecord } from "./qr.types";
 
-export type ConsumeOutcome = "OK" | "NOT_FOUND" | "TRIP_MISMATCH" | "ALREADY_USED" | "EXPIRED";
+export type ConsumeOutcome = "OK" | "NOT_FOUND" | "TRIP_MISMATCH" | "ALREADY_USED" | "EXPIRED" | "IDEMPOTENCY_CONFLICT";
 
 export type QrStoreOperation = "save" | "get-or-create" | "consume";
 
@@ -48,13 +48,14 @@ export class QrStoreUnavailableError extends Error {
 export interface QrStore {
   save(record: QrRecord): Promise<void>;
   getOrCreateActive(record: QrOperationalRecord, now: Date): Promise<QrGetOrCreateResult>;
-  consumeIfValid(tokenHash: string, tripId: string, now: Date): Promise<ConsumeOutcome>;
+  consumeIfValid(tokenHash: string, tripId: string, now: Date, operationId?: string): Promise<ConsumeOutcome>;
 }
 
 // Implementación en memoria: el estado vive en el proceso, se pierde al reiniciar y no se
 // comparte entre instancias.
 export function createInMemoryQrStore(): QrStore {
   const records = new Map<string, QrOperationalRecord | QrRecord>();
+  const successfulOperations = new Map<string, { tokenHash: string; tripId: string }>();
 
   async function save(record: QrRecord): Promise<void> {
     records.set(record.tokenHash, record);
@@ -81,7 +82,13 @@ export function createInMemoryQrStore(): QrStore {
   // usedAt ocurren en la misma ejecución del event loop. Si se agregara un await en el
   // medio, dos validaciones concurrentes del mismo QR podrían intercalarse entre el
   // chequeo y la marca, y ambas terminarían consumiéndolo con éxito.
-  async function consumeIfValid(tokenHash: string, tripId: string, now: Date): Promise<ConsumeOutcome> {
+  async function consumeIfValid(tokenHash: string, tripId: string, now: Date, operationId?: string): Promise<ConsumeOutcome> {
+    if (operationId !== undefined) {
+      const previous = successfulOperations.get(operationId);
+      if (previous !== undefined) {
+        return previous.tokenHash === tokenHash && previous.tripId === tripId ? "OK" : "IDEMPOTENCY_CONFLICT";
+      }
+    }
     const record = records.get(tokenHash);
 
     if (record === undefined) {
@@ -101,6 +108,7 @@ export function createInMemoryQrStore(): QrStore {
     }
 
     record.usedAt = now;
+    if (operationId !== undefined) successfulOperations.set(operationId, { tokenHash, tripId });
     return "OK";
   }
 
