@@ -24,6 +24,7 @@ jobs:
     env:
       M1_JWT_SECRET: ci-placeholder-not-for-production
       M2_INTERNAL_API_KEY: ci-placeholder-not-for-production
+      QR_INTERNAL_API_KEY: ci-only-qr-key-not-for-production
       RABBITMQ_USER: guest
       RABBITMQ_PASSWORD: guest
       M8_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
