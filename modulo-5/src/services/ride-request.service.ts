@@ -626,24 +626,24 @@ export class RideRequestService {
       );
     }
 
-    // 4. Verificar vigencia por tiempo (TTL) en Redis
-    const remainingTtl = await this.redisService.getRemainingTtl(offerId);
-    const nowTime = Date.now();
-    const expiresAtTime = new Date(offer.expiresAt).getTime();
-
-    if (remainingTtl === -2 || nowTime > expiresAtTime || offer.status === 'EXPIRED') {
-      offer.status = 'EXPIRED';
-      await this.redisService.deleteOffer(offerId);
-      this.offers.set(offerId, offer);
-      throw new ConflictError('La oferta ha expirado y ya no está vigente', 'OFFER_EXPIRED');
-    }
-
-    // 5. Verificar que no haya sido respondida previamente
-    if (offer.status !== 'PENDING') {
+    // 4. Verificar si ya fue respondida previamente por el conductor (CP-5.4-11: reintentos de respuesta)
+    if (offer.status === 'ACCEPTED' || offer.status === 'REJECTED') {
       throw new ConflictError(
         `La oferta ya fue respondida previamente y se encuentra en estado ${offer.status}`,
         'OFFER_ALREADY_RESPONDED'
       );
+    }
+
+    // 5. Verificar vigencia por tiempo (TTL) en Redis o expiración por resolución (CP-5.4-05 y CP-5.4-06)
+    const remainingTtl = await this.redisService.getRemainingTtl(offerId);
+    const nowTime = Date.now();
+    const expiresAtTime = new Date(offer.expiresAt).getTime();
+
+    if (offer.status === 'EXPIRED' || remainingTtl === -2 || nowTime >= expiresAtTime) {
+      offer.status = 'EXPIRED';
+      await this.redisService.deleteOffer(offerId).catch(() => {});
+      this.offers.set(offerId, offer);
+      throw new ConflictError('La oferta ha expirado y ya no está vigente', 'OFFER_EXPIRED');
     }
 
     // 6. Obtener la solicitud asociada desde la BD

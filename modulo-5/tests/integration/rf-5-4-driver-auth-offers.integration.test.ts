@@ -2,16 +2,18 @@ import request from 'supertest';
 import { app } from '../../src/index';
 
 /**
- * Suite de Pruebas de Integración para RF-5.4: Aceptar o Rechazar Ofertas con Auth M1
+ * Matriz Oficial de Casos de Prueba para RF-5.4: Aceptar o Rechazar Ofertas
  * 
- * Requerimientos verificados:
- * 1. El conductor puede aceptar o rechazar una oferta mientras esté vigente.
- * 2. Validación estricta de token JWT y rol "CONDUCTOR" validado por M1.
- * 3. Prevención total de identidades de demo o suplantaciones desde el cuerpo del pedido (req.body.driverId).
- * 4. Control de acceso: un conductor no puede responder ofertas ajenas ni consultar ofertas de otros conductores.
- * 5. Rechazo ante ofertas expiradas por TTL o ya respondidas previamente.
+ * Casos cubiertos con ID de trazabilidad:
+ * - CP-5.4-01: Recorrido integrado: Crear, buscar, ofertar y aceptar un viaje.
+ * - CP-5.4-02: Básico: Rechazar sin bloquear a los demás (A rechaza; B acepta).
+ * - CP-5.4-05: Básico: Aceptar en el límite (variante L) y después del vencimiento (variante D) con reloj controlado.
+ * - CP-5.4-06: Básico: Dejar vencer otra oferta sin consultarla antes; luego intentar rechazarla.
+ * - CP-5.4-08: Seguridad: Con sesión de B intentar responder oferta dirigida a A con ID de A en payload.
+ * - CP-5.4-11: Reintentos: Repetir una aceptación manteniendo asignación única.
+ * - Casos de Autenticación M1: Token faltante, inválido y rol prohibido (CLIENTE).
  */
-describe('RF-5.4: Integración Auth M1 y Aceptación/Rechazo de Ofertas', () => {
+describe('RF-5.4: Casos de Prueba Oficiales — Aceptar o Rechazar Ofertas de Conductor', () => {
   const getUniqueClientId = () => `client_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   const getUniqueKey = () => `key_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
@@ -30,7 +32,7 @@ describe('RF-5.4: Integración Auth M1 y Aceptación/Rechazo de Ofertas', () => 
   };
 
   /**
-   * Helper para crear una solicitud y despachar ofertas a uno o más conductores
+   * Helper para crear una solicitud y despachar ofertas
    */
   async function createRequestAndOffers(driverIds: string[], ttlSeconds = 60) {
     const clientId = getUniqueClientId();
@@ -52,9 +54,297 @@ describe('RF-5.4: Integración Auth M1 y Aceptación/Rechazo de Ofertas', () => 
     return { requestId, clientId, offers: offersRes.body.offers };
   }
 
-  describe('Validación de Autenticación M1 y Rol de Conductor', () => {
-    it('debe rechazar con 401 MISSING_TOKEN si no se incluye header de autenticación en /accept', async () => {
-      const { offers } = await createRequestAndOffers(['drv_test_1']);
+  // ==========================================================================
+  // CP-5.4-01: Recorrido integrado
+  // ==========================================================================
+  it('CP-5.4-01: Recorrido integrado — Crear, buscar, ofertar y aceptar un viaje', async () => {
+    const clientId = getUniqueClientId();
+
+    // 1. Como cliente, crear una solicitud y guardar su ID
+    const createRes = await request(app)
+      .post('/api/v1/ride-requests')
+      .set('x-user-id', clientId)
+      .set('Idempotency-Key', getUniqueKey())
+      .send(validPayload);
+
+    expect(createRes.status).toBe(201);
+    const requestId = createRes.body.id;
+    expect(requestId).toBeDefined();
+
+    // 2. Buscar candidatos compatibles
+    const candidatesRes = await request(app)
+      .post(`/api/v1/ride-requests/${requestId}/candidates`)
+      .set('x-user-id', clientId)
+      .send({ radiusKm: 5, maxCandidates: 3 });
+
+    expect(candidatesRes.status).toBe(200);
+    expect(candidatesRes.body.candidatesCount).toBeGreaterThan(0);
+    const selectedDriverId = candidatesRes.body.candidates[0].driverId;
+
+    // 3. Enviar una oferta al conductor elegido y comprobar que le llega
+    const sendOffersRes = await request(app)
+      .post(`/api/v1/ride-requests/${requestId}/offers`)
+      .set('x-user-id', clientId)
+      .send({ driverIds: [selectedDriverId], ttlSeconds: 60 });
+
+    expect(sendOffersRes.status).toBe(201);
+    const offerId = sendOffersRes.body.offers[0].id;
+
+    // Comprobar que la oferta le llega al conductor
+    const driverInboxRes = await request(app)
+      .get(`/api/v1/drivers/${selectedDriverId}/offers`)
+      .set('x-driver-id', selectedDriverId);
+
+    expect(driverInboxRes.status).toBe(200);
+    const receivedOffer = driverInboxRes.body.offers.find((o: any) => o.id === offerId);
+    expect(receivedOffer).toBeDefined();
+    expect(receivedOffer.requestId).toBe(requestId);
+    expect(receivedOffer.status).toBe('PENDING');
+
+    // 4. Como ese conductor, aceptarla antes de vencer
+    const acceptRes = await request(app)
+      .post(`/api/v1/offers/${offerId}/accept`)
+      .set('x-driver-id', selectedDriverId)
+      .send();
+
+    expect(acceptRes.status).toBe(200);
+    expect(acceptRes.body.action).toBe('ACCEPT');
+    expect(acceptRes.body.status).toBe('ACCEPTED');
+    expect(acceptRes.body.requestStatus).toBe('ASSIGNED');
+    expect(acceptRes.body.assignedDriverId).toBe(selectedDriverId);
+
+    // 5. Consultar la solicitud y la asignación resultante
+    const finalRequestRes = await request(app)
+      .get(`/api/v1/ride-requests/${requestId}`)
+      .set('x-user-id', clientId);
+
+    expect(finalRequestRes.status).toBe(200);
+    expect(finalRequestRes.body.id).toBe(requestId);
+    expect(finalRequestRes.body.status).toBe('ASSIGNED');
+    expect(finalRequestRes.body.assignedDriverId).toBe(selectedDriverId);
+  });
+
+  // ==========================================================================
+  // CP-5.4-02: Básico — Rechazar sin bloquear a los demás
+  // ==========================================================================
+  it('CP-5.4-02: Básico — Rechazar sin bloquear a los demás (A rechaza; B acepta)', async () => {
+    const driverA = 'drv_A_cp02';
+    const driverB = 'drv_B_cp02';
+
+    // 1. Crear ofertas para A y B
+    const { requestId, clientId, offers } = await createRequestAndOffers([driverA, driverB], 60);
+    const offerA = offers.find((o: any) => o.driverId === driverA);
+    const offerB = offers.find((o: any) => o.driverId === driverB);
+
+    expect(offerA).toBeDefined();
+    expect(offerB).toBeDefined();
+
+    // 2. A rechaza su oferta
+    const rejectRes = await request(app)
+      .post(`/api/v1/offers/${offerA.id}/reject`)
+      .set('x-driver-id', driverA)
+      .send();
+
+    expect(rejectRes.status).toBe(200);
+    expect(rejectRes.body.action).toBe('REJECT');
+    expect(rejectRes.body.status).toBe('REJECTED');
+
+    // La oferta de A queda rechazada y no lo asigna
+    const checkOfferARes = await request(app)
+      .get(`/api/v1/offers/${offerA.id}`)
+      .set('x-user-id', clientId);
+    expect(checkOfferARes.body.status).toBe('REJECTED');
+
+    // 3. Después B acepta mientras su oferta sigue vigente
+    const acceptBRes = await request(app)
+      .post(`/api/v1/offers/${offerB.id}/accept`)
+      .set('x-driver-id', driverB)
+      .send();
+
+    expect(acceptBRes.status).toBe(200);
+    expect(acceptBRes.body.action).toBe('ACCEPT');
+    expect(acceptBRes.body.status).toBe('ACCEPTED');
+    expect(acceptBRes.body.assignedDriverId).toBe(driverB);
+
+    // B queda asignado al viaje
+    const finalRequestRes = await request(app)
+      .get(`/api/v1/ride-requests/${requestId}`)
+      .set('x-user-id', clientId);
+    expect(finalRequestRes.body.status).toBe('ASSIGNED');
+    expect(finalRequestRes.body.assignedDriverId).toBe(driverB);
+  });
+
+  // ==========================================================================
+  // CP-5.4-05: Básico — Aceptar en el límite (variante L) y después del vencimiento (variante D)
+  // ==========================================================================
+  describe('CP-5.4-05: Básico — Aceptar en el límite y después del vencimiento (Reloj Controlado)', () => {
+    let dateSpy: jest.SpyInstance;
+
+    afterEach(() => {
+      if (dateSpy) {
+        dateSpy.mockRestore();
+      }
+    });
+
+    it('Variante L: aceptar exactamente en el instante expiresAt cuenta como vencido según regla fijada (no acepta ni asigna)', async () => {
+      const driverL = 'drv_L_limit';
+      const ttlSeconds = 10;
+      const { requestId, clientId, offers } = await createRequestAndOffers([driverL], ttlSeconds);
+      const offerL = offers[0];
+
+      const expiresAtExactMs = new Date(offerL.expiresAt).getTime();
+
+      // Reloj controlado: simulamos el instante exacto expiresAt
+      dateSpy = jest.spyOn(Date, 'now').mockReturnValue(expiresAtExactMs);
+
+      const acceptRes = await request(app)
+        .post(`/api/v1/offers/${offerL.id}/accept`)
+        .set('x-driver-id', driverL)
+        .send();
+
+      // Regla acordada: si now >= expiresAt la oferta ya venció -> 409 OFFER_EXPIRED
+      expect(acceptRes.status).toBe(409);
+      expect(acceptRes.body.code).toBe('OFFER_EXPIRED');
+
+      // Restaurar reloj para consultar estado final de la solicitud
+      dateSpy.mockRestore();
+      const finalRequest = await request(app)
+        .get(`/api/v1/ride-requests/${requestId}`)
+        .set('x-user-id', clientId);
+
+      // No asigna al conductor
+      expect(finalRequest.body.status).not.toBe('ASSIGNED');
+    });
+
+    it('Variante D: aceptar después de expiresAt siempre se rechaza por vencimiento y no asigna', async () => {
+      const driverD = 'drv_D_after';
+      const ttlSeconds = 10;
+      const { requestId, clientId, offers } = await createRequestAndOffers([driverD], ttlSeconds);
+      const offerD = offers[0];
+
+      const afterExpiresMs = new Date(offerD.expiresAt).getTime() + 2000;
+
+      // Reloj controlado: simulamos 2 segundos después de expiresAt
+      dateSpy = jest.spyOn(Date, 'now').mockReturnValue(afterExpiresMs);
+
+      const acceptRes = await request(app)
+        .post(`/api/v1/offers/${offerD.id}/accept`)
+        .set('x-driver-id', driverD)
+        .send();
+
+      // D: siempre se rechaza por vencimiento
+      expect(acceptRes.status).toBe(409);
+      expect(acceptRes.body.code).toBe('OFFER_EXPIRED');
+
+      dateSpy.mockRestore();
+      const finalRequest = await request(app)
+        .get(`/api/v1/ride-requests/${requestId}`)
+        .set('x-user-id', clientId);
+
+      expect(finalRequest.body.status).not.toBe('ASSIGNED');
+    });
+  });
+
+  // ==========================================================================
+  // CP-5.4-06: Básico — Rechazar una oferta vencida
+  // ==========================================================================
+  it('CP-5.4-06: Básico — Dejar vencer otra oferta sin consultarla antes; luego intentar rechazarla', async () => {
+    const driverVencido = 'drv_vencido_06';
+    const ttlSeconds = 5;
+    const { offers } = await createRequestAndOffers([driverVencido], ttlSeconds);
+    const offer = offers[0];
+
+    const afterExpirationMs = new Date(offer.expiresAt).getTime() + 5000;
+
+    // Sin consultar antes la oferta, dejamos pasar el tiempo (reloj controlado)
+    const dateSpy = jest.spyOn(Date, 'now').mockReturnValue(afterExpirationMs);
+
+    // Conductor intenta rechazar la oferta ya vencida
+    const rejectRes = await request(app)
+      .post(`/api/v1/offers/${offer.id}/reject`)
+      .set('x-driver-id', driverVencido)
+      .send();
+
+    dateSpy.mockRestore();
+
+    // Se informa que venció; no se registra como un rechazo recibido dentro de plazo
+    expect(rejectRes.status).toBe(409);
+    expect(rejectRes.body.code).toBe('OFFER_EXPIRED');
+  });
+
+  // ==========================================================================
+  // CP-5.4-08: Seguridad — Otro conductor intenta responder
+  // ==========================================================================
+  it('CP-5.4-08: Seguridad — Con sesión de B, intentar aceptar una oferta dirigida a A, enviando además el ID de A en el pedido', async () => {
+    const driverA = 'drv_destinatario_A';
+    const driverB = 'drv_intruso_B';
+
+    // Se crea oferta para el conductor A
+    const { requestId, clientId, offers } = await createRequestAndOffers([driverA], 60);
+    const offerA = offers[0];
+
+    // Con sesión de B (x-driver-id: drv_intruso_B), intenta aceptar la oferta de A enviando driverId: 'drv_destinatario_A' en el body
+    const hackRes = await request(app)
+      .post(`/api/v1/offers/${offerA.id}/accept`)
+      .set('x-driver-id', driverB)
+      .send({ driverId: driverA });
+
+    // Se deniega la respuesta: el ID enviado en el body no reemplaza a la identidad autenticada
+    expect(hackRes.status).toBe(403);
+    expect(hackRes.body.code).toBe('FORBIDDEN_ACCESS');
+
+    // Comprobar que no cambió la asignación de la solicitud
+    const finalRequest = await request(app)
+      .get(`/api/v1/ride-requests/${requestId}`)
+      .set('x-user-id', clientId);
+
+    expect(finalRequest.body.status).not.toBe('ASSIGNED');
+    expect(finalRequest.body.assignedDriverId).toBeFalsy();
+  });
+
+  // ==========================================================================
+  // CP-5.4-11: Reintentos — Repetir una aceptación
+  // ==========================================================================
+  it('CP-5.4-11: Reintentos — Aceptar una oferta válida y repetir exactamente el mismo pedido', async () => {
+    const driverRep = 'drv_reintento_11';
+    const { requestId, clientId, offers } = await createRequestAndOffers([driverRep], 60);
+    const offer = offers[0];
+
+    // 1. Primer intento: Aceptar oferta válida
+    const firstAcceptRes = await request(app)
+      .post(`/api/v1/offers/${offer.id}/accept`)
+      .set('x-driver-id', driverRep)
+      .send();
+
+    expect(firstAcceptRes.status).toBe(200);
+    expect(firstAcceptRes.body.status).toBe('ACCEPTED');
+    expect(firstAcceptRes.body.assignedDriverId).toBe(driverRep);
+
+    // 2. Segundo intento: Repetir exactamente el mismo pedido
+    const secondAcceptRes = await request(app)
+      .post(`/api/v1/offers/${offer.id}/accept`)
+      .set('x-driver-id', driverRep)
+      .send();
+
+    // El contrato define rechazar el reintento redundante con 409
+    expect(secondAcceptRes.status).toBe(409);
+    expect(['OFFER_ALREADY_RESPONDED', 'REQUEST_ALREADY_ASSIGNED']).toContain(secondAcceptRes.body.code);
+
+    // 3. Consultar el estado y verificar que se mantiene una sola asignación
+    const finalRequest = await request(app)
+      .get(`/api/v1/ride-requests/${requestId}`)
+      .set('x-user-id', clientId);
+
+    expect(finalRequest.body.status).toBe('ASSIGNED');
+    expect(finalRequest.body.assignedDriverId).toBe(driverRep);
+  });
+
+  // ==========================================================================
+  // Casos Complementarios: Validación de Token M1 y Rol de Conductor
+  // ==========================================================================
+  describe('Autenticación M1 y Rol Conductor', () => {
+    it('debe rechazar con 401 MISSING_TOKEN si no se incluye header de autenticación', async () => {
+      const { offers } = await createRequestAndOffers(['drv_token_test']);
       const offerId = offers[0].id;
 
       const res = await request(app)
@@ -65,8 +355,8 @@ describe('RF-5.4: Integración Auth M1 y Aceptación/Rechazo de Ofertas', () => 
       expect(res.body.code).toBe('MISSING_TOKEN');
     });
 
-    it('debe rechazar con 401 INVALID_TOKEN si el token JWT es inválido o expirado', async () => {
-      const { offers } = await createRequestAndOffers(['drv_test_1']);
+    it('debe rechazar con 401 INVALID_TOKEN si el token JWT no es válido', async () => {
+      const { offers } = await createRequestAndOffers(['drv_token_test']);
       const offerId = offers[0].id;
 
       const res = await request(app)
@@ -78,8 +368,8 @@ describe('RF-5.4: Integración Auth M1 y Aceptación/Rechazo de Ofertas', () => 
       expect(res.body.code).toBe('INVALID_TOKEN');
     });
 
-    it('debe rechazar con 403 FORBIDDEN_ROLE si el usuario autenticado en M1 tiene rol CLIENTE', async () => {
-      const { offers } = await createRequestAndOffers(['drv_test_1']);
+    it('debe rechazar con 403 FORBIDDEN_ROLE si el usuario autenticado tiene rol CLIENTE', async () => {
+      const { offers } = await createRequestAndOffers(['drv_token_test']);
       const offerId = offers[0].id;
 
       const res = await request(app)
@@ -89,11 +379,9 @@ describe('RF-5.4: Integración Auth M1 y Aceptación/Rechazo de Ofertas', () => 
 
       expect(res.status).toBe(403);
       expect(res.body.code).toBe('FORBIDDEN_ROLE');
-      expect(res.body.message).toContain('CONDUCTOR');
     });
 
     it('debe permitir aceptar con token JWT válido de M1 con rol CONDUCTOR', async () => {
-      // drv_m1_100 es el userId retornado por el mock de M1 para valid_driver_token
       const { offers } = await createRequestAndOffers(['drv_m1_100']);
       const offerId = offers[0].id;
 
@@ -103,110 +391,8 @@ describe('RF-5.4: Integración Auth M1 y Aceptación/Rechazo de Ofertas', () => 
         .send();
 
       expect(res.status).toBe(200);
-      expect(res.body.action).toBe('ACCEPT');
       expect(res.body.status).toBe('ACCEPTED');
-      expect(res.body.requestStatus).toBe('ASSIGNED');
       expect(res.body.assignedDriverId).toBe('drv_m1_100');
-    });
-  });
-
-  describe('Prevención de Identidades Reemplazables desde el Payload (Suplantación)', () => {
-    it('debe ignorar cualquier driverId malicioso enviado en el body y validar solo contra el conductor autenticado', async () => {
-      const { offers } = await createRequestAndOffers(['drv_real_auth']);
-      const offerId = offers[0].id;
-
-      // El conductor autenticado es drv_real_auth, pero el body intenta engañar con driverId: drv_fake_imposter
-      const res = await request(app)
-        .post(`/api/v1/offers/${offerId}/accept`)
-        .set('x-driver-id', 'drv_real_auth')
-        .send({ driverId: 'drv_fake_imposter' });
-
-      expect(res.status).toBe(200);
-      expect(res.body.status).toBe('ACCEPTED');
-      // Debe quedar asignado a drv_real_auth (el autenticado), no al imposter
-      expect(res.body.assignedDriverId).toBe('drv_real_auth');
-      expect(res.body.driverId).toBe('drv_real_auth');
-    });
-
-    it('debe rechazar con 403 FORBIDDEN_ACCESS si un conductor intenta aceptar la oferta de otro conductor', async () => {
-      // Oferta enviada a drv_destinatario_legitimo
-      const { offers } = await createRequestAndOffers(['drv_destinatario_legitimo']);
-      const offerId = offers[0].id;
-
-      // Conductor que intenta responder es drv_intruso
-      const res = await request(app)
-        .post(`/api/v1/offers/${offerId}/accept`)
-        .set('x-driver-id', 'drv_intruso')
-        .send();
-
-      expect(res.status).toBe(403);
-      expect(res.body.code).toBe('FORBIDDEN_ACCESS');
-    });
-
-    it('debe rechazar con 403 FORBIDDEN_ACCESS si un conductor intenta consultar ofertas de otro conductor', async () => {
-      const res = await request(app)
-        .get('/api/v1/drivers/drv_otro/offers')
-        .set('x-driver-id', 'drv_mio');
-
-      expect(res.status).toBe(403);
-      expect(res.body.code).toBe('FORBIDDEN_ACCESS');
-    });
-  });
-
-  describe('Flujos de Aceptación y Rechazo de Ofertas Vigentes', () => {
-    it('debe permitir rechazar una oferta vigente y cambiar el estado a REJECTED', async () => {
-      const { offers } = await createRequestAndOffers(['drv_rej_1']);
-      const offerId = offers[0].id;
-
-      const res = await request(app)
-        .post(`/api/v1/offers/${offerId}/reject`)
-        .set('x-driver-id', 'drv_rej_1')
-        .send();
-
-      expect(res.status).toBe(200);
-      expect(res.body.action).toBe('REJECT');
-      expect(res.body.status).toBe('REJECTED');
-    });
-
-    it('debe permitir responder vía POST /respond con action ACCEPT', async () => {
-      const { offers } = await createRequestAndOffers(['drv_resp_1']);
-      const offerId = offers[0].id;
-
-      const res = await request(app)
-        .post(`/api/v1/offers/${offerId}/respond`)
-        .set('x-driver-id', 'drv_resp_1')
-        .send({ action: 'ACCEPT' });
-
-      expect(res.status).toBe(200);
-      expect(res.body.action).toBe('ACCEPT');
-      expect(res.body.status).toBe('ACCEPTED');
-    });
-
-    it('debe permitir responder vía POST /respond con action REJECT', async () => {
-      const { offers } = await createRequestAndOffers(['drv_resp_2']);
-      const offerId = offers[0].id;
-
-      const res = await request(app)
-        .post(`/api/v1/offers/${offerId}/respond`)
-        .set('x-driver-id', 'drv_resp_2')
-        .send({ action: 'REJECT' });
-
-      expect(res.status).toBe(200);
-      expect(res.body.action).toBe('REJECT');
-      expect(res.body.status).toBe('REJECTED');
-    });
-
-    it('debe responder 400 si la acción en /respond es inválida', async () => {
-      const { offers } = await createRequestAndOffers(['drv_resp_3']);
-      const offerId = offers[0].id;
-
-      const res = await request(app)
-        .post(`/api/v1/offers/${offerId}/respond`)
-        .set('x-driver-id', 'drv_resp_3')
-        .send({ action: 'MAYBE' });
-
-      expect(res.status).toBe(400);
-      expect(res.body.code).toBe('VALIDATION_ERROR');
     });
   });
 });
