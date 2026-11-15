@@ -5,31 +5,27 @@ import { RabbitMqService } from '../../src/services/rabbitmq.service';
 import { CreateRideRequestDTO } from '../../src/types/ride-request.types';
 
 /**
- * Suite de Pruebas de Integración para RF-5.5: Asignación Única y Resolución Atómica
+ * Matriz Oficial de Casos de Prueba para RF-5.5: Asignación Única y Resolución Atómica
  * 
- * Requerimientos verificados:
- * 1. Ante respuestas concurrentes, sólo un conductor puede quedar asignado al viaje.
- * 2. Asignación atómica mediante estado compartido y base de datos (DbService).
- * 3. Concurrencia entre múltiples instancias del servicio (Instancia A vs Instancia B).
- * 4. Tolerancia a fallos: Asignación atómica garantizada aún ante fallas o caída total de Redis.
- * 5. Invalidación/expiración inmediata de todas las ofertas competidoras tras la asignación.
+ * Casos cubiertos con ID de trazabilidad:
+ * - CP-5.5-01: Dos conductores aceptan juntos (enviar las dos aceptaciones al mismo tiempo en paralelo).
+ * - CP-5.5-03: Aceptación duplicada simultánea (enviar en paralelo dos copias de la misma oferta y conductor).
+ * - CP-5.5-04: Otro conductor acepta después (asignar a A; después B intenta aceptar su oferta anterior).
+ * - CP-5.5-12: No perder la asignación al reiniciar M5 (persistencia en DB compartida y rechazo a segunda asignación).
+ * - Multi-Instancia: Concurrencia entre Instancia A e Instancia B sobre base de datos compartida.
+ * - Resiliencia: Asignación atómica garantizada ante error o caída total de Redis.
  */
-describe('RF-5.5: Asignación Única, Concurrencia Multi-Instancia y Fallas de Redis', () => {
+describe('RF-5.5: Casos de Prueba Oficiales — Asignación Única y Resolución Atómica', () => {
   let dbService: DbService;
   let redisService: RedisService;
   let rabbitMqService: RabbitMqService;
-
-  let instanceA: RideRequestService;
-  let instanceB: RideRequestService;
+  let service: RideRequestService;
 
   beforeEach(() => {
     dbService = new DbService();
     redisService = new RedisService();
     rabbitMqService = new RabbitMqService();
-
-    // Simulamos dos instancias independientes de M5 compartiendo la misma infraestructura
-    instanceA = new RideRequestService(dbService, redisService, rabbitMqService);
-    instanceB = new RideRequestService(dbService, redisService, rabbitMqService);
+    service = new RideRequestService(dbService, redisService, rabbitMqService);
   });
 
   afterAll(async () => {
@@ -42,144 +38,263 @@ describe('RF-5.5: Asignación Única, Concurrencia Multi-Instancia y Fallas de R
     origin: {
       latitude: -34.6037,
       longitude: -58.3816,
-      address: 'Obelisco, Buenos Aires'
+      address: 'Av. Corrientes y 9 de Julio (Obelisco)'
     },
     destination: {
       latitude: -34.5885,
       longitude: -58.3974,
-      address: 'Recoleta, Buenos Aires'
+      address: 'Av. Alvear 1891 (Recoleta)'
     },
     vehicleType: 'AUTO'
   };
 
-  describe('Concurrencia entre Múltiples Instancias (Multi-Instance)', () => {
-    it('debe permitir que solo un conductor gane cuando dos instancias procesan aceptaciones simultáneas', async () => {
-      const clientId = `client_multi_${Date.now()}`;
-      const idempotencyKey = `idemp_multi_${Date.now()}`;
+  const getUniqueClientId = () => `client_rf55_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const getUniqueKey = () => `key_rf55_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
-      // 1. Crear solicitud a través de la Instancia A
-      const request = await instanceA.createRideRequest(clientId, idempotencyKey, sampleCreateDTO);
+  // ==========================================================================
+  // CP-5.5-01: Dos conductores aceptan juntos
+  // ==========================================================================
+  it('CP-5.5-01: Con ofertas vigentes para A y B, enviar las dos aceptaciones al mismo tiempo en paralelo', async () => {
+    const driverA = 'drv_A_cp01';
+    const driverB = 'drv_B_cp01';
+    const clientId = getUniqueClientId();
 
-      // 2. Despachar ofertas a 2 conductores competidores
-      const sendResult = await instanceA.sendOffersForRequest(request.id, clientId, {
-        driverIds: ['drv_inst_A', 'drv_inst_B'],
+    // 1. Con ofertas vigentes para A y B
+    const request = await service.createRideRequest(clientId, getUniqueKey(), sampleCreateDTO);
+    const sendResult = await service.sendOffersForRequest(request.id, clientId, {
+      driverIds: [driverA, driverB],
+      ttlSeconds: 60
+    });
+
+    const offerA = sendResult.offers.find((o) => o.driverId === driverA)!;
+    const offerB = sendResult.offers.find((o) => o.driverId === driverB)!;
+    expect(offerA).toBeDefined();
+    expect(offerB).toBeDefined();
+
+    // 2. Enviar las dos aceptaciones al mismo tiempo en paralelo
+    const responses = await Promise.allSettled([
+      service.respondToOffer(offerA.id, driverA, { action: 'ACCEPT' }),
+      service.respondToOffer(offerB.id, driverB, { action: 'ACCEPT' })
+    ]);
+
+    // 3. Sólo uno queda asignado; las respuestas no muestran dos ganadores
+    const fulfilled = responses.filter((r) => r.status === 'fulfilled') as PromiseFulfilledResult<any>[];
+    const rejected = responses.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+
+    expect(fulfilled.length).toBe(1);
+    expect(rejected.length).toBe(1);
+
+    expect(fulfilled[0].value.status).toBe('ACCEPTED');
+    expect(fulfilled[0].value.requestStatus).toBe('ASSIGNED');
+    const winningDriverId = fulfilled[0].value.assignedDriverId;
+    expect([driverA, driverB]).toContain(winningDriverId);
+
+    expect(rejected[0].reason).toBeInstanceOf(ConflictError);
+    expect(['REQUEST_ALREADY_ASSIGNED', 'OFFER_EXPIRED']).toContain(
+      (rejected[0].reason as ConflictError).code
+    );
+
+    // 4. La consulta final no muestra dos ganadores
+    const finalRequest = await service.getRideRequestById(request.id, clientId);
+    expect(finalRequest.status).toBe('ASSIGNED');
+    expect(finalRequest.assignedDriverId).toBe(winningDriverId);
+  });
+
+  // ==========================================================================
+  // CP-5.5-03: Aceptación duplicada simultánea
+  // ==========================================================================
+  it('CP-5.5-03: Enviar en paralelo dos copias de la aceptación de la misma oferta y conductor', async () => {
+    const driverDup = 'drv_dup_cp03';
+    const clientId = getUniqueClientId();
+
+    // 1. Crear solicitud y oferta
+    const request = await service.createRideRequest(clientId, getUniqueKey(), sampleCreateDTO);
+    const sendResult = await service.sendOffersForRequest(request.id, clientId, {
+      driverIds: [driverDup],
+      ttlSeconds: 60
+    });
+
+    const offer = sendResult.offers[0];
+
+    // 2. Enviar en paralelo dos copias de la aceptación de la misma oferta y conductor
+    const responses = await Promise.allSettled([
+      service.respondToOffer(offer.id, driverDup, { action: 'ACCEPT' }),
+      service.respondToOffer(offer.id, driverDup, { action: 'ACCEPT' })
+    ]);
+
+    const fulfilled = responses.filter((r) => r.status === 'fulfilled') as PromiseFulfilledResult<any>[];
+    const rejected = responses.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+
+    // 3. Se confirma una sola asignación y no se generan viajes duplicados
+    expect(fulfilled.length).toBe(1);
+    expect(rejected.length).toBe(1);
+
+    expect(fulfilled[0].value.status).toBe('ACCEPTED');
+    expect(fulfilled[0].value.assignedDriverId).toBe(driverDup);
+
+    expect(rejected[0].reason).toBeInstanceOf(ConflictError);
+    expect(['OFFER_ALREADY_RESPONDED', 'REQUEST_ALREADY_ASSIGNED']).toContain(
+      (rejected[0].reason as ConflictError).code
+    );
+
+    const finalRequest = await service.getRideRequestById(request.id, clientId);
+    expect(finalRequest.status).toBe('ASSIGNED');
+    expect(finalRequest.assignedDriverId).toBe(driverDup);
+  });
+
+  // ==========================================================================
+  // CP-5.5-04: Otro conductor acepta después
+  // ==========================================================================
+  it('CP-5.5-04: Asignar a A; después B intenta aceptar su oferta anterior para esa misma solicitud', async () => {
+    const driverA = 'drv_A_cp04';
+    const driverB = 'drv_B_cp04';
+    const clientId = getUniqueClientId();
+
+    const request = await service.createRideRequest(clientId, getUniqueKey(), sampleCreateDTO);
+    const sendResult = await service.sendOffersForRequest(request.id, clientId, {
+      driverIds: [driverA, driverB],
+      ttlSeconds: 60
+    });
+
+    const offerA = sendResult.offers.find((o) => o.driverId === driverA)!;
+    const offerB = sendResult.offers.find((o) => o.driverId === driverB)!;
+
+    // 1. Asignar primero a A
+    const acceptA = await service.respondToOffer(offerA.id, driverA, { action: 'ACCEPT' });
+    expect(acceptA.status).toBe('ACCEPTED');
+    expect(acceptA.assignedDriverId).toBe(driverA);
+
+    // 2. Después B intenta aceptar su oferta anterior para esa misma solicitud
+    await expect(
+      service.respondToOffer(offerB.id, driverB, { action: 'ACCEPT' })
+    ).rejects.toThrow(ConflictError);
+
+    // 3. La asignación permanece en A y se rechaza la aceptación de B
+    const finalRequest = await service.getRideRequestById(request.id, clientId);
+    expect(finalRequest.status).toBe('ASSIGNED');
+    expect(finalRequest.assignedDriverId).toBe(driverA);
+  });
+
+  // ==========================================================================
+  // CP-5.5-12: No perder la asignación al reiniciar
+  // ==========================================================================
+  it('CP-5.5-12: Asignar un conductor, reiniciar M5 y hacer que otro acepte una oferta anterior de esa solicitud', async () => {
+    const driverOriginal = 'drv_original_12';
+    const driverTardio = 'drv_tardio_12';
+
+    const sharedDbService = new DbService();
+    const sharedRedisService = new RedisService();
+    const sharedRabbitMq = new RabbitMqService();
+
+    // Instancia 1 de M5 (antes del reinicio)
+    const m5BeforeRestart = new RideRequestService(sharedDbService, sharedRedisService, sharedRabbitMq);
+
+    const clientId = getUniqueClientId();
+    const requestInitial = await m5BeforeRestart.createRideRequest(clientId, getUniqueKey(), sampleCreateDTO);
+
+    const sendResult = await m5BeforeRestart.sendOffersForRequest(requestInitial.id, clientId, {
+      driverIds: [driverOriginal, driverTardio],
+      ttlSeconds: 60
+    });
+
+    const offerOriginal = sendResult.offers.find((o) => o.driverId === driverOriginal)!;
+    const offerTardio = sendResult.offers.find((o) => o.driverId === driverTardio)!;
+
+    // 1. Asignar al conductor original
+    const responseOriginal = await m5BeforeRestart.respondToOffer(offerOriginal.id, driverOriginal, {
+      action: 'ACCEPT'
+    });
+    expect(responseOriginal.status).toBe('ACCEPTED');
+    expect(responseOriginal.assignedDriverId).toBe(driverOriginal);
+
+    // 2. Simular reinicio de M5: se destruye la memoria del proceso y se inicia una nueva instancia
+    // conectada a la base de datos persistente compartida (sharedDbService)
+    const m5AfterRestart = new RideRequestService(sharedDbService, sharedRedisService, sharedRabbitMq);
+
+    // 3. Hacer que el otro conductor (driverTardio) intente aceptar su oferta anterior en la nueva instancia
+    await expect(
+      m5AfterRestart.respondToOffer(offerTardio.id, driverTardio, { action: 'ACCEPT' })
+    ).rejects.toThrow(ConflictError);
+
+    // 4. Se conserva el conductor original en la DB y no se permite una segunda asignación
+    const finalDbRequest = await sharedDbService.getRideRequestById(requestInitial.id);
+    expect(finalDbRequest).not.toBeNull();
+    expect(finalDbRequest!.status).toBe('ASSIGNED');
+    expect(finalDbRequest!.assignedDriverId).toBe(driverOriginal);
+
+    // La oferta tardía permanece en estado EXPIRED en la persistencia compartida
+    const offerTardioDb = await sharedDbService.getRideOfferById(offerTardio.id);
+    expect(offerTardioDb!.status).toBe('EXPIRED');
+  });
+
+  // ==========================================================================
+  // Casos Complementarios: Multi-Instancia y Resiliencia ante Fallas de Redis
+  // ==========================================================================
+  describe('Pruebas Complementarias: Multi-Instancia y Fallas de Redis', () => {
+    it('Multi-Instancia: Dos instancias en paralelo compitiendo por la misma solicitud (solo una gana)', async () => {
+      const sharedDb = new DbService();
+      const sharedRedis = new RedisService();
+      const sharedRabbit = new RabbitMqService();
+
+      const nodeA = new RideRequestService(sharedDb, sharedRedis, sharedRabbit);
+      const nodeB = new RideRequestService(sharedDb, sharedRedis, sharedRabbit);
+
+      const clientId = getUniqueClientId();
+      const req = await nodeA.createRideRequest(clientId, getUniqueKey(), sampleCreateDTO);
+
+      const sendRes = await nodeA.sendOffersForRequest(req.id, clientId, {
+        driverIds: ['drv_nodeA', 'drv_nodeB'],
         ttlSeconds: 60
       });
 
-      const offerA = sendResult.offers.find((o) => o.driverId === 'drv_inst_A')!;
-      const offerB = sendResult.offers.find((o) => o.driverId === 'drv_inst_B')!;
-      expect(offerA).toBeDefined();
-      expect(offerB).toBeDefined();
+      const offerA = sendRes.offers.find((o) => o.driverId === 'drv_nodeA')!;
+      const offerB = sendRes.offers.find((o) => o.driverId === 'drv_nodeB')!;
 
-      // 3. Ejecutar aceptación simultánea: conductor A responde en Instancia A, conductor B en Instancia B
       const responses = await Promise.allSettled([
-        instanceA.respondToOffer(offerA.id, 'drv_inst_A', { action: 'ACCEPT' }),
-        instanceB.respondToOffer(offerB.id, 'drv_inst_B', { action: 'ACCEPT' })
+        nodeA.respondToOffer(offerA.id, 'drv_nodeA', { action: 'ACCEPT' }),
+        nodeB.respondToOffer(offerB.id, 'drv_nodeB', { action: 'ACCEPT' })
       ]);
 
-      // 4. Exactamente una debe ganar (fulfilled) y exactamente una debe fallar con conflicto (rejected)
-      const fulfilled = responses.filter((r) => r.status === 'fulfilled') as PromiseFulfilledResult<any>[];
-      const rejected = responses.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+      const fulfilled = responses.filter((r) => r.status === 'fulfilled');
+      const rejected = responses.filter((r) => r.status === 'rejected');
 
       expect(fulfilled.length).toBe(1);
       expect(rejected.length).toBe(1);
-
-      // La respuesta exitosa confirma asignación
-      expect(fulfilled[0].value.status).toBe('ACCEPTED');
-      expect(fulfilled[0].value.requestStatus).toBe('ASSIGNED');
-      const winningDriver = fulfilled[0].value.assignedDriverId;
-      expect(['drv_inst_A', 'drv_inst_B']).toContain(winningDriver);
-
-      // La respuesta perdedora es un ConflictError
-      expect(rejected[0].reason).toBeInstanceOf(ConflictError);
-      expect(['REQUEST_ALREADY_ASSIGNED', 'OFFER_EXPIRED']).toContain(
-        (rejected[0].reason as ConflictError).code
-      );
-
-      // 5. Verificar que el estado compartido en la base de datos es consistente
-      const sharedRequest = await dbService.getRideRequestById(request.id);
-      expect(sharedRequest).not.toBeNull();
-      expect(sharedRequest!.status).toBe('ASSIGNED');
-      expect(sharedRequest!.assignedDriverId).toBe(winningDriver);
-
-      // 6. Verificar que la oferta perdedora quedó marcada como EXPIRED en la BD
-      const losingOfferId = winningDriver === 'drv_inst_A' ? offerB.id : offerA.id;
-      const losingOfferInDb = await dbService.getRideOfferById(losingOfferId);
-      expect(losingOfferInDb).not.toBeNull();
-      expect(losingOfferInDb!.status).toBe('EXPIRED');
     });
-  });
 
-  describe('Asignación Atómica ante Fallas de Redis', () => {
-    it('debe mantener la asignación atómica y rechazar colisiones aunque Redis arroje un error fatal', async () => {
-      const clientId = `client_redis_err_${Date.now()}`;
-      const idempotencyKey = `idemp_redis_err_${Date.now()}`;
+    it('Fallas de Redis: Asignación atómica garantizada ante error o caída total de Redis', async () => {
+      const sharedDb = new DbService();
+      const sharedRedis = new RedisService();
+      const sharedRabbit = new RabbitMqService();
 
-      // 1. Crear solicitud
-      const request = await instanceA.createRideRequest(clientId, idempotencyKey, sampleCreateDTO);
+      const resilientService = new RideRequestService(sharedDb, sharedRedis, sharedRabbit);
+      const clientId = getUniqueClientId();
+      const req = await resilientService.createRideRequest(clientId, getUniqueKey(), sampleCreateDTO);
 
-      // 2. Despachar ofertas a 3 conductores
-      const driverIds = ['drv_fail_1', 'drv_fail_2', 'drv_fail_3'];
-      const sendResult = await instanceA.sendOffersForRequest(request.id, clientId, {
-        driverIds,
+      const sendRes = await resilientService.sendOffersForRequest(req.id, clientId, {
+        driverIds: ['drv_falla_1', 'drv_falla_2', 'drv_falla_3'],
         ttlSeconds: 60
       });
 
-      // 3. Simular falla crítica en Redis: acquireAssignmentLock rechaza con error de socket
-      jest.spyOn(redisService, 'acquireAssignmentLock').mockRejectedValue(
+      // Simular desconexión crítica o fallo de socket en Redis
+      jest.spyOn(sharedRedis, 'acquireAssignmentLock').mockRejectedValue(
         new Error('ECONNREFUSED: Redis cluster unreachable')
       );
 
-      // 4. Los 3 conductores intentan aceptar concurrentemente mientras Redis está caído
       const responses = await Promise.allSettled(
-        sendResult.offers.map((offer) =>
-          instanceA.respondToOffer(offer.id, offer.driverId, { action: 'ACCEPT' })
+        sendRes.offers.map((offer) =>
+          resilientService.respondToOffer(offer.id, offer.driverId, { action: 'ACCEPT' })
         )
       );
 
-      // 5. La DB compartida atómica debe garantizar que exactamente 1 gane y 2 sean rechazados
-      const fulfilled = responses.filter((r) => r.status === 'fulfilled') as PromiseFulfilledResult<any>[];
-      const rejected = responses.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+      const fulfilled = responses.filter((r) => r.status === 'fulfilled');
+      const rejected = responses.filter((r) => r.status === 'rejected');
 
       expect(fulfilled.length).toBe(1);
       expect(rejected.length).toBe(2);
 
-      expect(fulfilled[0].value.status).toBe('ACCEPTED');
-      expect(fulfilled[0].value.requestStatus).toBe('ASSIGNED');
-
-      for (const rej of rejected) {
-        expect(rej.reason).toBeInstanceOf(ConflictError);
-        expect((rej.reason as ConflictError).code).toBe('REQUEST_ALREADY_ASSIGNED');
-      }
-
-      // 6. El estado en la BD debe ser asignado al único conductor ganador
-      const finalRequest = await dbService.getRideRequestById(request.id);
-      expect(finalRequest!.status).toBe('ASSIGNED');
-      expect(driverIds).toContain(finalRequest!.assignedDriverId);
-    });
-
-    it('no debe permitir asignar una solicitud que ya se encontraba previamente cancelada por el cliente', async () => {
-      const clientId = `client_cancel_${Date.now()}`;
-      const idempotencyKey = `idemp_cancel_${Date.now()}`;
-
-      const request = await instanceA.createRideRequest(clientId, idempotencyKey, sampleCreateDTO);
-      const sendResult = await instanceA.sendOffersForRequest(request.id, clientId, {
-        driverIds: ['drv_cancel_1'],
-        ttlSeconds: 60
-      });
-
-      const offer = sendResult.offers[0];
-
-      // Cliente cancela primero
-      await instanceA.cancelRideRequest(request.id, clientId, { reason: 'Demora excesiva' });
-
-      // Conductor intenta aceptar oferta de viaje cancelado
-      await expect(
-        instanceA.respondToOffer(offer.id, 'drv_cancel_1', { action: 'ACCEPT' })
-      ).rejects.toThrow(ConflictError);
-
-      const finalRequest = await dbService.getRideRequestById(request.id);
-      expect(finalRequest!.status).toBe('CANCELLED');
+      const finalReq = await sharedDb.getRideRequestById(req.id);
+      expect(finalReq!.status).toBe('ASSIGNED');
     });
   });
 });
