@@ -9,6 +9,9 @@ import YAML from 'yaml';
 // exclusivo de la red de M8; si no, podría resolver al servicio de otro módulo.
 const M8_DIR = path.resolve(process.cwd(), '../..');
 const INFRA = ['postgres', 'redis', 'rabbitmq'] as const;
+// compose.yaml no escribe la URL del broker: la toma entera del .env, así que
+// su host no se ve acá. Se controla aparte (ver el describe de RabbitMQ).
+const URL_DESDE_ENV = { RABBITMQ_URL: '${M8_RABBITMQ_URL:?M8_RABBITMQ_URL must be configured}' };
 
 type Compose = {
   services: Record<string, { environment?: Record<string, unknown>; networks?: unknown }>;
@@ -37,10 +40,10 @@ const entornoOverride = override.services['m8-app'].environment ?? {};
 const variablesDeInfra = Object.entries(entornoBase).filter(([, valor]) => hostDeInfra(valor) !== undefined);
 
 describe('compose.integracion-real.yaml frente a compose.yaml', () => {
-  it('compose.yaml tiene variables de m8-app que nombran postgres, redis y rabbitmq', () => {
+  it('compose.yaml tiene variables de m8-app que nombran postgres y redis', () => {
     const hosts = new Set(variablesDeInfra.map(([, valor]) => hostDeInfra(valor)));
 
-    expect([...hosts].sort()).toEqual([...INFRA].sort());
+    expect([...hosts].sort()).toEqual(['postgres', 'redis']);
   });
 
   it.each(variablesDeInfra.map(([nombre]) => nombre))('%s está redefinida en el override', (nombre) => {
@@ -73,8 +76,27 @@ describe('compose.integracion-real.yaml frente a compose.yaml', () => {
 
   it('el override no redefine variables de otros RF', () => {
     const propias = ['M6_TRIPS_URL', 'M6_TIMEOUT_MS', 'SUPPORT_M1_IDENTITY_URL'];
-    const esperadas = [...propias, ...variablesDeInfra.map(([nombre]) => nombre)];
+    const esperadas = [...propias, ...variablesDeInfra.map(([nombre]) => nombre), ...Object.keys(URL_DESDE_ENV)];
 
     expect(Object.keys(entornoOverride).sort()).toEqual(esperadas.sort());
+  });
+});
+
+describe('RabbitMQ en compose.integracion-real.yaml', () => {
+  it('compose.yaml toma RABBITMQ_URL de M8_RABBITMQ_URL', () => {
+    expect(entornoBase.RABBITMQ_URL).toBe(URL_DESDE_ENV.RABBITMQ_URL);
+  });
+
+  it('el override redefine RABBITMQ_URL con el alias m8-rabbitmq', () => {
+    expect(entornoOverride.RABBITMQ_URL).toBe(
+      'amqp://${RABBITMQ_USER:?RABBITMQ_USER must be configured}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be configured}@m8-rabbitmq:5672',
+    );
+  });
+
+  it('el usuario de esa URL es el mismo con el que compose.yaml crea el broker', () => {
+    const broker = base.services.rabbitmq.environment ?? {};
+
+    expect(broker.RABBITMQ_DEFAULT_USER).toBe('${RABBITMQ_USER:?RABBITMQ_USER must be configured}');
+    expect(broker.RABBITMQ_DEFAULT_PASS).toBe('${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be configured}');
   });
 });

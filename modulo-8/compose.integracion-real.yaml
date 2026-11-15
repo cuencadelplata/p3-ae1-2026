@@ -25,12 +25,15 @@ services:
       # repiten acá con un alias que sólo existe en la red de M8. Son las
       # mismas URLs y credenciales de compose.yaml: sólo cambia el hostname.
       # Si se modifican allá, hay que modificarlas acá.
-      NOTIFICATIONS_DATABASE_URL: "postgres://m8_notifications:${NOTIFICATIONS_DB_PASSWORD:-m8_notifications_local}@m8-postgres:5432/${POSTGRES_DB:-m8}"
-      DELIVERY_DATABASE_URL: "postgres://m8_notification_delivery:${DELIVERY_DB_PASSWORD:-m8_delivery_local}@m8-postgres:5432/${POSTGRES_DB:-m8}"
-      RECEIPTS_DATABASE_URL: "postgres://m8_receipts:${RECEIPTS_DB_PASSWORD:-m8_receipts_local}@m8-postgres:5432/${POSTGRES_DB:-m8}"
-      SUPPORT_DATABASE_URL: "postgres://m8_support:${SUPPORT_DB_PASSWORD:-m8_support_local}@m8-postgres:5432/${POSTGRES_DB:-m8}"
+      NOTIFICATIONS_DATABASE_URL: "postgres://m8_notifications:${NOTIFICATIONS_DB_PASSWORD:?NOTIFICATIONS_DB_PASSWORD must be configured}@m8-postgres:5432/${POSTGRES_DB:-m8}"
+      DELIVERY_DATABASE_URL: "postgres://m8_notification_delivery:${DELIVERY_DB_PASSWORD:?DELIVERY_DB_PASSWORD must be configured}@m8-postgres:5432/${POSTGRES_DB:-m8}"
+      RECEIPTS_DATABASE_URL: "postgres://m8_receipts:${RECEIPTS_DB_PASSWORD:?RECEIPTS_DB_PASSWORD must be configured}@m8-postgres:5432/${POSTGRES_DB:-m8}"
+      SUPPORT_DATABASE_URL: "postgres://m8_support:${SUPPORT_DB_PASSWORD:?SUPPORT_DB_PASSWORD must be configured}@m8-postgres:5432/${POSTGRES_DB:-m8}"
       REDIS_URL: redis://m8-redis:6379
-      RABBITMQ_URL: amqp://guest:guest@m8-rabbitmq:5672
+      # compose.yaml toma RABBITMQ_URL entera de M8_RABBITMQ_URL, cuyo host
+      # ("rabbitmq") sería ambiguo acá. Se arma con las mismas variables que
+      # crean el usuario del broker y el alias exclusivo de la red de M8.
+      RABBITMQ_URL: "amqp://${RABBITMQ_USER:?RABBITMQ_USER must be configured}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be configured}@m8-rabbitmq:5672"
     networks:
       - default
       - m6-real
