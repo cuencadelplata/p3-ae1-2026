@@ -222,6 +222,25 @@ export class DbService {
   }
 
   /**
+   * Indica si la conexión con PostgreSQL está activa
+   */
+  public isReady(): boolean {
+    return this.isConnected;
+  }
+
+  public getMemoryRequests(): Map<string, RideRequest> {
+    return this.memoryRequests;
+  }
+
+  public getMemoryOffers(): Map<string, RideOffer> {
+    return this.memoryOffers;
+  }
+
+  public getMemoryLogs(): Array<{ id: string; requestId: string; eventType: string; driverId?: string; details?: string; createdAt: string }> {
+    return this.memoryLogs;
+  }
+
+  /**
    * Cierra limpiamente la conexión a Prisma
    */
   public async disconnect(): Promise<void> {

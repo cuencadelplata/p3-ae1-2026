@@ -22,6 +22,7 @@ import { RideRequestValidator } from '../schemas/ride-request.schema';
 import { RedisService } from './redis.service';
 import { RabbitMQService } from './rabbitmq.service';
 import { M4ClientService } from './m4-client.service';
+import { DbService } from './db.service';
 import { randomUUID } from 'node:crypto';
 
 export class ConflictError extends Error {
@@ -66,15 +67,18 @@ export class RideRequestService {
   private redisService: RedisService;
   private rabbitmqService: RabbitMQService;
   private m4ClientService: M4ClientService;
+  private dbService: DbService;
 
   constructor(
     redisService?: RedisService,
     rabbitmqService?: RabbitMQService,
-    m4ClientService?: M4ClientService
+    m4ClientService?: M4ClientService,
+    dbService?: DbService
   ) {
     this.redisService = redisService || new RedisService();
     this.rabbitmqService = rabbitmqService || new RabbitMQService();
     this.m4ClientService = m4ClientService || new M4ClientService();
+    this.dbService = dbService || new DbService();
 
     // Suscribirse a la cola despacho.reabrir para atender cancelaciones de conductor (integración con módulo de cancelaciones)
     this.rabbitmqService.subscribeToReopenDispatch((event) => this.handleDriverCancellation(event));
@@ -90,6 +94,10 @@ export class RideRequestService {
 
   public getM4ClientService(): M4ClientService {
     return this.m4ClientService;
+  }
+
+  public getDbService(): DbService {
+    return this.dbService;
   }
   /**
    * Stub de integración con M7: Estimación de Tarifa (RF-7.1)
@@ -208,6 +216,13 @@ export class RideRequestService {
     // 7. Persistir en almacenamiento e historial inmutable (RNF-04)
     this.requests.set(newRequest.id, newRequest);
     this.idempotencyStore.set(idempotencyKey, newRequest);
+    await this.dbService.saveRideRequest(newRequest);
+    await this.dbService.logDispatchEvent(
+      newRequest.id,
+      'CREATED',
+      undefined,
+      `Solicitud creada por cliente ${clientId}`
+    );
 
     this.auditEvents.push({
       eventId: `evt_${randomUUID()}`,
@@ -230,7 +245,13 @@ export class RideRequestService {
    * Obtiene la solicitud por ID
    */
   public async getRideRequestById(requestId: string, clientId: string): Promise<RideRequest> {
-    const request = this.requests.get(requestId);
+    let request = this.requests.get(requestId);
+    if (!request) {
+      request = (await this.dbService.getRideRequestById(requestId)) || undefined;
+      if (request) {
+        this.requests.set(requestId, request);
+      }
+    }
     if (!request) {
       throw new NotFoundError('Solicitud de viaje no encontrada', 'RIDE_REQUEST_NOT_FOUND');
     }
@@ -400,9 +421,20 @@ export class RideRequestService {
       });
     }
 
+    for (const offer of createdOffers) {
+      await this.dbService.saveRideOffer(offer);
+    }
+
     request.status = 'OFFERED';
     request.updatedAt = now.toISOString();
     this.requests.set(requestId, request);
+    await this.dbService.saveRideRequest(request);
+    await this.dbService.logDispatchEvent(
+      request.id,
+      'OFFERED',
+      undefined,
+      `Ofertas enviadas a ${createdOffers.length} conductor(es)`
+    );
 
     this.auditEvents.push({
       eventId: `evt_${randomUUID()}`,
@@ -513,7 +545,14 @@ export class RideRequestService {
     let attempts = 0;
     while (!acquired && attempts < 20) {
       await new Promise((resolve) => setTimeout(resolve, 20));
-      const current = this.requests.get(offer.requestId);
+      const current = this.requests.get(offer.requestId) || (await this.dbService.getRideRequestById(offer.requestId));
+      const isCancelled = (current && current.status === 'CANCELLED') || (await this.redisService.isRequestCancelled(offer.requestId));
+      if (isCancelled) {
+        throw new ConflictError(
+          'La solicitud de viaje fue cancelada por el cliente y ya no se encuentra disponible',
+          'REQUEST_CANCELLED'
+        );
+      }
       if (current && current.status === 'ASSIGNED') {
         throw new ConflictError(
           'La solicitud de viaje ya fue asignada a otro conductor',
@@ -525,7 +564,14 @@ export class RideRequestService {
     }
 
     if (!acquired) {
-      const current = this.requests.get(offer.requestId);
+      const current = this.requests.get(offer.requestId) || (await this.dbService.getRideRequestById(offer.requestId));
+      const isCancelled = (current && current.status === 'CANCELLED') || (await this.redisService.isRequestCancelled(offer.requestId));
+      if (isCancelled) {
+        throw new ConflictError(
+          'La solicitud de viaje fue cancelada por el cliente y ya no se encuentra disponible',
+          'REQUEST_CANCELLED'
+        );
+      }
       if (current && current.status === 'ASSIGNED') {
         throw new ConflictError(
           'La solicitud de viaje ya fue asignada a otro conductor',
@@ -533,8 +579,8 @@ export class RideRequestService {
         );
       }
       throw new ConflictError(
-        'La solicitud de viaje ya fue asignada a otro conductor',
-        'REQUEST_ALREADY_ASSIGNED'
+        'No se pudo adquirir el lock de la solicitud; operación concurrente en curso',
+        'LOCK_ACQUISITION_FAILED'
       );
     }
 
@@ -560,6 +606,7 @@ export class RideRequestService {
         offer.status = 'REJECTED';
         this.offers.set(offerId, offer);
         await this.redisService.deleteOffer(offerId);
+        await this.dbService.saveRideOffer(offer);
 
         const relatedOffers = Array.from(this.offers.values()).filter(
           (o) => o.requestId === request.id
@@ -571,6 +618,7 @@ export class RideRequestService {
           request.status = 'NO_DRIVERS_AVAILABLE';
           request.updatedAt = now.toISOString();
           this.requests.set(request.id, request);
+          await this.dbService.saveRideRequest(request);
         }
 
         return {
@@ -591,6 +639,7 @@ export class RideRequestService {
         offer.status = 'EXPIRED';
         this.offers.set(offerId, offer);
         await this.redisService.deleteOffer(offerId);
+        await this.dbService.saveRideOffer(offer);
         throw new ConflictError(
           'La solicitud de viaje ya fue asignada a otro conductor',
           'REQUEST_ALREADY_ASSIGNED'
@@ -601,6 +650,7 @@ export class RideRequestService {
         offer.status = 'EXPIRED';
         this.offers.set(offerId, offer);
         await this.redisService.deleteOffer(offerId);
+        await this.dbService.saveRideOffer(offer);
         throw new ConflictError(
           `La solicitud de viaje no está disponible para ser aceptada (estado: ${request.status})`,
           'REQUEST_NOT_AVAILABLE'
@@ -612,10 +662,12 @@ export class RideRequestService {
       request.assignedDriverId = offer.driverId;
       request.updatedAt = now.toISOString();
       this.requests.set(request.id, request);
+      await this.dbService.saveRideRequest(request);
 
       offer.status = 'ACCEPTED';
       this.offers.set(offerId, offer);
       await this.redisService.deleteOffer(offerId);
+      await this.dbService.saveRideOffer(offer);
 
       // Expirar e invalidar las demás ofertas en memoria y en Redis
       const otherOffers = Array.from(this.offers.values()).filter(
@@ -625,6 +677,7 @@ export class RideRequestService {
         other.status = 'EXPIRED';
         this.offers.set(other.id, other);
         await this.redisService.deleteOffer(other.id);
+        await this.dbService.saveRideOffer(other);
       }
 
       this.auditEvents.push({
@@ -636,6 +689,13 @@ export class RideRequestService {
         payload: { offerId: offer.id, driverId: offer.driverId },
         timestamp: now.toISOString()
       });
+
+      await this.dbService.logDispatchEvent(
+        request.id,
+        'ASSIGNED',
+        offer.driverId,
+        `Oferta ${offer.id} aceptada por conductor ${offer.driverId}`
+      );
 
       // Publicar evento de asignación en RabbitMQ hacia M6 y M8
       try {
@@ -696,27 +756,69 @@ export class RideRequestService {
     // 2. Obtener y verificar solicitud y pertenencia
     const request = await this.getRideRequestById(requestId, clientId);
 
-    // 3. Adquirir lock distribuido para sincronizar con posible aceptación concurrente
+    // 3. Adquirir lock distribuido para sincronizar con posible aceptación concurrente (RNF-09)
     const lockKey = `request:${request.id}`;
-    await this.redisService.acquireLock(lockKey, 3000);
+    let lockAcquired = await this.redisService.acquireLock(lockKey, 3000);
+    let attempts = 0;
+    while (!lockAcquired && attempts < 10) {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const current = this.requests.get(request.id) || (await this.dbService.getRideRequestById(request.id));
+      if (current && current.status === 'ASSIGNED') {
+        throw new ConflictError(
+          'No es posible realizar una cancelación previa: la solicitud ya ha sido asignada a un conductor',
+          'REQUEST_ALREADY_ASSIGNED'
+        );
+      }
+      if (current && current.status === 'CANCELLED') {
+        throw new ConflictError(
+          'La solicitud de viaje ya se encuentra cancelada',
+          'REQUEST_ALREADY_CANCELLED'
+        );
+      }
+      lockAcquired = await this.redisService.acquireLock(lockKey, 3000);
+      attempts++;
+    }
+
+    // Exigir lock adquirido: si no se pudo adquirir, rechazar operación concurrente
+    if (!lockAcquired) {
+      const current = this.requests.get(request.id) || (await this.dbService.getRideRequestById(request.id));
+      if (current && current.status === 'ASSIGNED') {
+        throw new ConflictError(
+          'No es posible realizar una cancelación previa: la solicitud ya ha sido asignada a un conductor',
+          'REQUEST_ALREADY_ASSIGNED'
+        );
+      }
+      if (current && current.status === 'CANCELLED') {
+        throw new ConflictError(
+          'La solicitud de viaje ya se encuentra cancelada',
+          'REQUEST_ALREADY_CANCELLED'
+        );
+      }
+      throw new ConflictError(
+        'No se pudo adquirir el lock de concurrencia para cancelar la solicitud; operación concurrente en curso',
+        'LOCK_ACQUISITION_FAILED'
+      );
+    }
 
     try {
-      // 4. Validar reglas de negocio para cancelación previa
-      if (request.status === 'ASSIGNED') {
+      // 4. Validar reglas de negocio para cancelación previa bajo lock adquirido
+      const current = this.requests.get(request.id) || (await this.dbService.getRideRequestById(request.id)) || request;
+
+      if (current.status === 'ASSIGNED') {
         throw new ConflictError(
           'No es posible realizar una cancelación previa: la solicitud ya ha sido asignada a un conductor',
           'REQUEST_ALREADY_ASSIGNED'
         );
       }
 
-      if (request.status === 'CANCELLED') {
+      if (current.status === 'CANCELLED') {
         throw new ConflictError(
           'La solicitud de viaje ya se encuentra cancelada',
           'REQUEST_ALREADY_CANCELLED'
         );
       }
 
-      if (request.status === 'EXPIRED') {
+      if (current.status === 'EXPIRED') {
         throw new ConflictError(
           'La solicitud de viaje ha expirado y no puede ser cancelada',
           'REQUEST_EXPIRED'
@@ -725,20 +827,29 @@ export class RideRequestService {
 
       // 5. Actualizar estado de la solicitud a CANCELLED
       const now = new Date();
-      const prevStatus = request.status;
-      request.status = 'CANCELLED';
-      request.updatedAt = now.toISOString();
-      request.cancelledAt = now.toISOString();
+      const prevStatus = current.status;
+      current.status = 'CANCELLED';
+      current.updatedAt = now.toISOString();
+      current.cancelledAt = now.toISOString();
       if (dto?.reason && dto.reason.trim().length > 0) {
-        request.cancellationReason = dto.reason.trim();
+        current.cancellationReason = dto.reason.trim();
       }
-      this.requests.set(request.id, request);
+      this.requests.set(current.id, current);
+
+      // Persistir el cambio de cancelación en PostgreSQL (DispatchDB)
+      await this.dbService.saveRideRequest(current);
+      await this.dbService.logDispatchEvent(
+        current.id,
+        'CANCELLED_BY_CLIENT',
+        undefined,
+        `Solicitud cancelada por el cliente ${clientId}. Motivo: ${current.cancellationReason || 'Sin motivo'}`
+      );
 
       // 6. Redis: Marcar cancelación atómica e invalidar todas las ofertas pendientes (RNF-06)
-      await this.redisService.markRequestCancelled(request.id, 3600);
+      await this.redisService.markRequestCancelled(current.id, 3600);
 
       const affectedOffers = Array.from(this.offers.values()).filter(
-        (o) => o.requestId === request.id && o.status === 'PENDING'
+        (o) => o.requestId === current.id && o.status === 'PENDING'
       );
       const affectedOfferIds = affectedOffers.map((o) => o.id);
       const affectedDriverIds = affectedOffers.map((o) => o.driverId);
@@ -746,20 +857,21 @@ export class RideRequestService {
       // Invalidación masiva en Redis
       await this.redisService.invalidateOffersForRequest(affectedOfferIds);
 
-      // Expirar ofertas en memoria
-      affectedOffers.forEach((pendingOffer) => {
+      // Expirar ofertas en memoria y en BD
+      for (const pendingOffer of affectedOffers) {
         pendingOffer.status = 'EXPIRED';
         this.offers.set(pendingOffer.id, pendingOffer);
-      });
+        await this.dbService.saveRideOffer(pendingOffer);
+      }
 
       // 7. RabbitMQ: Publicar evento asíncrono para M6 y M8 (RNF-07)
       await this.rabbitmqService.publishRideRequestCancelled({
         eventType: 'RIDE_REQUEST_CANCELLED',
-        requestId: request.id,
-        clientId: request.clientId,
-        reason: request.cancellationReason,
+        requestId: current.id,
+        clientId: current.clientId,
+        reason: current.cancellationReason,
         affectedDriverIds,
-        cancelledAt: request.cancelledAt,
+        cancelledAt: current.cancelledAt,
         correlationId: `corr_${randomUUID()}`,
         timestamp: now.toISOString()
       });
@@ -767,12 +879,12 @@ export class RideRequestService {
       // 8. Persistencia de auditoría inmutable (RNF-04)
       this.auditEvents.push({
         eventId: `evt_${randomUUID()}`,
-        requestId: request.id,
+        requestId: current.id,
         eventType: 'CANCELLED_BY_CLIENT',
         actorId: clientId,
         actorType: 'CLIENT',
         payload: {
-          reason: request.cancellationReason,
+          reason: current.cancellationReason,
           affectedDriversCount: affectedDriverIds.length,
           affectedDriverIds,
           previousStatus: prevStatus
@@ -781,19 +893,21 @@ export class RideRequestService {
       });
 
       console.log(
-        `[RF-5.6] Solicitud de viaje ${request.id} CANCELADA por cliente ${clientId}. Motivo="${request.cancellationReason || 'Sin motivo especificado'}" | Conductores liberados: ${affectedDriverIds.length}`
+        `[RF-5.6] Solicitud de viaje ${current.id} CANCELADA por cliente ${clientId}. Motivo="${current.cancellationReason || 'Sin motivo especificado'}" | Conductores liberados: ${affectedDriverIds.length}`
       );
 
       return {
-        requestId: request.id,
-        clientId: request.clientId,
+        requestId: current.id,
+        clientId: current.clientId,
         status: 'CANCELLED',
-        reason: request.cancellationReason,
-        cancelledAt: request.cancelledAt,
+        reason: current.cancellationReason,
+        cancelledAt: current.cancelledAt,
         message: 'Solicitud de viaje cancelada exitosamente por el cliente.'
       };
     } finally {
-      await this.redisService.releaseLock(lockKey);
+      if (lockAcquired) {
+        await this.redisService.releaseLock(lockKey);
+      }
     }
   }
 

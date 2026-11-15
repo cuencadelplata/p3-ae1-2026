@@ -31,13 +31,15 @@ const rideRequestController = new RideRequestController(rideRequestService);
 app.get('/health', (_req, res) => {
   const redisReady = rideRequestService.getRedisService().isReady();
   const rabbitmqReady = rideRequestService.getRabbitMQService().isReady();
+  const dbReady = rideRequestService.getDbService().isReady();
   res.status(200).json({
     status: 'UP',
     service: 'm5-dispatch-service',
     version: '2.0.0',
     backingServices: {
       redis: redisReady ? 'CONNECTED' : 'FALLBACK_MEMORY',
-      rabbitmq: rabbitmqReady ? 'CONNECTED' : 'FALLBACK_MEMORY'
+      rabbitmq: rabbitmqReady ? 'CONNECTED' : 'FALLBACK_MEMORY',
+      database: dbReady ? 'CONNECTED' : 'FALLBACK_MEMORY'
     },
     timestamp: new Date().toISOString()
   });
