@@ -18,6 +18,7 @@ services:
       RABBITMQ_URL: "${M8_RABBITMQ_URL:?M8_RABBITMQ_URL must be configured}"
       QR_TTL_SECONDS: "${QR_TTL_SECONDS:-300}"
       QR_EXPIRED_GRACE_SECONDS: "${QR_EXPIRED_GRACE_SECONDS:-3600}"
+      QR_INTERNAL_API_KEY: "${QR_INTERNAL_API_KEY:?QR_INTERNAL_API_KEY must be configured}"
       RECEIPT_LINK_TTL_SECONDS: "${RECEIPT_LINK_TTL_SECONDS:-900}"
       M1_IDENTITY_URL: "${M1_IDENTITY_URL:-http://m1-identity-sandbox:4011/auth/validar-identidad-y-rol}"
       M1_TIMEOUT_MS: "${M1_TIMEOUT_MS:-2000}"
@@ -26,7 +27,7 @@ services:
       M2_TIMEOUT_MS: "${M2_TIMEOUT_MS:-3000}"
       M2_INTERNAL_API_KEY: "${M2_INTERNAL_API_KEY:?M2_INTERNAL_API_KEY must be configured}"
       FISCAL_API_URL: http://fiscal-sandbox:4010
-      M7_PAYMENTS_URL: http://m7-payments-sandbox:4020
+      M7_PAYMENTS_URL: "${M7_PAYMENTS_URL:-http://m7-payments-sandbox:4020}"
     restart: unless-stopped
     depends_on:
       postgres:
