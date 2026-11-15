@@ -367,7 +367,15 @@ Su finalidad es solicitar la entrega de una notificación lógica ya creada por 
 | Routing keys | `trip.requested`, `driver.assigned`, `driver.arrived`, `trip.started`, `trip.cancelled`, `trip.completed` |
 | Productor | M6 (Viajes) / M5 (Despacho) |
 | Consumidor | RF8.6 (Consumer de RF8.1: `m8.notifications.trip-events`) |
-| Estado | **CONTRATO INTERNO CONGELADO Y CONFIRMADO** |
+| Estado | **PROPUESTA M8; PENDIENTE DE ACUERDO Y ADAPTADOR CON M5/M6/M1** |
+
+**Estado real al 2026-11-15:** M6 informó que hoy publica `viaje.arribado` y
+`viaje.iniciado` en `viajes_exchange` (direct), sin `messageId` ni destinatario.
+La aplicación única de M8 todavía no monta el consumidor de eventos de viaje
+descrito abajo; monta el consumidor del documento de M3. Por tanto, la tabla y
+el envelope siguientes son el contrato objetivo para acordar, no un flujo
+intermodular ya probado. El destinatario definitivo debe ser el `userId`
+numérico de M1, con su rol explícito cuando corresponda.
 
 #### 1. Sobre del mensaje (`mobility.events`)
 
@@ -381,7 +389,7 @@ Su finalidad es solicitar la entrega de una notificación lógica ya creada por 
   "producer": "m6-viajes",
   "data": {
     "tripId": "trip-2026-000123",
-    "recipientId": "usr-0091",
+    "recipientId": 91,
     "details": {}
   }
 }
@@ -392,7 +400,7 @@ Su finalidad es solicitar la entrega de una notificación lógica ya creada por 
 * `correlationId`: Debe coincidir con `data.tripId`.
 * `occurredAt`: ISO 8601 UTC.
 * `data.tripId`: ID único del viaje.
-* `data.recipientId`: ID del destinatario de la notificación (cliente o conductor).
+* `data.recipientId`: `userId` numérico de M1 del destinatario (cliente o conductor).
 
 #### 2. Mapeo de los 6 eventos de viaje
 
