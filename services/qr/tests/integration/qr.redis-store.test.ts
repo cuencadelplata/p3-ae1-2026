@@ -174,6 +174,23 @@ describe("createRedisQrStore — consumo", () => {
 });
 
 describe("createRedisQrStore — contenido de Redis", () => {
+  it("consume una vez entre operaciones concurrentes y recuerda la operacion ganadora", async () => {
+    const store = createStore();
+    const record = createRecord(await redisNowMs(client));
+    await store.save(record);
+    const first = randomUUID();
+    const second = randomUUID();
+
+    const results = await Promise.all([
+      store.consumeIfValid(record.tokenHash, TRIP_ID, new Date(), first),
+      store.consumeIfValid(record.tokenHash, TRIP_ID, new Date(), second),
+    ]);
+    const winner = results[0] === "OK" ? first : second;
+    expect(results.sort()).toEqual(["ALREADY_USED", "OK"]);
+    expect(await store.consumeIfValid(record.tokenHash, TRIP_ID, new Date(), winner)).toBe("OK");
+    expect(await store.consumeIfValid("otro-token", TRIP_ID, new Date(), winner)).toBe("IDEMPOTENCY_CONFLICT");
+  });
+
   it("las claves no contienen el token y el hash conserva sólo los campos operativos necesarios", async () => {
     const store = createStore();
     const service = createQrService({
