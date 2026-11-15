@@ -97,6 +97,8 @@ paths:
       tags:
         - QR Verification
       summary: Generar un QR de verificación
+      security:
+        - QrServiceKey: []
       description: |
         Genera un QR temporal y de un solo uso asociado al viaje indicado. El QR
         codifica únicamente un token opaco; M8 no modifica el estado del viaje.
@@ -154,6 +156,8 @@ paths:
                           reason: Debe ser un string con longitud mínima de 1.
                 malformedJson:
                   $ref: '#/components/examples/MalformedJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '415':
           $ref: '#/components/responses/UnsupportedMediaType'
         '500':
@@ -181,6 +185,8 @@ paths:
       tags:
         - QR Verification
       summary: Validar y consumir un QR de verificación
+      security:
+        - QrServiceKey: []
       description: |
         Valida que el token exista, corresponda al viaje indicado, continúe
         vigente y no haya sido utilizado. Una validación exitosa consume el QR:
@@ -188,18 +194,28 @@ paths:
 
         La comprobación y el consumo son una única operación atómica, también
         entre varias instancias del servicio. Ante validaciones concurrentes del
-        mismo QR, exactamente una responde 200 y las demás responden 409.
+        mismo QR con operaciones diferentes, exactamente una responde 200 y las
+        demás responden 409. Los reintentos de la misma operación y clave
+        recuperan el 200 previo.
 
-        Un 503 indica que no fue posible confirmar el resultado. Si la conexión
-        con el almacenamiento se interrumpe después de aplicar el consumo, un
-        reintento posterior puede responder 409 aunque el cliente no haya
-        recibido el 200: un 409 posterior a un 503 es ambiguo.
+        M6 envía Idempotency-Key (UUID) y conserva su valor al reintentar la misma
+        validación. Si se perdió una respuesta después del consumo, el reintento
+        con la misma clave y los mismos datos recupera 200. Otra operación sobre
+        ese QR recibe 409. Sin esa clave, un 409 posterior a un 503 sigue siendo
+        ambiguo. El resultado se conserva mientras vive el registro del QR en Redis.
 
         M8 no inicia ni modifica el viaje: con el resultado, M6 decide si inicia
         el viaje.
       operationId: validateQr
       parameters:
         - $ref: '#/components/parameters/CorrelationId'
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: UUID de la operación; M6 debe enviarlo y repetirlo sin cambiarlo en los reintentos.
+          schema:
+            type: string
+            format: uuid
       requestBody:
         required: true
         content:
@@ -268,8 +284,8 @@ paths:
                       message: No se encontró un QR correspondiente al token y viaje indicados.
         '409':
           description: |
-            El QR ya fue utilizado. Es la respuesta de las validaciones
-            concurrentes que no obtuvieron el consumo del QR.
+            El QR ya fue utilizado por otra operación, o la misma
+            Idempotency-Key se reutilizó con otro viaje o token.
           headers:
             X-Correlation-Id:
               $ref: '#/components/headers/CorrelationId'
@@ -301,6 +317,8 @@ paths:
                     error:
                       code: QR_EXPIRED
                       message: El QR ha vencido.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '415':
           $ref: '#/components/responses/UnsupportedMediaType'
         '500':
@@ -319,6 +337,12 @@ paths:
           $ref: '#/components/responses/StoreUnavailable'
 
 components:
+  securitySchemes:
+    QrServiceKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: Clave interna acordada por M6 y M8; configurar fuera del repositorio.
   parameters:
     CorrelationId:
       name: X-Correlation-Id
@@ -365,6 +389,12 @@ components:
           message: No fue posible procesar la solicitud.
 
   responses:
+    Unauthorized:
+      description: Clave interna x-api-key ausente o inválida.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     UnsupportedMediaType:
       description: El tipo de contenido no es application/json.
       headers:
@@ -602,6 +632,8 @@ components:
       type: string
       description: Código que identifica el tipo de error.
       enum:
+        - UNAUTHORIZED
+        - IDEMPOTENCY_CONFLICT
         - VALIDATION_ERROR
         - UNSUPPORTED_MEDIA_TYPE
         - QR_NOT_FOUND

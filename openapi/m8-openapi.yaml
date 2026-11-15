@@ -157,7 +157,9 @@ paths:
     post:
       tags: [QR]
       summary: Generar un QR temporal
-      description: Devuelve el QR activo del viaje de forma idempotente. El QR codifica sólo un token opaco.
+      description: Devuelve el QR activo del viaje de forma idempotente. El QR codifica sólo un token opaco. Ruta interna para M6.
+      security:
+        - QrServiceKey: []
       servers:
         - url: http://localhost:3000
       requestBody:
@@ -176,12 +178,21 @@ paths:
         '400': { description: Solicitud inválida. }
         '415': { description: Content-Type no admitido. }
         '500': { description: Error interno al generar el QR. }
+        '401': { description: Clave interna ausente o inválida. }
         '503': { description: Almacenamiento de QR no disponible; incluye Retry-After. }
   /qr/validate:
     post:
       tags: [QR]
       summary: Validar y consumir un QR
-      description: La validación exitosa consume el QR. Ante concurrencia, sólo una validación puede resultar exitosa.
+      description: La validación exitosa consume el QR. M6 debe enviar un Idempotency-Key UUID y repetir la misma clave al reintentar; sólo esa misma operación recupera el 200 si se perdió la respuesta. Otra operación sobre el QR consumido recibe 409.
+      security:
+        - QrServiceKey: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: UUID de la operación de M6; obligatorio para que sus reintentos sean inequívocos.
+          schema: { type: string, format: uuid }
       servers:
         - url: http://localhost:3000
       requestBody:
@@ -198,8 +209,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/QrValidationResponse'
         '400': { description: Solicitud inválida. }
+        '401': { description: Clave interna ausente o inválida. }
         '404': { description: QR no encontrado o no corresponde al viaje. }
-        '409': { description: QR ya utilizado. }
+        '409': { description: QR ya utilizado por otra operación o Idempotency-Key reutilizada con otros datos. }
         '410': { description: QR vencido. }
         '415': { description: Content-Type no admitido. }
         '500': { description: Error interno inesperado. }
@@ -502,6 +514,11 @@ paths:
         '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
 components:
   securitySchemes:
+    QrServiceKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: Clave interna compartida por M6 y M8 mediante variables de entorno.
     BearerAuth:
       type: http
       scheme: bearer
