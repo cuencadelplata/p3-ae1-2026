@@ -1,9 +1,9 @@
-import { Router, Request, Response } from "express";
+import { Router } from "express";
 
 const router = Router();
 
-// Simula la pasarela de pago de Mercado Pago
-router.post("/mock-mercadopago/v1/payments", (req: Request, res: Response) => {
+// Simula el endpoint real de Mercado Pago: POST /v1/payments
+router.post("/mock-mercadopago/v1/payments", (req, res) => {
   const { viajeId, total } = req.body;
 
   if (!viajeId || typeof total !== "number") {
@@ -15,7 +15,6 @@ router.post("/mock-mercadopago/v1/payments", (req: Request, res: Response) => {
     id: `mp-mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     status: "approved",
     transaction_amount: total,
-    viajeId,
   });
 });
 

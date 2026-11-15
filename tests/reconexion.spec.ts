@@ -9,14 +9,10 @@ const nuevoId = (p: string) => `${p}-${Date.now()}-${Math.floor(Math.random() * 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function docker(cmd: string) {
-  try {
-    execSync(`docker compose ${cmd}`, { stdio: "inherit" });
-  } catch (e) {
-    console.warn(`[docker cmd] error ejecutando 'docker compose ${cmd}': ${(e as Error).message}`);
-  }
+  execSync(`docker compose ${cmd}`, { stdio: "inherit" });
 }
 
-// Payload real que publica M6
+// Payload real que publica M6 (Lucas)
 const eventoCancelacion = (viajeId: string, evento: "cancelacion_cliente" | "despacho.reabrir") => ({
   viajeId,
   clienteId: `C-${viajeId}`,
@@ -60,7 +56,7 @@ test.describe("Resiliencia ante caída de backing services", () => {
     await expect.poll(() => esDuplicado(request, viajeId), { timeout: 15000 }).toBe(true);
   });
 
-  test("2. Redis apagado: sigue procesando (usa Circuit Breaker y base de datos)", async ({ request }) => {
+  test("2. Redis apagado: sigue procesando (usa la base)", async ({ request }) => {
     docker("stop redis");
     await esperar(2000);
 
@@ -80,12 +76,11 @@ test.describe("Resiliencia ante caída de backing services", () => {
     await esperar(3000);
 
     docker("start rabbitmq");
-    await esperar(30000); // tiempo a amqplib para reconectar y rearmar exchanges/colas/bindings
+    await esperar(30000); // le da tiempo real a amqplib para reconectar y rearmar exchanges/colas/bindings
 
     const viajeIdDespues = nuevoId("POST-CAIDA");
     expect(await publicar(request, viajeIdDespues)).toBe(true);
-    await expect.poll(() => esDuplicado(request, viajeIdDespues), { timeout: 15000 }).toBe(true);
-  });
+    await expect.poll(() => esDuplicado(request, viajeIdDespues), { timeout: 15000 }).toBe(true);  });
 
   test("4. Redis y RabbitMQ caen juntos y vuelven: recupera sin intervención", async ({
     request,

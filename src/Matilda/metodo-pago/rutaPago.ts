@@ -4,7 +4,7 @@ import {
   obtenerMetodoPago,
   autorizarMetodoPago,
   rechazarMetodoPago,
-} from "./controllerPago";
+} from "./controllerPago.js";
 
 const router = Router();
 

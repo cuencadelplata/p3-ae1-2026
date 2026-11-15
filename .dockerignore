@@ -2,6 +2,13 @@ node_modules
 dist
 *.log
 .git
+.github
+coverage
+test-results
+tests
+src/test
+*.md
+.env
 M7-cargo-cancelacion
 M6-trips-stub
 M7-historial-financiero
