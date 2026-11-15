@@ -176,6 +176,30 @@ El `compose.yaml` de M8 no define `SUPPORT_M1_IDENTITY_URL`; lo hace
   responde el router solo o la app standalone. Lo que resta es de QR (RF8.2)
   o de la app común, no de Support.
 
+### Decisiones y límites
+
+- **Autenticación desactivada por defecto.** El M1 real no corre en el
+  `compose.yaml` común de M8 (sólo está el sandbox de M1 que usa Receipts),
+  así que en el stack normal `/tickets` no exige Bearer. Se activa definiendo
+  `SUPPORT_M1_IDENTITY_URL`, como hace `compose.integracion-real.yaml`. El
+  detalle está en [Autenticación con M1](#autenticación-con-m1).
+- **Autorización por rol o por dueño: pendiente de acuerdo con M1 y M2.**
+  Support sólo autentica: cualquier usuario válido opera sobre cualquier
+  ticket. Falta acordar con M1 los roles y con M2 la correspondencia entre
+  cliente y usuario; hasta entonces no se inventa una regla propia.
+- **Mensajería de AE1 a cargo de RF8.6.** El consumer RabbitMQ heredado, la
+  publicación de `ticket.creado` / `ticket.actualizado` y
+  `POST /events/publish` no son de RF8.5; en la app integrada están
+  desactivados. Lo que queda para la extracción está en
+  [`docs/rf86-handoff.md`](docs/rf86-handoff.md).
+- **`correlation_id` = `tripId`.** La columna `correlation_id` de `tickets`
+  guarda el `tripId`, no el `X-Correlation-Id` del pedido. Sigue la
+  convención `correlationId = tripId` de AE2 para flujos de viaje
+  ([acuerdos intermodulares](../../docs/ae2-intermodule-agreements.md),
+  sección 3, "Transporte y envelope"),
+  que responde a RNF-13 de la consigna: identificador de correlación/tripId
+  para reconstruir un flujo distribuido.
+
 ### Base de Datos (CommunicationsDB)
 
 Support guarda los tickets, su historial y las claves de idempotencia en el
