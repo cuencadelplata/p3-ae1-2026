@@ -604,20 +604,22 @@ export class RideRequestService {
     }
 
     const { action } = dto;
-    const targetDriverId = dto.driverId || driverId;
+    // Identidad inmutable del conductor provista por el contexto de autenticación (RF-5.4)
+    // Se previene expresamente cualquier suplantación de identidad o demo desde el payload
+    const targetDriverId = driverId;
 
-    // 2. Obtener oferta desde Redis (RF-5.4: Estado efímero y vigencia TTL)
+    // 2. Obtener oferta desde Redis, memoria o base de datos (RF-5.4: Estado efímero y vigencia TTL)
     let offer = await this.redisService.getOffer(offerId);
     if (!offer) {
-      offer = this.offers.get(offerId) || null;
+      offer = this.offers.get(offerId) || (await this.dbService.getRideOfferById(offerId));
     }
 
     if (!offer) {
       throw new NotFoundError('Oferta de viaje no encontrada o expirada', 'OFFER_NOT_FOUND');
     }
 
-    // 3. Validar destinatario de la oferta
-    if (targetDriverId !== 'driver_demo_default' && offer.driverId !== targetDriverId) {
+    // 3. Validar destinatario de la oferta estrictamente contra el conductor autenticado
+    if (offer.driverId !== targetDriverId) {
       throw new ConflictError(
         'No tiene autorización para responder a esta oferta (destinatario no coincide)',
         'FORBIDDEN_ACCESS'
@@ -686,72 +688,77 @@ export class RideRequestService {
     // RF-5.5: Asignación Única y Resolución Atómica de Concurrencia (action === 'ACCEPT')
     // =========================================================================
 
-    // 1. Lock Distribuido Atómico en Redis (SET NX EX)
-    const lockResult = await this.redisService.acquireAssignmentLock(request.id, targetDriverId, 30);
-    if (!lockResult.acquired) {
+    // 1. Lock Distribuido en Redis (SET NX EX)
+    // Provee protección ultrarrápida contra carreras de concurrencia.
+    // Si Redis presenta una falla, el sistema degrada con tolerancia a fallos
+    // apoyándose en la asignación atómica a nivel de base de datos compartida.
+    let redisLockAcquired = false;
+    try {
+      const lockResult = await this.redisService.acquireAssignmentLock(request.id, targetDriverId, 30);
+      if (!lockResult.acquired) {
+        offer.status = 'EXPIRED';
+        await this.redisService.deleteOffer(offerId).catch(() => {});
+        this.offers.set(offerId, offer);
+
+        throw new ConflictError(
+          'La solicitud de viaje ya fue asignada a otro conductor',
+          'REQUEST_ALREADY_ASSIGNED'
+        );
+      }
+      redisLockAcquired = true;
+    } catch (redisError) {
+      if (redisError instanceof ConflictError) {
+        throw redisError;
+      }
+      // Falla de Redis: tolerancia a fallos y degradación graciosa hacia DB atómica
+      console.warn(
+        `[RF-5.5] Redis no disponible o error en lock (${(redisError as any)?.message}). Procediendo con asignación atómica en DB compartida.`
+      );
+    }
+
+    // 2. Asignación atómica en base de datos compartida (PostgreSQL / Prisma / DbService)
+    // Garantiza que solo un conductor gane, incluso ante múltiples instancias o fallas de Redis
+    const atomicResult = await this.dbService.assignRideRequestAtomic(request.id, targetDriverId, offer.id);
+    if (!atomicResult.success) {
       offer.status = 'EXPIRED';
-      await this.redisService.deleteOffer(offerId);
+      await this.redisService.deleteOffer(offerId).catch(() => {});
       this.offers.set(offerId, offer);
+
+      if (atomicResult.conflictReason === 'REQUEST_CANCELLED') {
+        throw new ConflictError(
+          'La solicitud de viaje fue cancelada por el cliente y ya no se encuentra disponible',
+          'REQUEST_CANCELLED'
+        );
+      }
 
       throw new ConflictError(
         'La solicitud de viaje ya fue asignada a otro conductor',
         'REQUEST_ALREADY_ASSIGNED'
-      );
-    }
-
-    // 2. Validar que la solicitud siga disponible
-    if (request.status === 'ASSIGNED') {
-      offer.status = 'EXPIRED';
-      await this.redisService.deleteOffer(offerId);
-      this.offers.set(offerId, offer);
-      throw new ConflictError(
-        'La solicitud de viaje ya fue asignada a otro conductor',
-        'REQUEST_ALREADY_ASSIGNED'
-      );
-    }
-
-    if (request.status === 'CANCELLED') {
-      offer.status = 'EXPIRED';
-      await this.redisService.deleteOffer(offerId);
-      this.offers.set(offerId, offer);
-      throw new ConflictError(
-        'La solicitud de viaje fue cancelada por el cliente y ya no se encuentra disponible',
-        'REQUEST_CANCELLED'
       );
     }
 
     const now = new Date();
+    const assignedRequest = atomicResult.request || request;
+    assignedRequest.status = 'ASSIGNED';
+    assignedRequest.assignedDriverId = offer.driverId;
+    assignedRequest.updatedAt = now.toISOString();
 
-    // 3. Asignar el viaje y actualizar persistencia en PostgreSQL
     offer.status = 'ACCEPTED';
-    request.status = 'ASSIGNED';
-    request.assignedDriverId = offer.driverId;
-    request.updatedAt = now.toISOString();
-
-    await this.dbService.saveRideOffer(offer);
-    await this.dbService.saveRideRequest(request);
-    await this.dbService.logDispatchEvent(
-      request.id,
-      'REQUEST_ASSIGNED',
-      offer.driverId,
-      `Asignado a conductor ${offer.driverId} con oferta ${offer.id}`
-    );
-
     this.offers.set(offerId, offer);
-    this.requests.set(request.id, request);
+    this.requests.set(assignedRequest.id, assignedRequest);
 
-    // 4. Borrar la oferta ganadora de Redis e invalidar las ofertas perdedoras
-    await this.redisService.deleteOffer(offerId);
+    // 3. Borrar la oferta ganadora de Redis e invalidar las ofertas perdedoras en Redis y memoria
+    await this.redisService.deleteOffer(offerId).catch(() => {});
 
-    for (const otherOffer of this.offers.values()) {
-      if (otherOffer.requestId === request.id && otherOffer.id !== offer.id && otherOffer.status === 'PENDING') {
-        otherOffer.status = 'EXPIRED';
-        await this.redisService.deleteOffer(otherOffer.id);
-        await this.dbService.saveRideOffer(otherOffer);
+    const relatedOffers = await this.dbService.getOffersByRequestId(request.id);
+    for (const otherOffer of relatedOffers) {
+      if (otherOffer.id !== offer.id) {
+        await this.redisService.deleteOffer(otherOffer.id).catch(() => {});
+        this.offers.set(otherOffer.id, { ...otherOffer, status: 'EXPIRED' });
       }
     }
 
-    // 5. Publicación Asíncrona del Evento hacia M8 (Notificaciones) y otros consumidores vía RabbitMQ
+    // 4. Publicación Asíncrona del Evento hacia M8 (Notificaciones) y otros consumidores vía RabbitMQ
     await this.rabbitMqService.publishTripAssigned({
       requestId: request.id,
       offerId: offer.id,
@@ -847,12 +854,12 @@ export class RideRequestService {
   }
 
   /**
-   * Obtiene una oferta por ID con cálculo dinámico de TTL
+   * Obtiene una oferta por ID con cálculo dinámico de TTL (RF-5.4)
    */
   public async getOfferById(offerId: string): Promise<RideOffer> {
     let offer = await this.redisService.getOffer(offerId);
     if (!offer) {
-      offer = this.offers.get(offerId) || null;
+      offer = this.offers.get(offerId) || (await this.dbService.getRideOfferById(offerId));
     }
 
     if (!offer) {
@@ -868,19 +875,29 @@ export class RideRequestService {
   }
 
   /**
-   * Obtiene todas las ofertas asignadas a un conductor específico
+   * Obtiene todas las ofertas asignadas a un conductor específico (RF-5.4)
    */
   public async getOffersForDriver(driverId: string): Promise<RideOffer[]> {
-    const driverOffers: RideOffer[] = [];
+    const dbOffers = await this.dbService.getOffersByDriverId(driverId);
+    const offerMap = new Map<string, RideOffer>();
 
+    // Integrar ofertas de BD y memoria
+    for (const offer of dbOffers) {
+      offerMap.set(offer.id, offer);
+    }
     for (const offer of this.offers.values()) {
       if (offer.driverId === driverId) {
-        const remainingTtl = await this.redisService.getRemainingTtl(offer.id);
-        if (remainingTtl <= 0 && offer.status === 'PENDING') {
-          offer.status = 'EXPIRED';
-        }
-        driverOffers.push(offer);
+        offerMap.set(offer.id, offer);
       }
+    }
+
+    const driverOffers: RideOffer[] = [];
+    for (const offer of offerMap.values()) {
+      const remainingTtl = await this.redisService.getRemainingTtl(offer.id);
+      if (remainingTtl <= 0 && offer.status === 'PENDING') {
+        offer.status = 'EXPIRED';
+      }
+      driverOffers.push(offer);
     }
 
     return driverOffers;
@@ -890,9 +907,18 @@ export class RideRequestService {
    * Obtiene todas las ofertas emitidas en el sistema
    */
   public async getAllOffers(): Promise<RideOffer[]> {
-    const allOffers: RideOffer[] = [];
+    const dbOffers = await this.dbService.getAllOffers();
+    const offerMap = new Map<string, RideOffer>();
 
+    for (const offer of dbOffers) {
+      offerMap.set(offer.id, offer);
+    }
     for (const offer of this.offers.values()) {
+      offerMap.set(offer.id, offer);
+    }
+
+    const allOffers: RideOffer[] = [];
+    for (const offer of offerMap.values()) {
       const remainingTtl = await this.redisService.getRemainingTtl(offer.id);
       if (remainingTtl <= 0 && offer.status === 'PENDING') {
         offer.status = 'EXPIRED';

@@ -192,6 +192,317 @@ export class DbService {
   }
 
   /**
+   * Obtiene una oferta de viaje por su ID desde PostgreSQL o memoria
+   */
+  public async getRideOfferById(id: string): Promise<RideOffer | null> {
+    if (this.isConnected && this.prisma) {
+      try {
+        const row = await this.prisma.rideOffer.findUnique({
+          where: { id },
+          include: { request: true }
+        });
+        if (!row) return null;
+        return {
+          id: row.id,
+          requestId: row.requestId,
+          driverId: row.driverId,
+          status: row.status as any,
+          ttlSeconds: row.ttlSeconds,
+          createdAt: row.createdAt.toISOString(),
+          expiresAt: row.expiresAt.toISOString(),
+          origin: {
+            latitude: row.request.originLat,
+            longitude: row.request.originLng,
+            address: row.request.originAddress
+          },
+          destination: {
+            latitude: row.request.destLat,
+            longitude: row.request.destLng,
+            address: row.request.destAddress
+          },
+          vehicleType: row.request.vehicleType as any,
+          estimatedFare: {
+            amount: row.request.estimatedAmount,
+            currency: row.request.currency,
+            estimatedDistanceKm: row.request.estimatedDistanceKm,
+            estimatedDurationMin: row.request.estimatedDurationMin,
+            fareToken: row.request.fareToken || undefined
+          }
+        };
+      } catch {
+        // Fallback
+      }
+    }
+
+    return this.memoryOffers.get(id) || null;
+  }
+
+  /**
+   * Obtiene todas las ofertas emitidas para una solicitud
+   */
+  public async getOffersByRequestId(requestId: string): Promise<RideOffer[]> {
+    if (this.isConnected && this.prisma) {
+      try {
+        const rows = await this.prisma.rideOffer.findMany({
+          where: { requestId },
+          include: { request: true }
+        });
+        return rows.map((row) => ({
+          id: row.id,
+          requestId: row.requestId,
+          driverId: row.driverId,
+          status: row.status as any,
+          ttlSeconds: row.ttlSeconds,
+          createdAt: row.createdAt.toISOString(),
+          expiresAt: row.expiresAt.toISOString(),
+          origin: {
+            latitude: row.request.originLat,
+            longitude: row.request.originLng,
+            address: row.request.originAddress
+          },
+          destination: {
+            latitude: row.request.destLat,
+            longitude: row.request.destLng,
+            address: row.request.destAddress
+          },
+          vehicleType: row.request.vehicleType as any,
+          estimatedFare: {
+            amount: row.request.estimatedAmount,
+            currency: row.request.currency,
+            estimatedDistanceKm: row.request.estimatedDistanceKm,
+            estimatedDurationMin: row.request.estimatedDurationMin,
+            fareToken: row.request.fareToken || undefined
+          }
+        }));
+      } catch {
+        // Fallback
+      }
+    }
+
+    return Array.from(this.memoryOffers.values()).filter((o) => o.requestId === requestId);
+  }
+
+  /**
+   * Obtiene todas las ofertas destinadas a un conductor específico
+   */
+  public async getOffersByDriverId(driverId: string): Promise<RideOffer[]> {
+    if (this.isConnected && this.prisma) {
+      try {
+        const rows = await this.prisma.rideOffer.findMany({
+          where: { driverId },
+          include: { request: true }
+        });
+        return rows.map((row) => ({
+          id: row.id,
+          requestId: row.requestId,
+          driverId: row.driverId,
+          status: row.status as any,
+          ttlSeconds: row.ttlSeconds,
+          createdAt: row.createdAt.toISOString(),
+          expiresAt: row.expiresAt.toISOString(),
+          origin: {
+            latitude: row.request.originLat,
+            longitude: row.request.originLng,
+            address: row.request.originAddress
+          },
+          destination: {
+            latitude: row.request.destLat,
+            longitude: row.request.destLng,
+            address: row.request.destAddress
+          },
+          vehicleType: row.request.vehicleType as any,
+          estimatedFare: {
+            amount: row.request.estimatedAmount,
+            currency: row.request.currency,
+            estimatedDistanceKm: row.request.estimatedDistanceKm,
+            estimatedDurationMin: row.request.estimatedDurationMin,
+            fareToken: row.request.fareToken || undefined
+          }
+        }));
+      } catch {
+        // Fallback
+      }
+    }
+
+    return Array.from(this.memoryOffers.values()).filter((o) => o.driverId === driverId);
+  }
+
+  /**
+   * Obtiene todas las ofertas en el sistema
+   */
+  public async getAllOffers(): Promise<RideOffer[]> {
+    if (this.isConnected && this.prisma) {
+      try {
+        const rows = await this.prisma.rideOffer.findMany({
+          include: { request: true }
+        });
+        return rows.map((row) => ({
+          id: row.id,
+          requestId: row.requestId,
+          driverId: row.driverId,
+          status: row.status as any,
+          ttlSeconds: row.ttlSeconds,
+          createdAt: row.createdAt.toISOString(),
+          expiresAt: row.expiresAt.toISOString(),
+          origin: {
+            latitude: row.request.originLat,
+            longitude: row.request.originLng,
+            address: row.request.originAddress
+          },
+          destination: {
+            latitude: row.request.destLat,
+            longitude: row.request.destLng,
+            address: row.request.destAddress
+          },
+          vehicleType: row.request.vehicleType as any,
+          estimatedFare: {
+            amount: row.request.estimatedAmount,
+            currency: row.request.currency,
+            estimatedDistanceKm: row.request.estimatedDistanceKm,
+            estimatedDurationMin: row.request.estimatedDurationMin,
+            fareToken: row.request.fareToken || undefined
+          }
+        }));
+      } catch {
+        // Fallback
+      }
+    }
+
+    return Array.from(this.memoryOffers.values());
+  }
+
+  /**
+   * Asignación atómica de solicitud en base de datos compartida (RF-5.5).
+   * Garantiza que ante respuestas concurrentes entre múltiples instancias del servicio,
+   * solo un conductor pueda quedar asignado al viaje, incluso ante fallas de Redis.
+   */
+  public async assignRideRequestAtomic(
+    requestId: string,
+    driverId: string,
+    offerId: string
+  ): Promise<{ success: boolean; request: RideRequest | null; conflictReason?: string }> {
+    if (this.isConnected && this.prisma) {
+      try {
+        const result = await this.prisma.$transaction(async (tx) => {
+          // 1. Verificar estado actual
+          const current = await tx.rideRequest.findUnique({ where: { id: requestId } });
+          if (!current) {
+            return { success: false, request: null, conflictReason: 'REQUEST_NOT_FOUND' };
+          }
+          if (current.status === 'ASSIGNED') {
+            return { success: false, request: null, conflictReason: 'REQUEST_ALREADY_ASSIGNED' };
+          }
+          if (current.status === 'CANCELLED') {
+            return { success: false, request: null, conflictReason: 'REQUEST_CANCELLED' };
+          }
+
+          // 2. Actualización condicional atómica a nivel SQL
+          const updateResult = await tx.rideRequest.updateMany({
+            where: {
+              id: requestId,
+              status: { notIn: ['ASSIGNED', 'CANCELLED'] }
+            },
+            data: {
+              status: 'ASSIGNED',
+              assignedDriverId: driverId,
+              updatedAt: new Date()
+            }
+          });
+
+          if (updateResult.count === 0) {
+            return { success: false, request: null, conflictReason: 'REQUEST_ALREADY_ASSIGNED' };
+          }
+
+          // 3. Actualizar la oferta ganadora a ACCEPTED
+          await tx.rideOffer.update({
+            where: { id: offerId },
+            data: {
+              status: 'ACCEPTED',
+              respondedAt: new Date()
+            }
+          });
+
+          // 4. Invalidar/expirar atómicamente el resto de las ofertas pendientes para este viaje
+          await tx.rideOffer.updateMany({
+            where: {
+              requestId: requestId,
+              id: { not: offerId },
+              status: 'PENDING'
+            },
+            data: {
+              status: 'EXPIRED',
+              respondedAt: new Date()
+            }
+          });
+
+          // 5. Registrar log de auditoría inmutable
+          await tx.dispatchLog.create({
+            data: {
+              requestId,
+              eventType: 'REQUEST_ASSIGNED',
+              driverId,
+              details: `Asignación atómica a conductor ${driverId} con oferta ${offerId}`
+            }
+          });
+
+          return { success: true };
+        });
+
+        if (!result.success) {
+          return { success: false, request: null, conflictReason: result.conflictReason };
+        }
+
+        const domainRequest = await this.getRideRequestById(requestId);
+        return { success: true, request: domainRequest };
+      } catch {
+        // Fallback en caso de error transaccional de DB
+      }
+    }
+
+    // Fallback atómico en memoria (para ejecución aislada sin base de datos)
+    const memReq = this.memoryRequests.get(requestId);
+    if (!memReq) {
+      return { success: false, request: null, conflictReason: 'REQUEST_NOT_FOUND' };
+    }
+    if (memReq.status === 'ASSIGNED') {
+      return { success: false, request: null, conflictReason: 'REQUEST_ALREADY_ASSIGNED' };
+    }
+    if (memReq.status === 'CANCELLED') {
+      return { success: false, request: null, conflictReason: 'REQUEST_CANCELLED' };
+    }
+
+    const now = new Date().toISOString();
+    memReq.status = 'ASSIGNED';
+    memReq.assignedDriverId = driverId;
+    memReq.updatedAt = now;
+    this.memoryRequests.set(requestId, memReq);
+
+    const memOffer = this.memoryOffers.get(offerId);
+    if (memOffer) {
+      memOffer.status = 'ACCEPTED';
+      this.memoryOffers.set(offerId, memOffer);
+    }
+
+    for (const off of this.memoryOffers.values()) {
+      if (off.requestId === requestId && off.id !== offerId && off.status === 'PENDING') {
+        off.status = 'EXPIRED';
+        this.memoryOffers.set(off.id, off);
+      }
+    }
+
+    this.memoryLogs.push({
+      id: `log_${Date.now()}`,
+      requestId,
+      eventType: 'REQUEST_ASSIGNED',
+      driverId,
+      details: `Asignación atómica a conductor ${driverId} con oferta ${offerId}`,
+      createdAt: now
+    });
+
+    return { success: true, request: { ...memReq } };
+  }
+
+  /**
    * Registra un log de auditoría append-only
    */
   public async logDispatchEvent(requestId: string, eventType: string, driverId?: string, details?: string): Promise<void> {
