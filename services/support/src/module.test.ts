@@ -119,6 +119,52 @@ describe('createSupportModule sin SUPPORT_M1_IDENTITY_URL ni M6_TRIPS_URL', () =
   });
 });
 
+describe('createSupportModule parsea su propio JSON', () => {
+  // Sólo el router del módulo: sin QR ni ningún otro parser montado antes.
+  function appSolo(m: SupportModule) {
+    const app = express();
+    app.use(m.router);
+    return app;
+  }
+
+  it('un JSON mal formado responde 400 SUPPORT_VALIDATION_ERROR con correlationId', async () => {
+    const res = await request(appSolo(crearModulo({})))
+      .post('/tickets')
+      .set('Content-Type', 'application/json')
+      .set('X-Correlation-Id', 'json-roto-1')
+      .send('{"tripId":');
+
+    expect(res.status).toBe(400);
+    expect(res.headers['x-correlation-id']).toBe('json-roto-1');
+    expect(res.body).toEqual({
+      error: {
+        code: 'SUPPORT_VALIDATION_ERROR',
+        message: 'La solicitud contiene datos inválidos.',
+        details: [{ field: 'body', reason: 'El JSON no es válido.' }],
+      },
+      correlationId: 'json-roto-1',
+    });
+  });
+
+  it('un cuerpo válido llega a la validación de Support ya parseado', async () => {
+    const res = await request(appSolo(crearModulo({}))).post('/tickets').send({ tripId: 't-1' });
+
+    // Sin parser, tripId también faltaría: sólo se rechaza motivo.
+    expect(res.status).toBe(400);
+    expect(res.body.error.details).toEqual([{ field: 'motivo', reason: 'Debe ser un texto no vacío.' }]);
+  });
+
+  it('no parsea cuerpos de rutas ajenas a /tickets', async () => {
+    const app = express();
+    app.use(crearModulo({}).router);
+    app.post('/otra', (req, res) => res.json({ body: req.body ?? null }));
+
+    const res = await request(app).post('/otra').send({ a: 1 });
+
+    expect(res.body).toEqual({ body: null });
+  });
+});
+
 describe('createSupportModule con una sola integración', () => {
   it('sólo M6_TRIPS_URL: no exige Bearer e informa sólo trips', async () => {
     const m = crearModulo({ M6_TRIPS_URL: 'http://m6.test:3000' });
