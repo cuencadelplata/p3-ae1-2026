@@ -32,13 +32,13 @@ export class RedisService {
       this.client = url
         ? new Redis(url, { lazyConnect: true, maxRetriesPerRequest: 1, enableOfflineQueue: false })
         : new Redis({
-            host,
-            port,
-            lazyConnect: true,
-            maxRetriesPerRequest: 1,
-            enableOfflineQueue: false,
-            connectTimeout: 2000
-          });
+          host,
+          port,
+          lazyConnect: true,
+          maxRetriesPerRequest: 1,
+          enableOfflineQueue: false,
+          connectTimeout: 2000
+        });
 
       this.client.on('connect', () => {
         this.isConnected = true;
