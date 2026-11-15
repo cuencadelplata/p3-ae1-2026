@@ -1,4 +1,5 @@
 import amqp, { Channel } from "amqplib";
+import { dependenciaDisponible } from "../metrics/metrics";
 
 const rabbitUrl =
     process.env.RABBITMQ_URL ||
@@ -24,6 +25,7 @@ async function conectar(): Promise<Channel> {
     conexion.on("close", () => {
         // Si RabbitMQ se cae, se descarta el canal y se reconecta en el próximo evento.
         canal = null;
+        dependenciaDisponible.set({ dependencia: "rabbitmq" }, 0);
     });
 
     const nuevoCanal = await conexion.createChannel();
@@ -31,6 +33,8 @@ async function conectar(): Promise<Channel> {
     await nuevoCanal.assertExchange(EXCHANGE_M1, "topic", {
         durable: true
     });
+
+    dependenciaDisponible.set({ dependencia: "rabbitmq" }, 1);
 
     return nuevoCanal;
 }

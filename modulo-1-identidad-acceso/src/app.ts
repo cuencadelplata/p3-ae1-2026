@@ -8,6 +8,7 @@ import YAML from "yaml";
 import authRoutes from "./routes/auth.routes";
 import revocationRoutes from "./routes/revocation.routes";
 import { testPageHtml } from "./views/testPage";
+import { exponerMetricas, medirDuracion } from "./metrics/metrics";
 
 const app = express();
 
@@ -28,6 +29,10 @@ const openapiDocument = YAML.parse(
 
 app.use(cors());
 app.use(express.json());
+app.use(medirDuracion);
+
+// AE4: métricas de M1 para Prometheus / Grafana Cloud.
+app.get("/metrics", exponerMetricas);
 
 app.get("/health", (_req, res) => {
     return res.status(200).json({

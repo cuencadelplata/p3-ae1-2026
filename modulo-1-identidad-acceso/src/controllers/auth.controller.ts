@@ -28,6 +28,10 @@ import {
     publicarIpBloqueada,
     publicarLoginExitoso
 } from "../messaging/auth.publisher";
+import {
+    ipsBloqueadasTotal,
+    loginsTotal
+} from "../metrics/metrics";
 
 import {
     findUserById
@@ -73,6 +77,7 @@ async function contarIntentoFallido(ip: string): Promise<void> {
 
         // Justo cuando llega al límite, se avisa a los demás módulos (asincrónico).
         if (intentos === MAX_INTENTOS_FALLIDOS) {
+            ipsBloqueadasTotal.inc();
             publicarIpBloqueada(ip, intentos, VENTANA_SEGUNDOS);
         }
     } catch (error) {
@@ -103,6 +108,8 @@ export async function login(
             resultado.usuario.rol
         );
 
+        loginsTotal.inc({ resultado: "exitoso" });
+
         res.status(200).json(resultado);
     } catch (error) {
         // Solo cuentan las credenciales incorrectas (401).
@@ -110,6 +117,7 @@ export async function login(
             error instanceof AuthError &&
             error.statusCode === 401
         ) {
+            loginsTotal.inc({ resultado: "fallido" });
             await contarIntentoFallido(ip);
         }
 

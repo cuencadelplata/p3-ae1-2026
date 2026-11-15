@@ -9,6 +9,7 @@ import {
     obtenerIntentosFallidos,
     segundosHastaDesbloqueo
 } from "../services/login-attempts.service";
+import { loginsTotal } from "../metrics/metrics";
 
 export function obtenerIpCliente(req: Request): string {
     return req.ip || req.socket.remoteAddress || "desconocida";
@@ -26,6 +27,8 @@ export async function loginRateLimit(
 
         if (intentos >= MAX_INTENTOS_FALLIDOS) {
             const segundos = await segundosHastaDesbloqueo(ip);
+
+            loginsTotal.inc({ resultado: "bloqueado" });
 
             res.setHeader("Retry-After", String(segundos));
             res.status(429).json({

@@ -1,4 +1,5 @@
 import Redis from "ioredis";
+import { dependenciaDisponible } from "../metrics/metrics";
 
 const redisUrl =
     process.env.REDIS_URL ||
@@ -14,7 +15,13 @@ const redis = new Redis(redisUrl, {
 
 let ultimoErrorLogueado = 0;
 
+// AE4: se marca en la métrica si Redis está conectado (1) o no (0).
+redis.on("ready", () => dependenciaDisponible.set({ dependencia: "redis" }, 1));
+redis.on("close", () => dependenciaDisponible.set({ dependencia: "redis" }, 0));
+
 redis.on("error", (error) => {
+    dependenciaDisponible.set({ dependencia: "redis" }, 0);
+
     // Evita llenar la consola: loguea como mucho un error cada 30 segundos.
     const ahora = Date.now();
 
