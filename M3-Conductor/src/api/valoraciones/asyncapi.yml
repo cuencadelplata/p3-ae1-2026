@@ -10,7 +10,7 @@ info:
 servers:
   rabbitmq:
     url: localhost:5672
-    protocol: amqp
+    protocol: amqpnpm run mock:viaje-finalizado
     description: Broker local (Docker Compose usa admin / admin123)
 
 channels:

@@ -76,15 +76,29 @@ Cuando el módulo de viajes publica `viaje.finalizado`, M3 hace lo siguiente:
 
 El panel se conecta a `GET /api/valoraciones/notificaciones/stream` y muestra el aviso en cuanto llega. Las pendientes guardadas en Redis se listan con `GET /api/valoraciones/pendientes`. El contrato de los dos eventos está en `M3-Conductor/src/api/valoraciones/asyncapi.yml`.
 
-Para disparar el evento sin el módulo de viajes, con la API ya iniciada y el panel abierto:
+En el evento guardado, `evaluadorId` es el conductor y `evaluadoId` es el cliente.
+
+### Probar las notificaciones de RabbitMQ
+
+Swagger no cubre este flujo: la notificación entra por la cola, no por un `POST`. Hace falta la API ya iniciada (Docker o `npm start`) y RabbitMQ en `localhost:5672`.
+
+1. Abrí el panel ([http://localhost:4000](http://localhost:4000) con Docker, [http://localhost:3000](http://localhost:3000) con `npm start`).
+2. En **Notificaciones de valoración**, el indicador tiene que decir **En vivo**. Si dice **Reconectando**, la API no está escuchando el stream.
+3. Desde `M3-Conductor`, en otra terminal, publicá un viaje terminado:
 
 ```bash
 npm run mock:viaje-finalizado
 ```
 
-El aviso aparece en el panel. El mismo mensaje sigue en la cola `cliente.valoracion-habilitada`, visible en RabbitMQ Management.
+Ese comando ejecuta `src/mocks/viajes/viajeFinalizado.publisher.mock.js`. Publica `viaje.finalizado` en `viajes.events`. M3 lo consume, guarda la pendiente y publica `valoracion.habilitada`.
 
-En el evento guardado, `evaluadorId` es el conductor y `evaluadoId` es el cliente.
+4. Comprobá las tres huellas del mismo viaje:
+
+   - **Logs de la API:** `viaje.finalizado recibido` y después `Valoración habilitada`. Con Docker: `docker logs --tail 30 p3-m3-api`. Con `npm start`, salen en esa misma terminal.
+   - **Panel:** una tarjeta nueva y, unos segundos, el aviso “Valoración habilitada para el viaje …”.
+   - **RabbitMQ Management** ([http://localhost:15672](http://localhost:15672), `admin` / `admin123`): el mensaje está en `valoraciones.notificaciones-panel` y también en `cliente.valoracion-habilitada`.
+
+Cada ejecución genera un `viajeId` nuevo (`viaje-` más la hora). El panel no vuelve a mostrar un viaje que ya está en pantalla, así que hace falta un id distinto para ver otra tarjeta. El panel tiene que estar abierto y decir **En vivo** antes de correr el comando: el aviso en vivo solo llega a los navegadores conectados en ese momento.
 
 ---
 
