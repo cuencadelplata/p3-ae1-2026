@@ -1,5 +1,7 @@
-import { config } from "../config";
-import { CircuitBreaker } from "../patrones/circuitBreaker";
+//
+
+import { config } from "../../config";
+import { CircuitBreaker } from "../../patrones/circuitBreaker";
 
 export class ErrorTransitorio extends Error {}
 export class ErrorPermanente extends Error {}

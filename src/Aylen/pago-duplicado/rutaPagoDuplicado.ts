@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { existeOrden } from "../reintegro/reintegroBD";
-import { estaEnCache, marcarEnCache } from "../infraestructura/redis";
+import { estaEnCache, marcarEnCache } from "../../infraestructura/redis";
 
 const router = Router();
 

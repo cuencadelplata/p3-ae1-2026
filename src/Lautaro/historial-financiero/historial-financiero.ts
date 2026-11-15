@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { pool } from "../infraestructura/basedatos";
+import { pool } from "../../infraestructura/basedatos";
 
 export type OperationStatus = "pending" | "completed" | "failed" | "cancelled";
 export type OperationType = "payment" | "refund" | "transfer" | "payout";

@@ -1,5 +1,7 @@
 node_modules
 dist
+*.log
+.git
 M7-cargo-cancelacion
 M6-trips-stub
 M7-historial-financiero

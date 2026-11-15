@@ -1,4 +1,4 @@
-import { pool } from "../infraestructura/basedatos";
+import { pool } from "../../infraestructura/basedatos";
 
 export interface NuevoReintegro {
   idOrden: string;

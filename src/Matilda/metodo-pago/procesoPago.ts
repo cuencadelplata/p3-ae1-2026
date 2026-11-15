@@ -1,4 +1,4 @@
-import { supabase } from "../supabaseClient";
+import { supabase } from "../../supabaseClient";
 import { type MetodoPago, type TipoPago } from "./metodoPago";
 
 const ordenesProcesadas = new Set<string>();

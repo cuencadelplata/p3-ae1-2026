@@ -1,7 +1,7 @@
 import amqp from "amqplib";
 import type { Channel, ChannelModel } from "amqplib";
 import { config } from "../config";
-import { iniciarConsumerViajeCancelado } from "../reintegro/consumerViajeCancelado";
+import { iniciarConsumerViajeCancelado } from "../Aylen/reintegro/consumerViajeCancelado";
 
 export const EXCHANGE_VIAJES = "viajes";
 export const EXCHANGE_M7 = "m7.eventos";
