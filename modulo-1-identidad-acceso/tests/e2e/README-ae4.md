@@ -31,8 +31,8 @@ Si la IP quedó bloqueada por un test anterior (por ejemplo, el de estrés), los
 
 1. `docker stop m1-redis`: `/health` responde, el login da 200 (fail-open) y la métrica de Redis pasa a 0.
 2. `docker start m1-redis`: M1 se reconecta solo, sin reiniciarse; la métrica vuelve a 1.
-3. `docker stop m1-rabbitmq`: el login sigue dando 200 y el evento se cuenta como `error`.
-4. `docker start m1-rabbitmq`: M1 vuelve a publicar eventos solo (reintenta cada 10 s).
+3. `docker stop m1-rabbitmq`: el login sigue dando 200 y la métrica de RabbitMQ pasa a 0.
+4. `docker start m1-rabbitmq`: M1 se reconecta solo al publicar el siguiente evento (reintenta cada 10 s); la métrica vuelve a 1.
 
 Al final deja Redis y RabbitMQ prendidos, aunque algún test falle.
 Con el tablero de Grafana Cloud abierto, se ve cada servicio pasar a **Caído** y volver a **Arriba**.

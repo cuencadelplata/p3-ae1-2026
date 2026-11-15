@@ -55,19 +55,20 @@ En Grafana Cloud: **Dashboards > New > Import**, subir `dashboard-m1.json` y ele
 | Panel | Qué muestra |
 | --- | --- |
 | Redis / RabbitMQ | Arriba (verde) o Caído (rojo) |
-| Logins en el período | Exitosos, fallidos y bloqueados |
-| IPs bloqueadas | Veces que una IP llegó al límite |
-| Logins por minuto | Evolución por resultado |
+| RF-1.2 Logins (período y por minuto) | Exitosos, fallidos y bloqueados |
+| RF-1.3 Validaciones (período y por minuto) | Válidas, tokens rechazados, usuarios bloqueados o inexistentes |
+| RF-1.4 Recuperación y revocación | Recuperaciones, reseteos y revocaciones, con ok o error |
 | Tiempo de respuesta p95 | Por ruta |
 | Pedidos por segundo | Por código HTTP |
-| Eventos en RabbitMQ | Publicados `ok` y `error` |
 | Memoria de M1 | Memoria del proceso |
+
+Si ya habías importado una versión anterior del tablero, importá este archivo de nuevo y elegí **Overwrite**.
 
 Las métricas tardan unos 30 segundos en aparecer: 15 de lectura más el envío.
 
 ## Demo
 
-1. Con el tablero abierto, hacer 5 logins fallidos y uno más: el panel de IPs bloqueadas sube a 1 y aparece la línea de `bloqueado`.
+1. Con el tablero abierto, hacer 5 logins fallidos y uno más: aparece la línea de `bloqueado` en RF-1.2.
 2. `docker compose stop redis`: el panel Redis pasa a Caído y el login sigue respondiendo.
 3. `docker compose start redis`: vuelve a Arriba sin reiniciar M1.
 4. Correr el test de estrés y ver subir los pedidos por segundo y el p95.

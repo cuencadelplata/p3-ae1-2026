@@ -2,7 +2,6 @@ import {
     EXCHANGE_M1,
     obtenerCanal
 } from "../config/rabbitmq";
-import { eventosPublicadosTotal } from "../metrics/metrics";
 
 // Nombres de los eventos que M1 publica sobre autenticación (RF-1.2).
 export const EVENTOS_AUTH = {
@@ -33,12 +32,8 @@ function publicarEvento(
                     contentType: "application/json"
                 }
             );
-
-            eventosPublicadosTotal.inc({ evento: routingKey, resultado: "ok" });
         })
         .catch((error) => {
-            eventosPublicadosTotal.inc({ evento: routingKey, resultado: "error" });
-
             // Si RabbitMQ está caído, el login sigue funcionando igual.
             console.error(
                 `[RabbitMQ] No se pudo publicar ${routingKey}:`,

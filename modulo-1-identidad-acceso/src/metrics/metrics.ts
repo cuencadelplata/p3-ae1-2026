@@ -14,30 +14,52 @@ client.collectDefaultMetrics({
     prefix: "m1_"
 });
 
-// RF-1.2: cuántos logins hubo y cómo terminaron.
-// resultado = exitoso (200) | fallido (401) | bloqueado (429)
+// ===================== Las 3 métricas del módulo M1 =====================
+
+// 1) RF-1.2 Autenticación (Franco): cuántos logins hubo y cómo terminaron.
+// resultado = exitoso (200) | fallido (401, contraseña incorrecta) | bloqueado (429, rate limit)
 export const loginsTotal = new client.Counter({
     name: "m1_logins_total",
-    help: "Intentos de login por resultado",
+    help: "RF-1.2 - Intentos de login por resultado",
     labelNames: ["resultado"] as const,
     registers: [registroMetricas]
 });
 
-// RF-1.2: cuántas veces una IP llegó al límite de intentos fallidos.
-export const ipsBloqueadasTotal = new client.Counter({
-    name: "m1_ips_bloqueadas_total",
-    help: "Veces que una IP llegó al límite de intentos fallidos",
+// 2) RF-1.3 Validación de identidad y rol (Adolfo): cuántas veces otros módulos validan un token.
+// resultado = valida | usuario_bloqueado | usuario_inexistente | token_rechazado
+export const validacionesIdentidadTotal = new client.Counter({
+    name: "m1_validaciones_identidad_total",
+    help: "RF-1.3 - Validaciones de identidad y rol por resultado",
+    labelNames: ["resultado"] as const,
     registers: [registroMetricas]
 });
 
-// RF-1.2: eventos enviados a RabbitMQ.
-// resultado = ok | error (por ejemplo, RabbitMQ caído)
-export const eventosPublicadosTotal = new client.Counter({
-    name: "m1_eventos_publicados_total",
-    help: "Eventos publicados en RabbitMQ por evento y resultado",
-    labelNames: ["evento", "resultado"] as const,
+// 3) RF-1.4 Recuperación y revocación de credenciales (Ana).
+// operacion = recuperacion_solicitada | contrasena_reseteada | credenciales_revocadas
+// resultado = ok | error
+export const credencialesTotal = new client.Counter({
+    name: "m1_credenciales_total",
+    help: "RF-1.4 - Operaciones de recuperación y revocación de credenciales",
+    labelNames: ["operacion", "resultado"] as const,
     registers: [registroMetricas]
 });
+
+// Los contadores arrancan en 0 para que los gráficos de Grafana tengan sus líneas desde el inicio.
+for (const resultado of ["exitoso", "fallido", "bloqueado"]) {
+    loginsTotal.inc({ resultado }, 0);
+}
+
+for (const resultado of ["valida", "usuario_bloqueado", "usuario_inexistente", "token_rechazado"]) {
+    validacionesIdentidadTotal.inc({ resultado }, 0);
+}
+
+for (const operacion of ["recuperacion_solicitada", "contrasena_reseteada", "credenciales_revocadas"]) {
+    for (const resultado of ["ok", "error"]) {
+        credencialesTotal.inc({ operacion, resultado }, 0);
+    }
+}
+
+// ===================== Métricas técnicas de soporte =====================
 
 // 1 si la dependencia está conectada, 0 si no. Sirve para mostrar qué pasa al apagar Redis o RabbitMQ.
 export const dependenciaDisponible = new client.Gauge({
@@ -49,17 +71,6 @@ export const dependenciaDisponible = new client.Gauge({
 
 dependenciaDisponible.set({ dependencia: "redis" }, 0);
 dependenciaDisponible.set({ dependencia: "rabbitmq" }, 0);
-
-// Los contadores arrancan en 0 para que los gráficos de Grafana tengan sus líneas desde el inicio.
-for (const resultado of ["exitoso", "fallido", "bloqueado"]) {
-    loginsTotal.inc({ resultado }, 0);
-}
-
-for (const evento of ["auth.login_exitoso", "auth.ip_bloqueada"]) {
-    for (const resultado of ["ok", "error"]) {
-        eventosPublicadosTotal.inc({ evento, resultado }, 0);
-    }
-}
 
 // Cuánto tarda cada respuesta HTTP, por ruta y código.
 export const duracionHttp = new client.Histogram({

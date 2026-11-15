@@ -70,7 +70,6 @@ describe("AE4 - RF-1.2 de punta a punta (M1 + Redis + RabbitMQ reales)", () => {
     test(`Después de ${MAX_INTENTOS} fallos responde 429 con Retry-After (Redis real)`, async () => {
         const fallidosAntes = await leerMetrica('m1_logins_total{resultado="fallido"}');
         const bloqueadosAntes = await leerMetrica('m1_logins_total{resultado="bloqueado"}');
-        const ipsAntes = await leerMetrica("m1_ips_bloqueadas_total");
 
         for (let i = 0; i < MAX_INTENTOS; i++) {
             const respuesta = await login(usuario.email, "incorrecta");
@@ -88,7 +87,6 @@ describe("AE4 - RF-1.2 de punta a punta (M1 + Redis + RabbitMQ reales)", () => {
         // Las métricas reflejan exactamente lo que pasó.
         assert.equal(await leerMetrica('m1_logins_total{resultado="fallido"}'), fallidosAntes + MAX_INTENTOS);
         assert.equal(await leerMetrica('m1_logins_total{resultado="bloqueado"}'), bloqueadosAntes + 2);
-        assert.equal(await leerMetrica("m1_ips_bloqueadas_total"), ipsAntes + 1);
     });
 
     test("El evento auth.ip_bloqueada llega a RabbitMQ con los intentos", async () => {

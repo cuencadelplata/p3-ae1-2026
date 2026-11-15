@@ -14,8 +14,7 @@ import {
     login
 } from "./helpers-ae4.mjs";
 
-const EVENTO_OK = 'm1_eventos_publicados_total{evento="auth.login_exitoso",resultado="ok"}';
-const EVENTO_ERROR = 'm1_eventos_publicados_total{evento="auth.login_exitoso",resultado="error"}';
+const RABBITMQ_CONECTADO = 'm1_dependencia_disponible{dependencia="rabbitmq"}';
 
 let usuario;
 
@@ -57,35 +56,27 @@ describe("AE4 - Resiliencia: apagar y prender Redis y RabbitMQ", () => {
         assert.equal((await login(usuario.email, usuario.password)).status, 200);
     });
 
-    test("Con RabbitMQ apagado, el login funciona y el evento se cuenta como error", async () => {
+    test("Con RabbitMQ apagado, el login sigue funcionando", async () => {
         controlarServicio("stop", "rabbitmq");
 
-        const erroresAntes = await leerMetrica(EVENTO_ERROR);
-
-        // Puede tardar unos segundos en notar que RabbitMQ se cayó.
-        await esperarHasta("un evento falle por RabbitMQ caído", async () => {
+        // Cada login intenta publicar su evento; M1 nota que RabbitMQ se cayó y la métrica pasa a 0.
+        await esperarHasta("la métrica de RabbitMQ pase a 0", async () => {
             const respuesta = await login(usuario.email, usuario.password);
             assert.equal(respuesta.status, 200, "el login no tiene que fallar por RabbitMQ");
-            await new Promise((r) => setTimeout(r, 300));
-            return (await leerMetrica(EVENTO_ERROR)) > erroresAntes;
+            return (await leerMetrica(RABBITMQ_CONECTADO)) === 0;
         }, { segundos: 30, cada: 2000 });
 
-        assert.equal(await leerMetrica('m1_dependencia_disponible{dependencia="rabbitmq"}'), 0);
         assert.equal((await api("/health")).status, 200);
     });
 
-    test("Al prender RabbitMQ, M1 vuelve a publicar eventos solo", async () => {
+    test("Al prender RabbitMQ, M1 se reconecta solo al publicar el siguiente evento", async () => {
         controlarServicio("start", "rabbitmq");
 
-        const okAntes = await leerMetrica(EVENTO_OK);
-
         // M1 reintenta la conexión cada 10 s; RabbitMQ tarda en arrancar.
-        await esperarHasta("se publique un evento ok", async () => {
+        await esperarHasta("la métrica de RabbitMQ vuelva a 1", async () => {
             assert.equal((await login(usuario.email, usuario.password)).status, 200);
             await new Promise((r) => setTimeout(r, 300));
-            return (await leerMetrica(EVENTO_OK)) > okAntes;
+            return (await leerMetrica(RABBITMQ_CONECTADO)) === 1;
         }, { segundos: 90, cada: 3000 });
-
-        assert.equal(await leerMetrica('m1_dependencia_disponible{dependencia="rabbitmq"}'), 1);
     });
 });

@@ -28,10 +28,7 @@ import {
     publicarIpBloqueada,
     publicarLoginExitoso
 } from "../messaging/auth.publisher";
-import {
-    ipsBloqueadasTotal,
-    loginsTotal
-} from "../metrics/metrics";
+import { loginsTotal } from "../metrics/metrics";
 
 import {
     findUserById
@@ -77,7 +74,6 @@ async function contarIntentoFallido(ip: string): Promise<void> {
 
         // Justo cuando llega al límite, se avisa a los demás módulos (asincrónico).
         if (intentos === MAX_INTENTOS_FALLIDOS) {
-            ipsBloqueadasTotal.inc();
             publicarIpBloqueada(ip, intentos, VENTANA_SEGUNDOS);
         }
     } catch (error) {

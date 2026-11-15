@@ -64,12 +64,11 @@ describe.sequential("AE4 - Métricas de M1 (GET /metrics)", () => {
         expect(despues).toBe(antes + 1);
     });
 
-    it("Contar fallidos, el bloqueo de la IP y el 429", async () => {
+    it("Contar los fallidos y el 429 del rate limit", async () => {
         await redis.flushall();
 
         const fallidosAntes = await leerMetrica('m1_logins_total{resultado="fallido"}');
         const bloqueadosAntes = await leerMetrica('m1_logins_total{resultado="bloqueado"}');
-        const ipsAntes = await leerMetrica("m1_ips_bloqueadas_total");
 
         for (let i = 0; i < MAX_INTENTOS_FALLIDOS; i++) {
             await request(app)
@@ -87,29 +86,18 @@ describe.sequential("AE4 - Métricas de M1 (GET /metrics)", () => {
             .toBe(fallidosAntes + MAX_INTENTOS_FALLIDOS);
         expect(await leerMetrica('m1_logins_total{resultado="bloqueado"}'))
             .toBe(bloqueadosAntes + 1);
-        expect(await leerMetrica("m1_ips_bloqueadas_total"))
-            .toBe(ipsAntes + 1);
 
         await redis.flushall();
     });
 
-    it("Contar los eventos publicados en RabbitMQ", async () => {
-        const antes = await leerMetrica(
-            'm1_eventos_publicados_total{evento="auth.login_exitoso",resultado="ok"}'
+    it("Exponer las 3 métricas del módulo desde el arranque, en 0", async () => {
+        const response = await request(app).get("/metrics");
+
+        expect(response.text).toContain('m1_logins_total{resultado="exitoso"}');
+        expect(response.text).toContain('m1_validaciones_identidad_total{resultado="valida"}');
+        expect(response.text).toContain(
+            'm1_credenciales_total{operacion="recuperacion_solicitada",resultado="ok"}'
         );
-
-        await request(app)
-            .post("/auth/iniciar-sesion")
-            .send({ email, password })
-            .expect(200);
-
-        // La publicación es asincrónica: se espera un momento a que termine.
-        await new Promise((resolve) => setTimeout(resolve, 50));
-
-        const despues = await leerMetrica(
-            'm1_eventos_publicados_total{evento="auth.login_exitoso",resultado="ok"}'
-        );
-        expect(despues).toBe(antes + 1);
     });
 
     it("Medir la duración por ruta, sin una serie por cada id", async () => {
