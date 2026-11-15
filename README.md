@@ -51,6 +51,13 @@ pnpm install --frozen-lockfile
 pnpm run build
 ```
 
+Antes de iniciar Compose, reemplazar `QR_INTERNAL_API_KEY` en el `.env` local
+por una clave aleatoria propia de al menos 16 caracteres. M6 deberá enviar el
+mismo valor en `x-api-key` al llamar a `POST /qr` y `POST /qr/validate` dentro
+de la red de integración. No publicar esa clave en Git ni en capturas.
+Para reintentar una validación, M6 debe conservar el mismo UUID en el header
+`Idempotency-Key`; una solicitud distinta usa un UUID nuevo.
+
 Ejecutar la suite principal:
 
 ```powershell
@@ -86,6 +93,10 @@ puerto se configura con `M8_HOST_PORT`.
 La imagen integrada AE2 es `juanmainval/m8-notificaciones-qr:2.0.1`. Necesita
 la misma infraestructura compartida, por lo que debe levantarse con Compose y
 no mediante un `docker run` aislado.
+Esa etiqueta corresponde a una publicación anterior: para medir o demostrar
+los cambios de esta rama, construir la imagen local con `docker compose
+--env-file .env up -d --build --wait`. La imagen resultante se llama
+`modulo-8-m8-app:local` por defecto y el servicio Compose es `m8-app`.
 
 ```powershell
 docker image ls juanmainval/m8-notificaciones-qr
@@ -101,6 +112,27 @@ Para volver a usar la imagen construida localmente:
 ```powershell
 Remove-Item Env:M8_IMAGE -ErrorAction SilentlyContinue
 ```
+
+### Pruebas de carga de M8
+
+Cada integrante puede clonar esta rama, crear su propio `.env` local y levantar
+el Compose anterior. M8 escucha en `http://localhost:3000` de **esa PC**; la
+imagen de M8 sola no incluye PostgreSQL, Redis ni RabbitMQ. Para comprobar el
+entorno antes de cargarlo:
+
+```powershell
+docker compose --env-file .env ps
+Invoke-RestMethod http://localhost:3000/health/ready
+```
+
+k6 puede correr localmente contra esa URL. Grafana Cloud k6 recibe los
+resultados con `k6 cloud run --local-execution <script.js>` después de iniciar
+sesión con `k6 cloud login`. En cambio, ejecutar la carga **desde la nube** no
+alcanza un `localhost` de la PC. El token de Grafana se guarda fuera del repo;
+no se agrega al script, `.env.example` ni a los commits. Ver los resultados de
+k6 en Grafana Cloud no implica que Grafana esté recogiendo métricas o trazas
+internas del contenedor M8: eso requiere configurar un colector o
+instrumentación por separado.
 
 ## Calidad e infraestructura
 
@@ -169,6 +201,6 @@ imágenes descargadas y el volumen de desarrollo de PostgreSQL.
 
 ## Identificación de entrega
 
-- Rama integrada: `AE2/notificaciones-qr-receipts-support`.
+- Rama de trabajo actual: `ae2/notificaciones-qr-receipts-support`.
 - Archivo comprimido: `AE2-M08-ApellidoNombre.zip`.
 - Informe: `Informe-AE2-M08-Apellido.docx`.
