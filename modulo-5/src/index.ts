@@ -4,6 +4,7 @@ import { RideRequestService } from './services/ride-request.service';
 import { RideRequestController } from './controllers/ride-request.controller';
 import { RedisService } from './services/redis.service';
 import { RabbitMQService } from './services/rabbitmq.service';
+import { authenticate } from './middleware/auth.middleware';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -85,16 +86,17 @@ app.get(['/docs', '/reference'], (_req, res) => {
 
 
 // Rutas API v1 - Solicitudes de Viaje
-app.post('/api/v1/ride-requests', rideRequestController.create);
-app.get('/api/v1/ride-requests/:requestId', rideRequestController.getById);
+// RF-5.1 (crear y consultar) protegido con autenticación (RNF-10)
+app.post('/api/v1/ride-requests', authenticate, rideRequestController.create);
+app.get('/api/v1/ride-requests/:requestId', authenticate, rideRequestController.getById);
 app.post('/api/v1/ride-requests/:requestId/cancel', rideRequestController.cancel);
 app.post('/api/v1/ride-requests/:requestId/candidates', rideRequestController.searchCandidates);
 app.post('/api/v1/ride-requests/:requestId/offers', rideRequestController.sendOffers);
 app.get('/api/v1/ride-requests/:requestId/offers', rideRequestController.getOffers);
 
 // Alias de compatibilidad e interoperabilidad para clientes que consultan viajes por ID
-app.get('/viajes/:requestId', rideRequestController.getById);
-app.get('/api/v1/viajes/:requestId', rideRequestController.getById);
+app.get('/viajes/:requestId', authenticate, rideRequestController.getById);
+app.get('/api/v1/viajes/:requestId', authenticate, rideRequestController.getById);
 
 // Rutas API v1 - Gestión de Ofertas de Conductor (RF-5.4)
 app.post('/api/v1/offers/:offerId/respond', rideRequestController.respondOffer);

@@ -14,6 +14,10 @@ export class RideRequestController {
    * Extrae el ID del cliente del contexto de seguridad (JWT / M1)
    */
   private extractClientId(req: Request): string {
+    // Si la ruta pasó por el middleware de autenticación, la identidad validada es la única fuente
+    if (req.auth?.userId) {
+      return req.auth.userId;
+    }
     const customHeader = req.headers['x-user-id'] || req.headers['x-client-id'];
     if (customHeader) {
       return customHeader.toString();

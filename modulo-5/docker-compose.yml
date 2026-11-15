@@ -66,6 +66,9 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@postgres-db:5432/dispatch_db?schema=public
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      # Autenticación RNF-10: JWT real por defecto. Definir JWT_SECRET en el entorno (el valor por defecto es SOLO para demo local).
+      - AUTH_MODE=${AUTH_MODE:-jwt}
+      - JWT_SECRET=${JWT_SECRET:-clave-solo-para-demo-local-cambiar}
     depends_on:
       postgres-db:
         condition: service_healthy
