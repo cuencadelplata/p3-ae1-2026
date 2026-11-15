@@ -42,3 +42,10 @@ export async function marcarEnCache(idOrden: string): Promise<void> {
   } catch {
   }
 }
+import { CircuitBreaker } from "../patrones/circuitBreaker";
+export const redisBreaker = new CircuitBreaker({
+  nombre: "redis",
+  umbralFallos: 3,
+  tiempoEsperaMs: 15000,
+  timeoutMs: 1500,
+});

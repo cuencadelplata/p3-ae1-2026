@@ -7,14 +7,14 @@ import { config } from "./config";
 import { conectarRedis } from "./infraestructura/redis";
 import { iniciarRabbit } from "./infraestructura/rabbit";
 import { pool } from "./infraestructura/basedatos";
-import { cargoCancelacionBreaker } from "./Aylen/reintegro/obtenerCargo";
 
 import estimacionTarifaRouter from "./Lautaro/estimacion-tarifa/estimacion-tarifa";
 import rutaPago from "./Matilda/metodo-pago/rutaPago";
 import mockMercadoPagoAPI from "./Matilda/mock/mercadoPagoAPI";
 import cargoCancelacionRouter from "./Lautaro/cargo-cancelacion/cargo-cancelacion";
 import rutaPagoDuplicado from "./Aylen/pago-duplicado/rutaPagoDuplicado";
-import historialRouter, { historial } from "./Lautaro/historial-financiero/historial-financiero";
+import rutaReintegro from "./Aylen/reintegro/rutaReintegro";
+import historialRouter from "./Lautaro/historial-financiero/historial-financiero";
 
 const app = express();
 app.use(express.json());
@@ -28,6 +28,7 @@ app.use(rutaPago);
 app.use(mockMercadoPagoAPI);
 app.use(cargoCancelacionRouter);
 app.use(rutaPagoDuplicado);
+app.use(rutaReintegro);
 app.use(historialRouter);
 
 async function inicializarBD() {

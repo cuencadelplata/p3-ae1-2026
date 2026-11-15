@@ -1,7 +1,8 @@
+import { redis, redisBreaker } from "../../infraestructura/redis";
 import { Request, Response } from "express";
 import { registrarMetodoPago, buscarPagoPorViaje, autorizarPago, rechazarPago } from "./procesoPago";
 import { procesarPagoMercadoPago } from "./PagoCliente";
-import { redis, redisBreaker } from "../../infraestructura/redis";
+
 
 const TTL_CACHE_SEGUNDOS = 30;
 const claveCache = (viajeId: string) => `m7:metodo-pago:${viajeId}`;

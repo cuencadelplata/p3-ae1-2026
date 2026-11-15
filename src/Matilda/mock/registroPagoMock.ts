@@ -1,7 +1,11 @@
-import { RegistroPago } from "../5-pago-duplicado/IRegistroPago";
+export interface RegistroPago {
+  idOrden: string;
+  idViaje: string;
+  monto: number;
+  fecha: Date;
+}
 
 // simulan pagos ya procesados, para probar la verificación de duplicados
-
 export const registrosDeEjemplo: RegistroPago[] = [
   {
     idOrden: "o1",
