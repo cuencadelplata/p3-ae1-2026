@@ -169,9 +169,12 @@ El `compose.yaml` de M8 no define `SUPPORT_M1_IDENTITY_URL`; lo hace
   antes de la autenticación, así que el `400` llega aunque falte el Bearer.
   La causa es el `express.json()` global que registra QR en
   `services/qr/src/module.ts`: QR se monta antes que Support en la app común,
-  el cuerpo se parsea ahí y el error lo atiende su manejador. La app
-  standalone de Support no tiene este problema. Se corrige en QR (RF8.2) o en
-  la app común, no en Support.
+  intercepta primero el cuerpo mal formado y el error lo atiende su
+  manejador. Support ya no depende de ese parser: su router
+  (`src/module.ts`) parsea el JSON de `/tickets` y convierte un cuerpo mal
+  formado en `SUPPORT_VALIDATION_ERROR` con `correlationId`, que es lo que
+  responde el router solo o la app standalone. Lo que resta es de QR (RF8.2)
+  o de la app común, no de Support.
 
 ### Base de Datos (CommunicationsDB)
 
