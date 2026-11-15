@@ -61,6 +61,10 @@ export class TicketVersionConflictError extends Error {
 // crearConClave crea a lo sumo un ticket por clave, también ante pedidos
 // simultáneos: si la clave ya existe con la misma huella devuelve ese ticket
 // con creado: false, y con otra huella lanza IdempotencyKeyConflictError.
+//
+// buscarPorClave es la lectura equivalente, sin crear nada: undefined si la
+// clave no existe, el ticket si existe con la misma huella, y
+// IdempotencyKeyConflictError con otra huella.
 export interface TicketRepository {
   crear(tripId: string, motivo: string, opciones?: OpcionesDeCreacion): Promise<Ticket>;
   crearConClave(
@@ -69,6 +73,7 @@ export interface TicketRepository {
     idempotencia: ClaveDeIdempotencia,
     opciones?: OpcionesDeCreacion,
   ): Promise<{ ticket: Ticket; creado: boolean }>;
+  buscarPorClave(idempotencia: ClaveDeIdempotencia): Promise<Ticket | undefined>;
   obtenerPorId(id: string): Promise<Ticket | undefined>;
   actualizarEstado(id: string, nuevoEstado: TicketStatus, cambio?: CambioDeEstado): Promise<Ticket | null>;
   // Historial del ticket en orden cronológico.

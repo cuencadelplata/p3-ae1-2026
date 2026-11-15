@@ -9,6 +9,12 @@ import {
 import { RabbitMQConsumer } from '../rabbitmq/consumer.js';
 import { TicketService } from '../services/ticket.service.js';
 
+// Quién hace el pedido: el usuario autenticado por M1 si la autenticación
+// está habilitada; si no, lo que el cliente declara en X-Actor-Id.
+function actorDelPedido(req: Request, res: Response): string | null {
+  return typeof res.locals.actor === 'string' ? res.locals.actor : leerActor(req.get('X-Actor-Id'));
+}
+
 export interface SupportControllerDeps {
   ticketService: TicketService;
 }
@@ -20,7 +26,7 @@ export function createSupportController({ ticketService }: SupportControllerDeps
     // Endpoint: POST /tickets
     async crearTicket(req: Request, res: Response) {
       const { tripId, motivo } = leerNuevoTicket(req.body);
-      const actor = leerActor(req.get('X-Actor-Id'));
+      const actor = actorDelPedido(req, res);
       const idempotencyKey = leerIdempotencyKey(req.get('Idempotency-Key'));
 
       const { ticket, creado } = await ticketService.crearTicket(tripId, motivo, { actor, idempotencyKey });
@@ -41,7 +47,7 @@ export function createSupportController({ ticketService }: SupportControllerDeps
     async actualizarEstado(req: Request, res: Response) {
       const id = req.params.id as string;
       const { estado, motivo, expectedVersion } = leerCambioDeEstado(req.body);
-      const actor = leerActor(req.get('X-Actor-Id'));
+      const actor = actorDelPedido(req, res);
 
       const ticketActualizado = await ticketService.actualizarEstado(id, estado, { actor, motivo, expectedVersion });
 
