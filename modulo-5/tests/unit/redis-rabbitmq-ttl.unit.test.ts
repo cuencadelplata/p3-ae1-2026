@@ -1,14 +1,16 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { RedisService } from '../../src/services/redis.service';
 import { RabbitMQService } from '../../src/services/rabbitmq.service';
 import { OfferCreatedEvent } from '../../src/types/ride-request.types';
 import { RideRequestService } from '../../src/services/ride-request.service';
+import { M4ClientService } from '../../src/services/m4-client.service';
 import { CreateRideRequestDTO, RideOffer } from '../../src/types/ride-request.types';
 
 describe('RNF-06 & RNF-07: Pruebas unitarias de Redis (TTL) y RabbitMQ', () => {
   let redisService: RedisService;
   let rabbitMQService: RabbitMQService;
   let rideRequestService: RideRequestService;
+  let m4Client: M4ClientService;
 
   const sampleLocation = {
     latitude: -27.4678,
@@ -26,10 +28,24 @@ describe('RNF-06 & RNF-07: Pruebas unitarias de Redis (TTL) y RabbitMQ', () => {
     // Forzar modo fallback en memoria para pruebas rápidas y deterministas
     process.env.DISABLE_REDIS = 'true';
     process.env.DISABLE_RABBITMQ = 'true';
+    process.env.M4_MOCK = 'true';
 
     redisService = new RedisService();
     rabbitMQService = new RabbitMQService();
-    rideRequestService = new RideRequestService(redisService, rabbitMQService);
+
+    // Corrección RF-5.2: Se usan mocks sembrados explícitamente (aprobados)
+    m4Client = new M4ClientService();
+    m4Client.seedMockDrivers([
+      { driverId: 'drv_101', latitude: -27.468, longitude: -58.834, vehicleType: 'AUTO', available: true, distanceKm: 1.2, rating: 4.8 },
+      { driverId: 'drv_102', latitude: -27.470, longitude: -58.832, vehicleType: 'AUTO', available: true, distanceKm: 2.1, rating: 4.7 },
+    ]);
+
+    rideRequestService = new RideRequestService(redisService, rabbitMQService, m4Client);
+  });
+
+  afterEach(() => {
+    delete process.env.M4_MOCK;
+    m4Client.clearMockDrivers();
   });
 
   describe('RedisService - Almacenamiento y TTL de Ofertas', () => {
@@ -120,6 +136,65 @@ describe('RNF-06 & RNF-07: Pruebas unitarias de Redis (TTL) y RabbitMQ', () => {
       destination: sampleDestination,
       vehicleType: 'AUTO'
     };
+
+    it('CP-5.3-09: Identificar clave Redis y comprobar vencimiento -> Durante vigencia existe con TTL positivo; tras vencimiento sin responder, ya no existe', async () => {
+      const request = await rideRequestService.createRideRequest('client_redis', 'idem_redis', createDto);
+      const ttlSec = 5;
+
+      const dispatchResult = await rideRequestService.sendOffersForRequest(request.id, 'client_redis', {
+        ttlSeconds: ttlSec,
+        driverIds: ['drv_101']
+      });
+
+      const offer = dispatchResult.offers[0];
+      const redisKey = `dispatch:offer:${offer.id}`;
+
+      // 1. Durante la vigencia: existe y tiene TTL positivo
+      const duringOffer = await redisService.getOffer(offer.id);
+      expect(duringOffer).not.toBeNull();
+      expect(duringOffer?.id).toBe(offer.id);
+      const ttlRemaining = await redisService.getRemainingTtl(offer.id);
+      expect(ttlRemaining).toBeGreaterThan(0);
+      expect(ttlRemaining).toBeLessThanOrEqual(ttlSec);
+
+      // 2. Consulta después del plazo sin aceptar, rechazar ni cancelar:
+      // Simulamos paso del tiempo superando el TTL en memoria
+      const store = (redisService as any).fallbackMemory || (redisService as any).memoryFallback;
+      const inMemoryOffer = store ? store.get(redisKey) : null;
+      if (inMemoryOffer) {
+        inMemoryOffer.expiresAt = Date.now() - 1000;
+      }
+
+      const afterOffer = await redisService.getOffer(offer.id);
+      expect(afterOffer).toBeNull();
+      const ttlAfter = await redisService.getRemainingTtl(offer.id);
+      expect(ttlAfter).toBe(-2); // -2 en Redis = clave expirada/inexistente
+    });
+
+    it('CP-5.3-14: La oferta llega al receptor -> Consumidor en cola dispatch.offers recibe la oferta con mismos IDs de solicitud, conductor y vencimiento', async () => {
+      const request = await rideRequestService.createRideRequest('client_rabbit', 'idem_rabbit', createDto);
+
+      let receivedEvent: OfferCreatedEvent | null = null;
+      // Suscribir consumidor que simula al receptor/módulo del conductor
+      await rabbitMQService.subscribeToOfferCreated((evt) => {
+        receivedEvent = evt;
+      });
+
+      const dispatchResult = await rideRequestService.sendOffersForRequest(request.id, 'client_rabbit', {
+        ttlSeconds: 20,
+        driverIds: ['drv_101']
+      });
+
+      const sentOffer = dispatchResult.offers[0];
+
+      // Verificamos evidencia de recepción por el consumidor
+      expect(receivedEvent).not.toBeNull();
+      expect((receivedEvent as any).offerId).toBe(sentOffer.id);
+      expect((receivedEvent as any).requestId).toBe(request.id);
+      expect((receivedEvent as any).driverId).toBe('drv_101');
+      expect((receivedEvent as any).ttlSeconds).toBe(20);
+      expect((receivedEvent as any).expiresAt).toBe(sentOffer.expiresAt);
+    });
 
     it('al despachar ofertas, debe guardarlas en Redis y emitir a RabbitMQ', async () => {
       const request = await rideRequestService.createRideRequest('client_1', 'idem_1', createDto);

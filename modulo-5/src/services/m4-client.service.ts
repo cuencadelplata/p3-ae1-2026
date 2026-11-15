@@ -7,6 +7,22 @@ import {
 } from '../types/ride-request.types';
 
 /**
+ * Error explícito para fallos de comunicación o respuesta del Módulo 4 (RNF-05 / AE2 p.11).
+ * Permite distinguir consistentemente entre un fallo de conexión/servicio y la ausencia legítima de conductores (RF-5.7).
+ */
+export class M4IntegrationError extends Error {
+  public code: string;
+  public statusCode: number;
+
+  constructor(message: string, code = 'M4_SERVICE_UNAVAILABLE', statusCode = 503) {
+    super(message);
+    this.name = 'M4IntegrationError';
+    this.code = code;
+    this.statusCode = statusCode;
+  }
+}
+
+/**
  * Cliente HTTP para integración con Módulo 4 (Ubicación y Gestión de Conductores)
  * RF-4.2 / RF-5.2: Búsqueda de conductores cercanos vía REST API
  */
@@ -52,6 +68,10 @@ export class M4ClientService {
     this.mockDrivers.clear();
   }
 
+  public hasMockDrivers(): boolean {
+    return this.mockDrivers.size > 0;
+  }
+
   /**
    * Consulta conductores cercanos a Módulo 4 mediante su endpoint oficial:
    * GET /api/v1/drivers/nearby?latitude=...&longitude=...&vehicleType=...&radiusKm=...&maxCandidates=...
@@ -86,30 +106,66 @@ export class M4ClientService {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s timeout
 
-      const response = await fetch(fullUrl, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json'
-        },
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
+      let response: Response;
+      try {
+        response = await fetch(fullUrl, {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json'
+          },
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!response.ok) {
         console.warn(`[M4ClientService] Error HTTP ${response.status} recibido de M4: ${response.statusText}`);
-        return this.getMockCandidates(latitude, longitude, vehicleType, radiusKm, maxCandidates);
+        if (this.mockDrivers.size > 0) {
+          return this.getMockCandidates(latitude, longitude, vehicleType, radiusKm, maxCandidates);
+        }
+        throw new M4IntegrationError(
+          `M4 respondió con error HTTP ${response.status}: ${response.statusText}`,
+          'M4_SERVICE_UNAVAILABLE',
+          response.status >= 500 ? 502 : response.status
+        );
       }
 
       const data = (await response.json()) as M4NearbyDriversResponse;
       if (!data || !Array.isArray(data.drivers)) {
         console.warn('[M4ClientService] Formato inesperado en respuesta de M4 (falta arreglo drivers):', data);
-        return [];
+        if (this.mockDrivers.size > 0) {
+          return this.getMockCandidates(latitude, longitude, vehicleType, radiusKm, maxCandidates);
+        }
+        throw new M4IntegrationError(
+          'Formato inesperado en respuesta de M4 (falta arreglo drivers)',
+          'M4_INVALID_RESPONSE',
+          502
+        );
       }
 
+      // Corrección RF-5.2 / CP-5.2-06:
+      // 1. Filtrar por disponibilidad, tipo de vehículo y frescura de ubicación (no vieja / no expirada)
+      // 2. Filtrar por distancia <= radio elegido
+      // 3. Ordenar ascendentemente por distancia ANTES de limitar (CP-5.2-04)
+      // 4. Aplicar límite (maxCandidates)
+      const now = Date.now();
       return data.drivers
-        .filter((d) => d.available === true && d.vehicleType === vehicleType)
-        .slice(0, maxCandidates)
+        .filter((d) => {
+          if (d.available !== true) return false;
+          if (d.vehicleType !== vehicleType) return false;
+
+          // CP-5.2-06: Descartar ubicaciones viejas / expiradas
+          // Si M4 envía expiresAt, debe ser posterior al momento actual
+          if (d.expiresAt && new Date(d.expiresAt).getTime() < now) {
+            return false;
+          }
+          // Si M4 envía updatedAt pero no expiresAt, consideramos vieja una ubicación > 5 minutos (300.000 ms)
+          if (d.updatedAt && !d.expiresAt && now - new Date(d.updatedAt).getTime() > 5 * 60 * 1000) {
+            return false;
+          }
+          return true;
+        })
         .map((d) => {
           const distanceKm =
             typeof d.distanceKm === 'number'
@@ -124,10 +180,38 @@ export class M4ClientService {
             longitude: d.longitude,
             rating: d.rating ?? 4.8
           };
-        });
+        })
+        .filter((d) => d.distanceKm <= radiusKm)
+        .sort((a, b) => a.distanceKm - b.distanceKm)
+        .slice(0, maxCandidates);
     } catch (err: any) {
-      // Fallback transparente si M4 no está levantado (entorno de pruebas o dev desconectado)
-      return this.getMockCandidates(latitude, longitude, vehicleType, radiusKm, maxCandidates);
+      if (err instanceof M4IntegrationError) {
+        throw err;
+      }
+
+      // Demora / timeout de M4
+      if (err.name === 'AbortError' || err.code === 'ABORT_ERR' || err.message?.toLowerCase().includes('aborted')) {
+        console.error('[M4ClientService] Timeout al consultar M4 (demora excesiva > 3000ms)');
+        throw new M4IntegrationError(
+          'Tiempo de espera agotado al consultar servicio de conductores M4 (timeout)',
+          'M4_GATEWAY_TIMEOUT',
+          504
+        );
+      }
+
+      // Simulación declarada aprobada en memoria (cuando hay mocks sembrados)
+      if (this.mockDrivers.size > 0) {
+        console.warn(`[M4ClientService] M4 no disponible, usando simulación declarada aprobada para tests: ${err.message}`);
+        return this.getMockCandidates(latitude, longitude, vehicleType, radiusKm, maxCandidates);
+      }
+
+      // Caída / fallo de red
+      console.error(`[M4ClientService] Error de conexión con M4: ${err.message}`);
+      throw new M4IntegrationError(
+        `Fallo de conexión con servicio M4: ${err.message}`,
+        'M4_CONNECTION_FAILED',
+        503
+      );
     }
   }
 
@@ -143,10 +227,19 @@ export class M4ClientService {
   ): NearbyDriverStub[] {
     if (this.mockDrivers.size > 0) {
       const candidates: NearbyDriverStub[] = [];
+      const now = Date.now();
 
       for (const driver of this.mockDrivers.values()) {
         if (driver.available !== true) continue;
         if (driver.vehicleType !== vehicleType) continue;
+
+        // CP-5.2-06: Descartar ubicaciones viejas / expiradas en simulación
+        if (driver.expiresAt && new Date(driver.expiresAt).getTime() < now) {
+          continue;
+        }
+        if (driver.updatedAt && !driver.expiresAt && now - new Date(driver.updatedAt).getTime() > 5 * 60 * 1000) {
+          continue;
+        }
 
         const distance =
           typeof driver.distanceKm === 'number' && driver.distanceKm > 0

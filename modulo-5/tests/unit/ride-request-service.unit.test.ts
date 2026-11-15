@@ -1,5 +1,7 @@
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { RideRequestService, ConflictError, NotFoundError, ValidationError } from '../../src/services/ride-request.service';
 import { CreateRideRequestDTO } from '../../src/types/ride-request.types';
+import { M4ClientService } from '../../src/services/m4-client.service';
 
 /**
  * Tests Unitarios — RideRequestService
@@ -9,6 +11,7 @@ import { CreateRideRequestDTO } from '../../src/types/ride-request.types';
  */
 describe('RideRequestService', () => {
   let service: RideRequestService;
+  let m4Client: M4ClientService;
 
   const validDTO: CreateRideRequestDTO = {
     origin: { latitude: -34.6037, longitude: -58.3816, address: 'Av. 9 de Julio y Corrientes (Obelisco)' },
@@ -17,7 +20,21 @@ describe('RideRequestService', () => {
   };
 
   beforeEach(() => {
-    service = new RideRequestService();
+    // Corrección RF-5.2: Se usan mocks sembrados explícitamente (aprobados) en vez de fallback silencioso
+    m4Client = new M4ClientService();
+    m4Client.seedMockDrivers([
+      { driverId: 'drv_101', latitude: -34.604, longitude: -58.382, vehicleType: 'AUTO', available: true, distanceKm: 1.2, rating: 4.8 },
+      { driverId: 'drv_102', latitude: -34.607, longitude: -58.385, vehicleType: 'AUTO', available: true, distanceKm: 2.1, rating: 4.7 },
+      { driverId: 'drv_201', latitude: -34.604, longitude: -58.382, vehicleType: 'MOTO', available: true, distanceKm: 1.5, rating: 4.6 },
+    ]);
+    process.env.M4_MOCK = 'true';
+    service = new RideRequestService(undefined, undefined, m4Client);
+  });
+
+  afterEach(() => {
+    delete process.env.M4_MOCK;
+    m4Client.clearMockDrivers();
+    service.stopExpirationWorker();
   });
 
   // ==========================================================================
@@ -155,26 +172,58 @@ describe('RideRequestService', () => {
   });
 
   // ==========================================================================
-  //  RF-5.3: Oferta con vencimiento
+  //  RF-5.3: Oferta con vencimiento (Matriz de cátedra CP-5.3-01 a 03)
   // ==========================================================================
   describe('RF-5.3 — sendOffersForRequest', () => {
-    it('debe crear ofertas con TTL para conductores candidatos', async () => {
+    it('CP-5.3-01: Sobre una solicitud vigente, enviar una oferta a un conductor válido -> Crea oferta con vencimiento', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+      const result = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101'],
+        ttlSeconds: 30,
+      });
+
+      expect(result.requestId).toBe(request.id);
+      expect(result.offersSentCount).toBe(1);
+      const offer = result.offers[0];
+      expect(offer.driverId).toBe('drv_101');
+      expect(offer.status).toBe('PENDING');
+      expect(offer.ttlSeconds).toBe(30);
+      expect(new Date(offer.expiresAt).getTime()).toBeGreaterThan(Date.now());
+    });
+
+    it('CP-5.3-02: Sobre una solicitud vigente, enviar ofertas a dos conductores válidos -> Cada uno recibe su propia oferta para la misma solicitud', async () => {
       const request = await service.createRideRequest('client_1', 'key_1', validDTO);
       const result = await service.sendOffersForRequest(request.id, 'client_1', {
         driverIds: ['drv_101', 'drv_102'],
         ttlSeconds: 30,
       });
 
-      expect(result.requestId).toBe(request.id);
       expect(result.offersSentCount).toBe(2);
-      expect(result.offers).toHaveLength(2);
+      expect(result.offers[0].requestId).toBe(request.id);
+      expect(result.offers[1].requestId).toBe(request.id);
+      expect(result.offers[0].driverId).toBe('drv_101');
+      expect(result.offers[1].driverId).toBe('drv_102');
+      expect(result.offers[0].id).not.toBe(result.offers[1].id);
+    });
 
-      result.offers.forEach((offer) => {
-        expect(offer.status).toBe('PENDING');
-        expect(offer.ttlSeconds).toBe(30);
-        expect(offer.driverId).toBeDefined();
-        expect(new Date(offer.expiresAt).getTime()).toBeGreaterThan(Date.now());
+    it('CP-5.3-03: Intentar ofertar a un ID de conductor que M3/M4 no reconoce como candidato válido -> No se crea ni envía oferta a ese destinatario', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+
+      // Conductor inexistente/no reconocido
+      await expect(
+        service.sendOffersForRequest(request.id, 'client_1', {
+          driverIds: ['drv_desconocido_no_valido'],
+          ttlSeconds: 30,
+        })
+      ).rejects.toThrow(NotFoundError);
+
+      // Si se envía uno válido y uno inválido, solo se crea para el válido
+      const mixed = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101', 'drv_desconocido_no_valido'],
+        ttlSeconds: 30,
       });
+      expect(mixed.offersSentCount).toBe(1);
+      expect(mixed.offers[0].driverId).toBe('drv_101');
     });
 
     it('debe transicionar el estado de la solicitud a OFFERED', async () => {
@@ -209,6 +258,103 @@ describe('RideRequestService', () => {
 
       await expect(
         service.sendOffersForRequest(request.id, 'client_1', { driverIds: ['drv_101'] })
+      ).rejects.toThrow(ConflictError);
+    });
+
+    // ---- Correcciones RF-5.3 ----
+
+    it('debe rechazar driverIds explícitos que no son elegibles/disponibles en M4 (Fix 1)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+
+      // 'drv_fantasma' no existe en los mocks sembrados → debe ser descartado
+      // Si todos son inválidos, lanza NotFoundError (NO_DRIVERS_AVAILABLE)
+      await expect(
+        service.sendOffersForRequest(request.id, 'client_1', {
+          driverIds: ['drv_fantasma', 'drv_inexistente'],
+          ttlSeconds: 30,
+        })
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it('debe filtrar driverIds no elegibles y crear ofertas solo para los válidos (Fix 1)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+
+      // 'drv_101' existe y es elegible, 'drv_fantasma' no
+      const result = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101', 'drv_fantasma'],
+        ttlSeconds: 30,
+      });
+
+      expect(result.offersSentCount).toBe(1);
+      expect(result.offers[0].driverId).toBe('drv_101');
+    });
+
+    it('no debe generar ofertas para solicitud cuyo plazo expiró (Fix 2 — RNF-09)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+
+      // Forzar expiración manipulando el expiresAt en el pasado
+      const storedRequest = await service.getRideRequestById(request.id, 'client_1');
+      (storedRequest as any).expiresAt = new Date(Date.now() - 1000).toISOString();
+
+      await expect(
+        service.sendOffersForRequest(request.id, 'client_1', {
+          driverIds: ['drv_101'],
+          ttlSeconds: 30,
+        })
+      ).rejects.toThrow(ConflictError);
+
+      // Verificar que el estado pasó a EXPIRED
+      const updated = await service.getRideRequestById(request.id, 'client_1');
+      expect(updated.status).toBe('EXPIRED');
+    });
+
+    it('debe deduplicar driverIds repetidos y crear una sola oferta por conductor (Fix 3)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+
+      const result = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101', 'drv_101', 'drv_101'],
+        ttlSeconds: 30,
+      });
+
+      // Solo 1 oferta aunque se pasó 3 veces el mismo ID
+      expect(result.offersSentCount).toBe(1);
+      expect(result.offers[0].driverId).toBe('drv_101');
+    });
+
+    it('no debe crear ofertas duplicadas si el conductor ya tiene oferta PENDING (Fix 3)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+
+      // Primer envío: drv_101 recibe oferta
+      await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101'],
+        ttlSeconds: 60,
+      });
+
+      // Segundo envío: drv_101 ya tiene oferta PENDING → debe ser descartado
+      // Solo drv_102 debería recibir oferta nueva
+      const result2 = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101', 'drv_102'],
+        ttlSeconds: 60,
+      });
+
+      expect(result2.offersSentCount).toBe(1);
+      expect(result2.offers[0].driverId).toBe('drv_102');
+    });
+
+    it('debe lanzar DUPLICATE_OFFERS si todos los driverIds ya tienen oferta PENDING (Fix 3)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+
+      await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101', 'drv_102'],
+        ttlSeconds: 60,
+      });
+
+      // Segundo envío con los mismos IDs → todos ya tienen PENDING
+      await expect(
+        service.sendOffersForRequest(request.id, 'client_1', {
+          driverIds: ['drv_101', 'drv_102'],
+          ttlSeconds: 60,
+        })
       ).rejects.toThrow(ConflictError);
     });
   });
@@ -439,15 +585,39 @@ describe('RideRequestService', () => {
   });
 
   // ==========================================================================
-  //  RF-5.7: Sin disponibilidad
+  //  RF-5.7: Sin disponibilidad y ciclo de tandas
   // ==========================================================================
-  describe('RF-5.7 — Sin disponibilidad', () => {
-    it('cuando todos los conductores rechazan, el estado vuelve a NO_DRIVERS_AVAILABLE', async () => {
+  describe('RF-5.7 — Sin disponibilidad y ciclo de tandas', () => {
+    it('cuando todos los conductores rechazan y aún hay plazo de búsqueda, regresa a SEARCHING para nueva ronda', async () => {
       const request = await service.createRideRequest('client_1', 'key_1', validDTO);
       const offers = await service.sendOffersForRequest(request.id, 'client_1', {
         driverIds: ['drv_101', 'drv_102'],
         ttlSeconds: 60,
       });
+
+      // Rechazar todas las ofertas de la tanda
+      for (const offer of offers.offers) {
+        await service.respondToOffer(offer.id, offer.driverId, {
+          action: 'REJECT',
+          driverId: offer.driverId,
+        });
+      }
+
+      const updated = await service.getRideRequestById(request.id, 'client_1');
+      // Corrección RF-5.3/5.7: No cerrar toda la búsqueda por vencer una tanda si el plazo de búsqueda sigue vigente
+      expect(updated.status).toBe('SEARCHING');
+    });
+
+    it('cuando todos los conductores rechazan y el plazo de búsqueda expiró, pasa a EXPIRED (RF-5.8 timeout)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+      const offers = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101', 'drv_102'],
+        ttlSeconds: 60,
+      });
+
+      // Forzar que el plazo de búsqueda (expiresAt) ya venció
+      const storedReq = await service.getRideRequestById(request.id, 'client_1');
+      (storedReq as any).expiresAt = new Date(Date.now() - 1000).toISOString();
 
       // Rechazar todas las ofertas
       for (const offer of offers.offers) {
@@ -458,7 +628,11 @@ describe('RideRequestService', () => {
       }
 
       const updated = await service.getRideRequestById(request.id, 'client_1');
-      expect(updated.status).toBe('NO_DRIVERS_AVAILABLE');
+      expect(updated.status).toBe('EXPIRED');
+
+      // Trazabilidad de timeout registrada
+      const audit = service.getOfferAuditLog(request.id);
+      expect(audit.some((e) => e.event === 'SEARCH_TIMEOUT')).toBe(true);
     });
   });
 
@@ -515,6 +689,120 @@ describe('RideRequestService', () => {
 
     it('debe lanzar NotFoundError para oferta inexistente', async () => {
       await expect(service.getOfferById('nonexistent')).rejects.toThrow(NotFoundError);
+    });
+
+    // ========================================================================
+    //  RF-5.3 / RF-5.8: Casos solicitados por cátedra (Trazabilidad, Timeout, Reinicios)
+    // ========================================================================
+    it('debe vencer tanda sin consultas y permitir nueva ronda (reinicio) si plazo está vigente', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+      const batch1 = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101'],
+        ttlSeconds: 15,
+      });
+
+      // Simular vencimiento de oferta sin respuesta del conductor (vencimiento sin consultas)
+      const offer = await service.getOfferById(batch1.offers[0].id);
+      (offer as any).expiresAt = new Date(Date.now() - 1000).toISOString();
+
+      // Consulta de ofertas detona lazy expiration y verificación de tanda
+      const offersAfter = await service.getOffersByRequestId(request.id, 'client_1');
+      expect(offersAfter[0].status).toBe('EXPIRED');
+
+      // Solicitud regresa a SEARCHING porque plazo de búsqueda sigue vigente
+      const updatedReq = await service.getRideRequestById(request.id, 'client_1');
+      expect(updatedReq.status).toBe('SEARCHING');
+
+      // Trazabilidad registra BATCH_TIMEOUT
+      const audit = service.getOfferAuditLog(request.id);
+      expect(audit.some((e) => e.event === 'BATCH_TIMEOUT')).toBe(true);
+
+      // Ahora se puede emitir una nueva ronda (reinicio de ofertas) con otro candidato
+      const batch2 = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_102'],
+        ttlSeconds: 30,
+      });
+      expect(batch2.offersSentCount).toBe(1);
+      expect(batch2.offers[0].driverId).toBe('drv_102');
+      const reqInBatch2 = await service.getRideRequestById(request.id, 'client_1');
+      expect(reqInBatch2.status).toBe('OFFERED');
+    });
+
+    it('debe permitir aceptar oferta cerca del límite de expiración (RF-5.4 coordinación con RF-5.3)', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+      const batch = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101'],
+        ttlSeconds: 30,
+      });
+      const offerId = batch.offers[0].id;
+
+      // Oferta configurada con 500ms restantes antes del límite
+      const offer = await service.getOfferById(offerId);
+      (offer as any).expiresAt = new Date(Date.now() + 500).toISOString();
+
+      // Aceptación antes del límite exacto debe proceder correctamente
+      const res = await service.respondToOffer(offerId, 'drv_101', {
+        action: 'ACCEPT',
+        driverId: 'drv_101',
+      });
+      expect(res.status).toBe('ACCEPTED');
+      expect(res.requestStatus).toBe('ASSIGNED');
+
+      // Registro de trazabilidad
+      const audit = service.getOfferAuditLog(request.id);
+      expect(audit.some((e) => e.event === 'OFFER_ACCEPTED')).toBe(true);
+    });
+
+    it('debe rechazar aceptación si el límite exacto ya fue superado por milisegundos', async () => {
+      const request = await service.createRideRequest('client_1', 'key_1', validDTO);
+      const batch = await service.sendOffersForRequest(request.id, 'client_1', {
+        driverIds: ['drv_101'],
+        ttlSeconds: 30,
+      });
+      const offerId = batch.offers[0].id;
+
+      // Forzar que el límite acaba de expirar (10ms en el pasado)
+      const offer = await service.getOfferById(offerId);
+      (offer as any).expiresAt = new Date(Date.now() - 10).toISOString();
+
+      await expect(
+        service.respondToOffer(offerId, 'drv_101', {
+          action: 'ACCEPT',
+          driverId: 'drv_101',
+        })
+      ).rejects.toThrow(ConflictError);
+
+      const audit = service.getOfferAuditLog(request.id);
+      expect(audit.some((e) => e.event === 'OFFER_EXPIRED')).toBe(true);
+    });
+
+    it('RF-5.3: El worker en segundo plano debe expirar ofertas y cerrar búsquedas automáticamente sin necesidad de consultas ni respuestas', async () => {
+      const request = await service.createRideRequest('client_worker', 'key_worker', validDTO);
+      const batch = await service.sendOffersForRequest(request.id, 'client_worker', {
+        driverIds: ['drv_101'],
+        ttlSeconds: 30,
+      });
+      const offerId = batch.offers[0].id;
+
+      // Manipulamos el expiresAt de la oferta directamente en el almacén de ofertas para simular que pasó el tiempo sin ninguna consulta
+      const offer = (service as any).offers.get(offerId);
+      offer.expiresAt = new Date(Date.now() - 1000).toISOString();
+
+      // Corremos el ciclo activo de vencimiento autónomo (o esperamos el tick del worker)
+      service.processActiveExpirations();
+
+      // Verificamos que la oferta se expiró autónomamente
+      const updatedOffer = (service as any).offers.get(offerId);
+      expect(updatedOffer.status).toBe('EXPIRED');
+
+      // Verificamos que la solicitud regresó a SEARCHING para permitir nueva ronda
+      const updatedReq = (service as any).requests.get(request.id);
+      expect(updatedReq.status).toBe('SEARCHING');
+
+      // Verificamos que el log de auditoría registró el vencimiento autónomo
+      const audit = service.getOfferAuditLog(request.id);
+      expect(audit.some((e) => e.event === 'OFFER_EXPIRED')).toBe(true);
+      expect(audit.some((e) => e.event === 'BATCH_TIMEOUT')).toBe(true);
     });
   });
 });

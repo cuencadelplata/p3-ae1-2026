@@ -76,6 +76,7 @@ export class RabbitMQService {
   // Suscriptor para reapertura de despacho ante cancelación de conductor
   private reopenDispatchSubscriber: ((event: DriverCancellationEvent) => Promise<void>) | null = null;
   private cancelledRequestsSubscriber: ((event: RideRequestCancelledEvent) => Promise<void>) | null = null;
+  private offerCreatedSubscriber: ((event: OfferCreatedEvent) => Promise<void> | void) | null = null;
 
   // Buffer de eventos emitidos en memoria para auditoría, tests y modo degradado
   private publishedEventsBuffer: any[] = [];
@@ -192,6 +193,41 @@ export class RabbitMQService {
     }
   }
 
+  /**
+   * Suscribe un consumidor a la cola dispatch.offers (CP-5.3-14)
+   * Permite evidenciar recepción de mensajes de ofertas tanto en modo simulado como en RabbitMQ real.
+   */
+  public async subscribeToOfferCreated(
+    callback: (event: OfferCreatedEvent) => Promise<void> | void
+  ): Promise<void> {
+    this.offerCreatedSubscriber = callback;
+
+    if (this.isConnected && this.channel) {
+      try {
+        await this.channel.assertQueue(RabbitMQService.QUEUE_OFFERS, { durable: true });
+        await this.channel.consume(RabbitMQService.QUEUE_OFFERS, async (msg) => {
+          if (!msg) return;
+          try {
+            const content = JSON.parse(msg.content.toString()) as OfferCreatedEvent;
+            if (this.offerCreatedSubscriber) {
+              await this.offerCreatedSubscriber(content);
+            }
+            this.channel?.ack(msg);
+          } catch (err) {
+            console.warn(`[RabbitMQService] Error consumiendo mensaje de ${RabbitMQService.QUEUE_OFFERS}:`, err);
+            this.channel?.nack(msg, false, false);
+          }
+        });
+        console.log(`[RabbitMQService] Consumidor activo escuchando cola '${RabbitMQService.QUEUE_OFFERS}'`);
+      } catch (err) {
+        console.warn(`[RabbitMQService] Error registrando consumidor en ${RabbitMQService.QUEUE_OFFERS}: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  /**
+   * Registra un callback para procesar cancelaciones de chofer y reabrir despacho
+   */
   public async subscribeToReopenDispatch(
     callback: (event: DriverCancellationEvent) => Promise<void>
   ): Promise<void> {
@@ -348,7 +384,15 @@ export class RabbitMQService {
   }
 
   public async publishOfferCreated(event: OfferCreatedEvent): Promise<boolean> {
-    return this.publishToQueue(RabbitMQService.QUEUE_OFFERS, event);
+    const sent = await this.publishToQueue(RabbitMQService.QUEUE_OFFERS, event);
+    if (this.offerCreatedSubscriber) {
+      try {
+        await this.offerCreatedSubscriber(event);
+      } catch (err) {
+        console.warn('[RabbitMQService] Error en suscriptor de oferta creada:', err);
+      }
+    }
+    return sent;
   }
 
   public async publishTripAssigned(payload: TripAssignedEventPayload): Promise<boolean> {
