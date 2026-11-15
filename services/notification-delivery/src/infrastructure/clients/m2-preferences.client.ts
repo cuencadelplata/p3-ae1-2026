@@ -4,6 +4,16 @@ export interface M2PreferencesClient {
   getPreferences(userId: number, correlationId: string): Promise<UserPreferences>;
 }
 
+export class M2PreferencesError extends Error {
+  constructor(
+    public readonly code: 'CUSTOMER_NOT_FOUND' | 'CONFIGURATION' | 'UNAVAILABLE',
+    message: string,
+  ) {
+    super(`[M2_CLIENT_ERROR] ${message}`);
+    this.name = 'M2PreferencesError';
+  }
+}
+
 export class HttpM2PreferencesClient implements M2PreferencesClient {
   constructor(
     private readonly baseUrl: string,
@@ -28,10 +38,17 @@ export class HttpM2PreferencesClient implements M2PreferencesClient {
 
       if (!response.ok) {
         if (response.status === 404) {
-          // Si el usuario no tiene preferencias explicitas en M2, por defecto asumimos activadas
-          return { userId, notificationsEnabled: true, pushEnabled: true };
+          const body: unknown = await response.json().catch(() => null);
+          const errorCode = body && typeof body === 'object' && 'error' in body ? body.error : undefined;
+          if (errorCode === 'CustomerNotFound') {
+            throw new M2PreferencesError('CUSTOMER_NOT_FOUND', `El usuario ${userId} no tiene perfil de cliente en M2.`);
+          }
+          throw new M2PreferencesError('CONFIGURATION', `M2 devolvió 404 ${String(errorCode ?? 'sin código')} para ${url}.`);
         }
-        throw new Error(`M2 retornó error HTTP ${response.status}: ${response.statusText}`);
+        throw new M2PreferencesError(
+          response.status === 503 ? 'UNAVAILABLE' : 'CONFIGURATION',
+          `M2 retornó error HTTP ${response.status}: ${response.statusText}`,
+        );
       }
 
       const body = (await response.json()) as {
@@ -45,7 +62,11 @@ export class HttpM2PreferencesClient implements M2PreferencesClient {
         typeof data.notificationsEnabled !== 'boolean' ||
         typeof data.pushEnabled !== 'boolean'
       ) {
-        throw new Error('M2 respondió preferencias con un formato inválido.');
+        throw new M2PreferencesError('CONFIGURATION', 'M2 respondió preferencias con un formato inválido.');
+      }
+
+      if ('userId' in data && data.userId !== userId) {
+        throw new M2PreferencesError('CONFIGURATION', 'M2 respondió preferencias de otro usuario.');
       }
 
       return {
@@ -54,8 +75,9 @@ export class HttpM2PreferencesClient implements M2PreferencesClient {
         pushEnabled: data.pushEnabled,
       };
     } catch (err: unknown) {
+      if (err instanceof M2PreferencesError) throw err;
       const message = err instanceof Error ? err.message : 'Error desconocido al contactar M2';
-      throw new Error(`[M2_CLIENT_ERROR] Falla al consultar preferencias de ${userId}: ${message}`);
+      throw new M2PreferencesError('UNAVAILABLE', `Falla al consultar preferencias de ${userId}: ${message}`);
     } finally {
       clearTimeout(timeout);
     }

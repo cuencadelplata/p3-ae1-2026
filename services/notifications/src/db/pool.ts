@@ -7,10 +7,16 @@ export function createNotificationsPool(databaseUrl: string | undefined): Pool {
     throw new NotificationPersistenceError("NOTIFICATIONS_DATABASE_URL debe estar configurada.");
   }
 
-  return new Pool({
+  const pool = new Pool({
     connectionString: databaseUrl,
     max: 10,
     connectionTimeoutMillis: 5_000,
     allowExitOnIdle: true,
   });
+  // pg emite 'error' cuando una conexión inactiva se corta (por ejemplo, al
+  // detener PostgreSQL). Sin listener, Node termina todo el proceso M8.
+  pool.on("error", (error: Error) => {
+    console.warn("[Notifications] Conexión inactiva de PostgreSQL interrumpida; se reintentará.", error.message);
+  });
+  return pool;
 }

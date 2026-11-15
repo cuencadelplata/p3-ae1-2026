@@ -4,7 +4,8 @@ export type DeliveryEventType =
   | 'DRIVER_ARRIVED'
   | 'TRIP_STARTED'
   | 'TRIP_CANCELLED'
-  | 'TRIP_COMPLETED';
+  | 'TRIP_COMPLETED'
+  | 'DRIVER_DOCUMENT_REGISTERED';
 
 export type DeliveryChannel = 'PUSH';
 
@@ -15,6 +16,7 @@ export type DeliveryStatus =
   | 'DELIVERED'
   | 'FAILED'
   | 'SKIPPED_PREFERENCE_OFF'
+  | 'SKIPPED_NO_CUSTOMER_PROFILE'
   | 'FAILED_NO_DEVICE_TOKEN';
 
 export type AttemptStatus = 'SUCCESS' | 'FAILED';
@@ -30,7 +32,8 @@ export interface InboxClaimResult {
 
 export interface NotificationRequestedData {
   notificationId: string;
-  tripId: string;
+  tripId?: string;
+  rideRequestId?: string;
   recipientId: number; // Corresponde al userId canónico numérico de M1 (BIGINT >= 1)
   eventType: DeliveryEventType;
   channel: DeliveryChannel;
@@ -65,7 +68,7 @@ export interface DeliveryRequest {
   deliveryId: string;
   notificationId: string;
   messageId: string;
-  tripId: string;
+  tripId?: string;
   userId: number;
   eventType: DeliveryEventType;
   channel: DeliveryChannel;
@@ -95,7 +98,7 @@ export interface DeliveryWithAttempts extends DeliveryRequest {
 
 export interface PushSendRequest {
   notificationId: string;
-  tripId: string;
+  tripId?: string;
   recipientId: number;
   deviceToken: string;
   title: string;
@@ -122,7 +125,7 @@ export interface UserPreferences {
 export interface DeliveryProcessingResult {
   messageId: string;
   notificationId: string;
-  actionTaken: 'DELIVERED' | 'SKIPPED_PREFERENCE_OFF' | 'FAILED' | 'ACK_DUPLICATE' | 'IGNORED_LEASE_ACTIVE';
+  actionTaken: 'DELIVERED' | 'SKIPPED_PREFERENCE_OFF' | 'SKIPPED_NO_CUSTOMER_PROFILE' | 'FAILED' | 'ACK_DUPLICATE' | 'IGNORED_LEASE_ACTIVE';
   status: DeliveryStatus | 'ALREADY_PROCESSED';
   attemptsCount: number;
   deliveredAt?: string;

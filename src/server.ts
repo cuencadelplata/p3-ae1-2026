@@ -1,11 +1,13 @@
 import type { Server } from 'node:http';
 
 import { createM8Application } from './app.js';
+import { validateM8RuntimeConfig } from './runtime-config.js';
 
 const configuredPort = Number(process.env.PORT);
 const port = Number.isInteger(configuredPort) && configuredPort > 0 ? configuredPort : 3000;
 
 async function bootstrap(): Promise<void> {
+  validateM8RuntimeConfig();
   const application = await createM8Application();
   const server = application.app.listen(port, () => {
     console.log(`[M8] Aplicación única escuchando en el puerto ${port}`);

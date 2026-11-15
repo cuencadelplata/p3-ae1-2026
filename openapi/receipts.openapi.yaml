@@ -24,8 +24,8 @@ info:
   contact:
     name: Grupo 14 - M8 Comprobantes
 servers:
-  - url: http://localhost:3008/api/v1
-    description: Servidor Local de Desarrollo
+  - url: http://localhost:3000/api/v1
+    description: Aplicación única de M8
   - url: /api/v1
     description: Servidor relativo
 
@@ -464,7 +464,7 @@ paths:
 
   /health/live:
     servers:
-      - url: http://localhost:3008
+      - url: http://localhost:3000
         description: Los health checks se exponen en la raiz, fuera del prefijo /api/v1
       - url: /
         description: Servidor relativo
@@ -487,7 +487,7 @@ paths:
 
   /health/ready:
     servers:
-      - url: http://localhost:3008
+      - url: http://localhost:3000
         description: Los health checks se exponen en la raiz, fuera del prefijo /api/v1
       - url: /
         description: Servidor relativo
@@ -537,7 +537,7 @@ paths:
 
   /health:
     servers:
-      - url: http://localhost:3008
+      - url: http://localhost:3000
         description: Los health checks se exponen en la raiz, fuera del prefijo /api/v1
       - url: /
         description: Servidor relativo
