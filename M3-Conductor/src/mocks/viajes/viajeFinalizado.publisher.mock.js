@@ -39,7 +39,7 @@ async function publicarViajeFinalizadoMock() {
 
     data: {
       viajeId:
-        "viaje-001",
+        `viaje-${Date.now()}`,
 
       conductorId:
         "conductor-001",

@@ -295,7 +295,26 @@
         "/conductores/": {
           "post": {
             "summary": "Crear un nuevo conductor",
-            "requestBody": { "required": true },
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "required": ["usuarioID"],
+                    "properties": {
+                      "usuarioID": { "type": "string", "example": "usr_9988" },
+                      "ciudad": { "type": "string", "example": "Corrientes" },
+                      "tipovehiculo": { "type": "string", "example": "auto" },
+                      "licenciaId": { "type": "string", "example": "lic_ar_4589" },
+                      "vehiculoId": { "type": "string", "example": "veh_cor_123" },
+                      "habilitado": { "type": "string", "example": "pendiente" },
+                      "estado_conexion": { "type": "string", "example": "desconectado" }
+                    }
+                  }
+                }
+              }
+            },
             "responses": {
               "201": { "description": "Conductor creado exitosamente" },
               "400": { "description": "Solicitud inválida" }
@@ -318,7 +337,23 @@
             "parameters": [
               { "name": "usuarioId", "in": "query", "required": true, "description": "ID del conductor para registrar su valoracion" }
             ],
-            "requestBody": { "required": true },
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "required": ["usuarioId", "valoracion"],
+                    "properties": {
+                      "usuarioId": { "type": "string", "example": "pasajero_3321" },
+                      "conductorId": { "type": "string", "example": "usr_9988" },
+                      "valoracion": { "type": "number", "minimum": 1, "maximum": 5, "example": 5 },
+                      "comentario": { "type": "string", "example": "Excelente viaje, conductor puntual y muy amable." }
+                    }
+                  }
+                }
+              }
+            },
             "responses": {
               "201": { "description": "Valoracion registrada correctamente" },
               "400": { "description": "Solicitud inválida" }
