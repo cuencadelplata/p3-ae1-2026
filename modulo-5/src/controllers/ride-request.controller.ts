@@ -17,6 +17,10 @@ export class RideRequestController {
    * En tests/demo: fallback a headers x-user-id o x-client-id.
    */
   private extractClientId(req: Request): string {
+    // Si la ruta pasó por el middleware de autenticación, la identidad validada es la fuente
+    if (req.auth?.userId) {
+      return req.auth.userId;
+    }
     if (req.authenticatedUser?.userId !== undefined) {
       return req.authenticatedUser.userId.toString();
     }

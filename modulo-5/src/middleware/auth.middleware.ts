@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 const M1_BASE_URL = process.env.M1_AUTH_URL || 'http://localhost:3001';
 const VALIDATE_ENDPOINT = `${M1_BASE_URL}/auth/validar-identidad-y-rol`;
@@ -8,26 +9,133 @@ export interface AuthenticatedUser {
   role: string;
 }
 
-// Augmentar el tipo Request de Express para incluir el usuario autenticado
+export interface AuthContext {
+  userId: string;
+  mode: 'jwt' | 'simulated';
+}
+
+// Augmentar el tipo Request de Express para incluir tanto authenticatedUser como auth
 declare global {
   namespace Express {
     interface Request {
       authenticatedUser?: AuthenticatedUser;
+      auth?: AuthContext;
     }
+  }
+}
+
+const base64urlToBuffer = (value: string): Buffer => Buffer.from(value, 'base64url');
+
+function unauthorized(res: Response, code: string, message: string, status = 401): void {
+  if (status === 401) {
+    res.setHeader('WWW-Authenticate', 'Bearer');
+  }
+  res.status(status).json({ code, message, timestamp: new Date().toISOString() });
+}
+
+/**
+ * Verifica un JWT HS256 (RNF-10). Devuelve el `sub` si es válido o lanza Error con un motivo.
+ */
+export function verifyJwt(token: string, secret: string, nowSeconds = Math.floor(Date.now() / 1000)): string {
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    throw new Error('Formato de token inválido');
+  }
+  const [headerB64, payloadB64, signatureB64] = parts;
+
+  let header: { alg?: string; typ?: string };
+  let payload: { sub?: unknown; userId?: unknown; exp?: number; nbf?: number };
+  try {
+    header = JSON.parse(base64urlToBuffer(headerB64).toString('utf8'));
+    payload = JSON.parse(base64urlToBuffer(payloadB64).toString('utf8'));
+  } catch {
+    throw new Error('Token ilegible');
+  }
+
+  // Solo HS256: rechaza "none" y cualquier otro algoritmo
+  if (header.alg !== 'HS256') {
+    throw new Error('Algoritmo no permitido');
+  }
+
+  const expected = createHmac('sha256', secret).update(`${headerB64}.${payloadB64}`).digest();
+  const received = base64urlToBuffer(signatureB64);
+  if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
+    throw new Error('Firma inválida');
+  }
+
+  if (typeof payload.exp !== 'number') {
+    throw new Error('El token no tiene vencimiento (exp)');
+  }
+  if (payload.exp <= nowSeconds) {
+    throw new Error('Token vencido');
+  }
+  if (typeof payload.nbf === 'number' && payload.nbf > nowSeconds) {
+    throw new Error('Token todavía no válido');
+  }
+
+  const subject = payload.sub ?? payload.userId;
+  if (subject === undefined || subject === null || String(subject).trim() === '') {
+    throw new Error('El token no identifica al usuario (sub)');
+  }
+  return String(subject);
+}
+
+let warnedSimulated = false;
+
+/**
+ * Middleware de autenticación para rutas de RF-5.1 (creación y consulta de viaje).
+ * Soporta modo JWT estricto (por defecto) y modo simulado para tests.
+ */
+export function authenticate(req: Request, res: Response, next: NextFunction): void {
+  const mode = (process.env.AUTH_MODE || 'jwt').toLowerCase();
+
+  if (mode === 'simulated') {
+    if (!warnedSimulated && process.env.NODE_ENV !== 'test') {
+      warnedSimulated = true;
+      console.warn('[M5][AUTH] AUTH_MODE=simulated: identidad SIMULADA por header x-user-id (no es seguridad real).');
+    }
+    const header = req.headers['x-user-id'] || req.headers['x-client-id'];
+    const userId = header?.toString().trim();
+    if (!userId) {
+      unauthorized(res, 'UNAUTHENTICATED', 'Falta la identidad del cliente (header x-user-id en modo simulado).');
+      return;
+    }
+    req.auth = { userId, mode: 'simulated' };
+    req.authenticatedUser = { userId, role: 'CLIENTE' };
+    next();
+    return;
+  }
+
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    unauthorized(res, 'AUTH_NOT_CONFIGURED', 'La autenticación no está configurada en el servicio (JWT_SECRET).', 503);
+    return;
+  }
+
+  const authorization = req.headers.authorization;
+  if (!authorization || !/^Bearer\s+\S+$/i.test(authorization)) {
+    unauthorized(res, 'UNAUTHENTICATED', "Se requiere el header 'Authorization: Bearer <token>'.");
+    return;
+  }
+
+  try {
+    const userId = verifyJwt(authorization.replace(/^Bearer\s+/i, ''), secret);
+    req.auth = { userId, mode: 'jwt' };
+    req.authenticatedUser = { userId, role: 'CLIENTE' };
+    next();
+  } catch (error) {
+    unauthorized(res, 'INVALID_TOKEN', (error as Error).message);
   }
 }
 
 /**
  * Llama a M1 para validar el token JWT y retorna { valid, userId, role }.
- * En modo test (NODE_ENV=test), se resuelve desde los headers de la request
- * para no depender del servicio externo.
  */
 async function validateTokenWithM1(
   authorizationHeader: string
 ): Promise<{ valid: boolean; userId: string; role: string } | null> {
-  // En entorno de test, simulamos la validación directamente
   if (process.env.NODE_ENV === 'test') {
-    return null; // Deja que el middleware de test-fallback se encargue
+    return null;
   }
 
   try {
@@ -51,10 +159,7 @@ async function validateTokenWithM1(
 }
 
 /**
- * Middleware de autenticación para rutas de CLIENTE.
- * Valida el JWT contra M1 y exige que el rol sea "CLIENTE" o cualquiera
- * (en M5 el cliente es quien crea/cancela la solicitud).
- * El userId canónico de M1 queda en req.authenticatedUser.
+ * Middleware de autenticación para rutas de CLIENTE delegadas a M1 (o fallback a authenticate).
  */
 export const requireAuth = async (
   req: Request,
@@ -63,13 +168,11 @@ export const requireAuth = async (
 ): Promise<void> => {
   const authHeader = req.headers['authorization'];
 
-  // Fallback en tests: acepta x-user-id como bypass
   if (process.env.NODE_ENV === 'test') {
     const testUserId = req.headers['x-user-id'] || req.headers['x-client-id'];
-    req.authenticatedUser = {
-      userId: testUserId ? testUserId.toString() : 'anonymous',
-      role: 'CLIENTE'
-    };
+    const userId = testUserId ? testUserId.toString() : 'anonymous';
+    req.authenticatedUser = { userId, role: 'CLIENTE' };
+    req.auth = { userId, mode: 'simulated' };
     return next();
   }
 
@@ -80,6 +183,18 @@ export const requireAuth = async (
       timestamp: new Date().toISOString()
     });
     return;
+  }
+
+  // Si JWT_SECRET está configurado y no M1_AUTH_URL, valida con verifyJwt
+  if (process.env.JWT_SECRET && !process.env.M1_AUTH_URL) {
+    try {
+      const userId = verifyJwt(authHeader.replace(/^Bearer\s+/i, ''), process.env.JWT_SECRET);
+      req.auth = { userId, mode: 'jwt' };
+      req.authenticatedUser = { userId, role: 'CLIENTE' };
+      return next();
+    } catch {
+      // Intentar fallback con M1 si existiese
+    }
   }
 
   const result = await validateTokenWithM1(authHeader);
@@ -94,13 +209,13 @@ export const requireAuth = async (
   }
 
   req.authenticatedUser = { userId: String(result.userId), role: result.role };
+  req.auth = { userId: String(result.userId), mode: 'jwt' };
   next();
 };
 
 /**
  * Middleware de autenticación para rutas de CONDUCTOR.
  * Valida el JWT contra M1 y exige que role === "CONDUCTOR".
- * El userId canónico de M1 es el identificador del conductor.
  */
 export const requireConductor = async (
   req: Request,
@@ -109,7 +224,6 @@ export const requireConductor = async (
 ): Promise<void> => {
   const authHeader = req.headers['authorization'];
 
-  // Fallback en tests: acepta x-driver-id o x-user-id como bypass
   if (process.env.NODE_ENV === 'test') {
     const testDriverId = req.headers['x-driver-id'] || req.headers['x-user-id'];
     req.authenticatedUser = {

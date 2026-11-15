@@ -14,6 +14,7 @@ const config: Config = {
       preset: 'ts-jest',
       testEnvironment: 'node',
       testMatch: ['<rootDir>/tests/integration/**/*.integration.test.ts'],
+      setupFiles: ['<rootDir>/tests/setup-auth-simulated.ts'],
       moduleFileExtensions: ['ts', 'js', 'json'],
     },
   ],

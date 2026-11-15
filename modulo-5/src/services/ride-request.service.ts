@@ -22,7 +22,7 @@ import { RideRequestValidator } from '../schemas/ride-request.schema';
 import { RedisService } from './redis.service';
 import { RabbitMQService } from './rabbitmq.service';
 import { M4ClientService } from './m4-client.service';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 export class ConflictError extends Error {
   public code: string;
@@ -60,6 +60,8 @@ export class ValidationError extends Error {
 export class RideRequestService {
   private requests: Map<string, RideRequest> = new Map();
   private idempotencyStore: Map<string, RideRequest> = new Map();
+  // Creaciones en curso por (cliente + Idempotency-Key): evita duplicados ante solicitudes simultáneas
+  private inFlightCreations: Map<string, { fingerprint: string; promise: Promise<RideRequest> }> = new Map();
   private offers: Map<string, RideOffer> = new Map();
   private auditEvents: DispatchAuditEvent[] = [];
 
@@ -92,12 +94,57 @@ export class RideRequestService {
     return this.m4ClientService;
   }
   /**
-   * Stub de integración con M7: Estimación de Tarifa (RF-7.1)
+   * Integración con M7: Estimación de Tarifa (RF-7.1)
+   * Realiza consulta síncrona HTTP al endpoint oficial /tarifa/estimacion si M7 está disponible,
+   * o utiliza cálculo local resiliente como fallback (RNF-14).
    */
   private async fetchEstimatedFareFromM7(
     distanceKm: number,
-    vehicleType: VehicleType
+    vehicleType: VehicleType,
+    origin?: { latitude: number; longitude: number; address: string },
+    destination?: { latitude: number; longitude: number; address: string }
   ): Promise<EstimatedFare> {
+    const m7Url = process.env.M7_URL || process.env.M7_SERVICE_URL;
+    if (m7Url && origin && destination) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 2000);
+        const response = await fetch(`${m7Url.replace(/\/$/, '')}/tarifa/estimacion`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            origen: {
+              lat: origin.latitude,
+              lng: origin.longitude,
+              direccion: origin.address
+            },
+            destino: {
+              lat: destination.latitude,
+              lng: destination.longitude,
+              direccion: destination.address
+            },
+            distanciaKm: Math.round(distanceKm * 10) / 10,
+            tiempoEstimadoMin: Math.max(5, Math.round(distanceKm * 2.5)),
+            vehicleType: vehicleType.toLowerCase()
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        if (response.ok) {
+          const data = (await response.json()) as any;
+          return {
+            amount: Number(data.estimatedFare || data.amount),
+            currency: data.currency || 'ARS',
+            estimatedDistanceKm: Number(data.distanciaKm || distanceKm),
+            estimatedDurationMin: Number(data.tiempoEstimadoMin || Math.max(5, Math.round(distanceKm * 2.5))),
+            fareToken: `ft_${randomUUID()}`
+          };
+        }
+      } catch {
+        // Fallback local resiliente
+      }
+    }
+
     const baseFare = vehicleType === 'AUTO' ? 1500 : 900;
     const perKmRate = vehicleType === 'AUTO' ? 500 : 300;
     const estimatedAmount = baseFare + distanceKm * perKmRate;
@@ -127,16 +174,101 @@ export class RideRequestService {
   }
 
   /**
+   * Huella (hash) del contenido de la solicitud que participa de la idempotencia.
+   * Se calcula igual desde el DTO entrante y desde una RideRequest ya guardada,
+   * así se puede detectar que la misma clave se reutilizó con otro contenido (RNF-08).
+   */
+  private static payloadFingerprint(data: {
+    origin?: { latitude?: number; longitude?: number; address?: string } | null;
+    destination?: { latitude?: number; longitude?: number; address?: string } | null;
+    vehicleType?: string;
+  }): string {
+    const loc = (l?: { latitude?: number; longitude?: number; address?: string } | null) => [
+      l?.latitude ?? null,
+      l?.longitude ?? null,
+      l?.address ?? null
+    ];
+    return createHash('sha256')
+      .update(JSON.stringify([loc(data.origin), loc(data.destination), data.vehicleType ?? null]))
+      .digest('hex');
+  }
+
+  /**
+   * La clave de idempotencia solo vale dentro del cliente autenticado que la envió:
+   * (clientId + Idempotency-Key) => clave opaca. Así, dos clientes que usen el mismo
+   * valor de Idempotency-Key nunca comparten registro (RNF-08 / RNF-10).
+   */
+  private static scopedIdempotencyKey(clientId: string, idempotencyKey: string): string {
+    return createHash('sha256').update(JSON.stringify([clientId, idempotencyKey])).digest('hex');
+  }
+
+  /**
    * Crea una nueva solicitud de viaje (RF-5.1)
+   * Garantías:
+   * 1. Idempotencia por (cliente autenticado + Idempotency-Key + contenido) (RNF-08).
+   *    - Misma clave y mismo contenido  => devuelve la solicitud original.
+   *    - Misma clave y contenido distinto => 409 IDEMPOTENCY_KEY_REUSED.
+   *    - La clave de otro cliente nunca devuelve la solicitud ajena.
+   * 2. Solicitudes simultáneas con la misma clave se resuelven con una sola creación
+   *    (las demás esperan el resultado de la primera: "single-flight").
+   * 3. Candado atómico de cliente activo en Redis (SET NX EX) contra solicitudes
+   *    simultáneas con claves distintas (RNF-09). Si la creación falla, el candado se libera.
+   * 4. Caché efímero de la estimación de tarifa de M7.
    */
   public async createRideRequest(
     clientId: string,
     idempotencyKey: string,
     dto: CreateRideRequestDTO
   ): Promise<RideRequest> {
-    // 1. Verificar idempotencia (RNF-08)
-    if (this.idempotencyStore.has(idempotencyKey)) {
-      return this.idempotencyStore.get(idempotencyKey)!;
+    const scopedKey = RideRequestService.scopedIdempotencyKey(clientId, idempotencyKey);
+    const fingerprint = RideRequestService.payloadFingerprint(dto);
+
+    // Single-flight: el chequeo y el registro son síncronos (sin await entre medio),
+    // por lo que dos llamadas simultáneas no pueden crear dos solicitudes con la misma clave.
+    const inFlight = this.inFlightCreations.get(scopedKey);
+    if (inFlight) {
+      if (inFlight.fingerprint !== fingerprint) {
+        throw new ConflictError(
+          'La Idempotency-Key ya fue utilizada con un contenido distinto',
+          'IDEMPOTENCY_KEY_REUSED'
+        );
+      }
+      return inFlight.promise;
+    }
+
+    const promise = this.executeCreateRideRequest(clientId, idempotencyKey, scopedKey, fingerprint, dto);
+    this.inFlightCreations.set(scopedKey, { fingerprint, promise });
+    try {
+      return await promise;
+    } finally {
+      this.inFlightCreations.delete(scopedKey);
+    }
+  }
+
+  private async executeCreateRideRequest(
+    clientId: string,
+    idempotencyKey: string,
+    scopedKey: string,
+    fingerprint: string,
+    dto: CreateRideRequestDTO
+  ): Promise<RideRequest> {
+    // 1. Idempotencia (Redis compartido; Map local como respaldo)
+    const cached =
+      (await this.redisService.getIdempotentRequest(scopedKey)) ??
+      this.idempotencyStore.get(scopedKey) ??
+      null;
+    if (cached) {
+      if (RideRequestService.payloadFingerprint(cached) !== fingerprint) {
+        throw new ConflictError(
+          'La Idempotency-Key ya fue utilizada con un contenido distinto',
+          'IDEMPOTENCY_KEY_REUSED'
+        );
+      }
+      // Estado vivo si existe en este proceso; si no (reinicio), se rehidrata desde la copia de Redis
+      const live = this.requests.get(cached.id);
+      if (live) return live;
+      this.requests.set(cached.id, cached);
+      return cached;
     }
 
     // 2. Validar reglas de negocio
@@ -157,80 +289,115 @@ export class RideRequestService {
       }
     }
 
-    // 3. Verificar que el cliente no tenga otra solicitud activa
-    const existingActive = Array.from(this.requests.values()).find(
-      (r) =>
-        r.clientId === clientId &&
-        (r.status === 'PENDING' || r.status === 'SEARCHING' || r.status === 'OFFERED')
-    );
-    if (existingActive) {
+    // 3. Candado atómico en Redis (RNF-09): SET NX EX evita dos solicitudes activas del mismo cliente
+    const lockAcquired = await this.redisService.acquireClientActiveLock(clientId, 'PENDING_INIT', 180);
+    if (!lockAcquired) {
       throw new ConflictError(
         'El cliente ya posee una solicitud de viaje en curso',
         'ACTIVE_REQUEST_EXISTS'
       );
     }
 
-    // 4. Calcular distancia estimada y consultar tarifa a M7
-    const distanceMeters = RideRequestValidator.calculateDistanceMeters(dto.origin, dto.destination);
-    const distanceKm = distanceMeters / 1000;
-    const estimatedFare = await this.fetchEstimatedFareFromM7(distanceKm, dto.vehicleType);
+    try {
+      // Verificar además solicitudes en memoria local que sigan activas
+      const existingActive = Array.from(this.requests.values()).find(
+        (r) =>
+          r.clientId === clientId &&
+          (r.status === 'PENDING' || r.status === 'SEARCHING' || r.status === 'OFFERED')
+      );
+      if (existingActive) {
+        throw new ConflictError(
+          'El cliente ya posee una solicitud de viaje en curso',
+          'ACTIVE_REQUEST_EXISTS'
+        );
+      }
 
-    // 5. Instanciar nueva solicitud
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + 3 * 60 * 1000); // 3 minutos TTL de búsqueda
+      // 4. Calcular distancia estimada y consultar tarifa a M7 con soporte de caché en Redis
+      const distanceMeters = RideRequestValidator.calculateDistanceMeters(dto.origin, dto.destination);
+      const distanceKm = distanceMeters / 1000;
 
-    const newRequest: RideRequest = {
-      id: randomUUID(),
-      clientId,
-      origin: dto.origin,
-      destination: dto.destination,
-      vehicleType: dto.vehicleType,
-      status: 'SEARCHING',
-      estimatedFare,
-      assignedDriverId: null,
-      idempotencyKey,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-      expiresAt: expiresAt.toISOString()
-    };
+      const fareCacheKey = `${dto.origin.latitude}_${dto.origin.longitude}_${dto.destination.latitude}_${dto.destination.longitude}_${dto.vehicleType}`;
+      let estimatedFare = await this.redisService.getCachedEstimatedFare(fareCacheKey);
+      if (!estimatedFare) {
+        estimatedFare = await this.fetchEstimatedFareFromM7(distanceKm, dto.vehicleType, dto.origin, dto.destination);
+        await this.redisService.cacheEstimatedFare(fareCacheKey, estimatedFare, 60);
+      }
 
-    // 6. Consultar conductores en M4 (RF-5.2)
-    const nearby = await this.fetchNearbyDriversFromM4(
-      dto.origin.latitude,
-      dto.origin.longitude,
-      dto.vehicleType
-    );
+      // 5. Instanciar nueva solicitud
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 3 * 60 * 1000); // 3 minutos TTL de búsqueda
 
-    if (nearby.length === 0) {
-      newRequest.status = 'NO_DRIVERS_AVAILABLE';
+      const newRequest: RideRequest = {
+        id: randomUUID(),
+        clientId,
+        origin: dto.origin,
+        destination: dto.destination,
+        vehicleType: dto.vehicleType,
+        status: 'SEARCHING',
+        estimatedFare,
+        assignedDriverId: null,
+        idempotencyKey,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        expiresAt: expiresAt.toISOString()
+      };
+
+      // 6. Consultar conductores en M4 (RF-5.2)
+      const nearby = await this.fetchNearbyDriversFromM4(
+        dto.origin.latitude,
+        dto.origin.longitude,
+        dto.vehicleType
+      );
+
+      if (nearby.length === 0) {
+        newRequest.status = 'NO_DRIVERS_AVAILABLE';
+      }
+
+      // 7. Persistir en almacenamiento y actualizar estado efímero en Redis
+      this.requests.set(newRequest.id, newRequest);
+      this.idempotencyStore.set(scopedKey, newRequest);
+
+      await this.redisService.updateClientActiveLock(clientId, newRequest.id, 180);
+      await this.redisService.saveIdempotentRequest(scopedKey, newRequest, 86400);
+      await this.redisService.saveRideRequest(newRequest, 86400);
+
+      // 8. Publicación asíncrona desacoplada de evento de dominio a RabbitMQ (RNF-07)
+      await this.rabbitmqService.publishRideRequestCreated(newRequest);
+
+      this.auditEvents.push({
+        eventId: `evt_${randomUUID()}`,
+        requestId: newRequest.id,
+        eventType: 'CREATED',
+        actorId: clientId,
+        actorType: 'CLIENT',
+        payload: { vehicleType: newRequest.vehicleType, estimatedFare },
+        timestamp: now.toISOString()
+      });
+
+      console.log(
+        `[RF-5.1] Solicitud de viaje creada con Redis y RabbitMQ: ID=${newRequest.id} | Cliente=${clientId} | Vehículo=${newRequest.vehicleType} | Tarifa=$${estimatedFare.amount} ARS | Origen="${dto.origin.address}" ➔ Destino="${dto.destination.address}"`
+      );
+
+      return newRequest;
+    } catch (error) {
+      // Si la creación falló después de tomar el candado, no dejar al cliente bloqueado 3 minutos
+      await this.redisService.releaseClientActiveLock(clientId);
+      throw error;
     }
-
-    // 7. Persistir en almacenamiento e historial inmutable (RNF-04)
-    this.requests.set(newRequest.id, newRequest);
-    this.idempotencyStore.set(idempotencyKey, newRequest);
-
-    this.auditEvents.push({
-      eventId: `evt_${randomUUID()}`,
-      requestId: newRequest.id,
-      eventType: 'CREATED',
-      actorId: clientId,
-      actorType: 'CLIENT',
-      payload: { vehicleType: newRequest.vehicleType, estimatedFare },
-      timestamp: now.toISOString()
-    });
-
-    console.log(
-      `[RF-5.1] Solicitud de viaje creada: ID=${newRequest.id} | Cliente=${clientId} | Vehículo=${newRequest.vehicleType} | Tarifa=$${estimatedFare.amount} ARS | Origen="${dto.origin.address}" ➔ Destino="${dto.destination.address}"`
-    );
-
-    return newRequest;
   }
 
   /**
    * Obtiene la solicitud por ID
    */
   public async getRideRequestById(requestId: string, clientId: string): Promise<RideRequest> {
-    const request = this.requests.get(requestId);
+    let request = this.requests.get(requestId);
+    if (!request) {
+      // Rehidratar desde Redis tras reinicio del proceso (CP-5.1-14)
+      request = (await this.redisService.getRideRequest(requestId)) ?? undefined;
+      if (request) {
+        this.requests.set(request.id, request);
+      }
+    }
     if (!request) {
       throw new NotFoundError('Solicitud de viaje no encontrada', 'RIDE_REQUEST_NOT_FOUND');
     }
