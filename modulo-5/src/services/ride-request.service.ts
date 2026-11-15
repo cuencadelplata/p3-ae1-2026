@@ -345,6 +345,7 @@ export class RideRequestService {
 
       await this.redisService.updateClientActiveLock(clientId, newRequest.id, 180);
       await this.redisService.saveIdempotentRequest(scopedKey, newRequest, 86400);
+      await this.redisService.saveRideRequest(newRequest, 86400);
 
       // 8. Publicación asíncrona desacoplada de evento de dominio a RabbitMQ (RNF-07)
       await this.rabbitmqService.publishRideRequestCreated(newRequest);
@@ -365,7 +366,14 @@ export class RideRequestService {
    * Obtiene la solicitud por ID
    */
   public async getRideRequestById(requestId: string, clientId: string): Promise<RideRequest> {
-    const request = this.requests.get(requestId);
+    let request = this.requests.get(requestId);
+    if (!request) {
+      // Rehidratar desde Redis tras reinicio del proceso (CP-5.1-14)
+      request = (await this.redisService.getRideRequest(requestId)) ?? undefined;
+      if (request) {
+        this.requests.set(request.id, request);
+      }
+    }
     if (!request) {
       throw new NotFoundError('Solicitud de viaje no encontrada', 'RIDE_REQUEST_NOT_FOUND');
     }

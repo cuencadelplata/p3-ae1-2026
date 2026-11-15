@@ -154,6 +154,59 @@ export class RedisService {
   }
 
   // ==========================================================================
+  // PERSISTENCIA EFÍMERA / RECUPERACIÓN DE SOLICITUDES (CP-5.1-14)
+  // Guarda y recupera solicitudes por ID para sobrevivir reinicios de M5
+  // ==========================================================================
+
+  /**
+   * Guarda una solicitud por ID en Redis para permitir su recuperación tras reiniciar el servicio
+   */
+  public async saveRideRequest(request: RideRequest, ttlSeconds = 86400): Promise<void> {
+    const key = `m5:request:${request.id}`;
+    const serialized = JSON.stringify(request);
+
+    try {
+      if (this.isConnected && this.client) {
+        await this.client.set(key, serialized, 'EX', ttlSeconds);
+        return;
+      }
+    } catch (err) {
+      // Fallback
+    }
+
+    this.fallbackMemory.set(key, {
+      value: serialized,
+      expiresAt: Date.now() + ttlSeconds * 1000
+    });
+  }
+
+  /**
+   * Obtiene una solicitud guardada por su ID desde Redis
+   */
+  public async getRideRequest(requestId: string): Promise<RideRequest | null> {
+    const key = `m5:request:${requestId}`;
+    try {
+      if (this.isConnected && this.client) {
+        const data = await this.client.get(key);
+        if (data) {
+          return JSON.parse(data) as RideRequest;
+        }
+        return null;
+      }
+    } catch (err) {
+      // Fallback
+    }
+
+    const item = this.fallbackMemory.get(key);
+    if (!item) return null;
+    if (item.expiresAt && Date.now() > item.expiresAt) {
+      this.fallbackMemory.delete(key);
+      return null;
+    }
+    return JSON.parse(item.value) as RideRequest;
+  }
+
+  // ==========================================================================
   // CANDADO ATÓMICO DE CLIENTE ACTIVO (RNF-09 - Criterios 6 y 7)
   // Operación SET ... NX EX para evitar solicitudes concurrentes simultáneas
   // ==========================================================================

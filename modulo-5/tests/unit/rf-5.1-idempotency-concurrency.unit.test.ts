@@ -134,11 +134,15 @@ describe('RF-5.1 — idempotencia y concurrencia', () => {
       expect(fetched.id).toBe(created.id);
     });
 
-    it('RF-5.1 tras reiniciar, una solicitud que nunca se reintentó no se recupera (límite documentado)', async () => {
+    it('RF-5.1 tras reiniciar, la solicitud se recupera desde Redis por su ID (CP-5.1-14)', async () => {
       const created = await service.createRideRequest('client_a', 'key_1', validDTO);
       const restarted = new RideRequestService(redis, rabbit);
 
-      await expect(restarted.getRideRequestById(created.id, 'client_a')).rejects.toThrow(NotFoundError);
+      const recovered = await restarted.getRideRequestById(created.id, 'client_a');
+      expect(recovered.id).toBe(created.id);
+      expect(recovered.clientId).toBe('client_a');
+      expect(recovered.vehicleType).toBe('AUTO');
+      expect(recovered.status).toBe('SEARCHING');
     });
 
     it('RF-5.1 si la creación falla, libera el candado y permite reintentar', async () => {
