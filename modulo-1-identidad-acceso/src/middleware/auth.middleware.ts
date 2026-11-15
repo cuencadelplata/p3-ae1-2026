@@ -16,6 +16,8 @@ export interface AuthenticatedRequest
     };
 }
 
+const ROLES_CANONICOS: UserRole[] = ["CLIENTE", "CONDUCTOR", "OPERADOR"];
+
 export function authenticateToken(
     req: AuthenticatedRequest,
     res: Response,
@@ -63,13 +65,16 @@ export function authenticateToken(
     try {
         const decoded = jwt.verify(
             partes[1],
-            jwtSecret
+            jwtSecret,
+            { algorithms: ["HS256"] }
         );
 
         if (
             typeof decoded === "string" ||
             typeof decoded.userId !== "number" ||
-            typeof decoded.role !== "string"
+            decoded.userId <= 0 ||
+            typeof decoded.role !== "string" ||
+            !ROLES_CANONICOS.includes(decoded.role as UserRole)
         ) {
             res.status(401).json({
                 valid: false,

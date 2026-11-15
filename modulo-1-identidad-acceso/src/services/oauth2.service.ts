@@ -152,7 +152,8 @@ function generateOAuth2Token(
         },
         jwtSecret,
         {
-            expiresIn: "1h"
+            expiresIn: "1h",
+            algorithm: "HS256"
         }
     );
 

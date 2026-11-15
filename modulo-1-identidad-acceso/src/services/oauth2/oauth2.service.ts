@@ -1,4 +1,4 @@
-﻿import crypto from "crypto";
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { config } from "../../config/env";
 import { OAuth2Provider, UserRole, UserRow } from "../../types/user.types";
@@ -38,7 +38,7 @@ export class OAuth2Service {
             timestamp: Date.now()
         };
 
-        return jwt.sign(payload, config.jwtSecret, { expiresIn: "10m" });
+        return jwt.sign(payload, config.jwtSecret, { expiresIn: "10m", algorithm: "HS256" });
     }
 
     /**
@@ -46,7 +46,7 @@ export class OAuth2Service {
      */
     static verifyState(stateToken: string): OAuth2StatePayload & { codeVerifier?: string } {
         try {
-            const decoded = jwt.verify(stateToken, config.jwtSecret) as OAuth2StatePayload & {
+            const decoded = jwt.verify(stateToken, config.jwtSecret, { algorithms: ["HS256"] }) as OAuth2StatePayload & {
                 codeVerifier?: string;
             };
             return decoded;
@@ -290,7 +290,7 @@ export class OAuth2Service {
         provider: OAuth2Provider;
     } {
         try {
-            const decoded = jwt.verify(jwtToken, config.jwtSecret) as {
+            const decoded = jwt.verify(jwtToken, config.jwtSecret, { algorithms: ["HS256"] }) as {
                 userId: number;
                 email: string;
                 role: UserRole;
@@ -354,7 +354,7 @@ export class OAuth2Service {
                 provider
             },
             config.jwtSecret,
-            { expiresIn: "1h" }
+            { expiresIn: "1h", algorithm: "HS256" }
         );
     }
 

@@ -131,7 +131,8 @@ export async function loginUser(
         },
         jwtSecret,
         {
-            expiresIn: "1h"
+            expiresIn: "1h",
+            algorithm: "HS256"
         }
     );
 
