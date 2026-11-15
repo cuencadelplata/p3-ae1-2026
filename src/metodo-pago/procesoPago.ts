@@ -1,135 +1,70 @@
-import { supabase } from "../supabaseClient";
-import { type MetodoPago, type TipoPago } from "./metodoPago";
+import {type MetodoPago, type TipoPago} from "./metodoPago.js";
 
-const ordenesProcesadas = new Set<string>();
+const metodosPago: MetodoPago[]=[]; //como una "BD"
 
-function generarId(): string {
-  return `pago_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+function generarId():string{
+    return Math.random().toString();
 }
 
-function mapRowToMetodoPago(row: any): MetodoPago {
-  return {
-    pagoId: row.pago_Id,
-    clienteId: row.cliente_Id,
-    viajeId: row.viaje_Id,
-    tipo: row.tipo,
-    detalle: row.detalle,
-    fecha: row.fecha,
-    estado: row.estado,
-    paymentId: row.paymentId ?? undefined,
-    total: row.total ?? undefined,
-    moneda: row.moneda ?? undefined,
-  };
+export function registrarMetodoPago(clienteId:string, viajeId: string, tipo: TipoPago): MetodoPago{
+
+    if (!clienteId || !viajeId){
+        throw new Error("clienteId y viajeId debe existir"); 
+    }
+
+    const tiposValidos: string[] = ["efectivo", "tarjeta", "transferencia"];
+    if (!tiposValidos.includes(tipo)) {
+        throw new Error("tipo de pago inválido");
+    }
+    
+const nuevoMetodo: MetodoPago={
+    pagoId: generarId(),
+    clienteId: clienteId,
+    viajeId: viajeId,
+    tipo: tipo,
+    fecha: new Date().toLocaleDateString(),
+    detalle: "",
+    estado: "pendiente", 
+};
+metodosPago.push(nuevoMetodo);
+    return nuevoMetodo;
+};
+
+
+export function buscarPagoPorViaje(viajeId: string): MetodoPago | undefined{
+
+   return metodosPago.find( (metodoPago) => metodoPago.viajeId === viajeId );
 }
 
-export async function registrarMetodoPago(
-  clienteId: string,
-  viajeId: string,
-  tipo: TipoPago
-): Promise<MetodoPago> {
-  if (!clienteId || !viajeId) {
-    throw new Error("clienteId y viajeId deben existir");
-  }
 
-  const tiposValidos: string[] = ["efectivo", "tarjeta", "transferencia"];
-  if (!tiposValidos.includes(tipo)) {
-    throw new Error("tipo de pago inválido");
-  }
+export function autorizarPago(viajeId: string, idOrden: string): MetodoPago {
 
-  const { data, error } = await supabase
-    .from("pagos")
-    .insert({
-      cliente_Id: clienteId,
-      viaje_Id: viajeId,
-      tipo,
-      fecha: new Date().toISOString(),
-      detalle: "",
-      estado: "pendiente",
-    })
-    .select()
-    .single();
+    const metodoPago = buscarPagoPorViaje(viajeId);
 
-  if (error) {
-    throw new Error(`No se pudo registrar el pago: ${error.message}`);
-  }
+    if (!metodoPago) {
+        throw new Error("no existe un tipo de pago registrado que este asociado para dicho viaje");
+    }
 
-  return mapRowToMetodoPago(data);
+    if (metodoPago.estado !== "pendiente") {
+        throw new Error("El pago no fue procesado aún");
+    }
+
+    metodoPago.estado = "autorizado";
+
+    return metodoPago;
 }
 
-export async function buscarPagoPorViaje(viajeId: string): Promise<MetodoPago | undefined> {
-  const { data, error } = await supabase
-    .from("pagos")
-    .select()
-    .eq("viaje_Id", viajeId)
-    .maybeSingle();
+export function rechazarPago(viajeId: string): MetodoPago {
 
-  if (error) {
-    throw new Error(`No se pudo buscar el pago: ${error.message}`);
-  }
+    const metodoPago = buscarPagoPorViaje(viajeId);
 
-  return data ? mapRowToMetodoPago(data) : undefined;
-}
+    if (!metodoPago) {
+        throw new Error("no existe un tipo de pago registrado que este asociado para dicho viaje");
+    }
+    if (metodoPago.estado !== "pendiente") {
+        throw new Error("El pago no fue procesado aún");
+    }
+    metodoPago.estado = "rechazado";
 
-export async function autorizarPago(
-  viajeId: string,
-  idOrden: string,
-  datosPago?: { paymentId?: string; total?: number; moneda?: string }
-): Promise<MetodoPago> {
-  if (ordenesProcesadas.has(idOrden)) {
-    throw new Error("Esta orden de pago ya fue procesada anteriormente");
-  }
-
-  const metodoPago = await buscarPagoPorViaje(viajeId);
-
-  if (!metodoPago) {
-    throw new Error("no existe un tipo de pago registrado que este asociado para dicho viaje");
-  }
-
-  if (metodoPago.estado !== "pendiente") {
-    throw new Error("El pago no fue procesado aún");
-  }
-
-  const { data, error } = await supabase
-    .from("pagos")
-    .update({
-      estado: "autorizado",
-      paymentId: datosPago?.paymentId,
-      total: datosPago?.total,
-      moneda: datosPago?.moneda,
-    })
-    .eq("viaje_Id", viajeId)
-    .select()
-    .single();
-
-  if (error) {
-    throw new Error(`No se pudo autorizar el pago: ${error.message}`);
-  }
-
-  ordenesProcesadas.add(idOrden);
-  return mapRowToMetodoPago(data);
-}
-
-export async function rechazarPago(viajeId: string): Promise<MetodoPago> {
-  const metodoPago = await buscarPagoPorViaje(viajeId);
-
-  if (!metodoPago) {
-    throw new Error("no existe un tipo de pago registrado que este asociado para dicho viaje");
-  }
-
-  if (metodoPago.estado !== "pendiente") {
-    throw new Error("El pago no fue procesado aún");
-  }
-
-  const { data, error } = await supabase
-    .from("pagos")
-    .update({ estado: "rechazado" })
-    .eq("viaje_Id", viajeId)
-    .select()
-    .single();
-
-  if (error) {
-    throw new Error(`No se pudo rechazar el pago: ${error.message}`);
-  }
-
-  return mapRowToMetodoPago(data);
+    return metodoPago;
 }
