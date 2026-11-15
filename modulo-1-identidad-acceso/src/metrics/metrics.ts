@@ -50,6 +50,17 @@ export const dependenciaDisponible = new client.Gauge({
 dependenciaDisponible.set({ dependencia: "redis" }, 0);
 dependenciaDisponible.set({ dependencia: "rabbitmq" }, 0);
 
+// Los contadores arrancan en 0 para que los gráficos de Grafana tengan sus líneas desde el inicio.
+for (const resultado of ["exitoso", "fallido", "bloqueado"]) {
+    loginsTotal.inc({ resultado }, 0);
+}
+
+for (const evento of ["auth.login_exitoso", "auth.ip_bloqueada"]) {
+    for (const resultado of ["ok", "error"]) {
+        eventosPublicadosTotal.inc({ evento, resultado }, 0);
+    }
+}
+
 // Cuánto tarda cada respuesta HTTP, por ruta y código.
 export const duracionHttp = new client.Histogram({
     name: "m1_http_request_duration_seconds",

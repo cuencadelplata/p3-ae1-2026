@@ -102,6 +102,42 @@ services:
     profiles:
       - test
 
+  # AE4 - Agente que lee GET /metrics de M1 y lo envía a Grafana Cloud.
+  # Solo arranca con: docker compose --profile metricas up -d
+  alloy:
+    image: grafana/alloy:v1.21.3
+
+    container_name: m1-alloy
+
+    environment:
+      # M1 dentro de este compose. Si M1 corre con npm run dev, usar host.docker.internal:3001
+      M1_METRICS_TARGET: ${M1_METRICS_TARGET:-m1-identidad-acceso:3001}
+      GRAFANA_CLOUD_PROM_URL: ${GRAFANA_CLOUD_PROM_URL:-}
+      GRAFANA_CLOUD_PROM_USER: ${GRAFANA_CLOUD_PROM_USER:-}
+      GRAFANA_CLOUD_API_KEY: ${GRAFANA_CLOUD_API_KEY:-}
+
+    volumes:
+      - ./observabilidad/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy_data:/var/lib/alloy/data
+
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+
+    ports:
+      - "12345:12345"
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    restart: unless-stopped
+
+    profiles:
+      - metricas
+
 volumes:
   identity_data:
   rabbitmq_data:
+  alloy_data:
