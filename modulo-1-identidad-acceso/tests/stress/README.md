@@ -31,19 +31,21 @@ Después del test la IP queda bloqueada 60 segundos: un login en ese tiempo devu
 
 ## Resultado de referencia
 
-Corrido contra M1 con Redis en una máquina de 2 núcleos:
+Corrido en la PC de desarrollo contra M1 (`npm run dev`) con Redis y RabbitMQ en Docker:
 
 | Medida | Valor |
 | --- | --- |
-| Pedidos totales | 2.957, con 0 errores |
-| Checks | 4.448 de 4.448 bien (100 %) |
-| Login (carga) | mediana 1,4 s, p95 1,94 s |
-| `/auth/me` (carga) | mediana 8 ms, p95 1,09 s |
-| Ataque | 1.458 respuestas 429 y 6 respuestas 401 |
-| M1 después del test | `/health` responde 200: no se cayó |
+| Pedidos totales | 2.723, con 0 errores (`http_req_failed` 0 %) |
+| Duración | 2 min 5 s; las dos fases completas |
+| Login (carga) | mediana 1,95 s, p95 2,43 s |
+| `/auth/me` (carga) | mediana 42 ms, p95 189 ms |
+| Ataque | 1.408 respuestas 429 |
+| M1 después del test | Sigue respondiendo: no se cayó |
+
+En una máquina de 2 núcleos el p95 de `/auth/me` subió a 1,09 s (ver abajo por qué).
 
 ## Qué muestran los resultados
 
 - **El login es lento a propósito.** Cada login calcula el hash de la contraseña con bcrypt, que está pensado para ser costoso y así encarecer los ataques de fuerza bruta.
-- **`/auth/me` espera detrás de los logins.** Su mediana es 8 ms, pero bajo carga el p95 sube a ~1 s. M1 corre en un solo hilo (Node.js) y `bcryptjs` hace el cálculo pesado en ese mismo hilo, así que los pedidos rápidos quedan en la fila detrás de los logins. Mejora posible: usar la librería `bcrypt` nativa, que hace el cálculo en el pool de hilos de libuv.
+- **`/auth/me` espera detrás de los logins.** Es una consulta rápida, pero bajo carga el p95 sube (189 ms en la PC de desarrollo, 1,09 s en una de 2 núcleos). M1 corre en un solo hilo (Node.js) y `bcryptjs` hace el cálculo pesado en ese mismo hilo, así que los pedidos rápidos quedan en la fila detrás de los logins. Mejora posible: usar la librería `bcrypt` nativa, que hace el cálculo en el pool de hilos de libuv.
 - **El rate limit frena el ataque, con un margen.** Con 10 atacantes llegando a la vez pasan 6 intentos en lugar de 5: el middleware lee el contador antes de que se sume el fallo, y en una ráfaga varios pedidos leen el mismo valor. Para que sea exacto habría que decidir con el valor que devuelve `INCR`, que es atómico.
