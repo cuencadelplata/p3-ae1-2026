@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Eye, EyeOff, ArrowLeft } from 'lucide-react'
 import axios from 'axios'
+import { API_URL } from '../api'
 
 interface RegisterProps {
   onRegisterSuccess: (token: string, user: any) => void
@@ -34,7 +35,7 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin }: Registe
     setLoading(true)
 
     try {
-      await axios.post('http://localhost:3001/auth/registrar-usuario', {
+      await axios.post(`${API_URL}/auth/registrar-usuario`, {
         nombre: name,
         apellido: surname,
         dni,
@@ -44,7 +45,7 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin }: Registe
         rol: role,
       })
 
-      const loginResponse = await axios.post('http://localhost:3001/auth/iniciar-sesion', {
+      const loginResponse = await axios.post(`${API_URL}/auth/iniciar-sesion`, {
         email,
         password,
       })

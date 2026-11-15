@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import axios from 'axios'
+import { API_URL } from '../api'
 
 interface PasswordRecoveryProps {
   onBackToLogin: () => void
@@ -23,7 +24,7 @@ export default function PasswordRecovery({ onBackToLogin }: PasswordRecoveryProp
     setError('')
 
     try {
-      const response = await axios.post('http://localhost:3001/auth/solicitar-recuperacion', { email })
+      const response = await axios.post(`${API_URL}/auth/solicitar-recuperacion`, { email })
       setMessage(response.data.message)
       setStep('reset')
     } catch (err: any) {
@@ -40,7 +41,7 @@ export default function PasswordRecovery({ onBackToLogin }: PasswordRecoveryProp
     setError('')
 
     try {
-      const response = await axios.post('http://localhost:3001/auth/resetear-contrasena', {
+      const response = await axios.post(`${API_URL}/auth/resetear-contrasena`, {
         token,
         newPassword,
       })

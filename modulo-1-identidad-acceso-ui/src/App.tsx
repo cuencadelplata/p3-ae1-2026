@@ -9,30 +9,21 @@ type AuthState = 'login' | 'register' | 'recovery' | 'dashboard'
 
 function App() {
   const storedToken = localStorage.getItem('token')
-  const storedUser = localStorage.getItem('user')
-  const [authState, setAuthState] = useState<AuthState>(
-    storedToken && storedUser ? 'dashboard' : 'login'
-  )
+  const [authState, setAuthState] = useState<AuthState>(storedToken ? 'dashboard' : 'login')
   const [token, setToken] = useState<string | null>(storedToken)
-  const [user, setUser] = useState<any>(() => {
-    try {
-      return storedUser ? JSON.parse(storedUser) : null
-    } catch {
-      return null
-    }
-  })
-
-  const handleLoginSuccess = (authToken: string, userData: any) => {
+  // Mensaje que se muestra en el login (por ejemplo, después de revocar credenciales).
+  const [aviso, setAviso] = useState('')
+  // Solo se guarda el token: los datos del usuario se piden a M1 (GET /auth/me) en el panel.
+  const handleLoginSuccess = (authToken: string) => {
     setToken(authToken)
-    setUser(userData)
     localStorage.setItem('token', authToken)
-    localStorage.setItem('user', JSON.stringify(userData))
+    setAviso('')
     setAuthState('dashboard')
   }
 
-  const handleLogout = () => {
+  const handleLogout = (mensaje?: string) => {
+    setAviso(mensaje ?? '')
     setToken(null)
-    setUser(null)
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     setAuthState('login')
@@ -42,6 +33,7 @@ function App() {
     <div className="relative min-h-screen flex flex-col items-center justify-start sm:justify-center p-4 py-8 sm:py-12 overflow-y-auto">
       {authState === 'login' && (
         <Login
+          aviso={aviso}
           onLoginSuccess={handleLoginSuccess}
           onSwitchToRegister={() => setAuthState('register')}
           onSwitchToRecovery={() => setAuthState('recovery')}
@@ -53,8 +45,8 @@ function App() {
       {authState === 'recovery' && (
         <PasswordRecovery onBackToLogin={() => setAuthState('login')} />
       )}
-      {authState === 'dashboard' && token && user && (
-        <Dashboard user={user} onLogout={handleLogout} />
+      {authState === 'dashboard' && token && (
+        <Dashboard token={token} onLogout={handleLogout} />
       )}
 
     </div>

@@ -1,19 +1,29 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import axios from 'axios'
+import { API_URL } from '../api'
 
 interface LoginProps {
+  aviso?: string
   onLoginSuccess: (token: string, user: any) => void
   onSwitchToRegister: () => void
   onSwitchToRecovery: () => void
 }
 
-export default function Login({ onLoginSuccess, onSwitchToRegister, onSwitchToRecovery }: LoginProps) {
+export default function Login({ aviso, onLoginSuccess, onSwitchToRegister, onSwitchToRecovery }: LoginProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // RF-1.2: segundos que faltan para que M1 desbloquee la IP después de un 429.
+  const [bloqueadoPor, setBloqueadoPor] = useState(0)
+
+  useEffect(() => {
+    if (bloqueadoPor <= 0) return
+    const timer = setTimeout(() => setBloqueadoPor(bloqueadoPor - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [bloqueadoPor])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -21,7 +31,7 @@ export default function Login({ onLoginSuccess, onSwitchToRegister, onSwitchToRe
     setError('')
 
     try {
-      const response = await axios.post('http://localhost:3001/auth/iniciar-sesion', {
+      const response = await axios.post(`${API_URL}/auth/iniciar-sesion`, {
         email,
         password,
       })
@@ -32,7 +42,11 @@ export default function Login({ onLoginSuccess, onSwitchToRegister, onSwitchToRe
 
       onLoginSuccess(token, { ...decoded, ...response.data.usuario })
     } catch (err: any) {
-      setError(err.response?.data?.error || err.response?.data?.message || 'Error al iniciar sesión')
+      if (err.response?.status === 429) {
+        // Rate limit de RF-1.2: demasiados intentos fallidos desde esta IP.
+        setBloqueadoPor(Number(err.response.headers['retry-after'] ?? err.response.data?.retryAfterSeconds ?? 60))
+      }
+      setError(err.response?.data?.error || err.response?.data?.message || 'No se pudo conectar con M1')
     } finally {
       setLoading(false)
     }
@@ -52,7 +66,13 @@ export default function Login({ onLoginSuccess, onSwitchToRegister, onSwitchToRe
 
         <div className="hairline mb-8" />
 
-        {error && <div className="alert-error mb-6 text-sm">{error}</div>}
+        {aviso && !error && <div className="alert-success mb-6 text-sm">{aviso}</div>}
+        {error && (
+          <div className="alert-error mb-6 text-sm">
+            {error}
+            {bloqueadoPor > 0 && <> · Probá de nuevo en {bloqueadoPor} s</>}
+          </div>
+        )}
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
@@ -91,8 +111,8 @@ export default function Login({ onLoginSuccess, onSwitchToRegister, onSwitchToRe
             </div>
           </div>
 
-          <button type="submit" disabled={loading} className="btn-primary mt-2">
-            {loading ? 'Iniciando sesión…' : 'Iniciar sesión'}
+          <button type="submit" disabled={loading || bloqueadoPor > 0} className="btn-primary mt-2">
+            {loading ? 'Iniciando sesión…' : bloqueadoPor > 0 ? `Bloqueado (${bloqueadoPor} s)` : 'Iniciar sesión'}
           </button>
         </form>
 
@@ -106,7 +126,7 @@ export default function Login({ onLoginSuccess, onSwitchToRegister, onSwitchToRe
 
         <div className="relative my-9">
           <div className="hairline" />
-          <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 px-3 text-[10px] tracking-[0.3em] uppercase text-[var(--text-dim)] bg-[#111722]">
+          <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 px-3 text-[10px] tracking-[0.3em] uppercase text-[var(--text-dim)] bg-[var(--surface)]">
           </span>
         </div>
 

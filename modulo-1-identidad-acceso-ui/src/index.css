@@ -1,43 +1,43 @@
 @import "tailwindcss";
 
 /* ============================================================
-   Sistema de diseño — "Ink & Champagne"
-   Fondo profundo, vidrio sutil, acento dorado, tipografía serif
+   Sistema de diseño de UCPRideShare
+   Paleta: lima #D5FF40, negro, gris #C0C2B8 y blanco. Tipografía: Poppins.
    ============================================================ */
 
 :root {
-  --ink-900: #0d1117;
-  --ink-800: #141a24;
-  --ink-700: #1c2432;
-  --line: rgba(255, 255, 255, 0.09);
-  --line-strong: rgba(255, 255, 255, 0.16);
-  --text: #ecebe7;
-  --text-soft: #a2a8b3;
-  --text-dim: #737a86;
-  --gold: #c9a961;
-  --gold-soft: #e2cd9a;
-  --danger: #e0685f;
-  --font-display: "Cormorant Garamond", "Didot", Georgia, "Times New Roman", serif;
-  --font-body: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* Paleta del sistema: lima #D5FF40, negro, gris #C0C2B8 y blanco. Tipografía Poppins. */
+  --ink-900: #0b0b0b;
+  --ink-800: #141414;
+  --ink-700: #1c1c1c;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.2);
+  --text: #ffffff;
+  --text-soft: #c0c2b8;
+  --text-dim: #8a8c84;
+  --accent: #d5ff40;       /* lima: acento principal */
+  --accent-dark: #bfe632;  /* lima al pasar el mouse */
+  --gold: var(--accent);   /* nombre viejo, lo usan los componentes */
+  --surface: #141414;      /* tarjeta principal */
+  --surface-2: #1c1c1c;    /* campos y tarjetas internas */
+  --gold-soft: #e6ff8c;
+  --danger: #ff6b5e;
+  --font-display: "Poppins", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Poppins", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+/* El reseteo de márgenes y padding ya lo hace Tailwind (preflight).
+   Un "* { margin: 0; padding: 0 }" fuera de @layer anulaba las clases p-*, m-* de Tailwind 4. */
 
 body {
   font-family: var(--font-body);
   color: var(--text);
   background:
-    radial-gradient(900px 600px at 15% -10%, rgba(201, 169, 97, 0.12), transparent 60%),
-    radial-gradient(800px 620px at 100% 110%, rgba(90, 120, 160, 0.14), transparent 60%),
-    linear-gradient(160deg, #0b0f16 0%, #121926 55%, #0d1117 100%);
+    radial-gradient(900px 520px at 50% 115%, rgba(213, 255, 64, 0.16), transparent 65%),
+    #0b0b0b;
   background-attachment: fixed;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
-  letter-spacing: 0.01em;
 }
 
 #root {
@@ -45,86 +45,69 @@ body {
   min-height: 100vh;
 }
 
-/* Panel de vidrio oscuro ------------------------------------ */
+/* Tarjeta principal ------------------------------------------ */
 .glass {
   position: relative;
-  background: linear-gradient(
-    155deg,
-    rgba(255, 255, 255, 0.07) 0%,
-    rgba(255, 255, 255, 0.035) 45%,
-    rgba(255, 255, 255, 0.02) 100%
-  );
-  backdrop-filter: blur(22px) saturate(140%);
+  background: #141414;
   border: 1px solid var(--line);
-  box-shadow:
-    0 40px 90px -30px rgba(0, 0, 0, 0.75),
-    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.8);
   animation: riseIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-/* Filo dorado superior */
-.glass::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(201, 169, 97, 0.6), transparent);
-  pointer-events: none;
 }
 
 /* Tipografía ------------------------------------------------- */
 .display {
   font-family: var(--font-display);
-  font-weight: 300;
-  letter-spacing: 0.005em;
-  line-height: 1.05;
+  font-weight: 600;
+  line-height: 1.1;
 }
 
 .eyebrow {
-  font-size: 0.68rem;
-  letter-spacing: 0.34em;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--gold);
+  color: var(--accent);
 }
 
 .hairline {
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
+  background: var(--line);
 }
 
 /* Botones ---------------------------------------------------- */
 .btn-primary {
-  @apply relative w-full px-6 py-3.5 rounded-xl font-medium tracking-wide cursor-pointer;
-  background: linear-gradient(120deg, #d8bd82 0%, #c9a961 48%, #b08f4c 100%);
-  color: #14181f;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  box-shadow: 0 14px 30px -14px rgba(201, 169, 97, 0.75);
-  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease, filter 0.35s ease;
+  @apply relative w-full px-6 py-3.5 rounded-xl font-semibold cursor-pointer;
+  background: var(--accent);
+  color: #0e0e0e;
+  border: 1px solid var(--accent);
+  transition: background 0.2s ease, transform 0.2s ease;
 }
 .btn-primary:hover:not(:disabled) {
-  transform: translateY(-2px);
-  filter: brightness(1.05);
-  box-shadow: 0 20px 44px -16px rgba(201, 169, 97, 0.85);
+  background: var(--accent-dark);
+  transform: translateY(-1px);
 }
 .btn-primary:active:not(:disabled) {
   transform: translateY(0);
 }
 .btn-primary:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .btn-secondary {
-  @apply w-full px-6 py-3.5 rounded-xl font-medium tracking-wide cursor-pointer;
-  color: var(--text-soft);
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--line-strong);
-  transition: color 0.3s ease, background 0.3s ease, border-color 0.3s ease;
-}
-.btn-secondary:hover {
+  @apply w-full px-6 py-3.5 rounded-xl font-medium cursor-pointer;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(201, 169, 97, 0.45);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.btn-secondary:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-ghost {
@@ -132,37 +115,35 @@ body {
   color: var(--text-soft);
   border: 1px solid var(--line);
   background: transparent;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 .btn-ghost:hover {
-  color: var(--text);
-  border-color: var(--line-strong);
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* Campos ----------------------------------------------------- */
 .input-field {
   @apply w-full px-4 py-3.5 rounded-xl;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-2);
   border: 1px solid var(--line);
-  transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .input-field::placeholder {
   color: var(--text-dim);
 }
 .input-field:focus {
   outline: none;
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(201, 169, 97, 0.6);
-  box-shadow: 0 0 0 4px rgba(201, 169, 97, 0.12);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(213, 255, 64, 0.15);
 }
 
 .field-label {
   display: block;
   margin-bottom: 0.5rem;
-  font-size: 0.7rem;
-  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-dim);
 }
@@ -171,60 +152,58 @@ body {
 .detail-card {
   border-radius: 1rem;
   padding: 1.25rem 1.35rem;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--surface-2);
   border: 1px solid var(--line);
-  transition: border-color 0.3s ease, background 0.3s ease, transform 0.3s ease;
+  transition: border-color 0.2s ease;
 }
 .detail-card:hover {
-  border-color: rgba(201, 169, 97, 0.35);
-  background: rgba(255, 255, 255, 0.055);
-  transform: translateY(-2px);
+  border-color: rgba(213, 255, 64, 0.5);
 }
 
 /* Selector de rol -------------------------------------------- */
 .role-chip {
   @apply rounded-xl py-3 px-2 text-center cursor-pointer;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--surface-2);
   border: 1px solid var(--line);
   color: var(--text-soft);
-  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: all 0.2s ease;
 }
 .role-chip:hover {
   border-color: var(--line-strong);
   color: var(--text);
 }
 .role-chip[data-active="true"] {
-  color: #14181f;
-  background: linear-gradient(120deg, #d8bd82, #c9a961);
-  border-color: rgba(255, 255, 255, 0.3);
-  box-shadow: 0 12px 26px -14px rgba(201, 169, 97, 0.8);
+  color: #0e0e0e;
+  font-weight: 600;
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
-/* Alerta ----------------------------------------------------- */
+/* Alertas ---------------------------------------------------- */
 .alert-error {
   border-radius: 0.85rem;
   padding: 0.9rem 1.1rem;
-  color: #f2c2bd;
-  background: rgba(224, 104, 95, 0.09);
-  border: 1px solid rgba(224, 104, 95, 0.35);
+  color: #ffc9c4;
+  background: rgba(255, 107, 94, 0.1);
+  border: 1px solid rgba(255, 107, 94, 0.4);
 }
 
 .alert-success {
   border-radius: 0.85rem;
   padding: 0.9rem 1.1rem;
-  color: var(--gold-soft);
-  background: rgba(201, 169, 97, 0.09);
-  border: 1px solid rgba(201, 169, 97, 0.35);
+  color: var(--accent);
+  background: rgba(213, 255, 64, 0.08);
+  border: 1px solid rgba(213, 255, 64, 0.35);
 }
 
 /* Animaciones ------------------------------------------------ */
 @keyframes riseIn {
   from {
     opacity: 0;
-    transform: translateY(18px) scale(0.985);
+    transform: translateY(14px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }
