@@ -36,6 +36,13 @@ describe("Seguridad JWT - Política Fail-Closed (Punto 1)", () => {
         }
     });
 
+    it("En desarrollo, si se pasa una clave por defecto como 'clave-desarrollo-m1', la acepta y no lanza error", () => {
+        process.env.NODE_ENV = "development";
+        process.env.JWT_SECRET = "clave-desarrollo-m1";
+
+        expect(getJwtSecret()).toBe("clave-desarrollo-m1");
+    });
+
     it("En producción, acepta un JWT_SECRET válido y seguro", () => {
         process.env.NODE_ENV = "production";
         process.env.JWT_SECRET = "mi-clave-super-secreta-de-produccion-2026-ucp";

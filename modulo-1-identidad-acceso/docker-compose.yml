@@ -12,6 +12,7 @@ services:
       - "3001:3001"
 
     environment:
+      NODE_ENV: ${NODE_ENV:-development}
       PORT: 3001
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672

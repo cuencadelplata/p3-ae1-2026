@@ -65,7 +65,7 @@ export function getJwtSecret(): string {
                 "la variable de entorno JWT_SECRET con una clave segura. No se permite el uso de secretos por defecto (Fail-Closed)."
             );
         }
-        return "clave-local-desarrollo-m1-cambiar-en-produccion";
+        return secret || "clave-local-desarrollo-m1-cambiar-en-produccion";
     }
 
     return secret;
