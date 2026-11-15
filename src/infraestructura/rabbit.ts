@@ -1,7 +1,7 @@
 import amqp from "amqplib";
 import type { Channel, ChannelModel } from "amqplib";
 import { config } from "../config";
-import { iniciarConsumerViajeCancelado } from "../reintegro/consumerViajeCancelado";
+import { iniciarConsumerViajeCancelado } from "../6-reintegro/consumerViajeCancelado";
 
 export const EXCHANGE_VIAJES = "viajes";
 export const EXCHANGE_M7 = "m7.eventos";
@@ -9,6 +9,7 @@ export const EXCHANGE_DLX = "m7.dlx";
 export const QUEUE_CANCELADO = "m7.reintegro.viaje-cancelado";
 export const QUEUE_DLQ = "m7.reintegro.viaje-cancelado.dlq";
 
+// Routing keys reales que publica M6 (Lucas). No usan "viaje.cancelado".
 const ROUTING_KEYS_M6 = ["cancelacion_cliente", "despacho.reabrir"];
 const REINTENTO_MS = 5000;
 
@@ -38,6 +39,8 @@ async function armarTopologia(ch: Channel): Promise<void> {
   await ch.prefetch(5);
 }
 
+// Conecta, arma la topología y deja el consumer escuchando.
+// Si la conexión se corta después (broker reiniciado, red caída), reintenta solo.
 export async function iniciarRabbit(): Promise<void> {
   if (conectando) return;
   conectando = true;
@@ -47,21 +50,18 @@ export async function iniciarRabbit(): Promise<void> {
     conexion = await amqp.connect(config.rabbitUrl);
   } catch (e) {
     conectando = false;
-    console.warn(`[rabbit] No se pudo conectar a RabbitMQ: ${(e as Error).message}. Próximo reintento en ${REINTENTO_MS / 1000}s`);
+    console.error(`[rabbit] no se pudo conectar: ${(e as Error).message}. Reintento en ${REINTENTO_MS / 1000}s`);
     setTimeout(iniciarRabbit, REINTENTO_MS);
     return;
   }
 
   conexion.on("close", () => {
-    console.warn("[rabbit] Conexión cerrada. Reconectando cuando el servicio vuelva a estar disponible...");
+    console.error("[rabbit] conexión cerrada, reconectando...");
     canal = undefined;
     conectando = false;
     setTimeout(iniciarRabbit, REINTENTO_MS);
   });
-
-  conexion.on("error", (e) => {
-    console.warn("[rabbit] Evento de error:", e.message);
-  });
+  conexion.on("error", (e) => console.error("[rabbit] error:", e.message));
 
   try {
     const ch = await conexion.createChannel();
@@ -70,26 +70,22 @@ export async function iniciarRabbit(): Promise<void> {
 
     canal = ch;
     conectando = false;
-    console.log("[rabbit] Conectado exitosamente y escuchando eventos en RabbitMQ.");
+    console.log("[rabbit] conectado y escuchando viaje.cancelado");
   } catch (e) {
     conectando = false;
-    console.error(`[rabbit] Error al configurar topología o consumidor: ${(e as Error).message}. Reintento en ${REINTENTO_MS / 1000}s`);
+    console.error(`[rabbit] fallo armando topología/consumer: ${(e as Error).message}. Reintento en ${REINTENTO_MS / 1000}s`);
     setTimeout(iniciarRabbit, REINTENTO_MS);
   }
 }
 
 export function publicar(routingKey: string, payload: object, messageId: string): void {
   if (!canal) {
-    console.warn(`[rabbit] Sin canal activo. Mensaje ${messageId} no pudo ser publicado a ${routingKey} (RabbitMQ caído o desconectado).`);
+    console.error(`[rabbit] sin canal activo, no se pudo publicar ${routingKey} (${messageId})`);
     return;
   }
-  try {
-    canal.publish(EXCHANGE_M7, routingKey, Buffer.from(JSON.stringify(payload)), {
-      persistent: true,
-      contentType: "application/json",
-      messageId,
-    });
-  } catch (e) {
-    console.error(`[rabbit] Error al publicar mensaje: ${(e as Error).message}`);
-  }
+  canal.publish(EXCHANGE_M7, routingKey, Buffer.from(JSON.stringify(payload)), {
+    persistent: true,
+    contentType: "application/json",
+    messageId,
+  });
 }

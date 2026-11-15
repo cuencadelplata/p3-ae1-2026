@@ -1,61 +1,44 @@
 import { createClient } from "redis";
 import { config } from "../config";
-import { CircuitBreaker } from "../patrones/circuitBreaker";
-
-export const redisBreaker = new CircuitBreaker({
-  nombre: "Redis",
-  umbralFallos: 2,
-  tiempoEsperaMs: 15000, // 15s de cooldown antes de probar en HALF-OPEN
-  timeoutMs: 1500,
-});
 
 export const redis = createClient({
   url: config.redisUrl,
   socket: {
     connectTimeout: 2000,
     reconnectStrategy: (reintentos) => {
-      if (reintentos > 10) return new Error("Redis: límite de reintentos alcanzado");
-      return Math.min(reintentos * 1000, 5000);
+      if (reintentos > 5) return new Error("Redis: demasiados reintentos, dejo de intentar");
+      return Math.min(reintentos * 500, 3000);
     },
   },
   disableOfflineQueue: true,
 });
-
-redis.on("error", (e) => {
-  // Silenciamos logs repetitivos cuando ya el circuito está gestionando la caída
-  if (redisBreaker.getEstado() !== "OPEN") {
-    console.warn("[redis] Evento de error:", e.message);
-  }
-});
+redis.on("error", (e) => console.error("[redis]", e.message));
 
 export async function conectarRedis(): Promise<void> {
-  try {
-    await redis.connect();
-    console.log("[redis] Conectado exitosamente.");
-  } catch (e) {
-    console.warn("[redis] No se pudo conectar a Redis al inicio (se activará fallback a PostgreSQL):", (e as Error).message);
-  }
+  await redis.connect();
 }
 
 const clave = (idOrden: string) => `m7:reintegro:procesado:${idOrden}`;
 
+// timeout manual extra, por si algún comando individual se cuelga igual
+function conLimite<T>(promesa: Promise<T>, ms = 1500): Promise<T> {
+  return Promise.race([
+    promesa,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("redis timeout")), ms)),
+  ]);
+}
+
 export async function estaEnCache(idOrden: string): Promise<boolean> {
-  return await redisBreaker.ejecutar(
-    async () => {
-      const existe = await redis.exists(clave(idOrden));
-      return existe === 1;
-    },
-    // Fallback: si el circuito está OPEN o Redis falla, asumimos false y vamos a PostgreSQL
-    () => false
-  );
+  try {
+    return (await conLimite(redis.exists(clave(idOrden)))) === 1;
+  } catch {
+    return false; // Redis caído o lento: sigue sin caché
+  }
 }
 
 export async function marcarEnCache(idOrden: string): Promise<void> {
-  await redisBreaker.ejecutar(
-    async () => {
-      await redis.set(clave(idOrden), "1", { EX: config.idempotenciaTtlSegundos });
-    },
-    // Fallback: si Redis está caído, simplemente no se cachea en memoria (queda en Postgres)
-    () => {}
-  );
+  try {
+    await conLimite(redis.set(clave(idOrden), "1", { EX: config.idempotenciaTtlSegundos }));
+  } catch {
+  }
 }

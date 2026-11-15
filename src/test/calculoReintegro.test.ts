@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { calculoReintegro } from "../../src/6-reintegro/calculoReintegro";
-import { cancelacionesDeEjemplo } from "../../src/mock/cancelacionMock";
 
 describe("calculoReintegro", () => {
 
@@ -24,15 +23,13 @@ describe("calculoReintegro", () => {
     expect(resultado).toBe(0);
   });
 
-  it("funciona con el primer dato del mock (monto 3000)", () => {
-    const primero = cancelacionesDeEjemplo[0]!;
-    const resultado = calculoReintegro(primero.montoCancelacion);
+  it("calcula el reintegro de una cancelación con cargo de 3000 (equivalente a M6/RF-7.4)", () => {
+    const resultado = calculoReintegro(3000);
     expect(resultado).toBe(2850); // 3000 * 0.95
   });
 
-  it("funciona con el segundo dato del mock (monto 4500)", () => {
-    const segundo = cancelacionesDeEjemplo[1]!;
-    const resultado = calculoReintegro(segundo.montoCancelacion);
+  it("calcula el reintegro de una cancelación con cargo de 4500 (equivalente a M6/RF-7.4)", () => {
+    const resultado = calculoReintegro(4500);
     expect(resultado).toBe(4275); // 4500 * 0.95
   });
 

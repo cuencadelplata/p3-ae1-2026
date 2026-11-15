@@ -3,16 +3,20 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "module": "commonjs",
-    "target": "es2022",
-    "moduleResolution": "node",
+    "target": "esnext",
+    "types": ["node"],
     "sourceMap": true,
     "declaration": true,
     "declarationMap": true,
-    "strict": false,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "strict": true,
+    "verbatimModuleSyntax": false,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
     "skipLibCheck": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "resolveJsonModule": true
+    "esModuleInterop": true
   },
   "include": ["src/**/*.ts"],
   "exclude": [
@@ -23,3 +27,4 @@
     "playwright.config.ts"
   ]
 }
+

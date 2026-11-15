@@ -1,17 +1,20 @@
 import { Router } from "express";
-import { esPagoDuplicado } from "./verificaPagoDuplicado";
-import { registrosDeEjemplo } from "../mock/registroPagoMock"; // mock compartido
+import { existeOrden } from "../6-reintegro/reintegroBD";
+import { estaEnCache, marcarEnCache } from "../infraestructura/redis";
 
 const router = Router();
 
 // GET /pagos/:idOrden/duplicado
-// consulta si un pago con idOrden ya fue registrado, para evitar cobros duplicados
-// registrados (mock), responde true/false
-
-router.get("/pagos/:idOrden/duplicado", (req, res) => {
+// consulta si una orden ya fue procesada: primero en Redis (rápido), si no en la base (fuente de verdad)
+router.get("/pagos/:idOrden/duplicado", async (req, res) => {
   const { idOrden } = req.params;
-  const esDuplicado = esPagoDuplicado(idOrden, registrosDeEjemplo); // busca si ya existe
-  res.json({ idOrden, esDuplicado });
+  try {
+    const esDuplicado = (await estaEnCache(idOrden)) || (await existeOrden(idOrden));
+    if (esDuplicado) await marcarEnCache(idOrden); // solo cacheamos el "sí"; un "no" puede cambiar
+    res.json({ idOrden, esDuplicado });
+  } catch {
+    res.status(503).json({ error: "No se pudo consultar el registro de órdenes" });
+  }
 });
 
 export default router;
