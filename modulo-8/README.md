@@ -104,6 +104,36 @@ Remove-Item Env:M8_IMAGE -ErrorAction SilentlyContinue
 
 ## Calidad e infraestructura
 
+### Explorar PostgreSQL como tablas
+
+Prisma Studio es una interfaz visual de desarrollo para ver y filtrar filas de
+PostgreSQL. Se conecta a la base M8 existente y reconoce sus tablas; no usamos
+Prisma ORM en la aplicación ni cambiamos las migraciones SQL. Corre en la PC,
+fuera del contenedor M8. Necesita que el servicio PostgreSQL de Compose esté
+levantado y que `.env` tenga `POSTGRES_USER`, `POSTGRES_PASSWORD`,
+`POSTGRES_DB` y `POSTGRES_HOST_PORT`.
+
+Desde `modulo-8/`:
+
+```powershell
+docker compose --env-file .env up -d postgres
+pnpm install --frozen-lockfile
+pnpm run db:studio
+```
+
+Abrí la dirección local que imprime Studio. Si el puerto habitual está ocupado,
+puede elegir otro, como `http://localhost:51212`. Si aparece
+**Could not load schema metadata**, comprobá primero que Docker Desktop esté
+iniciado y que `docker compose --env-file .env ps postgres` muestre PostgreSQL
+en ejecución; después pulsá **Retry** en Studio. En el panel de tablas vas a
+encontrar los esquemas `messaging`, `notification_delivery`, `notifications`,
+`receipts` y `support`.
+Por ejemplo, abrí `receipts.receipts` para ver los comprobantes. Para detener
+Studio, presioná `Ctrl+C` en la terminal donde se inició. La configuración
+`infra/db-ui/prisma.config.ts` construye la conexión a partir del `.env` local;
+no se guarda una URL con contraseña en Git. La interfaz permite editar filas,
+por lo que corresponde usarla sólo con datos de desarrollo.
+
 Con el entorno levantado se pueden ejecutar las verificaciones de demostración:
 
 ```powershell
