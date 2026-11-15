@@ -157,24 +157,22 @@ export class RideRequestController {
   };
 
   /**
-   * Extrae el ID del conductor del contexto de seguridad.
-   * En producción: userId canónico de M1 resuelto por el middleware JWT.
-   * Un conductor es un usuario con role === "CONDUCTOR" en M1;
-   * su identificador es el mismo userId.
+   * Extrae el ID del conductor del contexto de seguridad (RF-5.4).
+   * En producción: userId canónico validado por el middleware de M1 con rol CONDUCTOR.
+   * Evita identidades de demo o suplantaciones desde el pedido.
    */
   private extractDriverId(req: Request): string {
     if (req.authenticatedUser?.userId !== undefined && req.authenticatedUser.role === 'CONDUCTOR') {
       return req.authenticatedUser.userId.toString();
     }
-    // Fallback para compatibilidad con tests y entorno demo
-    const customHeader = req.headers['x-driver-id'] || req.headers['x-user-id'];
-    if (customHeader) {
-      return customHeader.toString();
+    // Fallback controlado únicamente en entorno de tests
+    if (process.env.NODE_ENV === 'test') {
+      const testDriverId = req.headers['x-driver-id'] || req.headers['x-user-id'] || req.params?.driverId;
+      if (testDriverId) {
+        return testDriverId.toString();
+      }
     }
-    if (req.body?.driverId) {
-      return req.body.driverId.toString();
-    }
-    return 'driver_demo_default';
+    throw new ConflictError('Acceso denegado: se requiere autenticación con rol CONDUCTOR de M1.', 'FORBIDDEN_ROLE');
   }
 
   /**
@@ -188,8 +186,7 @@ export class RideRequestController {
       const { action } = req.body || {};
 
       const result = await this.rideRequestService.respondToOffer(offerId, driverId, {
-        action,
-        driverId: req.body?.driverId
+        action
       });
 
       res.status(200).json(result);
@@ -208,8 +205,7 @@ export class RideRequestController {
       const driverId = this.extractDriverId(req);
 
       const result = await this.rideRequestService.respondToOffer(offerId, driverId, {
-        action: 'ACCEPT',
-        driverId: req.body?.driverId
+        action: 'ACCEPT'
       });
 
       res.status(200).json(result);
@@ -228,8 +224,7 @@ export class RideRequestController {
       const driverId = this.extractDriverId(req);
 
       const result = await this.rideRequestService.respondToOffer(offerId, driverId, {
-        action: 'REJECT',
-        driverId: req.body?.driverId
+        action: 'REJECT'
       });
 
       res.status(200).json(result);
@@ -259,6 +254,18 @@ export class RideRequestController {
   public getOffersForDriver = async (req: Request, res: Response): Promise<void> => {
     try {
       const { driverId } = req.params;
+      const authenticatedDriverId = this.extractDriverId(req);
+
+      // Verificación estricta de pertenencia (RF-5.4)
+      if (authenticatedDriverId !== driverId) {
+        res.status(403).json({
+          code: 'FORBIDDEN_ACCESS',
+          message: 'No tiene autorización para consultar las ofertas de otro conductor.',
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+
       const offers = await this.rideRequestService.getOffersForDriver(driverId);
       res.status(200).json({ driverId, count: offers.length, offers });
     } catch (error) {
