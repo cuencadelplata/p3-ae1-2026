@@ -74,6 +74,20 @@ services:
       timeout: 3s
       retries: 5
 
+  k6:
+    image: grafana/k6:2.3.0
+    profiles: ["performance"]
+    working_dir: /scripts
+    volumes:
+      - ./k6:/scripts:ro
+    environment:
+      K6_BASE_URL: "${K6_BASE_URL:-http://m4-api:3004}"
+      K6_CLOUD_TOKEN: "${K6_CLOUD_TOKEN:-}"
+      K6_CLOUD_STACK: "${K6_CLOUD_STACK:-}"
+    depends_on:
+      m4-api:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   rabbitmq_data:

@@ -35,7 +35,7 @@ En AE2 Redis es la fuente de verdad para las ubicaciones temporales. La API no c
 Cada conductor se guarda con una clave de este formato:
 
 ```text
-m4:driver:{driverId}:location
+driver:{driverId}:location
 ```
 
 El valor contiene las coordenadas, tipo de vehiculo, disponibilidad, `updatedAt` y `expiresAt`. La comparacion de `updatedAt` y el guardado se realizan en una unica operacion atomica de Redis.
@@ -85,6 +85,24 @@ pnpm run build
 
 El Dockerfile tambien ejecuta todos los tests durante la construccion y cancela el build si alguno falla.
 
+## Rendimiento con k6 y Grafana Cloud
+
+Las pruebas de rendimiento se encuentran en [`k6/`](k6/README.md) y se ejecutan en un contenedor opcional para no mezclar el generador de carga con la API.
+
+Prueba minima:
+
+```bash
+docker compose --profile performance run --rm k6 run /scripts/smoke.js
+```
+
+Prueba de carga de conductores cercanos:
+
+```bash
+docker compose --profile performance run --rm k6 run /scripts/load-nearby.js
+```
+
+Los mismos resultados pueden enviarse a Grafana Cloud mediante `k6 cloud run --local-execution`. El token y la URL del stack se reciben exclusivamente por variables de entorno y no se guardan en el repositorio.
+
 ## Imagenes publicadas
 
 - API: [segocodee/p3-m4-ubicacion](https://hub.docker.com/r/segocodee/p3-m4-ubicacion), version de trabajo `2.0.0`.
@@ -96,6 +114,7 @@ El Dockerfile tambien ejecuta todos los tests durante la construccion y cancela 
 - `PORT`: puerto interno de la API, valor predeterminado `3004`.
 - `LOCATION_TTL_SECONDS`: vigencia de una ubicacion, valor predeterminado `60`.
 - `REDIS_URL`: conexion a Redis, valor local predeterminado `redis://127.0.0.1:6379`.
+- RabbitMQ se conecta con reintentos durante el arranque para evitar fallos transitorios entre contenedores.
 
 ## Limitaciones conocidas
 
