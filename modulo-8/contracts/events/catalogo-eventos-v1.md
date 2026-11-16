@@ -18,7 +18,7 @@ evidencia del estado heredado de AE1.
 | 2026-09-29 | Comprobantes consume `payment.confirmed` desde su propia cola | Damián Caminos (RF-8.6) | Acordado |
 | 2026-09-29 | Referencia de descarga temporal para reenvíos | Lucas Cremaschi (RF-8.4) | Acordado |
 | 2026-09-30 | Contenido de `payment.confirmed` | Grupo M7 | Respondido sin cubrir los datos del comprobante; se mantiene la alternativa 1 de forma provisoria (ver 5.1) |
-| 2026-10-04 | Congelar contrato de entrada RF8.6 → RF8.1 (6 eventos de viaje, sobre, deduplicación, queue/bindings) y Outbox RF8.1 → RF8.7 | Damián Caminos (RF-8.6) / Invaldi (M8) | **CONGELADO Y CONFIRMADO** |
+| 2026-10-04 | Propuesta de entrada RF8.6 → RF8.1 (eventos de viaje, sobre, deduplicación, queue/bindings) y Outbox RF8.1 → RF8.7 | Damián Caminos (RF-8.6) / Invaldi (M8) | Outbox interno confirmado; entrada externa pendiente con M5/M6 |
 | 2026-10-04 | Forma de integración de M7 con Comprobantes | M7 (RF-7.3) / Invaldi (M8) | M7 se integra solo por REST y no publicará `payment.confirmed`. Comprobantes consulta `GET /metodo-pago/{viajeId}` de M7 y emite solo con el pago autorizado (ver 5.1). Importe y moneda: consulta pendiente a M7 |
 | 2026-10-05 | Importe cobrado en la respuesta de M7 | M7 (RF-7.3) | M7 agregó `total` y `moneda` a `GET /metodo-pago/{viajeId}`, guardados al autorizar (commit `063e112` de M7). Comprobantes los usa desde la versión 2.3.0 (ver 5.1) |
 | 2026-10-04 | El reenvío devuelve el enlace temporal de la sección 6 | Lucas Cremaschi (RF-8.4) | Acordado sin cambios en el contrato |
@@ -240,6 +240,14 @@ GET /metodo-pago/{viajeId}
 404 { mensaje }   (el viaje no tiene un pago registrado)
 ```
 
+**Revisión de la rama publicada de M7 (2026-11-15):** el GET exige `x-api-key`
+con la clave `M7_API_KEY` de M7. M8 la configura con el mismo nombre fuera de
+Git; el sandbox local no exige esa clave. El código de M7 conserva `total` y
+`moneda` al autorizar, pero su OpenAPI publicado aún no documenta esos campos
+ni la autenticación del GET. M7 ya tiene un cliente para la API de Mercado Pago;
+la respuesta real de un pago autorizado y la prueba conjunta quedan para la
+rama común.
+
 | M7 | Modelo de Comprobantes | Efecto en la emisión |
 | --- | --- | --- |
 | `estado: autorizado` | `APROBADO` | Se emite. |
@@ -332,7 +340,7 @@ Su finalidad es solicitar la entrega de una notificación lógica ya creada por 
   "data": {
     "notificationId": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
     "tripId": "trip-2026-000123",
-    "recipientId": "usr-0091",
+    "recipientId": 91,
     "eventType": "TRIP_STARTED",
     "channel": "PUSH",
     "message": "Tu viaje ha comenzado.",
@@ -344,8 +352,8 @@ Su finalidad es solicitar la entrega de una notificación lógica ya creada por 
 | Campo | Tipo | Obligatorio | Regla |
 | --- | --- | --- | --- |
 | `notificationId` | string (UUID v4) | Sí | ID de la notificación lógica creada en RF8.1. |
-| `tripId` | string | Sí | ID del viaje asociado. |
-| `recipientId` | string | Sí | Destinatario del mensaje (cliente o conductor). |
+| `tripId` | string | Según evento | ID del viaje; no corresponde a `TRIP_REQUESTED` ni `DRIVER_DOCUMENT_REGISTERED`. |
+| `recipientId` | number, entero seguro ≥ 1 | Sí | `userId` numérico canónico de M1. No es el `clienteId` libre de M6. |
 | `eventType` | enum | Sí | Evento de viaje en notificaciones (`TRIP_REQUESTED`, `DRIVER_ASSIGNED`, etc.). |
 | `channel` | enum | Sí | Canal de entrega (`PUSH`). |
 | `message` | string | Sí | Mensaje formateado listo para ser enviado por el proveedor de entrega. |
@@ -375,7 +383,11 @@ La aplicación única de M8 todavía no monta el consumidor de eventos de viaje
 descrito abajo; monta el consumidor del documento de M3. Por tanto, la tabla y
 el envelope siguientes son el contrato objetivo para acordar, no un flujo
 intermodular ya probado. El destinatario definitivo debe ser el `userId`
-numérico de M1, con su rol explícito cuando corresponda.
+numérico de M1. M2 confirmó que el `clienteId` libre de M6 no permite obtener
+ese `userId`: el productor deberá conservarlo desde la identidad M1 y enviarlo
+en el evento. Para destinatarios conductores, M3/M5/M6 deben confirmar la
+relación con M1. El campo de rol y la topología final siguen pendientes de
+acuerdo; M8 no convierte cadenas arbitrarias ni consulta bases ajenas.
 
 #### 1. Sobre del mensaje (`mobility.events`)
 
