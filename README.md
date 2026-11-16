@@ -1,7 +1,7 @@
 # Módulo 8 — Notificaciones, Documentos y Soporte
 
-La entrega actual es la integracion completa del Modulo 8 para el AE2. El módulo
-reúne RF8.1 a RF8.7 en una única aplicación HTTP (`m8-app`) y conserva las
+Este directorio reúne el backend del Módulo 8. RF8.1 a RF8.7 se ejecutan en
+una única aplicación HTTP (`m8-app`) y conservan las
 responsabilidades de cada requerimiento separadas internamente. PostgreSQL,
 Redis y RabbitMQ se ejecutan como infraestructura compartida del módulo.
 
@@ -24,13 +24,8 @@ modifica el estado `EN_CURSO`; esas decisiones pertenecen a M6.
 - **RF8.7 — Entrega:** administra dispositivos, intentos e idempotencia de la
   entrega PUSH.
 
-Los responsables trabajan por requerimiento para mantener el código
-desacoplado: Juan Martín Invaldi (RF8.1), Bautista Goya (RF8.2), Juan
-Gualtieri (RF8.3), Lucas Cremaschi (RF8.4), Damián Caminos (RF8.6) y Santiago
-Meza (RF8.7). RF8.5 se integra con el mismo criterio de separación de
-responsabilidades. La integración se realizó mediante contratos compartidos,
-pruebas automatizadas, Compose e infraestructura común, sin transformar los RF
-en aplicaciones HTTP independientes.
+Cada RF tiene su propia responsabilidad dentro de la misma aplicación. Sus
+contratos y guías se encuentran en los índices enlazados más abajo.
 
 Cada RF conserva ownership lógico de sus datos. M8 no consulta directamente
 bases de datos, Redis ni tablas de otros módulos: toda integración externa se
@@ -40,6 +35,22 @@ realiza por HTTP/OpenAPI documentado o por eventos RabbitMQ acordados.
 - Node.js 24;
 - pnpm 10.33.0;
 - Docker Desktop con Docker Compose.
+
+## Dónde está cada parte
+
+M8 es una sola aplicación backend. `src/` la inicia y monta los paquetes de
+`services/`: notificaciones (RF8.1), QR (RF8.2), comprobantes y reenvío (RF8.3
+y RF8.4), soporte (RF8.5), mensajería compartida (RF8.6) y entrega (RF8.7).
+`infra/` contiene la infraestructura **local de M8** y los simuladores usados
+en las pruebas; no es la infraestructura definitiva de los otros módulos.
+
+Los contratos se encuentran desde un único [índice por RF](contracts/README.md):
+HTTP en `openapi/` y RabbitMQ en `contracts/events/`. Las guías y decisiones
+están en el [índice de documentación](docs/README.md). Las versiones anteriores
+se pueden consultar en el historial Git. `dist/` y `node_modules/` son generados.
+
+M8 todavía no contiene un frontend de usuario. Sus pantallas se incorporarán
+al frontend común del proyecto; `/docs` es documentación interactiva de la API.
 
 ## Ejecución local desde el código fuente
 Abrir PowerShell dentro de `modulo-8` y crear el archivo de configuración local
@@ -51,10 +62,12 @@ pnpm install --frozen-lockfile
 pnpm run build
 ```
 
-Antes de iniciar Compose, reemplazar `QR_INTERNAL_API_KEY` en el `.env` local
-por una clave aleatoria propia de al menos 16 caracteres. M6 deberá enviar el
-mismo valor en `x-api-key` al llamar a `POST /qr` y `POST /qr/validate` dentro
-de la red de integración. No publicar esa clave en Git ni en capturas.
+Antes de iniciar Compose, reemplazar **todos** los valores `replace-with-*` del
+`.env` local: claves de RabbitMQ, PostgreSQL, QR, M1 y M2. Configurar las dos
+URL de RabbitMQ con el mismo usuario y contraseña definidos para el broker.
+Si ya existe un volumen PostgreSQL, conservar las contraseñas con que se crearon
+sus roles. M6 deberá enviar `QR_INTERNAL_API_KEY` en `x-api-key` al llamar a
+`POST /qr` y `POST /qr/validate`. No publicar claves en Git ni en capturas.
 Para reintentar una validación, M6 debe conservar el mismo UUID en el header
 `Idempotency-Key`; una solicitud distinta usa un UUID nuevo.
 
@@ -88,12 +101,12 @@ puerto se configura con `M8_HOST_PORT`.
 `openapi: 3.0.3` indica la versión de la especificación OpenAPI utilizada;
 `info.version: 2.0.1` identifica la versión actual del contrato integrado.
 
-## Imagen publicada y demostración
+## Imagen y demostración
 
-La imagen integrada AE2 es `juanmainval/m8-notificaciones-qr:2.0.1`. Necesita
+Una imagen publicada anteriormente es `juanmainval/m8-notificaciones-qr:2.0.1`. Necesita
 la misma infraestructura compartida, por lo que debe levantarse con Compose y
 no mediante un `docker run` aislado.
-Esa etiqueta corresponde a una publicación anterior: para medir o demostrar
+Esa etiqueta corresponde a una versión anterior: para medir o demostrar
 los cambios de esta rama, construir la imagen local con `docker compose
 --env-file .env up -d --build --wait`. La imagen resultante se llama
 `modulo-8-m8-app:local` por defecto y el servicio Compose es `m8-app`.
@@ -125,14 +138,10 @@ docker compose --env-file .env ps
 Invoke-RestMethod http://localhost:3000/health/ready
 ```
 
-k6 puede correr localmente contra esa URL. Grafana Cloud k6 recibe los
-resultados con `k6 cloud run --local-execution <script.js>` después de iniciar
-sesión con `k6 cloud login`. En cambio, ejecutar la carga **desde la nube** no
-alcanza un `localhost` de la PC. El token de Grafana se guarda fuera del repo;
-no se agrega al script, `.env.example` ni a los commits. Ver los resultados de
-k6 en Grafana Cloud no implica que Grafana esté recogiendo métricas o trazas
-internas del contenedor M8: eso requiere configurar un colector o
-instrumentación por separado.
+M8 expone `GET /metrics`. La [guía de observabilidad](docs/guia-observabilidad-y-comandos.md)
+explica cómo ejecutar el smoke HTTP de k6 y habilitar Grafana Alloy para enviar
+las métricas a Grafana Cloud. El smoke no sustituye las pruebas de RabbitMQ ni
+una prueba de carga con varios usuarios virtuales.
 
 ## Calidad e infraestructura
 
@@ -184,11 +193,12 @@ con otra demostración manual.
 La guía paso a paso de demostración está en [`../test.md`](../test.md), el
 procedimiento operativo ampliado en [docs/RUNBOOK.md](docs/RUNBOOK.md) y una
 demo manual específica de Support en
-[docs/rf85_generaciontickets.md](docs/rf85_generaciontickets.md).
+[guía de soporte](docs/rf8.5/generaciontickets.md).
 
-Las variables `M1_JWT_SECRET` y `M2_INTERNAL_API_KEY` de `.env.example` son
-placeholders exclusivos de desarrollo. En un entorno real se inyectan
-externamente y nunca se versionan secretos.
+Antes de preparar commits, ejecutar `pnpm run check:secrets`. La plantilla
+`.env.example` sólo contiene marcadores para las credenciales; el `.env` real
+permanece ignorado por Git. El CI genera sus propias claves temporales y repite
+esa comprobación.
 
 ## Apagado
 
@@ -198,9 +208,3 @@ docker compose --env-file .env down --remove-orphans
 
 Este comando elimina los contenedores y la red del entorno, pero conserva las
 imágenes descargadas y el volumen de desarrollo de PostgreSQL.
-
-## Identificación de entrega
-
-- Rama de trabajo actual: `ae2/notificaciones-qr-receipts-support`.
-- Archivo comprimido: `AE2-M08-ApellidoNombre.zip`.
-- Informe: `Informe-AE2-M08-Apellido.docx`.
