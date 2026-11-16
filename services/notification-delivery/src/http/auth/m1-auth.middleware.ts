@@ -108,8 +108,8 @@ export function extractAuthenticatedUser(authHeader?: string): AuthenticatedUser
     }
 
     clean = clean.replace('usr-', '');
-    const numId = parseInt(clean, 10);
-    if (!Number.isNaN(numId) && Number.isInteger(numId) && numId >= 1) {
+    const numId = Number(clean);
+    if (/^[1-9]\d*$/.test(clean) && Number.isSafeInteger(numId)) {
       return {
         userId: numId,
         ...(assignedRole ? { role: assignedRole } : {}),
@@ -144,7 +144,7 @@ export function extractAuthenticatedUser(authHeader?: string): AuthenticatedUser
 
   // 3.1. Validación de userId (obligatorio, numérico entero >= 1)
   const rawUserId = payload.userId;
-  if (typeof rawUserId !== 'number' || !Number.isInteger(rawUserId) || rawUserId < 1) {
+  if (typeof rawUserId !== 'number' || !Number.isSafeInteger(rawUserId) || rawUserId < 1) {
     return null;
   }
 

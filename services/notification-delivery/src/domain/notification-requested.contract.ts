@@ -114,7 +114,7 @@ export function validateNotificationRequestedEnvelope(
 
   if (
     typeof data.recipientId !== 'number' ||
-    !Number.isInteger(data.recipientId) ||
+    !Number.isSafeInteger(data.recipientId) ||
     data.recipientId < 1
   ) {
     throw new ContractValidationError(
