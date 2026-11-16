@@ -1,16 +1,5 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import dotenv from 'dotenv';
-
-dotenv.config();
-
-const supabaseUrl: string | undefined = process.env.SUPABASE_URL;
-const supabaseKey: string | undefined = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error(
-    'Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en las variables de entorno'
-  );
-}
-
-const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
-export { supabase };
+/**
+ * Supabase fue removido: vehículos y documentos persisten en memoria.
+ * Este módulo se conserva vacío para no romper imports residuales.
+ */
+export const supabase = null;

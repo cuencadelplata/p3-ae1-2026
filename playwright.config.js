@@ -61,19 +61,20 @@ module.exports = defineConfig({
     {
       name: "vehiculos",
       testMatch: "vehiculo/e2e/*.spec.ts",
-      use: { baseURL: process.env.VEHICULOS_URL || "http://localhost:8083" },
+      // 127.0.0.1 evita ECONNREFUSED a ::1 en Windows cuando Node resuelve localhost a IPv6
+      use: { baseURL: process.env.VEHICULOS_URL || "http://127.0.0.1:8083" },
     },
     {
       name: "conductor-api",
       testMatch: "conductor/e2e/api.spec.js",
-      use: { baseURL: process.env.CONDUCTOR_URL || "http://localhost:5000" },
+      use: { baseURL: process.env.CONDUCTOR_URL || "http://127.0.0.1:5000" },
     },
     {
       name: "conductor-frontend",
       testMatch: "conductor/e2e/frontend.spec.js",
       use: {
         ...devices["Desktop Chrome"],
-        baseURL: process.env.FRONTEND_URL || "http://localhost:4000",
+        baseURL: process.env.FRONTEND_URL || "http://127.0.0.1:4000",
       },
     },
   ],
