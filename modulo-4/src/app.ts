@@ -1,6 +1,6 @@
 import express, { type Application } from 'express';
 import { apiReference } from '@scalar/express-api-reference';
-import { readFileSync } from 'node:fs';
+import { createReadStream, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -30,6 +30,9 @@ import type { RabbitMQConnection } from './infrastructure/rabbitmq/rabbitmq.conn
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectDirectory = path.resolve(moduleDirectory, '..');
+const scalarStandaloneAsset = realpathSync(
+  path.join(projectDirectory, 'node_modules', '@scalar', 'api-reference', 'dist', 'browser', 'standalone.js')
+);
 
 export interface AppDependencies {
   locationRepository?: LocationRepository;
@@ -92,11 +95,11 @@ export const createApp = (dependencies: AppDependencies = {}): Application => {
 
   // Documentación OpenAPI / Scalar
   application.use('/openapi', express.static(path.join(projectDirectory, 'openapi')));
-  application.get('/scalar/standalone.js', (_req, res) => {
-    const scalarAsset = readFileSync(
-      path.join(projectDirectory, 'node_modules', '@scalar', 'api-reference', 'dist', 'browser', 'standalone.js')
-    );
-    res.type('application/javascript').send(scalarAsset);
+  application.get('/scalar/standalone.js', (_req, res, next) => {
+    res.type('application/javascript');
+    const assetStream = createReadStream(scalarStandaloneAsset);
+    assetStream.on('error', next);
+    assetStream.pipe(res);
   });
   application.get(
     '/docs',
