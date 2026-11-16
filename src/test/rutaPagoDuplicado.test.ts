@@ -2,14 +2,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import express from "express";
 
-vi.mock("../6-reintegro/reintegroBD", () => ({ existeOrden: vi.fn() }));
+vi.mock("../Aylen/reintegro/reintegroBD", () => ({ existeOrden: vi.fn() }));
 vi.mock("../infraestructura/redis", () => ({
   estaEnCache: vi.fn(),
   marcarEnCache: vi.fn(),
 }));
 
-import rutaPagoDuplicado from "../5-pago-duplicado/rutaPagoDuplicado";
-import { existeOrden } from "../6-reintegro/reintegroBD";
+import rutaPagoDuplicado from "../Aylen/pago-duplicado/rutaPagoDuplicado";
+import { existeOrden } from "../Aylen/reintegro/reintegroBD";
 import { estaEnCache, marcarEnCache } from "../infraestructura/redis";
 
 const app = express();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculoReintegro } from "../../src/6-reintegro/calculoReintegro";
+import { calculoReintegro } from "../Aylen/reintegro/calculoReintegro";
 
 describe("calculoReintegro", () => {
 

@@ -1,4 +1,4 @@
-import { supabase } from "../../supabaseClient";
+import { pool } from "../../infraestructura/basedatos";
 
 export interface NuevoReintegro {
   idOrden: string;
@@ -7,41 +7,19 @@ export interface NuevoReintegro {
   montoReintegro: number;
 }
 
-const ordenesMemoria = new Set<string>();
-
 export async function insertarReintegro(r: NuevoReintegro): Promise<boolean> {
-  try {
-    const { error } = await supabase
-      .from("reintegros")
-      .insert({
-        id_orden: r.idOrden,
-        viaje_id: r.viajeId,
-        monto_cancelacion: r.montoCancelacion,
-        monto_reintegro: r.montoReintegro,
-      });
-    if (error) {
-      if (error.code === "23505") return false; // duplicate
-      throw error;
-    }
-    return true;
-  } catch (error) {
-    console.warn("[reintegroBD] Fallback en memoria ante error de BD:", (error as Error).message);
-    if (ordenesMemoria.has(r.idOrden)) return false;
-    ordenesMemoria.add(r.idOrden);
-    return true;
-  }
+  const sql = `
+    INSERT INTO reintegros (id_orden, viaje_id, monto_cancelacion, monto_reintegro)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (id_orden) DO NOTHING
+  `;
+  const params = [r.idOrden, r.viajeId, r.montoCancelacion, r.montoReintegro];
+  const result = await pool.query(sql, params);
+  return (result.rowCount ?? 0) > 0;
 }
 
 export async function existeOrden(idOrden: string): Promise<boolean> {
-  try {
-    const { data, error } = await supabase
-      .from("reintegros")
-      .select("id_orden")
-      .eq("id_orden", idOrden)
-      .maybeSingle();
-    if (error) throw error;
-    return data !== null;
-  } catch {
-    return ordenesMemoria.has(idOrden);
-  }
+  const sql = `SELECT id_orden FROM reintegros WHERE id_orden = $1`;
+  const result = await pool.query(sql, [idOrden]);
+  return (result.rowCount ?? 0) > 0;
 }

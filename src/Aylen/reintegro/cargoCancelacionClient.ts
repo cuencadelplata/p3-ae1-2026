@@ -52,10 +52,5 @@ export async function obtenerCargo(body: CargoRequest): Promise<number> {
       }
       return data.charge;
     },
-    // Fallback cuando el circuito está OPEN o el servicio cae
-    () => {
-      console.warn("[cargoCancelacion] Circuit Breaker OPEN o servicio inaccesible: se asume cargo 0 o degradación segura.");
-      return 0;
-    }
   );
 }

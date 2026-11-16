@@ -5,27 +5,27 @@ vi.mock("../infraestructura/redis", () => ({
   marcarEnCache: vi.fn(),
 }));
 vi.mock("../infraestructura/rabbit", () => ({ publicar: vi.fn() }));
-vi.mock("../6-reintegro/reintegroBD", () => ({
+vi.mock("../Aylen/reintegro/reintegroBD", () => ({
   existeOrden: vi.fn(),
   insertarReintegro: vi.fn(),
 }));
-vi.mock("../6-reintegro/cargoCancelacionClient", async (importOriginal) => {
+vi.mock("../Aylen/reintegro/cargoCancelacionClient", async (importOriginal) => {
   const real =
-    await importOriginal<typeof import("../6-reintegro/cargoCancelacionClient")>();
+    await importOriginal<typeof import("../Aylen/reintegro/cargoCancelacionClient")>();
   return { ...real, obtenerCargo: vi.fn() };
 });
 
 import {
   procesarReintegro,
   type EventoCancelacionM6,
-} from "../6-reintegro/procesarReintegro";
+} from "../Aylen/reintegro/procesarReintegro";
 import { estaEnCache, marcarEnCache } from "../infraestructura/redis";
 import { publicar } from "../infraestructura/rabbit";
-import { existeOrden, insertarReintegro } from "../6-reintegro/reintegroBD";
+import { existeOrden, insertarReintegro } from "../Aylen/reintegro/reintegroBD";
 import {
   obtenerCargo,
   ErrorTransitorio,
-} from "../6-reintegro/cargoCancelacionClient";
+} from "../Aylen/reintegro/cargoCancelacionClient";
 
 const eventoCliente: EventoCancelacionM6 = {
   viajeId: "V-1",

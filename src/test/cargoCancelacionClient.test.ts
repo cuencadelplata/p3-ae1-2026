@@ -3,7 +3,10 @@ import {
   obtenerCargo,
   ErrorTransitorio,
   ErrorPermanente,
-} from "../6-reintegro/cargoCancelacionClient";
+} from "../Aylen/reintegro/cargoCancelacionClient";
+import { cargoCancelacionBreaker } from "../Aylen/reintegro/cargoCancelacionClient";
+
+beforeEach(() => { cargoCancelacionBreaker.reset(); });
 
 // simula respuesta de 7.4
 

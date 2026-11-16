@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { iniciarConsumerViajeCancelado } from "../../reintegro/consumerViajeCancelado";
-import { ErrorPermanente } from "../../reintegro/obtenerCargo";
-import * as procesarReintegroModule from "../../reintegro/procesarReintegro";
+import { iniciarConsumerViajeCancelado } from "../../Aylen/reintegro/consumerViajeCancelado";
+import { ErrorPermanente } from "../../Aylen/reintegro/obtenerCargo";
+import * as procesarReintegroModule from "../../Aylen/reintegro/procesarReintegro";
 import { QUEUE_CANCELADO } from "../../infraestructura/rabbit";
 
 describe("consumerViajeCancelado", () => {

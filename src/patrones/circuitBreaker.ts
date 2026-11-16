@@ -88,4 +88,9 @@ export class CircuitBreaker {
       );
     }
   }
+  public reset(): void {
+    this.estado = EstadoCircuito.CLOSED;
+    this.fallosConsecutivos = 0;
+    this.proximoIntento = 0;
+  }
 }

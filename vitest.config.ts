@@ -8,6 +8,8 @@ export default defineConfig({
       RABBITMQ_URL: "amqp://guest:guest@localhost:5672",
       CARGO_CANCELACION_URL: "http://localhost:3007",
       M7_API_KEY: "clave-de-prueba",
+      SUPABASE_URL: "https://test.supabase.co",
+      SUPABASE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
       MP_ACCESS_TOKEN: "TEST-token-de-prueba",
     },
     exclude: [

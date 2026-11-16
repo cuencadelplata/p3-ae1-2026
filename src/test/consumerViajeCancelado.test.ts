@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Channel } from "amqplib";
 
-vi.mock("../6-reintegro/procesarReintegro", () => ({ procesarReintegro: vi.fn() }));
+vi.mock("../Aylen/reintegro/procesarReintegro", () => ({ procesarReintegro: vi.fn() }));
 vi.mock("../infraestructura/rabbit", () => ({ QUEUE_CANCELADO: "cola.test" }));
 
-import { iniciarConsumerViajeCancelado } from "../6-reintegro/consumerViajeCancelado";
-import { procesarReintegro } from "../6-reintegro/procesarReintegro";
+import { iniciarConsumerViajeCancelado } from "../Aylen/reintegro/consumerViajeCancelado";
+import { procesarReintegro } from "../Aylen/reintegro/procesarReintegro";
 import {
   ErrorPermanente,
   ErrorTransitorio,
-} from "../6-reintegro/cargoCancelacionClient";
+} from "../Aylen/reintegro/cargoCancelacionClient";
 
 const eventoValido = {
   viajeId: "V-1",
