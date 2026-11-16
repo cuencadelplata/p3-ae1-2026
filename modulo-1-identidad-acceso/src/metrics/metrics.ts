@@ -44,6 +44,16 @@ export const credencialesTotal = new client.Counter({
     registers: [registroMetricas]
 });
 
+// RF-1.4 (Ana): eventos de recuperación y revocación que M1 publica en RabbitMQ.
+// evento = auth.recuperacion_solicitada | auth.credenciales_revocadas
+// resultado = publicado (RabbitMQ lo aceptó) | error (RabbitMQ no disponible)
+export const eventosCredencialesTotal = new client.Counter({
+    name: "m1_eventos_credenciales_total",
+    help: "RF-1.4 - Eventos de recuperación y revocación publicados en RabbitMQ",
+    labelNames: ["evento", "resultado"] as const,
+    registers: [registroMetricas]
+});
+
 // Los contadores arrancan en 0 para que los gráficos de Grafana tengan sus líneas desde el inicio.
 for (const resultado of ["exitoso", "fallido", "bloqueado"]) {
     loginsTotal.inc({ resultado }, 0);
@@ -56,6 +66,12 @@ for (const resultado of ["valida", "usuario_bloqueado", "usuario_inexistente", "
 for (const operacion of ["recuperacion_solicitada", "contrasena_reseteada", "credenciales_revocadas"]) {
     for (const resultado of ["ok", "error"]) {
         credencialesTotal.inc({ operacion, resultado }, 0);
+    }
+}
+
+for (const evento of ["auth.recuperacion_solicitada", "auth.credenciales_revocadas"]) {
+    for (const resultado of ["publicado", "error"]) {
+        eventosCredencialesTotal.inc({ evento, resultado }, 0);
     }
 }
 

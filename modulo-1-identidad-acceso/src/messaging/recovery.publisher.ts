@@ -3,6 +3,7 @@ import {
     EXCHANGE_M1,
     obtenerCanal
 } from "../config/rabbitmq";
+import { eventosCredencialesTotal } from "../metrics/metrics";
 
 // Eventos que M1 publica sobre recuperación y revocación (RF-1.4).
 export const EVENTOS_RECUPERACION = {
@@ -27,18 +28,26 @@ async function publicarEvento(
         datos
     };
 
-    const canal = await obtenerCanal();
+    try {
+        const canal = await obtenerCanal();
 
-    canal.publish(
-        EXCHANGE_M1,
-        routingKey,
-        Buffer.from(JSON.stringify(mensaje)),
-        {
-            persistent: true,
-            contentType: "application/json",
-            messageId: mensaje.id
-        }
-    );
+        canal.publish(
+            EXCHANGE_M1,
+            routingKey,
+            Buffer.from(JSON.stringify(mensaje)),
+            {
+                persistent: true,
+                contentType: "application/json",
+                messageId: mensaje.id
+            }
+        );
+
+        eventosCredencialesTotal.inc({ evento: routingKey, resultado: "publicado" });
+    } catch (error) {
+        // Se cuenta el fallo y se sigue rechazando la promesa: el servicio decide qué hacer.
+        eventosCredencialesTotal.inc({ evento: routingKey, resultado: "error" });
+        throw error;
+    }
 }
 
 // El servicio de notificaciones lee este evento y envía el correo con el token.
