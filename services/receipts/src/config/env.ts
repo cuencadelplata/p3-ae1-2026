@@ -117,6 +117,9 @@ export const env = {
    */
   m7PaymentsUrl: readText('M7_PAYMENTS_URL', 'http://localhost:4020').replace(/\/+$/, ''),
 
+  /** Clave compartida con M7 real. El sandbox local no exige autenticacion. */
+  m7ApiKey: readText('M7_API_KEY', ''),
+
   /** Tiempo maximo de espera de una consulta a M7, en milisegundos. */
   m7TimeoutMs: readPositiveInt('M7_TIMEOUT_MS', 2000),
 

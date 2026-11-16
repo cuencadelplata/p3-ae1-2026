@@ -142,6 +142,7 @@ export function ensureAuthorized(payment: M7Payment | null, tripId: string): M7P
 export interface PaymentsClientOptions {
   baseUrl: string;
   timeoutMs: number;
+  apiKey?: string;
 }
 
 export interface PaymentsClient {
@@ -168,6 +169,7 @@ export function createPaymentsClient(options: PaymentsClientOptions): PaymentsCl
       let body: unknown;
       try {
         response = await fetch(`${options.baseUrl}/metodo-pago/${encodeURIComponent(tripId)}`, {
+          headers: options.apiKey ? { 'x-api-key': options.apiKey } : {},
           signal: AbortSignal.timeout(options.timeoutMs),
         });
         body = await response.json().catch(() => null);
@@ -207,4 +209,5 @@ export function createPaymentsClient(options: PaymentsClientOptions): PaymentsCl
 export const paymentsClient = createPaymentsClient({
   baseUrl: env.m7PaymentsUrl,
   timeoutMs: env.m7TimeoutMs,
+  apiKey: env.m7ApiKey,
 });

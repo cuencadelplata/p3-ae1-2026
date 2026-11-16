@@ -28,6 +28,7 @@ services:
       M2_INTERNAL_API_KEY: "${M2_INTERNAL_API_KEY:?M2_INTERNAL_API_KEY must be configured}"
       FISCAL_API_URL: http://fiscal-sandbox:4010
       M7_PAYMENTS_URL: "${M7_PAYMENTS_URL:-http://m7-payments-sandbox:4020}"
+      M7_API_KEY: "${M7_API_KEY:-}"
     restart: unless-stopped
     depends_on:
       postgres:
