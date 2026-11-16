@@ -5,10 +5,11 @@
 # y recibe unicamente los permisos necesarios sobre la tabla compartida de Inbox
 # de mensajeria "messaging.inbox_events" (RF8.6), sin acceso a receipts ni a otros esquemas.
 set -eu
+: "${DELIVERY_DB_PASSWORD:?DELIVERY_DB_PASSWORD debe configurarse}"
 
 psql -v ON_ERROR_STOP=1 \
   -v db="$POSTGRES_DB" \
-  -v pwd="${DELIVERY_DB_PASSWORD:-m8_delivery_local}" \
+  -v pwd="$DELIVERY_DB_PASSWORD" \
   --username "$POSTGRES_USER" \
   --dbname "$POSTGRES_DB" <<'EOSQL'
 

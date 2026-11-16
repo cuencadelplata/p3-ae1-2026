@@ -4,18 +4,15 @@
  * Lanza N solicitudes simultaneas de emision sobre un mismo tripId y verifica
  * que el servicio emita un unico comprobante. Genera la evidencia del portafolio.
  *
- * Si recibe varias URL base, reparte las solicitudes entre ellas: con dos
- * replicas del servicio, ningun candado en memoria puede evitar la carrera y
- * la unicidad depende solo de la restriccion UNIQUE de la base.
+ * Si recibe varias URL base de la misma aplicación, reparte las solicitudes
+ * entre ellas; la unicidad depende de la restricción UNIQUE de la base.
  *
  * Uso, con el stack levantado (docker compose up -d en modulo-8):
- *   una instancia : pnpm run prueba:concurrencia
- *   dos replicas  : docker compose --profile replicas up -d --build
- *                   pnpm run prueba:replicas
+ *   pnpm run prueba:concurrencia
  */
 import { execSync } from 'node:child_process';
 
-const BASES = process.argv.length > 2 ? process.argv.slice(2) : [process.env.BASE_URL ?? 'http://localhost:3008'];
+const BASES = process.argv.length > 2 ? process.argv.slice(2) : [process.env.BASE_URL ?? 'http://localhost:3000'];
 const SOLICITUDES = Number(process.env.SOLICITUDES ?? 8);
 const tripId = `trip-concurrencia-${Date.now()}`;
 const LINEA = '='.repeat(72);
@@ -78,7 +75,7 @@ async function main() {
       await waitForHealth(base);
     } catch (error) {
       console.error(`\nNo se pudo contactar el servicio en ${base} (${error.message}).`);
-      console.error('Asegurate de que el contenedor m8-documentos este levantado.\n');
+      console.error('Asegurate de que el contenedor m8-app este levantado.\n');
       process.exit(1);
     }
   }

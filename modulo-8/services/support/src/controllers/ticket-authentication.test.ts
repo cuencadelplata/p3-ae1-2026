@@ -254,7 +254,7 @@ describe('contrato OpenAPI de la autenticación', () => {
     for (const operacion of operaciones) {
       expect(operacion.security).toEqual([{}, { bearerAuth: [] }]);
     }
-    expect(contract.paths['/events/publish'].post.security).toBeUndefined();
+    expect(contract.paths['/events/publish']).toBeUndefined();
   });
 
   it('todas las rutas de /tickets documentan el 401 y un 503 con Retry-After', () => {
