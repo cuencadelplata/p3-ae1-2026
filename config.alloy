@@ -14,7 +14,16 @@ discovery.relabel "logs_docker" {
 loki.source.docker "default" {
   host       = "unix:///var/run/docker.sock"
   targets    = discovery.relabel.logs_docker.output
+  forward_to = [loki.process.filtro.receiver]
+}
+
+loki.process "filtro" {
   forward_to = [loki.write.grafana_cloud.receiver]
+
+  stage.drop {
+    older_than          = "1h"
+    drop_counter_reason = "demasiado_viejo"
+  }
 }
 
 loki.write "grafana_cloud" {
