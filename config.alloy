@@ -1,40 +1,3 @@
-// 1. Receptor OTLP (trazas y métricas de m3-vehiculos y m3-conductor-api)
-otelcol.receiver.otlp "default" {
-  http {
-    endpoint = "0.0.0.0:4318"
-  }
-  grpc {
-    endpoint = "0.0.0.0:4317"
-  }
-
-  output {
-    metrics = [otelcol.processor.batch.default.input]
-    traces  = [otelcol.processor.batch.default.input]
-  }
-}
-
-// 2. Procesador Batch
-otelcol.processor.batch "default" {
-  output {
-    metrics = [otelcol.exporter.otlphttp.grafana_cloud.input]
-    traces  = [otelcol.exporter.otlphttp.grafana_cloud.input]
-  }
-}
-
-// 3. Exportador OTLP hacia Grafana Cloud
-otelcol.auth.basic "grafana_cloud" {
-  username = sys.env("GRAFANA_CLOUD_OTLP_USER")
-  password = sys.env("GRAFANA_CLOUD_API_KEY")
-}
-
-otelcol.exporter.otlphttp "grafana_cloud" {
-  client {
-    endpoint = sys.env("GRAFANA_CLOUD_OTLP_ENDPOINT")
-    auth     = otelcol.auth.basic.grafana_cloud.handler
-  }
-}
-
-// 4. Recolección de logs de los contenedores Docker hacia Grafana Cloud (Loki)
 discovery.docker "contenedores" {
   host = "unix:///var/run/docker.sock"
 }
@@ -59,7 +22,7 @@ loki.write "grafana_cloud" {
     url = sys.env("GRAFANA_CLOUD_LOKI_URL")
     basic_auth {
       username = sys.env("GRAFANA_CLOUD_LOKI_USER")
-      password = sys.env("GRAFANA_CLOUD_API_KEY")
+      password = sys.env("GRAFANA_CLOUD_TOKEN")
     }
   }
 }
