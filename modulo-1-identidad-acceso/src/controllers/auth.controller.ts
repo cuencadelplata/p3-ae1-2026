@@ -28,7 +28,10 @@ import {
     publicarIpBloqueada,
     publicarLoginExitoso
 } from "../messaging/auth.publisher";
-import { loginsTotal } from "../metrics/metrics";
+import {
+    loginsTotal,
+    validacionesIdentidadTotal
+} from "../metrics/metrics";
 
 import {
     findUserById
@@ -131,6 +134,8 @@ export function validateToken(
     const user = userId ? findUserById(userId) : undefined;
 
     if (!user) {
+        validacionesIdentidadTotal.inc({ resultado: "usuario_inexistente" });
+
         res.status(200).json({
             valid: false,
             userId,
@@ -140,6 +145,10 @@ export function validateToken(
         });
         return;
     }
+
+    validacionesIdentidadTotal.inc({
+        resultado: user.estado === "ACTIVO" ? "valida" : "usuario_bloqueado"
+    });
 
     res.status(200).json({
         valid: user.estado === "ACTIVO",

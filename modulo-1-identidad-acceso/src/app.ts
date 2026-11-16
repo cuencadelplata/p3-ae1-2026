@@ -9,6 +9,7 @@ import authRoutes from "./routes/auth.routes";
 import revocationRoutes from "./routes/revocation.routes";
 import { testPageHtml } from "./views/testPage";
 import { exponerMetricas, medirDuracion } from "./metrics/metrics";
+import { contarValidacionRechazada } from "./middleware/validation-metrics.middleware";
 
 const app = express();
 
@@ -33,6 +34,9 @@ app.use(medirDuracion);
 
 // AE4: métricas de M1 para Prometheus / Grafana Cloud.
 app.get("/metrics", exponerMetricas);
+
+// RF-1.3: cuenta los tokens rechazados al validar identidad (ver m1_validaciones_identidad_total).
+app.use("/auth/validar-identidad-y-rol", contarValidacionRechazada);
 
 app.get("/health", (_req, res) => {
     return res.status(200).json({
