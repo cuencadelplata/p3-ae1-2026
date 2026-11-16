@@ -14,6 +14,8 @@ services:
       M3_URL: http://simulador:3001
       M4_URL: http://simulador:3001/api/v1
       M7_URL: http://simulador:3001
+      # Clave interna acordada con M7; en entornos publicados se inyecta desde un secreto.
+      M7_API_KEY: ${M7_API_KEY:-m7-clave-local}
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
       DB_HOST: tripdb
@@ -79,6 +81,8 @@ services:
       context: .
       dockerfile: Dockerfile
     command: ["node", "dist/simulator/rf-6.4-6.7/m6-rf-6.4-rf6.7/server.js"]
+    environment:
+      M7_API_KEY: ${M7_API_KEY:-m7-clave-local}
     expose:
       - "3001"
 

@@ -1,52 +1,141 @@
-import { crearViaje, post } from './helpers.js';
+import amqp from 'amqplib';
 import { execFileSync } from 'node:child_process';
+import { crearViaje, datosFinalizacion, post } from './helpers.js';
+
+const rabbitUrl = process.env.E2E_RABBITMQ_URL ?? 'amqp://guest:guest@127.0.0.1:5672';
 
 describe('RF-6.4 - Finalización del viaje en Docker', () => {
-  it('registra la finalización y autoriza el pago mediante el simulador', async () => {
-    const viajeId = await crearViaje({
-      clienteId: `E2E-64-${Date.now()}`,
-      iniciar: true,
-    });
+  it('registra tiempo real, distancia, tarifa y autoriza el pago con tarjeta en M7 (simulador)', async () => {
+    const viajeId = await crearViaje({ clienteId: `E2E-64-${Date.now()}`, iniciar: true });
 
-    const { response, body } = await post(`/api/viajes/${viajeId}/finalizacion`, {
-      origen: { latitude: 0, longitude: 0 },
-      destino: { latitude: 0, longitude: 0.01 },
-      tipoVehiculo: 'auto',
-      horaFin: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-      metodoPago: 'tarjeta',
-    });
+    const { response, body } = await post(`/api/viajes/${viajeId}/finalizacion`, datosFinalizacion());
 
     expect(response.status).toBe(200);
-    expect(body.viaje.estado).toBe('completado');
-    expect(body.viaje.total).toBe(927.5);
-    expect(body.viaje.tiempoMinutos).toBe(3);
-    expect(body.viaje.distanciaKm).toBe(1.11);
-    expect(body.viaje.metricasEstimadas).toBe(true);
-    expect(body.metricasEstimadas).toBe(true);
-    expect(body.fuenteMetrica).toBe('M4');
-    expect(body.paymentId).toBe(`PAY-${viajeId}`);
+    expect(body.viaje).toMatchObject({
+      estado: 'completado',
+      // Simulador M7: (500 + 1,11 km × 250 + 1 min × 50) × 1 (auto)
+      total: 827.5,
+      tiempoMinutos: 1,
+      tiempoEstimadoMinutos: 3,
+      distanciaKm: 1.11,
+      moneda: 'ARS',
+      metricasEstimadas: true,
+    });
+    expect(body).toMatchObject({
+      paymentId: `PAY-${viajeId}`,
+      estadoPago: 'autorizado',
+      fuenteMetrica: 'M4',
+      idempotente: false,
+    });
   });
 
-  it('rechaza finalizar un viaje ya completado', async () => {
+  it('finaliza en efectivo dejando el pago pendiente', async () => {
+    const viajeId = await crearViaje({ clienteId: `E2E-64-efectivo-${Date.now()}`, iniciar: true });
+
+    const { response, body } = await post(
+      `/api/viajes/${viajeId}/finalizacion`,
+      datosFinalizacion({ metodoPago: 'efectivo', pago: undefined }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(body.estadoPago).toBe('pendiente');
+  });
+
+  it('rechaza finalizar un viaje que todavía no inició', async () => {
     const viajeId = await crearViaje({ clienteId: `E2E-64-no-iniciado-${Date.now()}` });
 
-    const { response, body } = await post(`/api/viajes/${viajeId}/finalizacion`, {
-      origen: { latitude: -34.6, longitude: -58.4 },
-      destino: { latitude: -34.7, longitude: -58.5 },
-      tipoVehiculo: 'auto',
-      horaFin: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-      metodoPago: 'efectivo',
-    });
+    const { response, body } = await post(`/api/viajes/${viajeId}/finalizacion`, datosFinalizacion());
 
     expect(response.status).toBe(400);
     expect(body.error).toContain('estado SOLICITADO');
   });
 
+  it('un segundo intento sobre un viaje ya completado devuelve la misma finalización sin cobrar de nuevo', async () => {
+    const viajeId = await crearViaje({ clienteId: `E2E-64-doble-${Date.now()}`, iniciar: true });
+
+    const primera = await post(`/api/viajes/${viajeId}/finalizacion`, datosFinalizacion());
+    const segunda = await post(`/api/viajes/${viajeId}/finalizacion`, datosFinalizacion());
+
+    expect(primera.response.status).toBe(200);
+    expect(segunda.response.status).toBe(200);
+    expect(segunda.body).toMatchObject({ idempotente: true, paymentId: primera.body.paymentId });
+    // Si M6 hubiera vuelto a autorizar, el simulador de M7 respondería 400 (orden ya procesada).
+  });
+
+  it('finalizaciones concurrentes: una sola transición a completado', async () => {
+    const viajeId = await crearViaje({ clienteId: `E2E-64-carrera-${Date.now()}`, iniciar: true });
+
+    const resultados = await Promise.all(
+      Array.from({ length: 5 }, () => post(`/api/viajes/${viajeId}/finalizacion`, datosFinalizacion())),
+    );
+
+    expect(resultados.map(({ response }) => response.status)).toEqual([200, 200, 200, 200, 200]);
+    expect(resultados.filter(({ body }) => body.idempotente === false)).toHaveLength(1);
+    const historial = await fetch(`${process.env.E2E_API_URL ?? 'http://127.0.0.1:3002'}/api/viajes/${viajeId}/historial-transiciones`);
+    const { historial: transiciones } = await historial.json() as { historial: Array<{ to: string }> };
+    expect(transiciones.filter((transicion) => transicion.to === 'completado')).toHaveLength(1);
+  });
+
+  it('devuelve 402 si la pasarela rechaza la tarjeta y el viaje sigue en curso', async () => {
+    const viajeId = await crearViaje({ clienteId: `E2E-64-rechazo-${Date.now()}`, iniciar: true });
+
+    const rechazo = await post(
+      `/api/viajes/${viajeId}/finalizacion`,
+      datosFinalizacion({ pago: { token: 'rechazado', paymentMethodId: 'visa', email: 'cliente@example.com' } }),
+    );
+
+    expect(rechazo.response.status).toBe(402);
+  });
+
+  it('publica viaje.finalizado (M3) y trip.completed (M8) en RabbitMQ', async () => {
+    const conexion = await amqp.connect(rabbitUrl);
+    const canal = await conexion.createChannel();
+    try {
+      await canal.assertExchange('viajes.events', 'topic', { durable: true });
+      await canal.assertExchange('mobility.events', 'topic', { durable: true });
+      const colaM3 = (await canal.assertQueue('', { exclusive: true })).queue;
+      const colaM8 = (await canal.assertQueue('', { exclusive: true })).queue;
+      await canal.bindQueue(colaM3, 'viajes.events', 'viaje.finalizado');
+      await canal.bindQueue(colaM8, 'mobility.events', 'trip.completed');
+
+      // M8 identifica al destinatario con el userId numérico de M1.
+      const clienteId = String(Date.now());
+      const viajeId = await crearViaje({ clienteId, iniciar: true });
+      const { response } = await post(`/api/viajes/${viajeId}/finalizacion`, datosFinalizacion());
+      expect(response.status).toBe(200);
+
+      const esperarMensaje = async (cola: string) => {
+        for (let intento = 0; intento < 40; intento += 1) {
+          const mensaje = await canal.get(cola, { noAck: true });
+          if (mensaje) {
+            const payload = JSON.parse(mensaje.content.toString());
+            if (JSON.stringify(payload).includes(viajeId)) return payload;
+          } else {
+            await new Promise((resolve) => setTimeout(resolve, 250));
+          }
+        }
+        throw new Error(`No llegó el evento del viaje ${viajeId} a ${cola}`);
+      };
+
+      expect(await esperarMensaje(colaM3)).toMatchObject({
+        eventType: 'viaje.finalizado',
+        data: { viajeId, clienteId, conductorId: `conductor-${clienteId}` },
+      });
+      expect(await esperarMensaje(colaM8)).toMatchObject({
+        eventType: 'TripCompleted',
+        version: 1,
+        correlationId: viajeId,
+        producer: 'm6-viajes',
+        data: { tripId: viajeId, recipientId: Number(clienteId) },
+      });
+    } finally {
+      await canal.close();
+      await conexion.close();
+    }
+  });
+
   it('keeps API alive while simulator is stopped', async () => {
-    const viajeId = await crearViaje({
-      clienteId: `E2E-64-outage-${Date.now()}`,
-      iniciar: true,
-    });
+    const viajeId = await crearViaje({ clienteId: `E2E-64-outage-${Date.now()}`, iniciar: true });
 
     execFileSync('docker', ['compose', 'stop', 'simulador']);
     try {
@@ -62,13 +151,7 @@ describe('RF-6.4 - Finalización del viaje en Docker', () => {
       }
       expect(health?.status).toBe(200);
 
-      const { response } = await post(`/api/viajes/${viajeId}/finalizacion`, {
-        origen: { latitude: 0, longitude: 0 },
-        destino: { latitude: 0, longitude: 0.01 },
-        tipoVehiculo: 'auto',
-        horaFin: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-        metodoPago: 'tarjeta',
-      });
+      const { response } = await post(`/api/viajes/${viajeId}/finalizacion`, datosFinalizacion());
       expect(response.status).toBe(503);
       expect(await health?.json()).toEqual({ status: 'ok' });
     } finally {
