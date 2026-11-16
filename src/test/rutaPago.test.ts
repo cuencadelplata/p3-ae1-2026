@@ -29,6 +29,10 @@ import rutaPago from "../Matilda/metodo-pago/rutaPago";
 
 const app = express();
 app.use(express.json());
+app.use((req, _res, next) => {
+  req.headers["x-api-key"] = "clave-de-prueba";
+  next();
+});
 app.use(rutaPago);
 
 let builder: any;
@@ -180,7 +184,7 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
 
     const respuesta = await request(app)
       .post("/metodo-pago/viaje-http-3/autorizar")
-      .send({ idOrden: "orden-http-3", total: 1500, moneda: "USD" });
+      .send({ idOrden: "orden-http-3", total: 1500, moneda: "USD", token: "tok", paymentMethodId: "visa", email: "a@b.com" });
 
     expect(respuesta.status).toBe(200);
     expect(respuesta.body.estado).toBe("autorizado");
@@ -213,7 +217,7 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
 
     const respuesta = await request(app)
       .post("/metodo-pago/viaje-sin-moneda/autorizar")
-      .send({ idOrden: "orden-sin-moneda", total: 800 });
+      .send({ idOrden: "orden-sin-moneda", total: 800, token: "tok", paymentMethodId: "visa", email: "a@b.com" });
 
     expect(respuesta.status).toBe(200);
     expect(respuesta.body.moneda).toBe("ARS");
@@ -243,7 +247,7 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
 
     const respuesta = await request(app)
       .post("/metodo-pago/viaje-rechazado-mp/autorizar")
-      .send({ idOrden: "orden-rechazada", total: 1500 });
+      .send({ idOrden: "orden-rechazada", total: 1500, token: "tok", paymentMethodId: "visa", email: "a@b.com" });
 
     expect(respuesta.status).toBe(402);
   });
@@ -258,7 +262,7 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
 
     const respuesta = await request(app)
       .post("/metodo-pago/viaje-inexistente-http/autorizar")
-      .send({ idOrden: "orden-x", total: 1000 });
+      .send({ idOrden: "orden-x", total: 1000, token: "tok", paymentMethodId: "visa", email: "a@b.com" });
 
     expect(respuesta.status).toBe(400);
   });
@@ -291,6 +295,3 @@ describe("POST /metodo-pago/:viajeId/rechazar", () => {
     expect(respuesta.status).toBe(400);
   });
 });
-//Request: recibe de Express (app) y te devuelve un objeto que simula peticiones HTTP 
-// .post= le dice a la petición que ruta usar
-// .send= manda al server

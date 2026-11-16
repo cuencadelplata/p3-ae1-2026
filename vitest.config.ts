@@ -7,6 +7,8 @@ export default defineConfig({
       REDIS_URL: "redis://localhost:6379",
       RABBITMQ_URL: "amqp://guest:guest@localhost:5672",
       CARGO_CANCELACION_URL: "http://localhost:3007",
+      M7_API_KEY: "clave-de-prueba",
+      MP_ACCESS_TOKEN: "TEST-token-de-prueba",
     },
     exclude: [
       "node_modules",
