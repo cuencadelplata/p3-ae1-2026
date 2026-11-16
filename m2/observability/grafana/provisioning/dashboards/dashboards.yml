@@ -1,0 +1,10 @@
+# Grafana local: carga al arrancar los tableros JSON montados en /var/lib/grafana/dashboards
+# (el mismo m2-dashboard.json que se importa en Grafana Cloud).
+apiVersion: 1
+providers:
+  - name: M2
+    folder: M2
+    type: file
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

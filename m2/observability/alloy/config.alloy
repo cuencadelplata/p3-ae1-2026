@@ -35,11 +35,16 @@ prometheus.relabel "m2" {
     target_label = "modulo"
     replacement  = "m2"
   }
-  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+  // Cada muestra va a los dos destinos; cada uno tiene su propia cola y su WAL.
+  forward_to = [
+    prometheus.remote_write.grafana_cloud.receiver,
+    prometheus.remote_write.local.receiver,
+  ]
 }
 
-// 4. Envía a Grafana Cloud. Sin credenciales válidas este paso falla,
-//    pero los pasos 1 a 3 siguen funcionando.
+// 4. Envía a Grafana Cloud. Sin credenciales válidas, o durante un corte de internet,
+//    este paso falla y reintenta; lo pendiente queda en el WAL y se envía cuando vuelve la
+//    conexión, siempre que Alloy no se reinicie en el medio. Los otros pasos siguen andando.
 prometheus.remote_write "grafana_cloud" {
   endpoint {
     url = sys.env("GRAFANA_CLOUD_PROM_URL")
@@ -48,5 +53,13 @@ prometheus.remote_write "grafana_cloud" {
       username = sys.env("GRAFANA_CLOUD_PROM_USER")
       password = sys.env("GRAFANA_CLOUD_API_KEY")
     }
+  }
+}
+
+// 5. Respaldo local: Prometheus en Docker, consultado por el Grafana local
+//    (http://localhost:3001). Funciona sin internet.
+prometheus.remote_write "local" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
   }
 }
