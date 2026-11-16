@@ -241,6 +241,25 @@ export async function buscarViajesPorCliente(clienteId: string): Promise<ViajeCo
     return viajes;
 }
 
+export async function buscarViajesPorConductor(conductorId: string): Promise<Array<Pick<Viaje, 'id' | 'clienteId' | 'conductorId' | 'estado' | 'origen' | 'destino' | 'fechaCreacion'>>> {
+    const { rows } = await pool.query(
+        `SELECT id, cliente_id, conductor_id, estado, origen, destino, fecha_creacion
+         FROM viajes
+         WHERE conductor_id = $1
+         ORDER BY fecha_creacion DESC, id DESC`,
+        [conductorId]
+    );
+    return rows.map((row) => ({
+        id: row.id as string,
+        clienteId: row.cliente_id as string,
+        conductorId: row.conductor_id as string,
+        estado: row.estado as EstadoViaje,
+        origen: row.origen as string,
+        destino: row.destino as string,
+        fechaCreacion: row.fecha_creacion as Date,
+    }));
+}
+
 export async function cancelarSiCancelable(id: string, actor?: string, motivo?: string): Promise<Viaje | null> {
     await ensureExtensionSchema();
     const client = await pool.connect();

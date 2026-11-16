@@ -12,6 +12,12 @@ export async function startServices(viajes: Map<string, Rf6Viaje>): Promise<{
       if (!viaje) throw new Error('Viaje no encontrado');
       return viaje;
     },
+    async getViajesDeCliente(clienteId) {
+      return [...viajes.values()].filter((viaje) => viaje.clienteId === clienteId);
+    },
+    async getViajesDeConductor(conductorId) {
+      return [...viajes.values()].filter((viaje) => viaje.conductorId === conductorId);
+    },
     async cancelViaje(input) {
       const viaje = viajes.get(input.viajeId);
       if (!viaje) throw new Error('Viaje no encontrado');

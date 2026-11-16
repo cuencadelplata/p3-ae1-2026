@@ -315,6 +315,21 @@ export const obtenerViajesDeCliente = async (req: Request, res: Response): Promi
     }
 };
 
+export const obtenerViajesDeConductor = async (req: Request, res: Response): Promise<any> => {
+    const { conductorId } = req.params;
+    if (typeof conductorId !== 'string' || !conductorId.trim()) {
+        return res.status(400).json({ error: 'Falta el id del conductor en la URL' });
+    }
+
+    try {
+        const viajes = await viajeRepo.buscarViajesPorConductor(conductorId);
+        return res.json({ conductorId, viajes });
+    } catch (error) {
+        console.error('ERROR EN viajeRepo.buscarViajesPorConductor:', error);
+        return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
+    }
+};
+
 export const asignarConductor = async (req: Request, res: Response): Promise<any> => {
     const { id } = req.params;
     if (typeof id !== 'string') {

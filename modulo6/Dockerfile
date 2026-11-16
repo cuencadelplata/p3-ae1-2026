@@ -11,5 +11,6 @@ ENV NODE_ENV=production
 COPY --from=build /app/package.json /app/package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/frontend ./frontend
 EXPOSE 3000
 CMD ["node", "dist/src/rf-6.1-6.2-6.3/index.js"]

@@ -1,6 +1,7 @@
 import express from 'express';
 import viajesRoutes from './routes/viajes.routes.js';
 import clientesRoutes from './routes/clientes.routes.js';
+import conductoresRoutes from './routes/conductores.routes.js';
 import { cerrarPublicador, despacharEventosPendientes } from './services/eventos-viaje.service.js';
 
 const app = express();
@@ -16,6 +17,7 @@ app.get('/health', (_req, res) => {
 // Enlazamos las rutas del modulo
 app.use('/api/viajes', viajesRoutes);
 app.use('/api/clientes', clientesRoutes);
+app.use('/api/conductores', conductoresRoutes);
 
 app.listen(PORT, () => {
     console.log(`Servidor del modulo corriendo en http://localhost:${PORT}`);

@@ -2,6 +2,7 @@ import express from 'express';
 import type { Server } from 'node:http';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import clientesRoutes from '../../../src/rf-6.1-6.2-6.3/routes/clientes.routes.js';
+import conductoresRoutes from '../../../src/rf-6.1-6.2-6.3/routes/conductores.routes.js';
 import pool from '../../../src/rf-6.1-6.2-6.3/db/pool.js';
 import { EstadoViaje } from '../../../src/rf-6.1-6.2-6.3/models/viaje.model.js';
 import * as viajeRepo from '../../../src/rf-6.1-6.2-6.3/repositories/viaje.repository.js';
@@ -11,6 +12,7 @@ const app = express();
 app.use(express.json());
 app.use('/api/viajes', viajesRoutes);
 app.use('/api/clientes', clientesRoutes);
+app.use('/api/conductores', conductoresRoutes);
 
 let server: Server;
 let baseUrl: string;
@@ -127,6 +129,37 @@ describe('GET /api/clientes/:clienteId/viajes', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const response = await fetch(`${baseUrl}/api/clientes/cliente-error/viajes`);
+    expect(response.status).toBe(503);
+  });
+});
+
+describe('GET /api/conductores/:conductorId/viajes', () => {
+  it('devuelve solo viajes asignados al conductor', async () => {
+    const conductorId = `conductor-lista-${Date.now()}`;
+    const assigned = await crearViaje(`${conductorId}-cliente`);
+    const unassigned = await crearViaje(`${conductorId}-otro-cliente`);
+    const assignment = await fetch(`${baseUrl}/api/viajes/${assigned.id}/asignar`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ conductorId }),
+    });
+    expect(assignment.status).toBe(200);
+
+    const response = await fetch(`${baseUrl}/api/conductores/${encodeURIComponent(conductorId)}/viajes`);
+    const body = await response.json() as { conductorId: string; viajes: Array<{ id: string; estado: string }> };
+
+    expect(response.status).toBe(200);
+    expect(body.conductorId).toBe(conductorId);
+    expect(body.viajes).toHaveLength(1);
+    expect(body.viajes[0]).toMatchObject({ id: assigned.id, estado: 'CONDUCTOR_EN_CAMINO' });
+    expect(body.viajes.some((viaje) => viaje.id === unassigned.id)).toBe(false);
+  });
+
+  it('responde 503 si la consulta de viajes falla', async () => {
+    vi.spyOn(viajeRepo, 'buscarViajesPorConductor').mockRejectedValueOnce(new Error('TripDB no disponible'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const response = await fetch(`${baseUrl}/api/conductores/conductor-error/viajes`);
     expect(response.status).toBe(503);
   });
 });

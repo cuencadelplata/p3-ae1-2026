@@ -57,6 +57,14 @@ Cada iteración crea un viaje y lo deja persistido en PostgreSQL; el perfil de e
 
 Compose inicia un simulador interno para las dependencias M3/M4/M7/M8. Los tres servicios M6 comparten la misma imagen Node y la misma base; `docker compose down` detiene el entorno y conserva el volumen de PostgreSQL.
 
+## Mini front-end RF-6.5/6.6
+
+Con el stack levantado, abre `http://localhost:3001/cliente` para RF-6.5 o `http://localhost:3001/conductor` para RF-6.6. El ID de viaje se obtiene del listado de la API y no se escribe manualmente. Si el usuario tiene varios viajes cancelables, se elige uno de la lista.
+
+Para cargar automáticamente la lista, pasa la identidad conocida por el módulo que inicia el flujo: `/cliente?clienteId=...` o `/conductor?conductorId=...`. Si no se recibe en la URL, se puede ingresar el ID de cliente/conductor para consultar sus viajes. El cliente usa `GET /api/clientes/{clienteId}/viajes`; el conductor usa `GET /api/conductores/{conductorId}/viajes`, que devuelve sus viajes asignados.
+
+Las APIs RF-6.5/6.6 no autentican ni identifican por sí solas a la persona que abre la pantalla. Las rutas fijan el flujo, pero no sustituyen autenticación; el módulo que conoce la sesión debe pasar el `clienteId` o `conductorId` correspondiente.
+
 ## Contratos
 
 - Todos los requisitos: [OpenAPI consolidado](openapi.yaml)
