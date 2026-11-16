@@ -3,13 +3,14 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 import { apiReference } from '@scalar/express-api-reference';
-import express, { type Express, type Request, type Response } from 'express';
+import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 
 import { loadReceiptsModule, type ReceiptsModule } from './receipts-runtime.js';
 import { loadQrModule, type QrModule } from './qr-runtime.js';
 import { loadSupportModule, type SupportModule } from './support-runtime.js';
 import { loadNotificationsModule, type NotificationsModule } from './notifications-runtime.js';
 import { loadDeliveryModule, type DeliveryModule } from './delivery-runtime.js';
+import { defaultM8MetricsTracker, type M8MetricsTracker } from './observability/metrics.js';
 
 export interface M8Application {
   app: Express;
@@ -23,6 +24,7 @@ export interface M8ApplicationModules {
   support: SupportModule;
   notifications: NotificationsModule;
   delivery: DeliveryModule;
+  metricsTracker?: M8MetricsTracker;
 }
 
 export async function createM8Application(): Promise<M8Application> {
@@ -36,15 +38,19 @@ export async function createM8Application(): Promise<M8Application> {
 
 /** Construye la app común a partir de módulos ya creados; facilita pruebas sin infraestructura externa. */
 export function createM8ApplicationFromModules(modules: M8ApplicationModules): M8Application {
-  const { receipts, qr, support, notifications, delivery } = modules;
+  const { receipts, qr, support, notifications, delivery, metricsTracker = defaultM8MetricsTracker } = modules;
   const app = express();
 
   app.disable('x-powered-by');
+  app.use(metricsTracker.middleware);
   app.use((_request: Request, response: Response, next) => {
     const incoming = _request.header('X-Correlation-Id');
     const correlationId = incoming && /^[A-Za-z0-9._:-]{1,128}$/.test(incoming) ? incoming : randomUUID();
     response.setHeader('X-Correlation-Id', correlationId);
     next();
+  });
+  app.get('/metrics', (request: Request, response: Response, next: NextFunction) => {
+    void metricsTracker.metricsHandler(request, response).catch(next);
   });
   app.get('/health/live', (_request: Request, response: Response) => {
     response.status(200).json({ status: 'ok', service: 'm8' });
@@ -92,7 +98,7 @@ export function createM8ApplicationFromModules(modules: M8ApplicationModules): M
     response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Ruta no encontrada.' } });
   });
 
-  return createApplicationLifecycle(app, receipts, qr, support, notifications, delivery);
+  return createApplicationLifecycle(app, receipts, qr, support, notifications, delivery, metricsTracker);
 }
 
 function registerDocumentation(app: Express): void {
@@ -109,7 +115,7 @@ function registerDocumentation(app: Express): void {
   );
 }
 
-function createApplicationLifecycle(app: Express, receipts: ReceiptsModule, qr: QrModule, support: SupportModule, notifications: NotificationsModule, delivery: DeliveryModule): M8Application {
+function createApplicationLifecycle(app: Express, receipts: ReceiptsModule, qr: QrModule, support: SupportModule, notifications: NotificationsModule, delivery: DeliveryModule, metricsTracker: M8MetricsTracker): M8Application {
   return {
     app,
     start(): void {
@@ -120,7 +126,7 @@ function createApplicationLifecycle(app: Express, receipts: ReceiptsModule, qr: 
       delivery.start();
     },
     async stop(): Promise<void> {
-      await Promise.all([receipts.stop(), qr.stop(), support.stop(), notifications.stop(), delivery.stop()]);
+      await Promise.all([receipts.stop(), qr.stop(), support.stop(), notifications.stop(), delivery.stop(), metricsTracker.close()]);
     },
   };
 }
