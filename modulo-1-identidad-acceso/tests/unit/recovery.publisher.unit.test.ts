@@ -10,6 +10,7 @@ import {
     publicarCredencialesRevocadas,
     publicarRecuperacionSolicitada
 } from "../../src/messaging/recovery.publisher";
+import { eventosCredencialesTotal } from "../../src/metrics/metrics";
 
 describe("RF-1.4 - Eventos de recuperación en RabbitMQ", () => {
     it("Publicar auth.recuperacion_solicitada con los datos para enviar el correo", async () => {
@@ -80,5 +81,49 @@ describe("RF-1.4 - Eventos de recuperación en RabbitMQ", () => {
         await expect(resultado).rejects.toThrow("RabbitMQ caído");
 
         canal.publish = publishOriginal;
+    });
+
+    it("Contar en la métrica cada evento que RabbitMQ acepta", async () => {
+        const recuperacionAntes = (await eventosCredencialesTotal.get()).values
+            .find((v) => v.labels.evento === "auth.recuperacion_solicitada" && v.labels.resultado === "publicado")?.value ?? 0;
+        const revocacionAntes = (await eventosCredencialesTotal.get()).values
+            .find((v) => v.labels.evento === "auth.credenciales_revocadas" && v.labels.resultado === "publicado")?.value ?? 0;
+
+        await publicarRecuperacionSolicitada(15, "ana@test.com", "Ana", "a".repeat(64), 900);
+        await publicarCredencialesRevocadas(15, "SOLICITUD_DEL_USUARIO", 1_800_000_000);
+        await publicarCredencialesRevocadas(15, "CAMBIO_DE_CONTRASENA", 1_800_000_000);
+
+        const valores = (await eventosCredencialesTotal.get()).values;
+
+        expect(valores.find((v) => v.labels.evento === "auth.recuperacion_solicitada" && v.labels.resultado === "publicado")?.value)
+            .toBe(recuperacionAntes + 1);
+        expect(valores.find((v) => v.labels.evento === "auth.credenciales_revocadas" && v.labels.resultado === "publicado")?.value)
+            .toBe(revocacionAntes + 2);
+    });
+
+    it("Contar como error el evento que RabbitMQ no acepta", async () => {
+        const canal = await obtenerCanal();
+        const publishOriginal = canal.publish;
+        const errorAntes = (await eventosCredencialesTotal.get()).values
+            .find((v) => v.labels.evento === "auth.recuperacion_solicitada" && v.labels.resultado === "error")?.value ?? 0;
+        const publicadoAntes = (await eventosCredencialesTotal.get()).values
+            .find((v) => v.labels.evento === "auth.recuperacion_solicitada" && v.labels.resultado === "publicado")?.value ?? 0;
+
+        canal.publish = () => {
+            throw new Error("RabbitMQ caído");
+        };
+
+        await expect(
+            publicarRecuperacionSolicitada(15, "ana@test.com", "Ana", "a".repeat(64), 900)
+        ).rejects.toThrow("RabbitMQ caído");
+
+        canal.publish = publishOriginal;
+
+        const valores = (await eventosCredencialesTotal.get()).values;
+
+        expect(valores.find((v) => v.labels.evento === "auth.recuperacion_solicitada" && v.labels.resultado === "error")?.value)
+            .toBe(errorAntes + 1);
+        expect(valores.find((v) => v.labels.evento === "auth.recuperacion_solicitada" && v.labels.resultado === "publicado")?.value)
+            .toBe(publicadoAntes);
     });
 });
