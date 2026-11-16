@@ -35,7 +35,10 @@ async function bootstrap() {
 
   // Conexión RabbitMQ
   const rabbitmqConnection = new RabbitMQConnection(config.rabbitmqUrl);
-  await rabbitmqConnection.connect();
+  const rabbitConnected = await rabbitmqConnection.connectWithRetry();
+  if (!rabbitConnected) {
+    Logger.warn('M4 continuará iniciado, pero RabbitMQ permanecerá no disponible hasta una reconexión posterior');
+  }
 
   // Publicador y Consumidor de Eventos RabbitMQ
   const eventPublisher = new RabbitMQEventPublisher(rabbitmqConnection);

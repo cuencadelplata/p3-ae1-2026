@@ -51,6 +51,24 @@ export class RabbitMQConnection {
     }
   }
 
+  public async connectWithRetry(maxAttempts = 10, delayMs = 1_000): Promise<boolean> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      await this.connect();
+
+      if (await this.isConnected()) {
+        return true;
+      }
+
+      if (attempt < maxAttempts) {
+        Logger.warn(`RabbitMQ no disponible. Reintento ${attempt}/${maxAttempts} en ${delayMs} ms`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+
+    Logger.error(`No se pudo conectar con RabbitMQ después de ${maxAttempts} intentos`);
+    return false;
+  }
+
   public async isConnected(): Promise<boolean> {
     return Boolean(this.connection && this.channel);
   }
