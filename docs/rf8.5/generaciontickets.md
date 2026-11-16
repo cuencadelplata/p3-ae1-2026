@@ -199,4 +199,4 @@ M6: un valor inventado, como el de la demostración anterior, responde `422`.
 | `503` | `SUPPORT_IDENTITY_UNAVAILABLE` | M1 no responde a tiempo o está caído. Incluye `Retry-After: 5`. |
 
 Cómo levantar M8 junto a los servicios reales de M6 y M1, y obtener un viaje y
-un token reales: [`infra/integracion-real/README.md`](../infra/integracion-real/README.md).
+un token reales: [`infra/integracion-real/README.md`](../../infra/integracion-real/README.md).
