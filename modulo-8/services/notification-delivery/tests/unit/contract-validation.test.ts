@@ -72,6 +72,14 @@ test('Validador de Contrato NotificationRequested', async (t) => {
       () => validateNotificationRequestedEnvelope(rawZero),
       ContractValidationError
     );
+
+    assert.throws(
+      () => validateNotificationRequestedEnvelope({
+        ...rawString,
+        data: { ...rawString.data, recipientId: Number.MAX_SAFE_INTEGER + 1 },
+      }),
+      ContractValidationError
+    );
   });
 
   await t.test('debe rechazar un mensaje sin messageId', () => {
