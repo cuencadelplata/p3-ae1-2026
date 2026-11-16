@@ -6,6 +6,7 @@ import test from 'node:test';
 import express from 'express';
 
 import { createM8ApplicationFromModules } from '../../dist/app.js';
+import { createM8MetricsTracker } from '../../dist/observability/metrics.js';
 
 function createModule(name, status = 'ok') {
   const router = express.Router();
@@ -95,3 +96,48 @@ test('expone unavailable cuando un módulo crítico no está disponible', async 
     await server.close();
   }
 });
+
+test('expone /metrics en formato Prometheus, clasifica por RF y excluye /health del ruido de negocio', async () => {
+  const qr = createModule('qr');
+  qr.router.post('/qr', (_req, res) => res.status(201).json({ token: 'tok-1' }));
+  const delivery = createModule('delivery');
+  delivery.router.post('/devices/tokens', (_req, res) => res.status(201).json({ ok: true }));
+  const receipts = createModule('receipts');
+  receipts.router.get('/api/v1/receipts/:tripId/pdf', (_req, res) => res.status(200).send('PDF'));
+
+  const metricsTracker = createM8MetricsTracker('m8-test');
+  const application = createM8ApplicationFromModules({
+    receipts,
+    qr,
+    support: createModule('support'),
+    notifications: createModule('notifications'),
+    delivery,
+    metricsTracker,
+  });
+  const server = await startApplication(application);
+
+  try {
+    await fetch(`${server.url}/health/live`);
+    await fetch(`${server.url}/qr`, { method: 'POST' });
+    await fetch(`${server.url}/devices/tokens`, { method: 'POST' });
+    await fetch(`${server.url}/api/v1/receipts/trip-dynamic-999/pdf`);
+
+    const metricsRes = await fetch(`${server.url}/metrics`);
+    assert.equal(metricsRes.status, 200);
+    const body = await metricsRes.text();
+
+    assert.match(body, /nodejs_/);
+    assert.match(body, /http_requests_total\{[^}]*route="\/qr"[^}]*rf="RF8\.2"/);
+    assert.match(body, /http_requests_total\{[^}]*route="\/devices\/tokens"[^}]*rf="RF8\.7"/);
+    assert.match(body, /http_requests_total\{[^}]*route="\/api\/v1\/receipts\/:tripId\/pdf"[^}]*rf="RF8\.3"/);
+    assert.match(body, /m8_business_operations_total\{[^}]*rf="RF8\.2"[^}]*operation="Generación de código QR"/);
+    assert.match(body, /m8_device_tokens_registered_total\{[^}]*platform="ANDROID"/);
+    assert.match(body, /m8_storage_size_bytes\{[^}]*component="Volumen Total Módulo 8"/);
+    assert.doesNotMatch(body, /route="\/health\/live"/);
+    assert.doesNotMatch(body, /trip-dynamic-999/);
+  } finally {
+    await application.stop();
+    await server.close();
+  }
+});
+

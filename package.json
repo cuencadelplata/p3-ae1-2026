@@ -23,14 +23,20 @@
     "test:resiliencia:raw": "node --test tests/e2e/resiliencia-ae2.e2e.test.mjs",
     "compose:build": "docker compose build",
     "compose:up": "docker compose up -d",
-    "compose:down": "docker compose down --remove-orphans"
+    "compose:down": "docker compose down --remove-orphans",
+    "smoke:all": "node tests/stress/run-k6.mjs all",
+    "smoke:notifications": "node tests/stress/run-k6.mjs notifications",
+    "smoke:qr": "node tests/stress/run-k6.mjs qr",
+    "smoke:receipts": "node tests/stress/run-k6.mjs receipts",
+    "smoke:support": "node tests/stress/run-k6.mjs support",
+    "smoke:delivery": "node tests/stress/run-k6.mjs delivery"
   },
   "dependencies": {
-    "@scalar/express-api-reference": "^0.10.18",
     "@m8/notification-delivery": "workspace:*",
     "@m8/notifications-processing": "workspace:*",
     "@m8/qr": "workspace:*",
     "@m8/shared": "workspace:*",
+    "@scalar/express-api-reference": "^0.10.18",
     "amqplib": "^0.10.9",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -39,6 +45,7 @@
     "m8-soporte": "workspace:*",
     "pdfkit": "^0.20.1",
     "pg": "^8.23.0",
+    "prom-client": "^15.1.3",
     "qrcode": "^1.5.4",
     "redis": "^6.2.1",
     "yaml": "^2.5.0",
@@ -47,6 +54,7 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.4",
+    "@types/pg": "^8.23.1",
     "typescript": "^7.0.2"
   }
 }
