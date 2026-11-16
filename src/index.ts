@@ -36,7 +36,6 @@ async function main() {
   await conectarRedis();
   console.log("Redis conectado");
 
-
   await iniciarRabbit();
 
   app.listen(config.port, () => {
