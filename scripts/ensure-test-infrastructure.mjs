@@ -1,15 +1,29 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { parse } from "dotenv";
 
 const mode = process.argv[2];
-const envFile = existsSync(".env") ? ".env" : ".env.example";
+const envFile = ".env";
 
 if (mode !== "dependencies" && mode !== "stack") {
   throw new Error("Uso: node scripts/ensure-test-infrastructure.mjs <dependencies|stack>");
 }
 
 if (!existsSync(envFile)) {
-  throw new Error("Falta modulo-8/.env y modulo-8/.env.example; no se puede iniciar la infraestructura de pruebas.");
+  throw new Error("Falta modulo-8/.env; crearlo a partir de .env.example y definir claves privadas antes de iniciar las pruebas.");
+}
+
+const config = parse(readFileSync(envFile));
+const requiredSecrets = [
+  "RABBITMQ_USER", "RABBITMQ_PASSWORD", "M8_RABBITMQ_URL", "RABBITMQ_URL",
+  "POSTGRES_PASSWORD", "RECEIPTS_DB_PASSWORD", "NOTIFICATIONS_DB_PASSWORD",
+  "SUPPORT_DB_PASSWORD", "DELIVERY_DB_PASSWORD", "QR_INTERNAL_API_KEY",
+  "M1_JWT_SECRET", "M2_INTERNAL_API_KEY",
+];
+for (const name of requiredSecrets) {
+  if (!config[name] || config[name].includes("replace-with-")) {
+    throw new Error(`Configurar ${name} en modulo-8/.env antes de iniciar Compose.`);
+  }
 }
 
 function runDocker(args) {

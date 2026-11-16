@@ -5,17 +5,17 @@ import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
 const localEnvPath = resolve(__dirname, "../..", ".env");
-const exampleEnvPath = resolve(__dirname, "../..", ".env.example");
-const envPath = existsSync(localEnvPath) ? localEnvPath : exampleEnvPath;
-
-if (!existsSync(envPath)) {
-  throw new Error("Falta modulo-8/.env y modulo-8/.env.example; no se pueden ejecutar pruebas de integracion.");
+if (!existsSync(localEnvPath)) {
+  throw new Error("Falta modulo-8/.env para las pruebas de integración.");
 }
 
-loadEnvFile(envPath);
+loadEnvFile(localEnvPath);
 
 if (process.env.NOTIFICATIONS_TEST_DATABASE_URL === undefined) {
-  const password = process.env.NOTIFICATIONS_DB_PASSWORD ?? "m8_notifications_local";
+  const password = process.env.NOTIFICATIONS_DB_PASSWORD;
+  if (!password || password.startsWith("replace-with-")) {
+    throw new Error("Configurar NOTIFICATIONS_DB_PASSWORD en modulo-8/.env.");
+  }
   const port = process.env.POSTGRES_HOST_PORT ?? "5432";
   const database = process.env.NOTIFICATIONS_TEST_DB_NAME ?? "m8_notifications_test";
 

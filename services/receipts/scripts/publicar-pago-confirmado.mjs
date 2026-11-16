@@ -148,11 +148,11 @@ async function main() {
       console.log(`   messageId=${evento.messageId} data=${JSON.stringify(evento.data)}`);
     }
   } else {
-    console.log(` No se encontro el comprobante en ${BASE}. Revisar docker compose logs receipts`);
+    console.log(` No se encontro el comprobante en ${BASE}. Revisar docker compose logs m8-app`);
   }
   console.log(LINEA);
   console.log(' Verificar:');
-  console.log('  - docker compose logs receipts : "emitido", "repetido descartado", "DLQ" y "evento publicado"');
+  console.log('  - docker compose logs m8-app : "emitido", "repetido descartado", "DLQ" y "evento publicado"');
   console.log('  - http://localhost:15672 -> Queues -> m8.receipts.payment-confirmed.dlq (1 mensaje)');
   console.log(LINEA);
 }
