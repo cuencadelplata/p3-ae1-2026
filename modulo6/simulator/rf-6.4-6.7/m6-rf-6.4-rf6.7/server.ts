@@ -2,6 +2,9 @@ import { createServer, type Server } from 'node:http';
 
 export function createSimulator(): Server {
   const metodosPago = new Map<string, Record<string, unknown>>();
+  const ordenesProcesadas = new Set<string>();
+  const apiKeyValida = (recibida: string | string[] | undefined) =>
+    !process.env.M7_API_KEY || recibida === process.env.M7_API_KEY;
   const codigosQr = new Map<string, { token: string; expiresAt: string }>();
 
   return createServer(async (request, response) => {
@@ -69,11 +72,21 @@ export function createSimulator(): Server {
         },
         calculadoEn: new Date().toISOString(),
       };
+    } else if (request.url?.startsWith('/metodo-pago') && !apiKeyValida(request.headers['x-api-key'])) {
+      // Igual que M7 real (exigirApiKey): /metodo-pago/* requiere x-api-key.
+      response.writeHead(401, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ mensaje: 'API key inválida o ausente' }));
+      return;
     } else if (request.method === 'POST' && request.url === '/metodo-pago') {
       const { clienteId, viajeId, tipo } = input;
       if (typeof clienteId !== 'string' || typeof viajeId !== 'string' || typeof tipo !== 'string' || !['efectivo', 'tarjeta', 'transferencia'].includes(tipo)) {
         response.writeHead(400, { 'content-type': 'application/json' });
         response.end(JSON.stringify({ mensaje: 'No se pudo registrar el método de pago' }));
+        return;
+      }
+      if (metodosPago.has(viajeId)) {
+        response.writeHead(400, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ mensaje: 'No se pudo registrar el método de pago', error: 'El viaje ya tiene un pago registrado' }));
         return;
       }
       const metodoPago = {
@@ -99,8 +112,29 @@ export function createSimulator(): Server {
         }
         if (request.method === 'GET' && !paymentMatch[2]) {
           result = metodoPago;
-        } else if (request.method === 'POST' && paymentMatch[2] === 'autorizar' && input.idOrden) {
-          metodoPago.estado = 'autorizado';
+        } else if (request.method === 'POST' && paymentMatch[2] === 'autorizar') {
+          // Mismo contrato que M7 real: idOrden, total y los datos de Mercado Pago.
+          const { idOrden, total, moneda, token, paymentMethodId, email } = input;
+          const error =
+            !idOrden ? 'idOrden es requerido'
+            : typeof total !== 'number' ? 'total es requerido'
+            : !token || !paymentMethodId || !email ? 'token, paymentMethodId y email son requeridos'
+            : ordenesProcesadas.has(String(idOrden)) ? 'Esta orden de pago ya fue procesada anteriormente'
+            : metodoPago.estado !== 'pendiente' ? 'El pago no fue procesado aún'
+            : undefined;
+          if (error) {
+            response.writeHead(400, { 'content-type': 'application/json' });
+            response.end(JSON.stringify({ mensaje: 'No se pudo autorizar el pago', error }));
+            return;
+          }
+          // Token de prueba para simular un rechazo de la pasarela.
+          if (token === 'rechazado') {
+            response.writeHead(402, { 'content-type': 'application/json' });
+            response.end(JSON.stringify({ mensaje: 'El pago no fue aprobado por Mercado Pago', estadoMP: 'rejected' }));
+            return;
+          }
+          ordenesProcesadas.add(String(idOrden));
+          Object.assign(metodoPago, { estado: 'autorizado', paymentId: `MP-${viajeId}`, total, moneda: moneda ?? 'ARS' });
           result = metodoPago;
         } else if (request.method === 'POST' && paymentMatch[2] === 'rechazar') {
           metodoPago.estado = 'rechazado';

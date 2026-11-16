@@ -56,6 +56,19 @@ export async function crearViaje(input: {
   return viaje.id;
 }
 
+/** Cuerpo de finalización válido: horaFin es "ahora" y el pago es con tarjeta tokenizada. */
+export function datosFinalizacion(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    origen: { latitude: 0, longitude: 0 },
+    destino: { latitude: 0, longitude: 0.01 },
+    tipoVehiculo: 'auto',
+    horaFin: new Date().toISOString(),
+    metodoPago: 'tarjeta',
+    pago: { token: 'tok-e2e', paymentMethodId: 'visa', email: 'cliente@example.com' },
+    ...overrides,
+  };
+}
+
 export async function post(path: string, body: unknown): Promise<{ response: Response; body: Record<string, any> }> {
   const response = await fetch(`${apiUrl}${path}`, {
     method: 'POST',

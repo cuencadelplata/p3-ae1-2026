@@ -60,17 +60,21 @@ describe('GET /api/clientes/:clienteId/viajes', () => {
     await viajeRepo.actualizarEstado(viajeEnCurso.id, EstadoViaje.CONDUCTOR_EN_CAMINO, 'conductor-test');
     await viajeRepo.actualizarEstado(viajeEnCurso.id, EstadoViaje.ARRIBADO);
     await viajeRepo.actualizarEstado(viajeEnCurso.id, EstadoViaje.EN_CURSO);
-    await viajeRepo.finalizarSiEnCurso(viajeEnCurso.id, async () => ({
+    await viajeRepo.finalizarSiEnCurso(viajeEnCurso.id, async (_viaje, inicio) => ({
+      inicio,
+      horaFin: new Date(inicio.getTime() + 3 * 60_000),
       tiempoMinutos: 3,
+      tiempoEstimadoMinutos: 3,
       distanciaKm: 1.11,
-      horaFin: new Date('2026-10-05T18:00:00Z'),
       metodoPago: 'tarjeta',
       total: 927.5,
+      moneda: 'ARS',
       origen: { latitude: 0, longitude: 0 },
       destino: { latitude: 0, longitude: 0.01 },
       tipoVehiculo: 'auto',
       fuenteMetrica: 'M4',
       metricasEstimadas: true,
+      estadoPago: 'autorizado',
       paymentId: `PAY-${viajeEnCurso.id}`,
     }));
 
@@ -83,7 +87,7 @@ describe('GET /api/clientes/:clienteId/viajes', () => {
         codigoVerificacion?: string | null;
         qrCode?: string | null;
         finalizacion: { paymentId: string; total: number } | null;
-        historialTransiciones: Array<{ from: string; to: string; detalle?: string }>;
+        historialTransiciones: Array<{ from: string | null; to: string; detalle?: string }>;
       }>;
     };
 
@@ -96,7 +100,8 @@ describe('GET /api/clientes/:clienteId/viajes', () => {
       estado: EstadoViaje.COMPLETADO,
       finalizacion: { paymentId: `PAY-${viajeEnCurso.id}`, total: 927.5 },
     });
-    expect(completed?.historialTransiciones).toHaveLength(4);
+    expect(completed?.historialTransiciones).toHaveLength(5);
+    expect(completed?.historialTransiciones[0]).toMatchObject({ from: null, to: 'solicitado' });
     expect(completed?.historialTransiciones.at(-1)).toMatchObject({
       from: 'en curso',
       to: 'completado',
@@ -105,7 +110,8 @@ describe('GET /api/clientes/:clienteId/viajes', () => {
 
     const requested = body.viajes.find((viaje) => viaje.id === otroViaje.id);
     expect(requested).toMatchObject({ estado: EstadoViaje.SOLICITADO, finalizacion: null });
-    expect(requested?.historialTransiciones).toEqual([]);
+    expect(requested?.historialTransiciones).toHaveLength(1);
+    expect(requested?.historialTransiciones[0]).toMatchObject({ from: null, to: 'solicitado' });
     expect(requested).not.toHaveProperty('codigoVerificacion');
     expect(requested).not.toHaveProperty('qrCode');
   });
