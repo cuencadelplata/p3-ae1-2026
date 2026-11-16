@@ -141,8 +141,11 @@ components:
       in: path
       name: driverId
       required: true
+      description: userId numérico del conductor en M1 (Usuarios). Si no es numérico, POST devuelve 400.
       schema:
         type: string
+        pattern: '^\d+$'
+        example: '101'
     vehicleId:
       in: path
       name: vehicleId

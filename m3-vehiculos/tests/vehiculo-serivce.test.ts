@@ -15,7 +15,7 @@ const { AppError } = await import("../src/errors/AppError.js");
 const { TipoServicio } = await import("../src/vehiculos/vehiculo-model.js");
 
 describe("Vehiculo Service Tests", () => {
-  const driverId = "driver-abc-123";
+  const driverId = "101";
 
   const mockVehiculoValido: any = {
     id: "veh-uuid-1",
@@ -73,6 +73,17 @@ describe("Vehiculo Service Tests", () => {
       ).rejects.toMatchObject({ status: 409 });
     });
 
+    it("debe lanzar 400 si el driverId no es el userId numérico de M1", async () => {
+      await expect(
+        registrarVehiculo("driver-abc", {
+          patente: "AB123CD",
+          anio: 2020,
+          tipoServicio: "AUTO",
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(repository.insertarVehiculo).not.toHaveBeenCalled();
+    });
+    
     it("debe lanzar error si la patente no tiene formato válido", async () => {
       await expect(
         registrarVehiculo(driverId, {

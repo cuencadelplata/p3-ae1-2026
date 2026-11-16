@@ -18,6 +18,10 @@ export async function registrarVehiculo(
   driverId: string,
   datos: VehiculoRequestDTO,
 ): Promise<Vehiculo> {
+  // El driverId es el userId numérico de M1 (misma regla que en documentos)
+  if (!/^\d+$/.test(driverId)) {
+    throw new AppError("driverId debe ser el userId numérico de M1", 400);
+  }
   if (!datos.patente) throw new AppError("Falta la patente");
 
   const patente = datos.patente.trim().toUpperCase();

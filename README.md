@@ -149,6 +149,7 @@ aplicaciones).
 - Redis 7 (redis:7-alpine), como caché para idempotencia de pedidos
 - RabbitMQ 3 (rabbitmq:3-management-alpine), para mensajería asíncrona entre operaciones del módulo
 
+
 ### Requisitos previos
 
 - Docker y Docker Compose (para correr contenerizado), o
