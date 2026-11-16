@@ -48,6 +48,11 @@ function loadConfigOrExit(): QrConfig & { readonly redisUrl: string } {
 }
 
 const config = loadConfigOrExit();
+const internalApiKey = process.env.QR_INTERNAL_API_KEY;
+if (internalApiKey === undefined || internalApiKey.trim().length < 16 || internalApiKey.startsWith("replace-with-")) {
+  log("error", "configuración inválida", { reason: "QR_INTERNAL_API_KEY debe configurarse con al menos 16 caracteres." });
+  process.exit(1);
+}
 
 const redisClient = createQrRedisClient({ url: config.redisUrl });
 
@@ -60,7 +65,7 @@ const qrService = createQrService({
   log: createLogger("qr"),
 });
 
-const server = createApp({ qrService, checkRedis: () => isRedisReady(redisClient) }).listen(port, () => {
+const server = createApp({ qrService, internalApiKey, checkRedis: () => isRedisReady(redisClient) }).listen(port, () => {
   log("info", "servicio QR escuchando", { port });
 });
 

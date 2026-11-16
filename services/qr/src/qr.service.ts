@@ -18,7 +18,7 @@ export interface QrServiceDeps {
 
 export interface QrService {
   generateQr(tripId: string): Promise<QrGenerationResponse>;
-  validateQr(tripId: string, token: string): Promise<QrValidationResponse>;
+  validateQr(tripId: string, token: string, operationId?: string): Promise<QrValidationResponse>;
 }
 
 const LOGGED_TOKEN_HASH_LENGTH = 8;
@@ -111,9 +111,13 @@ export function createQrService(deps: QrServiceDeps): QrService {
     };
   }
 
-  async function validateQr(tripId: string, token: string): Promise<QrValidationResponse> {
+  async function validateQr(tripId: string, token: string, operationId?: string): Promise<QrValidationResponse> {
     const tokenHash = createHash("sha256").update(token).digest("hex");
-    const outcome = await withStore(tripId, () => deps.store.consumeIfValid(tokenHash, tripId, deps.now()));
+    const outcome = await withStore(tripId, () =>
+      operationId === undefined
+        ? deps.store.consumeIfValid(tokenHash, tripId, deps.now())
+        : deps.store.consumeIfValid(tokenHash, tripId, deps.now(), operationId),
+    );
 
     if (outcome === "OK") {
       deps.log("info", "QR validado y consumido", {
@@ -138,6 +142,8 @@ export function createQrService(deps: QrServiceDeps): QrService {
         throw new ApiError(409, "QR_ALREADY_USED", "El QR ya fue utilizado.");
       case "EXPIRED":
         throw new ApiError(410, "QR_EXPIRED", "El QR ha vencido.");
+      case "IDEMPOTENCY_CONFLICT":
+        throw new ApiError(409, "IDEMPOTENCY_CONFLICT", "La clave de idempotencia ya se usó con otros datos.");
     }
   }
 

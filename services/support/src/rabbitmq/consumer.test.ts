@@ -48,7 +48,11 @@ function dropBroker(connection: FakeConnection) {
   connection.emit('close');
 }
 
-describe('RabbitMQConsumer ante un broker caído', () => {
+// Cada test vuelve a importar en frío la app y el consumer (vi.resetModules).
+// Solo tarda menos de un segundo, pero con toda la suite en paralelo y la caché
+// fría puede pasar los 5 s por defecto de Vitest. El tiempo se va en importar
+// módulos, no en lo que se verifica.
+describe('RabbitMQConsumer ante un broker caído', { timeout: 15_000 }, () => {
   let connections: FakeConnection[];
 
   // El consumer guarda su estado en campos estáticos: cada test usa un módulo nuevo.

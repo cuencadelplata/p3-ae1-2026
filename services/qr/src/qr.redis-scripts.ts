@@ -91,8 +91,35 @@ end
 return 'OK'
 `;
 
+// KEYS[3] identifica una solicitud de validacion. La misma clave y el mismo
+// viaje/token recuperan el exito previo; reutilizarla con otros datos falla.
+// Se guarda junto con el consumo en un unico script, incluso si la respuesta
+// de Redis se pierde despues de ejecutar el comando.
+const CONSUME_IDEMPOTENT_SCRIPT = `
+local previous = redis.call('HMGET', KEYS[3], 'tripId', 'tokenHash')
+if previous[1] then
+  if previous[1] == ARGV[1] and previous[2] == ARGV[2] then
+    return 'OK'
+  end
+  return 'IDEMPOTENCY_CONFLICT'
+end
+local record = redis.call('HMGET', KEYS[1], 'tripId', 'expiresAt', 'usedAt')
+if not record[1] then return 'NOT_FOUND' end
+if record[1] ~= ARGV[1] then return 'TRIP_MISMATCH' end
+if record[3] then return 'ALREADY_USED' end
+${REDIS_NOW_MS}
+if nowMs >= tonumber(record[2]) then return 'EXPIRED' end
+local ttlMs = redis.call('PTTL', KEYS[1])
+if ttlMs <= 0 then return 'NOT_FOUND' end
+redis.call('HSET', KEYS[3], 'tripId', ARGV[1], 'tokenHash', ARGV[2])
+redis.call('PEXPIRE', KEYS[3], ttlMs)
+redis.call('HSET', KEYS[1], 'usedAt', string.format('%d', nowMs))
+if redis.call('GET', KEYS[2]) == ARGV[2] then redis.call('DEL', KEYS[2]) end
+return 'OK'
+`;
+
 export class QrScriptReplyError extends Error {
-  constructor(script: "qrSave" | "qrGetOrCreate" | "qrConsume") {
+  constructor(script: "qrSave" | "qrGetOrCreate" | "qrConsume" | "qrConsumeIdempotent") {
     super(`Respuesta inesperada del script ${script}.`);
     this.name = "QrScriptReplyError";
   }
@@ -104,6 +131,7 @@ const CONSUME_OUTCOMES: ReadonlySet<string> = new Set<ConsumeOutcome>([
   "TRIP_MISMATCH",
   "ALREADY_USED",
   "EXPIRED",
+  "IDEMPOTENCY_CONFLICT",
 ]);
 
 export interface SaveScriptArgs {
@@ -206,6 +234,21 @@ export const qrRedisScripts = {
       if (!CONSUME_OUTCOMES.has(outcome)) {
         throw new QrScriptReplyError("qrConsume");
       }
+      return outcome as ConsumeOutcome;
+    },
+  }),
+  qrConsumeIdempotent: defineScript({
+    SCRIPT: CONSUME_IDEMPOTENT_SCRIPT,
+    NUMBER_OF_KEYS: 3,
+    parseCommand(parser: CommandParser, key: string, tripKey: string, operationKey: string, tripId: string, tokenHash: string) {
+      parser.pushKey(key);
+      parser.pushKey(tripKey);
+      parser.pushKey(operationKey);
+      parser.push(tripId, tokenHash);
+    },
+    transformReply: (reply: unknown): ConsumeOutcome => {
+      const outcome = String(reply);
+      if (!CONSUME_OUTCOMES.has(outcome)) throw new QrScriptReplyError("qrConsumeIdempotent");
       return outcome as ConsumeOutcome;
     },
   }),

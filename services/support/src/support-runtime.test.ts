@@ -32,8 +32,9 @@ describe('loadSupportConfig', () => {
     expect(() => loadSupportConfig({ SUPPORT_LEGACY_EVENTS: 'true' })).toThrow(/SUPPORT_LEGACY_EVENTS/);
   });
 
-  it('conserva los valores por defecto de puerto y broker', () => {
-    expect(loadSupportConfig({})).toMatchObject({ port: 3000, rabbitUrl: 'amqp://localhost:5672' });
+  it('conserva el puerto por defecto y exige configurar el broker externamente', () => {
+    expect(loadSupportConfig({})).toMatchObject({ port: 3000, rabbitUrl: '' });
+    expect(loadSupportConfig({ RABBITMQ_URL: 'amqp://broker-configurado' }).rabbitUrl).toBe('amqp://broker-configurado');
   });
 });
 

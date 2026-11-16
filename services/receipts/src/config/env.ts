@@ -7,6 +7,14 @@ function readText(name: string, fallback: string): string {
   return raw === undefined || raw.trim() === '' ? fallback : raw.trim();
 }
 
+function readRequiredText(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Falta la variable de entorno ${name}.`);
+  }
+  return value;
+}
+
 function readPort(name: string, fallback: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw.trim() === '') {
@@ -59,10 +67,7 @@ export const env = {
    * Conexion a PostgreSQL con el rol propio del servicio, que solo tiene
    * permisos sobre el esquema "receipts" (RNF-04).
    */
-  databaseUrl: readText(
-    'RECEIPTS_DATABASE_URL',
-    'postgres://m8_receipts:m8_receipts_local@localhost:5432/m8',
-  ),
+  databaseUrl: readRequiredText('RECEIPTS_DATABASE_URL'),
 
   /** Redis guarda solo datos efimeros: los enlaces temporales de descarga. */
   redisUrl: readText('REDIS_URL', 'redis://localhost:6379'),
@@ -71,7 +76,7 @@ export const env = {
   receiptLinkTtlSeconds: readPositiveInt('RECEIPT_LINK_TTL_SECONDS', 900),
 
   /** Mensajeria segun el catalogo de eventos v1 (modulo-8/contracts/events). */
-  rabbitmqUrl: readText('RABBITMQ_URL', 'amqp://guest:guest@localhost:5672'),
+  rabbitmqUrl: readText('RABBITMQ_URL', ''),
   eventsExchange: readText('EVENTS_EXCHANGE', 'mobility.events'),
   deadLetterExchange: readText('EVENTS_DEAD_LETTER_EXCHANGE', 'mobility.events.dlx'),
   paymentConfirmedQueue: readText('PAYMENT_CONFIRMED_QUEUE', 'm8.receipts.payment-confirmed'),
@@ -111,6 +116,9 @@ export const env = {
    * del pago. Simulada en modulo-8/infra/m7-payments-sandbox.
    */
   m7PaymentsUrl: readText('M7_PAYMENTS_URL', 'http://localhost:4020').replace(/\/+$/, ''),
+
+  /** Clave compartida con M7 real. El sandbox local no exige autenticacion. */
+  m7ApiKey: readText('M7_API_KEY', ''),
 
   /** Tiempo maximo de espera de una consulta a M7, en milisegundos. */
   m7TimeoutMs: readPositiveInt('M7_TIMEOUT_MS', 2000),

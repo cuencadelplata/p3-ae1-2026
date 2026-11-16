@@ -2,10 +2,15 @@
 // contrato OpenAPI (openapi/rf85-support.yaml); lo verifica el test de contrato.
 export const SUPPORT_ERROR_CODES = [
   'SUPPORT_VALIDATION_ERROR',
+  'SUPPORT_AUTH_REQUIRED',
+  'SUPPORT_INVALID_TOKEN',
   'SUPPORT_TICKET_NOT_FOUND',
   'SUPPORT_INVALID_TRANSITION',
   'SUPPORT_CONCURRENCY_CONFLICT',
   'SUPPORT_IDEMPOTENCY_CONFLICT',
+  'SUPPORT_TRIP_NOT_FOUND',
+  'SUPPORT_TRIP_SERVICE_UNAVAILABLE',
+  'SUPPORT_IDENTITY_UNAVAILABLE',
   'SUPPORT_DB_UNAVAILABLE',
   'SUPPORT_INTERNAL_ERROR',
 ] as const;
@@ -29,10 +34,21 @@ export class SupportError extends Error {
     super(message);
     this.name = 'SupportError';
   }
+
+  // Si se indica, la respuesta lleva la cabecera Retry-After.
+  retryAfterSeconds?: number;
 }
 
 export function validationError(details: ErrorDetail[]): SupportError {
   return new SupportError(400, 'SUPPORT_VALIDATION_ERROR', 'La solicitud contiene datos inválidos.', details);
+}
+
+export function authRequired(): SupportError {
+  return new SupportError(401, 'SUPPORT_AUTH_REQUIRED', 'Se requiere la cabecera Authorization: Bearer <token>.');
+}
+
+export function invalidToken(): SupportError {
+  return new SupportError(401, 'SUPPORT_INVALID_TOKEN', 'El token de autenticación no es válido.');
 }
 
 export function ticketNotFound(): SupportError {
@@ -64,6 +80,44 @@ export function databaseUnavailable(cause?: unknown): SupportError {
     'El servicio de soporte no está disponible en este momento. Reintentá en unos instantes.',
   );
   error.cause = cause;
+  return error;
+}
+
+export function tripNotFound(): SupportError {
+  return new SupportError(422, 'SUPPORT_TRIP_NOT_FOUND', 'El viaje indicado no existe.', [
+    { field: 'tripId', reason: 'M6 no tiene un viaje con ese identificador.' },
+  ]);
+}
+
+const TRIP_SERVICE_RETRY_AFTER_SECONDS = 5;
+
+// M6 no pudo confirmar si el viaje existe. El mismo pedido va a funcionar
+// cuando M6 se recupere: por eso 503 con Retry-After. cause conserva el error
+// original; nunca sale en la respuesta.
+export function tripServiceUnavailable(cause?: unknown): SupportError {
+  const error = new SupportError(
+    503,
+    'SUPPORT_TRIP_SERVICE_UNAVAILABLE',
+    'No fue posible verificar el viaje en este momento. Reintentá en unos instantes.',
+  );
+  error.cause = cause;
+  error.retryAfterSeconds = TRIP_SERVICE_RETRY_AFTER_SECONDS;
+  return error;
+}
+
+const IDENTITY_RETRY_AFTER_SECONDS = 5;
+
+// M1 no pudo confirmar a quién pertenece el token. Falla cerrado: sin
+// identidad confirmada no se atiende el pedido. cause conserva el error
+// original; nunca sale en la respuesta.
+export function identityUnavailable(cause?: unknown): SupportError {
+  const error = new SupportError(
+    503,
+    'SUPPORT_IDENTITY_UNAVAILABLE',
+    'No fue posible validar la identidad en este momento. Reintentá en unos instantes.',
+  );
+  error.cause = cause;
+  error.retryAfterSeconds = IDENTITY_RETRY_AFTER_SECONDS;
   return error;
 }
 

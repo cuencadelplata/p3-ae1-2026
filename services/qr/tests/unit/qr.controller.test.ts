@@ -3,9 +3,12 @@
  * Verifican validación y propagación de resultados/errores sin servidor Express.
  */
 import type { Request, Response } from "express";
+import express from "express";
+import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { createQrHandlers } from "../../src/qr.controller";
+import { createQrHandlers, createQrRouter } from "../../src/qr.controller";
+import { errorHandler } from "../../src/http/error-handler";
 import type { QrService } from "../../src/qr.service";
 import type { QrGenerationResponse, QrValidationResponse } from "../../src/qr.types";
 import { ApiError } from "../../src/http/api-error";
@@ -30,6 +33,24 @@ function createServiceDouble(): QrService {
     validateQr: vi.fn<(tripId: string, token: string) => Promise<QrValidationResponse>>(),
   };
 }
+
+describe("rutas QR internas", () => {
+  it("exige x-api-key en ambas rutas y no afecta otras rutas", async () => {
+    const service = createServiceDouble();
+    vi.mocked(service.generateQr).mockResolvedValue({
+      token: "token", qrDataUrl: "data:image/png;base64,AAAA", expiresAt: "2026-09-01T12:05:00.000Z",
+    });
+    const app = express();
+    app.use(express.json(), createQrRouter(service, "clave-interna-de-prueba"), errorHandler);
+    app.get("/otra-ruta", (_req, res) => { res.status(200).json({ ok: true }); });
+
+    expect((await request(app).post("/qr").send({ tripId: "trip-1" })).status).toBe(401);
+    expect((await request(app).post("/qr/validate").send({ tripId: "trip-1", token: "token" })).status).toBe(401);
+    expect((await request(app).post("/qr").set("x-api-key", "incorrecta").send({ tripId: "trip-1" })).status).toBe(401);
+    expect((await request(app).post("/qr").set("x-api-key", "clave-interna-de-prueba").send({ tripId: "trip-1" })).status).toBe(201);
+    expect((await request(app).get("/otra-ruta")).status).toBe(200);
+  });
+});
 
 describe("createQrHandlers — generateQr", () => {
   it("responde 400 VALIDATION_ERROR con los details del validador cuando el body es inválido", async () => {

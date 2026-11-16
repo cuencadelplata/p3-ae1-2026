@@ -33,6 +33,11 @@ CREATE SCHEMA IF NOT EXISTS notifications AUTHORIZATION m8_notifications;
 ALTER SCHEMA notifications OWNER TO m8_notifications;
 GRANT USAGE, CREATE ON SCHEMA notifications TO m8_notifications;
 
+-- RF8.6 usa su Inbox técnico compartido; Notifications solo recibe acceso a
+-- esa tabla y no a datos funcionales de otros RF.
+GRANT USAGE ON SCHEMA messaging TO m8_notifications;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE messaging.inbox_events TO m8_notifications;
+
 DO $$
 DECLARE
   item record;

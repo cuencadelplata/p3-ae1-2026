@@ -41,7 +41,7 @@ function numberField(
   detailField = field,
 ): number | undefined {
   const value = source[field];
-  if (!Number.isInteger(value) || (value as number) <= 0) {
+  if (!Number.isSafeInteger(value) || (value as number) <= 0) {
     details.push({ field: detailField, reason: "Debe ser un entero positivo." });
     return undefined;
   }
@@ -169,12 +169,12 @@ export function mapTripEventEnvelope(
   }
 
   let tripId: string | undefined;
-  let recipientId: string | undefined;
+  let recipientId: number | undefined;
   if (!isRecord(value.data)) {
     details.push({ field: "data", reason: "Debe ser un objeto." });
   } else {
     tripId = stringField(value.data, "tripId", details, "data.tripId");
-    recipientId = stringField(value.data, "recipientId", details, "data.recipientId");
+    recipientId = numberField(value.data, "recipientId", details, "data.recipientId");
   }
 
   if (tripId !== undefined && correlationId !== undefined && correlationId !== tripId) {

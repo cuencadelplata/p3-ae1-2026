@@ -30,10 +30,15 @@ await app.close();
 `processTripEvent` distingue `SUCCESS_CREATED`, `SUCCESS_ALREADY_PROCESSED`,
 `INVALID_EVENT` y `PERSISTENCE_FAILURE`. Un duplicado idempotente es exito, no
 conflicto funcional.
+Para eventos de viaje, `recipientId` debe ser el `userId` numérico positivo de
+M1. RF8.1 rechaza `clienteId` libres como `"cliente-123"`; no consulta a M2
+para traducirlos. PostgreSQL conserva `recipient_id` como texto por
+compatibilidad, pero el Outbox emite el número que exige RF8.7.
 
-`NotificationDeliveryIntent` es un modelo interno de lectura para el futuro
-relay. No es el payload oficial de `NotificationRequested.data`, que continua
-pendiente de acuerdo con RF8.7.
+`NotificationDeliveryIntent` es un modelo interno de lectura del relay. El
+payload oficial de `NotificationRequested.data` está acordado con RF8.7 y
+mantiene `recipientId` numérico. El envelope externo y la topología de eventos
+de viaje siguen pendientes de M5/M6; aún no se monta ese consumidor.
 
 ## Ejecucion desde `modulo-8/`
 

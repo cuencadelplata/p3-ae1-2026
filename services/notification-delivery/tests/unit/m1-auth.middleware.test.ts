@@ -211,6 +211,9 @@ test('Middleware de Autenticación M1 - Seguridad, Expiración y Roles Canónico
 
     const tokenCero = createSignedJwt({ userId: 0, role: 'CLIENTE' }, 'secreto_productivo_m1');
     assert.equal(extractAuthenticatedUser(`Bearer ${tokenCero}`), null);
+
+    const tokenInseguro = createSignedJwt({ userId: Number.MAX_SAFE_INTEGER + 1, role: 'CLIENTE' }, 'secreto_productivo_m1');
+    assert.equal(extractAuthenticatedUser(`Bearer ${tokenInseguro}`), null);
   });
 
   await t.test('parseJwtPayload decodifica payloads Base64Url válidos y maneja inválidos', () => {
