@@ -943,24 +943,35 @@ export class RideRequestService {
 
   /**
    * Notifica a M6 (Gestión de Viajes) vía HTTP para crear y asignar el viaje al conductor (RF-5.5)
+   * Integra clientUserId y driverUserId numéricos de M1 e Idempotency-Key para reintentos sin duplicación.
    */
   private async notifyM6TripAssigned(
     clientId: string,
     originAddress: string,
     destinationAddress: string,
-    driverId: string
+    driverId: string,
+    rideRequestId?: string
   ): Promise<string | null> {
     const m6BaseUrl = process.env.M6_SERVICE_URL || 'http://localhost:3000';
+    const clientUserId = this.rabbitmqService.parseCanonicalUserId(clientId);
+    const driverUserId = this.rabbitmqService.parseCanonicalUserId(driverId);
 
     try {
-      // 1. Crear viaje en M6
+      // 1. Crear viaje en M6 con clientUserId e idempotencia
+      const createHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (rideRequestId) {
+        createHeaders['Idempotency-Key'] = rideRequestId;
+      }
+
       const createRes = await fetch(`${m6BaseUrl}/api/viajes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: createHeaders,
         body: JSON.stringify({
           clienteId: clientId,
+          clientUserId,
           origen: originAddress || 'Origen no especificado',
-          destino: destinationAddress || 'Destino no especificado'
+          destino: destinationAddress || 'Destino no especificado',
+          ...(rideRequestId ? { rideRequestId } : {})
         }),
         signal: AbortSignal.timeout(3000)
       });
@@ -978,12 +989,13 @@ export class RideRequestService {
         return null;
       }
 
-      // 2. Asignar conductor al viaje en M6
+      // 2. Asignar conductor al viaje en M6 con driverUserId
       const assignRes = await fetch(`${m6BaseUrl}/api/viajes/${tripId}/asignar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          conductorId: driverId
+          conductorId: driverId,
+          driverUserId
         }),
         signal: AbortSignal.timeout(3000)
       });
@@ -1262,7 +1274,8 @@ export class RideRequestService {
       assignedRequest.clientId,
       assignedRequest.origin.address || `${assignedRequest.origin.latitude},${assignedRequest.origin.longitude}`,
       assignedRequest.destination.address || `${assignedRequest.destination.latitude},${assignedRequest.destination.longitude}`,
-      offer.driverId
+      offer.driverId,
+      assignedRequest.id
     );
 
     console.log(
