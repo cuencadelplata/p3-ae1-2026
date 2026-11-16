@@ -21,12 +21,12 @@ const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter({
     url: `${collectorUrl}/v1/traces`,
   }),
-  metricReaders: [
+      metricReaders: [
     new PeriodicExportingMetricReader({
       exporter: new OTLPMetricExporter({
         url: `${collectorUrl}/v1/metrics`,
       }),
-      exportIntervalMillis: 15000,
+      exportIntervalMillis: 10000,
     }),
   ],
   instrumentations: [
