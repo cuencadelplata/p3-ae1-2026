@@ -13,9 +13,9 @@
 
 Hasta la versión 2.0.0 el servicio tenía cuatro debilidades frente a fallas:
 
-1. **No se integraba con ningún servicio externo.** El PDF se genera localmente; la
-   consigna de AE2 pide integrar o simular un servicio externo con timeouts y manejo de
-   errores.
+1. **No se integraba con ningún servicio externo.** El PDF se genera localmente;
+   el servicio necesitaba timeouts y manejo explícito de errores al consultar
+   una dependencia externa.
 2. **Si PostgreSQL no respondía al arrancar, el proceso terminaba** (`exit 1` al fallar
    las migraciones) y el contenedor no tenía política de reinicio: quedaba caído aunque
    la base volviera.
@@ -63,7 +63,7 @@ desacoplado por la cola, y una demora del autorizador no lo afecta.
 un autorizador colgado retiene indefinidamente las solicitudes HTTP y los mensajes que
 el consumidor tiene tomados (`prefetch`).
 
-**Circuit breaker** ([`src/resilience/circuit-breaker.ts`](../../src/resilience/circuit-breaker.ts)):
+**Circuit breaker** ([`src/resilience/circuit-breaker.ts`](../../../services/receipts/src/resilience/circuit-breaker.ts)):
 
 ```mermaid
 stateDiagram-v2
@@ -130,7 +130,7 @@ Cambios que lo hacen posible:
 * El servidor HTTP arranca **antes** que la base. El consumidor y el relay arrancan
   después de preparar el esquema, porque lo necesitan.
 * El manejador de errores reconoce los errores de conexión de PostgreSQL
-  ([`src/db/errors.ts`](../../src/db/errors.ts)) y responde `503` en lugar de `500`.
+  ([`src/db/errors.ts`](../../../services/receipts/src/db/errors.ts)) y responde `503` en lugar de `500`.
 * `restart: unless-stopped` en Compose, como último recurso ante una terminación
   inesperada del proceso. Las caídas de dependencias no lo hacen terminar.
 

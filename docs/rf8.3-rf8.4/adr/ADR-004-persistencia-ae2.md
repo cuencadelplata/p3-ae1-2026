@@ -4,7 +4,6 @@
 * **Fecha:** 2026-09-30
 * **Autor:** Juan Gualtieri (evolución individual AE2)
 * **Requerimientos:** RF-8.3, RNF-04, RNF-08, RNF-09, RNF-10, RNF-23
-* **Reemplaza parcialmente a:** [ADR-001](ADR-001-m8-comprobantes-ae1.md), puntos 3 y 4 (sistema de archivos y candado en memoria)
 
 ---
 
