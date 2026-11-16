@@ -199,6 +199,7 @@ descontar intentos y no llega a la DLQ.
 | `FISCAL_TIMEOUT_MS` | `2000` | Timeout de cada autorización |
 | `FISCAL_CIRCUIT_FAILURE_THRESHOLD` / `FISCAL_CIRCUIT_OPEN_MS` | `3` / `10000` | Fallas que abren el circuito y tiempo abierto |
 | `M7_PAYMENTS_URL` | `http://localhost:4020` | API de pagos de M7 (estado del pago por viaje) |
+| `M7_API_KEY` | Sin valor para el sandbox | Clave compartida con M7 real; M8 la envía en `x-api-key`. Configurar fuera de Git. |
 | `M7_TIMEOUT_MS` | `2000` | Timeout de cada consulta a M7 |
 
 Lista completa en [`.env.example`](.env.example). Ninguna credencial está fija en el
