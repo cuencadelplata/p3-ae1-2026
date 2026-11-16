@@ -35,6 +35,12 @@ prometheus.relabel "m2" {
     target_label = "modulo"
     replacement  = "m2"
   }
+  // Máquina que envía (M2_ORIGEN). Sin esta etiqueta, dos máquinas mandando al mismo
+  // stack generan series idénticas que se pisan e inflan los paneles.
+  rule {
+    target_label = "origen"
+    replacement  = coalesce(sys.env("M2_ORIGEN"), constants.hostname)
+  }
   // Cada muestra va a los dos destinos; cada uno tiene su propia cola y su WAL.
   forward_to = [
     prometheus.remote_write.grafana_cloud.receiver,

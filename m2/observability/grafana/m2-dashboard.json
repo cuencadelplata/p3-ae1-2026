@@ -2,12 +2,19 @@
   "title": "M2 Clientes",
   "uid": "m2-clientes",
   "description": "Las 3 métricas de M2 (tráfico y errores, latencia p95, estado de dependencias) y los resultados de k6. Fuente: Alloy → Grafana Cloud.",
-  "tags": ["m2", "clientes", "k6"],
+  "tags": [
+    "m2",
+    "clientes",
+    "k6"
+  ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
-  "time": { "from": "now-30m", "to": "now" },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
   "templating": {
     "list": [
       {
@@ -18,12 +25,40 @@
         "current": {}
       },
       {
+        "name": "origen",
+        "label": "Origen",
+        "description": "Máquina que envía las métricas (etiqueta origen de Alloy, M2_ORIGEN).",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${ds}"
+        },
+        "query": {
+          "query": "label_values(m2_http_requests_total{modulo=\"m2\"}, origen)",
+          "refId": "origen"
+        },
+        "definition": "label_values(m2_http_requests_total{modulo=\"m2\"}, origen)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "sort": 1,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      },
+      {
         "name": "requisito",
         "label": "Requisito",
         "description": "Filtra los paneles 1 y 2 por las rutas de cada RF de M2.",
         "type": "custom",
         "query": "Todos : .*,RF-2.1 Perfil y preferencias : /v1/customers|/v1/customers/me|/v1/customers/:id|/internal/preferences/:userId,RF-2.2 Direcciones : /api/v1/(direcciones|geocodificacion).*,RF-2.3 Historial de viajes : /v1/customers/:id/trips,RF-2.4 Calificaciones : (/api/v1)?/calificaciones.*,RF-2.5 Estado de cuenta : /v1/customers/:id/status",
-        "current": { "text": "Todos", "value": ".*" },
+        "current": {
+          "text": "Todos",
+          "value": ".*"
+        },
         "options": [],
         "includeAll": false,
         "multi": false
@@ -35,23 +70,41 @@
       "type": "row",
       "title": "Métricas del módulo",
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
     },
     {
       "id": 1,
       "type": "timeseries",
       "title": "1. Tráfico y errores (pedidos/s por código)",
       "description": "m2_http_requests_total: pedidos por segundo agrupados por código HTTP. Los 5xx indican errores del módulo.",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 1 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
       "fieldConfig": {
-        "defaults": { "unit": "reqps", "custom": { "fillOpacity": 10 } },
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
         "overrides": []
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (status_code) (rate(m2_http_requests_total{modulo=\"m2\", route=~\"$requisito\"}[$__rate_interval]))",
+          "expr": "sum by (status_code) (rate(m2_http_requests_total{modulo=\"m2\", origen=~\"$origen\", route=~\"$requisito\"}[$__rate_interval]))",
           "legendFormat": "{{status_code}}"
         }
       ]
@@ -61,26 +114,44 @@
       "type": "timeseries",
       "title": "2. Latencia p95 por ruta",
       "description": "m2_http_request_duration_seconds: el 95 % de los pedidos tardó menos que este valor. La línea roja es 1,8 s, el plazo acordado con M8 para /internal/preferences/:userId.",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 1 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "s",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1.8 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1.8
+              }
             ]
           },
-          "custom": { "thresholdsStyle": { "mode": "line" } }
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          }
         },
         "overrides": []
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(m2_http_request_duration_seconds_bucket{modulo=\"m2\", route=~\"$requisito\", route!~\"unmatched|/__stubs.*|/metrics\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(m2_http_request_duration_seconds_bucket{modulo=\"m2\", origen=~\"$origen\", route=~\"$requisito\", route!~\"unmatched|/__stubs.*|/metrics\"}[$__rate_interval])))",
           "legendFormat": "{{route}}"
         }
       ]
@@ -90,31 +161,80 @@
       "type": "state-timeline",
       "title": "3. Estado de las dependencias",
       "description": "m2_circuit_state: circuit breaker de cada dependencia. closed = normal; open = M2 dejó de llamarla y responde degradado; half_open = probando si volvió.",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 1 },
-      "options": { "showValue": "auto", "mergeValues": true },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "options": {
+        "showValue": "auto",
+        "mergeValues": true
+      },
       "fieldConfig": {
         "defaults": {
           "mappings": [
             {
               "type": "value",
               "options": {
-                "0": { "text": "closed", "color": "green", "index": 0 },
-                "1": { "text": "half_open", "color": "yellow", "index": 1 },
-                "2": { "text": "open", "color": "red", "index": 2 },
-                "3": { "text": "isolated", "color": "purple", "index": 3 }
+                "0": {
+                  "text": "closed",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "half_open",
+                  "color": "yellow",
+                  "index": 1
+                },
+                "2": {
+                  "text": "open",
+                  "color": "red",
+                  "index": 2
+                },
+                "3": {
+                  "text": "isolated",
+                  "color": "purple",
+                  "index": 3
+                }
               }
             }
           ],
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] }
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              },
+              {
+                "color": "purple",
+                "value": 3
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (dependency) (m2_circuit_state{modulo=\"m2\", state=\"half_open\"}) * 1 + max by (dependency) (m2_circuit_state{modulo=\"m2\", state=\"open\"}) * 2 + max by (dependency) (m2_circuit_state{modulo=\"m2\", state=\"isolated\"}) * 3",
+          "expr": "max by (dependency) (m2_circuit_state{modulo=\"m2\", origen=~\"$origen\", state=\"half_open\"}) * 1 + max by (dependency) (m2_circuit_state{modulo=\"m2\", origen=~\"$origen\", state=\"open\"}) * 2 + max by (dependency) (m2_circuit_state{modulo=\"m2\", origen=~\"$origen\", state=\"isolated\"}) * 3",
           "legendFormat": "{{dependency}}"
         }
       ]
@@ -123,39 +243,93 @@
       "type": "row",
       "title": "Pruebas de carga (k6)",
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 10 }
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      }
     },
     {
       "id": 4,
       "type": "timeseries",
       "title": "Usuarios virtuales de k6",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 11 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 11
+      },
       "targets": [
-        { "refId": "A", "expr": "sum by (testid) (k6_vus{modulo=\"m2\"})", "legendFormat": "{{testid}}" }
+        {
+          "refId": "A",
+          "expr": "sum by (testid) (k6_vus{modulo=\"m2\", origen=~\"$origen\"})",
+          "legendFormat": "{{testid}}"
+        }
       ]
     },
     {
       "id": 5,
       "type": "timeseries",
       "title": "Latencia p95 vista por k6",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 11 },
-      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 11
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
       "targets": [
-        { "refId": "A", "expr": "max by (testid, name) (k6_http_req_duration_p95{modulo=\"m2\", name!=\"setup\"})", "legendFormat": "{{testid}} {{name}}" }
+        {
+          "refId": "A",
+          "expr": "max by (testid, name) (k6_http_req_duration_p95{modulo=\"m2\", origen=~\"$origen\", name!=\"setup\"})",
+          "legendFormat": "{{testid}} {{name}}"
+        }
       ]
     },
     {
       "id": 6,
       "type": "timeseries",
       "title": "Pedidos fallidos según k6",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 11 },
-      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 11
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
       "targets": [
-        { "refId": "A", "expr": "avg by (testid) (k6_http_req_failed_rate{modulo=\"m2\"})", "legendFormat": "{{testid}}" }
-      ]
+        {
+          "refId": "A",
+          "legendFormat": "{{testid}}",
+          "expr": "1 - (sum by (testid) (rate(k6_http_reqs_total{modulo=\"m2\", origen=~\"$origen\", name!=\"setup\", expected_response=\"true\"}[$__rate_interval])) / sum by (testid) (rate(k6_http_reqs_total{modulo=\"m2\", origen=~\"$origen\", name!=\"setup\"}[$__rate_interval])))"
+        }
+      ],
+      "description": "Porcentaje de pedidos de k6 con respuesta no esperada: 1 - exitosos / total (expected_response). Marca 0 % cuando no hay fallas. No incluye el setup."
     }
   ]
 }

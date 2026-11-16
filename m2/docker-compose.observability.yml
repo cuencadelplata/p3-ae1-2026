@@ -25,6 +25,8 @@ services:
       GRAFANA_CLOUD_PROM_URL: ${GRAFANA_CLOUD_PROM_URL:-http://grafana-cloud-sin-configurar.invalid/api/prom/push}
       GRAFANA_CLOUD_PROM_USER: ${GRAFANA_CLOUD_PROM_USER:-sin-configurar}
       GRAFANA_CLOUD_API_KEY: ${GRAFANA_CLOUD_API_KEY:-sin-configurar}
+      # Etiqueta origen: identifica la máquina que envía (por defecto, el nombre del equipo en Windows)
+      M2_ORIGEN: ${M2_ORIGEN:-${COMPUTERNAME:-sin-nombre}}
     volumes:
       - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
       # WAL de Alloy. Durante un corte, mientras Alloy siga corriendo, lo pendiente se reenvía
@@ -88,6 +90,8 @@ services:
       K6_OUT: experimental-prometheus-rw
       K6_PROMETHEUS_RW_SERVER_URL: http://alloy:9999/api/v1/metrics/write
       K6_PROMETHEUS_RW_TREND_STATS: "p(95),p(99),avg,max"
+      # Al terminar la prueba, marca las series como finalizadas para que no queden "colgadas" en los paneles
+      K6_PROMETHEUS_RW_STALE_MARKERS: "true"
     volumes:
       - ./load/k6:/scripts:ro
     depends_on:
