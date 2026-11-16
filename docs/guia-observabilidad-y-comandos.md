@@ -41,12 +41,14 @@ cd modulo-8
 pnpm install
 ```
 
-### Paso 2.3: Configurar credenciales de Grafana Cloud en `.env`
+### Paso 2.3: Configurar `.env` con credenciales de Grafana Cloud y claves de M8
 1. Crea tu archivo `.env` local copiando la plantilla:
    ```powershell
    Copy-Item .env.example .env
    ```
-2. Abre `modulo-8/.env` y completa las variables de Grafana Cloud con las credenciales compartidas por el equipo:
+2. Abre `modulo-8/.env` y realiza estas dos configuraciones:
+   * **Reemplaza los 3 textos de ejemplo con valores reales** (o pega las claves provistas por el equipo para `QR_INTERNAL_API_KEY`, `M2_INTERNAL_API_KEY` y `M1_JWT_SECRET`). Por seguridad, M8 rechaza iniciar si conservan el prefijo de ejemplo `replace-with-`.
+   * **Completa las 3 variables de Grafana Cloud** con las credenciales compartidas por el equipo:
    ```env
    GRAFANA_CLOUD_REMOTE_WRITE_URL=https://prometheus-prod-40-prod-sa-east-1.grafana.net/api/prom/push
    GRAFANA_CLOUD_USER=3757548
@@ -62,6 +64,7 @@ Desde la terminal en `modulo-8`, ejecuta:
 ```powershell
 pnpm run ensure:stack
 ```
+*(También puedes ejecutar de forma equivalente: `docker compose --env-file .env up -d --build --wait`).*
 
 Este comando construye y arranca automáticamente los contenedores (`m8-app`, bases de datos, RabbitMQ, sandboxes y el recolector `alloy`).
 
