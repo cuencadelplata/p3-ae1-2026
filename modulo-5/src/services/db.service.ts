@@ -1,4 +1,4 @@
-﻿import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { RideRequest, RideOffer } from '../types/ride-request.types';
 
 /**
@@ -247,7 +247,7 @@ export class DbService {
           where: { requestId },
           include: { request: true }
         });
-        return rows.map((row) => ({
+        return rows.map((row: any) => ({
           id: row.id,
           requestId: row.requestId,
           driverId: row.driverId,
@@ -292,7 +292,7 @@ export class DbService {
           where: { driverId },
           include: { request: true }
         });
-        return rows.map((row) => ({
+        return rows.map((row: any) => ({
           id: row.id,
           requestId: row.requestId,
           driverId: row.driverId,
@@ -336,7 +336,7 @@ export class DbService {
         const rows = await this.prisma.rideOffer.findMany({
           include: { request: true }
         });
-        return rows.map((row) => ({
+        return rows.map((row: any) => ({
           id: row.id,
           requestId: row.requestId,
           driverId: row.driverId,
@@ -383,7 +383,7 @@ export class DbService {
   ): Promise<{ success: boolean; request: RideRequest | null; conflictReason?: string }> {
     if (this.isConnected && this.prisma) {
       try {
-        const result = await this.prisma.$transaction(async (tx) => {
+        const result = await this.prisma.$transaction(async (tx: any) => {
           // 1. Verificar estado actual
           const current = await tx.rideRequest.findUnique({ where: { id: requestId } });
           if (!current) {

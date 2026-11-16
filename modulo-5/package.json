@@ -27,6 +27,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@opentelemetry/api": "^1.10.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.301.2",
+    "@opentelemetry/resources": "^3.1.1",
+    "@opentelemetry/sdk-metrics": "^3.1.1",
+    "@opentelemetry/semantic-conventions": "^1.45.0",
     "@prisma/client": "^5.22.0",
     "amqplib": "^2.2.0",
     "dotenv": "^18.0.5",

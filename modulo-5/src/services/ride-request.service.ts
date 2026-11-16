@@ -25,6 +25,7 @@ import { DbService } from './db.service';
 import { RedisService } from './redis.service';
 import { RabbitMQService } from './rabbitmq.service';
 import { M4ClientService, M4IntegrationError } from './m4-client.service';
+import { TelemetryService } from './telemetry.service';
 import { createHash, randomUUID } from 'node:crypto';
 
 export { M4IntegrationError } from './m4-client.service';
@@ -601,6 +602,8 @@ export class RideRequestService {
         timestamp: now.toISOString()
       });
 
+      TelemetryService.getInstance().recordRideRequestCreated(newRequest.vehicleType, newRequest.status);
+
       console.log(
         `[RF-5.1] Solicitud de viaje creada con Redis y RabbitMQ: ID=${newRequest.id} | Cliente=${clientId} | Vehículo=${newRequest.vehicleType} | Tarifa=$${estimatedFare.amount} ARS | Origen="${dto.origin.address}" ➔ Destino="${dto.destination.address}"`
       );
@@ -854,6 +857,7 @@ export class RideRequestService {
 
       // Persistir oferta en Redis con TTL (RNF-06 / RF-5.3) y base de datos
       await this.redisService.saveOffer(offer, ttlSeconds);
+      TelemetryService.getInstance().recordDriverOffer('SENT');
       if (this.dbService) {
         await this.dbService.saveRideOffer(offer);
         await this.dbService.logDispatchEvent(request.id, 'OFFER_SENT', driverId, `Oferta ID: ${offer.id} | TTL: ${ttlSeconds}s`).catch(() => {});
@@ -1099,6 +1103,7 @@ export class RideRequestService {
     // Manejo de rechazo (REJECT)
     if (action === 'REJECT') {
       offer.status = 'REJECTED';
+      TelemetryService.getInstance().recordDriverOffer('REJECTED');
       await this.redisService.deleteOffer(offerId).catch(() => {});
       if (this.dbService) {
         await this.dbService.saveRideOffer(offer).catch(() => {});
@@ -1220,6 +1225,7 @@ export class RideRequestService {
     assignedRequest.updatedAt = now.toISOString();
 
     offer.status = 'ACCEPTED';
+    TelemetryService.getInstance().recordDriverOffer('ACCEPTED');
     this.offers.set(offerId, offer);
     this.requests.set(assignedRequest.id, assignedRequest);
 
@@ -1396,6 +1402,7 @@ export class RideRequestService {
         current.cancellationReason = dto.reason.trim();
       }
       this.requests.set(current.id, current);
+      TelemetryService.getInstance().recordRideCancelled(prevStatus === 'OFFERED' ? 'OFFERED' : 'PRE_DISPATCH');
 
       // Persistir el cambio de cancelación en PostgreSQL (DispatchDB)
       await this.dbService.saveRideRequest(current);

@@ -1,8 +1,12 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import path from 'path';
 import { RideRequestService } from './services/ride-request.service';
 import { RideRequestController } from './controllers/ride-request.controller';
 import { authenticate, requireConductor } from './middleware/auth.middleware';
+import { TelemetryService } from './services/telemetry.service';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -27,6 +31,7 @@ app.use('/openapi', express.static(path.join(__dirname, '../openapi')));
 // Inyección de dependencias
 const rideRequestService = new RideRequestService();
 const rideRequestController = new RideRequestController(rideRequestService);
+TelemetryService.getInstance();
 
 // Health check con diagnóstico de backing services (RNF-16 / AE2)
 app.get('/health', (_req, res) => {
