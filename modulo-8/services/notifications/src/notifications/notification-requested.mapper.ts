@@ -23,9 +23,16 @@ export function toPublicNotificationEventType(
 export function createNotificationRequestedData(
   notification: LogicalNotification,
 ): NotificationRequestedData {
-  const recipientId = notification.eventType === "DriverDocumentRegistered"
-    ? Number(notification.recipientId)
-    : notification.recipientId;
+  // PostgreSQL conserva recipient_id como texto por compatibilidad histórica.
+  // Sólo se acepta la representación decimal canónica del userId de M1.
+  const recipientId = typeof notification.recipientId === "number"
+    ? notification.recipientId
+    : /^[1-9]\d*$/.test(notification.recipientId)
+      ? Number(notification.recipientId)
+      : NaN;
+  if (!Number.isSafeInteger(recipientId) || recipientId < 1) {
+    throw new Error("recipientId debe ser el userId numérico positivo de M1.");
+  }
 
   const data: NotificationRequestedData = {
     notificationId: notification.notificationId,
