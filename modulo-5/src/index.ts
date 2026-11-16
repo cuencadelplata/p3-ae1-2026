@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import { RideRequestService } from './services/ride-request.service';
 import { RideRequestController } from './controllers/ride-request.controller';
-import { authenticate } from './middleware/auth.middleware';
+import { authenticate, requireConductor } from './middleware/auth.middleware';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -90,12 +90,12 @@ app.get('/api/v1/ride-requests/:requestId/offers', rideRequestController.getOffe
 app.get('/viajes/:requestId', authenticate, rideRequestController.getById);
 app.get('/api/v1/viajes/:requestId', authenticate, rideRequestController.getById);
 // Rutas API v1 - Gestión de Ofertas de Conductor (RF-5.4)
-app.post('/api/v1/offers/:offerId/respond', rideRequestController.respondOffer);
-app.post('/api/v1/offers/:offerId/accept', rideRequestController.acceptOffer);
-app.post('/api/v1/offers/:offerId/reject', rideRequestController.rejectOffer);
+app.post('/api/v1/offers/:offerId/respond', requireConductor, rideRequestController.respondOffer);
+app.post('/api/v1/offers/:offerId/accept', requireConductor, rideRequestController.acceptOffer);
+app.post('/api/v1/offers/:offerId/reject', requireConductor, rideRequestController.rejectOffer);
 app.get('/api/v1/offers/:offerId', rideRequestController.getOfferById);
 app.get('/api/v1/offers', rideRequestController.getAllOffers);
-app.get('/api/v1/drivers/:driverId/offers', rideRequestController.getOffersForDriver);
+app.get('/api/v1/drivers/:driverId/offers', requireConductor, rideRequestController.getOffersForDriver);
 
 
 

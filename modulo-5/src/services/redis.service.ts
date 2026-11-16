@@ -1,6 +1,11 @@
 import Redis from 'ioredis';
 import { RideRequest, EstimatedFare, RideOffer } from '../types/ride-request.types';
 
+export interface LockResult {
+  acquired: boolean;
+  holder?: string;
+}
+
 /**
  * Servicio de Gestión de Estado Efímero y Caché con Redis (RNF-06, RNF-08, RNF-09, RF-5.3, RF-5.6)
  * Maneja:
@@ -313,6 +318,10 @@ export class RedisService {
     if (existingExpire && existingExpire > now) {
       return false;
     }
+    const existingFallback = this.fallbackMemory.get(key);
+    if (existingFallback && (!existingFallback.expiresAt || existingFallback.expiresAt > now)) {
+      return false;
+    }
 
     this.memoryLocks.set(key, now + ttlMs);
     return true;
@@ -333,6 +342,80 @@ export class RedisService {
     }
 
     this.memoryLocks.delete(key);
+    this.fallbackMemory.delete(key);
+  }
+
+  /**
+   * Distributed Lock atómico para asignación de viajes (RF-5.5)
+   * Utiliza SET key value NX EX ttl para garantizar exclusión mutua
+   * en escenarios de múltiples conductores respondiendo en paralelo.
+   */
+  public async acquireAssignmentLock(
+    requestId: string,
+    driverId: string,
+    ttlSeconds = 30
+  ): Promise<LockResult> {
+    const lockKey = `dispatch:lock:request:${requestId}`;
+    const lockValue = JSON.stringify({
+      driverId,
+      acquiredAt: new Date().toISOString()
+    });
+
+    if (this.isConnected && this.client) {
+      try {
+        const result = await this.client.set(lockKey, lockValue, 'EX', ttlSeconds, 'NX');
+        if (result === 'OK') {
+          return { acquired: true, holder: driverId };
+        }
+        const existingData = await this.client.get(lockKey);
+        const holder = existingData ? (JSON.parse(existingData).driverId as string) : undefined;
+        return { acquired: false, holder };
+      } catch (err) {
+        throw err;
+      }
+    }
+
+    const now = Date.now();
+    const existingLock = this.memoryLocks.get(lockKey);
+    if (existingLock && existingLock > now) {
+      return { acquired: false };
+    }
+    const existing = this.fallbackMemory.get(lockKey);
+    if (existing && (!existing.expiresAt || existing.expiresAt > now)) {
+      try {
+        const parsed = JSON.parse(existing.value);
+        return { acquired: false, holder: parsed.driverId };
+      } catch {
+        return { acquired: false };
+      }
+    }
+
+    this.memoryLocks.set(lockKey, now + ttlSeconds * 1000);
+    this.fallbackMemory.set(lockKey, {
+      value: lockValue,
+      expiresAt: now + ttlSeconds * 1000
+    });
+
+    return { acquired: true, holder: driverId };
+  }
+
+  /**
+   * Libera el bloqueo de asignación si fuera necesario
+   */
+  public async releaseAssignmentLock(requestId: string): Promise<void> {
+    const lockKey = `dispatch:lock:request:${requestId}`;
+
+    if (this.isConnected && this.client) {
+      try {
+        await this.client.del(lockKey);
+        return;
+      } catch {
+        // Fallback
+      }
+    }
+
+    this.memoryLocks.delete(lockKey);
+    this.fallbackMemory.delete(lockKey);
   }
 
   // ==========================================================================
