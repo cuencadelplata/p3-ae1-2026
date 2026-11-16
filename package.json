@@ -30,6 +30,7 @@
     "@scalar/express-api-reference": "^0.10.18",
     "@supabase/supabase-js": "^2.49.4",
     "amqplib": "^2.1.0",
+    "dotenv": "^18.0.10",
     "express": "^5.2.1",
     "pg": "^8.23.0",
     "prom-client": "^15.1.3",
