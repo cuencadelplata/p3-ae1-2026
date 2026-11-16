@@ -28,6 +28,20 @@ npm run test:rf-6.4-6.7
 npm run test:rf-6.5-6.6
 ```
 
+## Pruebas de carga con K6
+
+Instala [K6](https://grafana.com/docs/k6/latest/set-up/install-k6/) y levanta el stack con `npm run docker:up`. Desde esta carpeta, ejecuta:
+
+```sh
+npm run k6:smoke
+npm run k6:load
+npm run k6:stress
+```
+
+Los perfiles comprueban `/health` y ejecutan el flujo de crear y consultar un viaje en la API central (`http://localhost:3000`). Smoke ejecuta 5 iteraciones con 1 VU; carga escala hasta 20 VUs; estrés escala progresivamente a 100 VUs, mantiene ese nivel durante 1 minuto y luego reduce la carga. Los perfiles de carga y estrés duran 2 y 3.5 minutos, respectivamente. Se exige p95 menor a 1 s, menos de 1% de solicitudes fallidas y más de 99% de checks exitosos. Para cambiar la URL, ejecuta K6 directamente, por ejemplo: `k6 run --env K6_PROFILE=stress --env BASE_URL=http://localhost:3000 k6/viajes.js`.
+
+Cada iteración crea un viaje y lo deja persistido en PostgreSQL; el perfil de estrés puede crear muchos registros. Usa un entorno de pruebas y limpia esos datos cuando ya no los necesites.
+
 `npm run test:e2e` requiere el stack en ejecución. También se puede seleccionar una familia con `test:e2e:rf-6.1-6.2-6.3`, `test:e2e:rf-6.4-6.7` o `test:e2e:rf-6.5-6.6`.
 
 ## Servicios
