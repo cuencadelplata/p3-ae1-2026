@@ -1,0 +1,43 @@
+# Observabilidad de M2: Alloy envía las métricas a Grafana Cloud y k6 corre las pruebas de carga.
+# Se usa encima del compose principal, desde m2/:
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml run --rm k6 run /scripts/smoke.js
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml run --rm k6 run /scripts/carga.js
+# Sin las credenciales GRAFANA_CLOUD_* en .env, Alloy arranca igual: lee la API y recibe k6,
+# pero el envío a Grafana Cloud falla (se ve en http://localhost:12345).
+services:
+  alloy:
+    image: grafana/alloy:v1.9.0
+    container_name: p3-alloy
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    environment:
+      GRAFANA_CLOUD_PROM_URL: ${GRAFANA_CLOUD_PROM_URL:-http://grafana-cloud-sin-configurar.invalid/api/prom/push}
+      GRAFANA_CLOUD_PROM_USER: ${GRAFANA_CLOUD_PROM_USER:-sin-configurar}
+      GRAFANA_CLOUD_API_KEY: ${GRAFANA_CLOUD_API_KEY:-sin-configurar}
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+    ports:
+      # Interfaz de Alloy: estado de cada componente
+      - "127.0.0.1:12345:12345"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  k6:
+    image: grafana/k6:1.0.0
+    profiles: ["k6"]
+    environment:
+      M2_URL: http://api:3000
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-internal-dev}
+      K6_OUT: experimental-prometheus-rw
+      K6_PROMETHEUS_RW_SERVER_URL: http://alloy:9999/api/v1/metrics/write
+      K6_PROMETHEUS_RW_TREND_STATS: "p(95),p(99),avg,max"
+    volumes:
+      - ./load/k6:/scripts:ro
+    depends_on:
+      - alloy
