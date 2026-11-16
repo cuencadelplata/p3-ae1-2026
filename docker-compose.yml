@@ -66,5 +66,15 @@ services:
     command: >
       node -e "require('http').createServer((q,s)=>{let b='';q.on('data',d=>b+=d);q.on('end',()=>{const r=JSON.parse(b||'{}');s.setHeader('Content-Type','application/json');s.end(JSON.stringify({tripId:r.tripId,requestedBy:r.requestedBy,charge:r.requestedBy==='cliente'?1000:0,currency:'ARS'}))})}).listen(3007)"
 
+  grafana-alloy:
+    image: grafana/alloy:latest
+    volumes:
+      - ./alloy-config.alloy:/etc/alloy/config.alloy
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: run /etc/alloy/config.alloy
+    depends_on:
+      - m7-reintegro
+    restart: on-failure
+
 volumes:
   postgres_data:
