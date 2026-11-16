@@ -13,6 +13,7 @@
         "test:e2e:vitest": "vitest run tests/e2e/identidad-acceso.e2e.test.ts",
         "test:e2e": "node --test tests/e2e/identidad-acceso.e2e.test.mjs",
         "test:e2e:ae4": "node --test tests/e2e/rf-1.2-ae4.e2e.test.mjs",
+        "test:e2e:rf14": "node --test tests/e2e/rf-1.4-ae4.e2e.test.mjs",
         "test:e2e:resiliencia": "node --test --test-timeout=300000 tests/e2e/resiliencia-ae4.e2e.test.mjs"
     },
     "keywords": [],
