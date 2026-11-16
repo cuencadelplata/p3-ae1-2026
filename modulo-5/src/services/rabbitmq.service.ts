@@ -15,6 +15,8 @@ export interface TripAssignedEventPayload {
   offerId: string;
   driverId: string | number;
   clientId: string | number;
+  clientUserId?: number | string;
+  driverUserId?: number | string;
   origin: GeoLocation;
   destination: GeoLocation;
   vehicleType: VehicleType;
@@ -396,8 +398,8 @@ export class RabbitMQService {
   }
 
   public async publishTripAssigned(payload: TripAssignedEventPayload): Promise<boolean> {
-    const clientUserId = this.parseCanonicalUserId(payload.clientId);
-    const driverUserId = this.parseCanonicalUserId(payload.driverId);
+    const clientUserId = payload.clientUserId ?? this.parseCanonicalUserId(payload.clientId);
+    const driverUserId = payload.driverUserId ?? this.parseCanonicalUserId(payload.driverId);
 
     const eventEnvelope: StandardEventEnvelope = {
       messageId: randomUUID(),
@@ -422,7 +424,7 @@ export class RabbitMQService {
   }
 
   public async publishRideRequestCreated(rideRequest: RideRequest): Promise<boolean> {
-    const clientNum = this.parseCanonicalUserId(rideRequest.clientId);
+    const clientNum = rideRequest.clientUserId ?? this.parseCanonicalUserId(rideRequest.clientId);
     const clientUserId = typeof clientNum === 'number' ? clientNum : 1;
 
     const event: RideRequestCreatedEvent = {

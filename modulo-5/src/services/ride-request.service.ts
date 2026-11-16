@@ -438,7 +438,8 @@ export class RideRequestService {
   public async createRideRequest(
     clientId: string,
     idempotencyKey: string,
-    dto: CreateRideRequestDTO
+    dto: CreateRideRequestDTO,
+    clientUserId?: number
   ): Promise<RideRequest> {
     const scopedKey = RideRequestService.scopedIdempotencyKey(clientId, idempotencyKey);
     const fingerprint = RideRequestService.payloadFingerprint(dto);
@@ -456,7 +457,7 @@ export class RideRequestService {
       return inFlight.promise;
     }
 
-    const promise = this.executeCreateRideRequest(clientId, idempotencyKey, scopedKey, fingerprint, dto);
+    const promise = this.executeCreateRideRequest(clientId, idempotencyKey, scopedKey, fingerprint, dto, clientUserId);
     this.inFlightCreations.set(scopedKey, { fingerprint, promise });
     try {
       return await promise;
@@ -470,7 +471,8 @@ export class RideRequestService {
     idempotencyKey: string,
     scopedKey: string,
     fingerprint: string,
-    dto: CreateRideRequestDTO
+    dto: CreateRideRequestDTO,
+    clientUserId?: number
   ): Promise<RideRequest> {
     // 1. Idempotencia (Redis compartido; Map local como respaldo)
     const cached =
@@ -547,9 +549,16 @@ export class RideRequestService {
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 3 * 60 * 1000); // 3 minutos TTL de búsqueda
 
+      const resolvedClientUserId =
+        clientUserId ??
+        (typeof this.rabbitmqService.parseCanonicalUserId(clientId) === 'number'
+          ? (this.rabbitmqService.parseCanonicalUserId(clientId) as number)
+          : undefined);
+
       const newRequest: RideRequest = {
         id: randomUUID(),
         clientId,
+        clientUserId: resolvedClientUserId,
         origin: dto.origin,
         destination: dto.destination,
         vehicleType: dto.vehicleType,
@@ -954,11 +963,13 @@ export class RideRequestService {
     originAddress: string,
     destinationAddress: string,
     driverId: string,
-    rideRequestId?: string
+    rideRequestId?: string,
+    explicitClientUserId?: number,
+    explicitDriverUserId?: number
   ): Promise<string | null> {
     const m6BaseUrl = process.env.M6_SERVICE_URL || 'http://localhost:3000';
-    const clientUserId = this.rabbitmqService.parseCanonicalUserId(clientId);
-    const driverUserId = this.rabbitmqService.parseCanonicalUserId(driverId);
+    const clientUserId = explicitClientUserId ?? this.rabbitmqService.parseCanonicalUserId(clientId);
+    const driverUserId = explicitDriverUserId ?? this.rabbitmqService.parseCanonicalUserId(driverId);
 
     try {
       // 1. Crear viaje en M6 con clientUserId e idempotencia
@@ -1032,6 +1043,11 @@ export class RideRequestService {
 
     const { action } = dto;
     const targetDriverId = driverId;
+    const resolvedDriverUserId =
+      dto.driverUserId ??
+      (typeof this.rabbitmqService.parseCanonicalUserId(targetDriverId) === 'number'
+        ? (this.rabbitmqService.parseCanonicalUserId(targetDriverId) as number)
+        : undefined);
 
     // 1. Obtener oferta desde Redis, memoria o base de datos (RF-5.4: Estado efímero y vigencia TTL)
     let offer: RideOffer | null | undefined = this.offers.get(offerId);
@@ -1225,6 +1241,7 @@ export class RideRequestService {
     assignedRequest.updatedAt = now.toISOString();
 
     offer.status = 'ACCEPTED';
+    offer.driverUserId = resolvedDriverUserId;
     TelemetryService.getInstance().recordDriverOffer('ACCEPTED');
     this.offers.set(offerId, offer);
     this.requests.set(assignedRequest.id, assignedRequest);
@@ -1265,6 +1282,8 @@ export class RideRequestService {
         offerId: offer.id,
         driverId: offer.driverId,
         clientId: assignedRequest.clientId,
+        clientUserId: assignedRequest.clientUserId,
+        driverUserId: resolvedDriverUserId,
         origin: assignedRequest.origin,
         destination: assignedRequest.destination,
         vehicleType: assignedRequest.vehicleType,
@@ -1281,7 +1300,9 @@ export class RideRequestService {
       assignedRequest.origin.address || `${assignedRequest.origin.latitude},${assignedRequest.origin.longitude}`,
       assignedRequest.destination.address || `${assignedRequest.destination.latitude},${assignedRequest.destination.longitude}`,
       offer.driverId,
-      assignedRequest.id
+      assignedRequest.id,
+      assignedRequest.clientUserId,
+      resolvedDriverUserId
     );
 
     console.log(

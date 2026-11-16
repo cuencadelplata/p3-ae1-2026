@@ -31,6 +31,7 @@ export interface EstimatedFare {
 export interface RideRequest {
   id: string;
   clientId: string;
+  clientUserId?: number; // ID numérico canónico de M1
   origin: GeoLocation;
   destination: GeoLocation;
   vehicleType: VehicleType;
@@ -134,6 +135,7 @@ export interface RideOffer {
   id: string;
   requestId: string;
   driverId: string;
+  driverUserId?: number; // ID numérico canónico de M1 del conductor
   status: RideOfferStatus;
   estimatedFare: EstimatedFare;
   origin: GeoLocation;
@@ -164,6 +166,7 @@ export type OfferAction = 'ACCEPT' | 'REJECT';
 export interface RespondOfferDTO {
   action: OfferAction;
   driverId?: string; // Opcional en el body si se envía por header / token JWT
+  driverUserId?: number; // ID numérico canónico de M1 del conductor
 }
 
 export interface RespondOfferResponseDTO {

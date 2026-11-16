@@ -34,6 +34,44 @@ export class RideRequestController {
   }
 
   /**
+   * Extrae explícitamente el userId numérico canónico de M1 si está disponible.
+   */
+  private extractClientUserId(req: Request): number | undefined {
+    const raw = req.authenticatedUser?.userId;
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'string') {
+      const parsed = parseInt(raw.replace(/^(client_|usr_)/, ''), 10);
+      if (!isNaN(parsed)) return parsed;
+    }
+    if (typeof req.body?.clientUserId === 'number') return req.body.clientUserId;
+    const customHeader = req.headers['x-client-user-id'] || req.headers['x-user-id'];
+    if (customHeader) {
+      const parsedHeader = parseInt(customHeader.toString().replace(/^(client_|usr_)/, ''), 10);
+      if (!isNaN(parsedHeader)) return parsedHeader;
+    }
+    return undefined;
+  }
+
+  /**
+   * Extrae explícitamente el driverUserId numérico canónico de M1 si está disponible.
+   */
+  private extractDriverUserId(req: Request): number | undefined {
+    const raw = req.authenticatedUser?.userId;
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'string') {
+      const parsed = parseInt(raw.replace(/^(drv_|driver_|usr_)/, ''), 10);
+      if (!isNaN(parsed)) return parsed;
+    }
+    if (typeof req.body?.driverUserId === 'number') return req.body.driverUserId;
+    const customHeader = req.headers['x-driver-user-id'] || req.headers['x-user-id'];
+    if (customHeader) {
+      const parsedHeader = parseInt(customHeader.toString().replace(/^(drv_|driver_|usr_)/, ''), 10);
+      if (!isNaN(parsedHeader)) return parsedHeader;
+    }
+    return undefined;
+  }
+
+  /**
    * POST /api/v1/ride-requests
    */
   public create = async (req: Request, res: Response): Promise<void> => {
@@ -49,12 +87,14 @@ export class RideRequestController {
       }
 
       const clientId = this.extractClientId(req);
+      const clientUserId = this.extractClientUserId(req);
       const dto: CreateRideRequestDTO = req.body;
 
       const rideRequest = await this.rideRequestService.createRideRequest(
         clientId,
         idempotencyKey,
-        dto
+        dto,
+        clientUserId
       );
 
       res.status(201).json(rideRequest);
@@ -204,11 +244,13 @@ export class RideRequestController {
     try {
       const { offerId } = req.params;
       const driverId = this.extractDriverId(req);
+      const driverUserId = this.extractDriverUserId(req);
       const { action } = req.body || {};
 
       const result = await this.rideRequestService.respondToOffer(offerId, driverId, {
         action,
-        driverId: req.body?.driverId
+        driverId: req.body?.driverId,
+        driverUserId
       });
 
       res.status(200).json(result);
@@ -225,10 +267,12 @@ export class RideRequestController {
     try {
       const { offerId } = req.params;
       const driverId = this.extractDriverId(req);
+      const driverUserId = this.extractDriverUserId(req);
 
       const result = await this.rideRequestService.respondToOffer(offerId, driverId, {
         action: 'ACCEPT',
-        driverId: req.body?.driverId
+        driverId: req.body?.driverId,
+        driverUserId
       });
 
       res.status(200).json(result);
