@@ -10,7 +10,11 @@
     "test": "jest",
     "test:unit": "jest --selectProjects unit",
     "test:integration": "jest --selectProjects integration",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:stress": "k6 run tests/stress/stress-ride-request-flow.js",
+    "test:stress:concurrency": "k6 run tests/stress/stress-concurrency-acceptance.js",
+    "test:stress:cancellation": "k6 run tests/stress/stress-cancellation-race.js",
+    "test:stress:all": "powershell -ExecutionPolicy Bypass -File tests/stress/run-all-stress-tests.ps1"
   },
   "keywords": [
     "microservices",

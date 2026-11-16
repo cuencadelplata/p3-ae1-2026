@@ -215,8 +215,8 @@ export const requireAuth = async (
     return next();
   }
 
-  // 2. Fallback controlado en entorno de test para headers directos
-  if (process.env.NODE_ENV === 'test') {
+  // 2. Fallback controlado en entorno de test o AUTH_MODE=simulated para headers directos
+  if (process.env.NODE_ENV === 'test' || (process.env.AUTH_MODE || '').toLowerCase() === 'simulated') {
     const testUserId = req.headers['x-user-id'] || req.headers['x-client-id'];
     if (testUserId !== undefined && testUserId !== '') {
       req.authenticatedUser = {
@@ -274,8 +274,8 @@ export const requireConductor = async (
     return next();
   }
 
-  // 2. Fallback controlado en entorno de test para headers directos
-  if (process.env.NODE_ENV === 'test') {
+  // 2. Fallback controlado en entorno de test o AUTH_MODE=simulated para headers directos
+  if (process.env.NODE_ENV === 'test' || (process.env.AUTH_MODE || '').toLowerCase() === 'simulated') {
     const testDriverId = req.headers['x-driver-id'] || req.headers['x-user-id'] || req.params?.driverId;
     if (testDriverId !== undefined && testDriverId !== '') {
       req.authenticatedUser = {
