@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { estimacionesTarifaTotal } from "../../infraestructura/metricas";
 
 export interface EstimacionTarifaRequest {
   origen: { lat: number; lng: number; direccion?: string };
@@ -75,6 +76,7 @@ export function calcularEstimacionTarifa(
 export const estimarTarifaHandler = (req: Request, res: Response) => {
   try {
     const resultado = calcularEstimacionTarifa(req.body);
+    estimacionesTarifaTotal.inc();
     return res.status(200).json(resultado);
   } catch (error: any) {
     return res.status(400).json({ error: error.message || "Error al calcular estimación" });

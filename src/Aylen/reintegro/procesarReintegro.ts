@@ -3,8 +3,7 @@ import { obtenerCargo, type CargoRequest } from "./obtenerCargo";
 import { existeOrden, insertarReintegro } from "./reintegroBD";
 import { estaEnCache, marcarEnCache } from "../../infraestructura/redis";
 import { publicar } from "../../infraestructura/rabbit";
-import { ejecutarReintegroMP } from "./reintegroMP";
-import { supabase } from "../../supabaseClient";
+import { reintegrosProcesadosTotal, reintegroDuracionSegundos } from "../../infraestructura/metricas";
 
 export interface EventoCancelacionM6 {
   viajeId: string;
@@ -47,32 +46,19 @@ export async function procesarReintegro(ev: EventoCancelacionM6): Promise<Result
 
   const montoReintegro = redondear(calculoReintegro(cargo));
 
-  // Buscar paymentId de la tabla de Matilda para hacer refund en MP
-  const { data: pago } = await supabase
-    .from("pagos")
-    .select("paymentId")
-    .eq("viaje_Id", ev.viajeId)
-    .maybeSingle();
-
-  if (pago?.paymentId) {
-    try {
-      await ejecutarReintegroMP(pago.paymentId, montoReintegro);
-    } catch (err: any) {
-      console.error(`[reintegro] Error MP refund: ${err?.message}`);
-      // No bloqueamos el flujo si MP falla — igual guardamos en BD
-    }
-  }
-
+  const finTimer = reintegroDuracionSegundos.startTimer();
   const insertado = await insertarReintegro({
     idOrden,
     viajeId: ev.viajeId,
     montoCancelacion: cargo,
     montoReintegro,
   });
+  finTimer();
 
   await marcarEnCache(idOrden);
   if (!insertado) return "duplicado";
 
+  reintegrosProcesadosTotal.inc();
   publicar(
     "reintegro.procesado",
     { idOrden, viajeId: ev.viajeId, montoReintegro },

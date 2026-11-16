@@ -2,6 +2,7 @@ import { redis, redisBreaker } from "../../infraestructura/redis";
 import { Request, Response } from "express";
 import { registrarMetodoPago, buscarPagoPorViaje, autorizarPago, rechazarPago } from "./procesoPago";
 import { procesarPagoMercadoPago } from "./PagoCliente";
+import { pagosAutorizadosTotal, pagoDuracionSegundos } from "../../infraestructura/metricas";
 
 const TTL_CACHE_SEGUNDOS = 30;
 const claveCache = (viajeId: string) => `m7:metodo-pago:${viajeId}`;
@@ -24,10 +25,9 @@ export async function obtenerMetodoPago(req: Request, res: Response) {
   try {
     const viajeId = String(req.params.viajeId);
 
-    // 1. Intentamos leer de la caché primero
     const enCache = await redisBreaker.ejecutar(
       async () => await redis.get(claveCache(viajeId)),
-      () => null // si Redis falla, seguimos directo a la base
+      () => null
     );
 
     if (enCache) {
@@ -35,7 +35,6 @@ export async function obtenerMetodoPago(req: Request, res: Response) {
       return;
     }
 
-    // 2. No estaba en caché: buscamos en la base real
     const metodoPago = await buscarPagoPorViaje(viajeId);
 
     if (!metodoPago) {
@@ -43,19 +42,17 @@ export async function obtenerMetodoPago(req: Request, res: Response) {
       return;
     }
 
-    // 3. Guardamos en caché para la próxima consulta, con TTL
     await redisBreaker.ejecutar(
       async () => {
         await redis.set(claveCache(viajeId), JSON.stringify(metodoPago), {
           EX: TTL_CACHE_SEGUNDOS,
         });
       },
-      () => {} // si Redis falla, no pasa nada
+      () => {}
     );
 
     res.status(200).json(metodoPago);
   } catch (error) {
-    // Falla de infraestructura: el servicio no está disponible
     res.status(503).json({ mensaje: "Servicio de pagos no disponible" });
   }
 }
@@ -78,6 +75,7 @@ export async function autorizarMetodoPago(req: Request, res: Response) {
       return;
     }
 
+    const finTimer = pagoDuracionSegundos.startTimer();
     const resultadoPago = await procesarPagoMercadoPago({
       idOrden,
       viajeId,
@@ -86,6 +84,7 @@ export async function autorizarMetodoPago(req: Request, res: Response) {
       paymentMethodId,
       email,
     });
+    finTimer();
 
     if (resultadoPago.status !== "approved") {
       res.status(402).json({
@@ -96,13 +95,13 @@ export async function autorizarMetodoPago(req: Request, res: Response) {
       return;
     }
 
+    pagosAutorizadosTotal.inc();
     const metodoPago = await autorizarPago(viajeId, idOrden, {
       paymentId: resultadoPago.paymentId,
       total,
       moneda: moneda ?? "ARS",
     });
 
-    // Invalidamos la caché: el estado cambió
     await redisBreaker.ejecutar(
       async () => await redis.del(claveCache(viajeId)),
       () => 0
