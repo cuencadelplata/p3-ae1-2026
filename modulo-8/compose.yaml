@@ -115,6 +115,25 @@ services:
       timeout: 5s
       retries: 5
 
+  alloy:
+    image: grafana/alloy:latest
+    ports:
+      - "12345:12345"
+    volumes:
+      - ./infra/observability/config.alloy:/etc/alloy/config.alloy:ro
+    environment:
+      GRAFANA_CLOUD_REMOTE_WRITE_URL: "${GRAFANA_CLOUD_REMOTE_WRITE_URL:-https://prometheus-prod-40-prod-sa-east-1.grafana.net/api/prom/push}"
+      GRAFANA_CLOUD_USER: "${GRAFANA_CLOUD_USER:-3757548}"
+      GRAFANA_CLOUD_TOKEN: "${GRAFANA_CLOUD_TOKEN:-placeholder}"
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --stability.level=public-preview
+      - /etc/alloy/config.alloy
+    restart: unless-stopped
+    depends_on:
+      - m8-app
+
 volumes:
   m8-postgres:
     name: m8-postgres
