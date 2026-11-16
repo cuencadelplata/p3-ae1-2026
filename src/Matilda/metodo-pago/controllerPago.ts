@@ -3,7 +3,6 @@ import { Request, Response } from "express";
 import { registrarMetodoPago, buscarPagoPorViaje, autorizarPago, rechazarPago } from "./procesoPago";
 import { procesarPagoMercadoPago } from "./PagoCliente";
 
-
 const TTL_CACHE_SEGUNDOS = 30;
 const claveCache = (viajeId: string) => `m7:metodo-pago:${viajeId}`;
 
@@ -40,9 +39,7 @@ export async function obtenerMetodoPago(req: Request, res: Response) {
     const metodoPago = await buscarPagoPorViaje(viajeId);
 
     if (!metodoPago) {
-      res.status(404).json({
-        mensaje: "No se encontró un pago para ese viaje",
-      });
+      res.status(404).json({ mensaje: "No se encontró un pago para ese viaje" });
       return;
     }
 
@@ -53,21 +50,20 @@ export async function obtenerMetodoPago(req: Request, res: Response) {
           EX: TTL_CACHE_SEGUNDOS,
         });
       },
-      () => {} // si Redis falla, no pasa nada, simplemente no se cachea
+      () => {} // si Redis falla, no pasa nada
     );
 
     res.status(200).json(metodoPago);
   } catch (error) {
-    res.status(400).json({
-      mensaje: "No se pudo buscar el método de pago",
-    });
+    // Falla de infraestructura: el servicio no está disponible
+    res.status(503).json({ mensaje: "Servicio de pagos no disponible" });
   }
 }
 
 export async function autorizarMetodoPago(req: Request, res: Response) {
   try {
     const viajeId = String(req.params.viajeId);
-    const { idOrden, total, moneda } = req.body;
+    const { idOrden, total, moneda, token, paymentMethodId, email } = req.body;
 
     if (!idOrden) {
       res.status(400).json({ mensaje: "idOrden es requerido" });
@@ -77,11 +73,26 @@ export async function autorizarMetodoPago(req: Request, res: Response) {
       res.status(400).json({ mensaje: "total es requerido" });
       return;
     }
+    if (!token || !paymentMethodId || !email) {
+      res.status(400).json({ mensaje: "token, paymentMethodId y email son requeridos" });
+      return;
+    }
 
-    const resultadoPago = await procesarPagoMercadoPago(viajeId, total);
+    const resultadoPago = await procesarPagoMercadoPago({
+      idOrden,
+      viajeId,
+      total,
+      token,
+      paymentMethodId,
+      email,
+    });
 
     if (resultadoPago.status !== "approved") {
-      res.status(402).json({ mensaje: "El pago fue rechazado por Mercado Pago" });
+      res.status(402).json({
+        mensaje: "El pago no fue aprobado por Mercado Pago",
+        estadoMP: resultadoPago.status,
+        detalle: resultadoPago.statusDetail,
+      });
       return;
     }
 
@@ -91,7 +102,7 @@ export async function autorizarMetodoPago(req: Request, res: Response) {
       moneda: moneda ?? "ARS",
     });
 
-    // Invalidamos la caché: el estado cambió, lo que había guardado quedó viejo
+    // Invalidamos la caché: el estado cambió
     await redisBreaker.ejecutar(
       async () => await redis.del(claveCache(viajeId)),
       () => 0
@@ -111,7 +122,6 @@ export async function rechazarMetodoPago(req: Request, res: Response) {
     const viajeId = String(req.params.viajeId);
     const metodoPago = await rechazarPago(viajeId);
 
-    // Invalidamos la caché acá también, mismo motivo
     await redisBreaker.ejecutar(
       async () => await redis.del(claveCache(viajeId)),
       () => 0

@@ -1,29 +1,56 @@
-export interface ResultadoPagoMP {
-  paymentId: string;
-  status: "approved" | "rejected";
+import { config } from "../../config";
+
+export interface DatosPagoMP {
+  idOrden: string;
+  viajeId: string;
+  total: number;
+  token: string;            // token de la tarjeta, generado por el checkout de Mercado Pago
+  paymentMethodId: string;  // por ejemplo "visa" o "master"
+  email: string;            
 }
 
-const MP_BASE_URL = process.env.MP_MOCK_URL ?? "http://localhost:3000";
+export interface ResultadoPagoMP {
+  paymentId: string;
+  status: "approved" | "rejected" | "pending";
+  statusDetail?: string;
+}
 
-// Llama al mock
-export async function procesarPagoMercadoPago(
-  viajeId: string,
-  total: number
-): Promise<ResultadoPagoMP> {
-  const response = await fetch(`${MP_BASE_URL}/mock-mercadopago/v1/payments`, {
+const ESTADOS_RECHAZADOS = ["rejected", "cancelled", "refunded", "charged_back"];
+
+export async function procesarPagoMercadoPago(datos: DatosPagoMP): Promise<ResultadoPagoMP> {
+  const response = await fetch(`${config.mpBaseUrl}/v1/payments`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ viajeId, total }),
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${config.mpAccessToken}`,
+      "x-idempotency-key": datos.idOrden,
+    },
+    body: JSON.stringify({
+      transaction_amount: datos.total,
+      description: `Viaje ${datos.viajeId}`,
+      token: datos.token,
+      payment_method_id: datos.paymentMethodId,
+      installments: 1,
+      payer: { email: datos.email },
+      external_reference: datos.idOrden,
+    }),
+    signal: AbortSignal.timeout(10_000),
   });
 
+  const data = await response.json().catch(() => ({}));
+
   if (!response.ok) {
-    throw new Error(`Mercado Pago (mock) respondió ${response.status}`);
+    throw new Error(`Mercado Pago respondió ${response.status}: ${data.message ?? "sin detalle"}`);
   }
 
-  const data = await response.json();
+  let status: ResultadoPagoMP["status"];
+  if (data.status === "approved") status = "approved";
+  else if (ESTADOS_RECHAZADOS.includes(data.status)) status = "rejected";
+  else status = "pending";
 
   return {
-    paymentId: data.id,
-    status: data.status,
+    paymentId: String(data.id),
+    status,
+    statusDetail: data.status_detail,
   };
 }
