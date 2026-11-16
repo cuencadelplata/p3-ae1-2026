@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import 'dotenv/config';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +10,7 @@ const __dirname = path.dirname(__filename);
 const smokeMode = process.argv[2] || 'all';
 const targetUrl = process.env.TARGET_URL || 'http://localhost:3000';
 const jwtSecret = process.env.M1_JWT_SECRET || 'local-dev-m1-secret-not-for-production';
+const qrApiKey = process.env.QR_INTERNAL_API_KEY || '';
 
 console.log(`[Runner K6] Ejecutando modo '${smokeMode}' contra '${targetUrl}'...`);
 
@@ -25,6 +27,8 @@ const dockerArgs = [
   `TARGET_URL=${targetUrl}`,
   '-e',
   `M1_JWT_SECRET=${jwtSecret}`,
+  '-e',
+  `QR_INTERNAL_API_KEY=${qrApiKey}`,
   '-e',
   `SMOKE_MODE=${smokeMode}`,
   'grafana/k6:latest',
