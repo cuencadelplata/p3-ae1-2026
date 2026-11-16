@@ -37,5 +37,30 @@ button.secondary, a.secondary { background: transparent; color: #8ce9d7; } butto
 .performance-run h3 { margin: 0 0 8px; font-size: 1rem; }
 .performance-run p { margin-bottom: 12px; color: #a8bbc9; }
 .performance-run ul { margin: 0; padding-left: 20px; line-height: 1.6; }
+.latency-chart { display: grid; gap: 8px; margin: 18px 0 12px; }
+.latency-chart figcaption { font-weight: 650; margin-bottom: 4px; }
+.latency-row {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr) 2.7rem;
+  gap: 8px;
+  align-items: center;
+  font-size: .84rem;
+  font-variant-numeric: tabular-nums;
+}
+.latency-row span:last-child { text-align: right; }
+.latency-row meter { width: 100%; height: 14px; }
+.latency-row meter::-webkit-meter-bar { background: #22384c; border: 0; }
+.latency-row meter::-webkit-meter-optimum-value { background: #64d6c1; }
+.latency-row meter::-moz-meter-bar { background: #64d6c1; }
+.performance-evidence { font-size: .84rem; }
+.performance-evidence summary { color: #8ce9d7; cursor: pointer; }
+.performance-evidence pre {
+  padding: 12px;
+  border-radius: 10px;
+  background: #06101b;
+  color: #aee9d7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 @media (max-width: 780px) { .topbar, .intro { align-items: stretch; flex-direction: column; } .topbar nav { flex-wrap: wrap; } .grid { grid-template-columns: 1fr; } .steps { justify-content: flex-start; } }
 @media (max-width: 480px) { .topbar, main { width: min(100% - 20px, 1160px); } .card { padding: 18px; } .two-columns { grid-template-columns: 1fr; } .actions { align-items: stretch; flex-direction: column; } }
