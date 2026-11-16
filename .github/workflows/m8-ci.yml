@@ -18,22 +18,6 @@ jobs:
   validate:
     name: Validate M8 workspace
     runs-on: ubuntu-latest
-    # Valores no productivos necesarios para que Docker Compose pueda
-    # interpolar el servicio notification-delivery durante la validación.
-    # Las credenciales reales continúan siendo obligatorias y externas.
-    env:
-      M1_JWT_SECRET: ci-placeholder-not-for-production
-      M2_INTERNAL_API_KEY: ci-placeholder-not-for-production
-      QR_INTERNAL_API_KEY: ci-only-qr-key-not-for-production
-      RABBITMQ_USER: guest
-      RABBITMQ_PASSWORD: guest
-      M8_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-      RABBITMQ_URL: amqp://guest:guest@localhost:5672
-      POSTGRES_PASSWORD: m8_admin_local
-      RECEIPTS_DB_PASSWORD: m8_receipts_local
-      NOTIFICATIONS_DB_PASSWORD: m8_notifications_local
-      SUPPORT_DB_PASSWORD: m8_support_local
-      DELIVERY_DB_PASSWORD: m8_delivery_local
     defaults:
       run:
         working-directory: modulo-8
@@ -57,6 +41,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Create private CI configuration
+        run: node scripts/create-ci-env.mjs
+
+      - name: Check public configuration
+        run: pnpm run check:secrets
 
       - name: Build workspace services
         run: pnpm run build
