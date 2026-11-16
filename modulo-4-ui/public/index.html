@@ -53,6 +53,29 @@
         <div class="section-title"><div><p class="eyebrow">Respuesta del servicio</p><h2>Ultima operacion</h2></div><span id="response-status" class="tag">Sin solicitudes</span></div>
         <pre id="output" aria-live="polite">Usá uno de los formularios para probar la API.</pre>
       </section>
+
+      <section class="card performance-card" aria-labelledby="performance-title">
+        <h2 id="performance-title">Rendimiento de M4</h2>
+        <div class="grid performance-runs">
+          <div class="performance-run">
+            <h3>Prueba rápida con k6 en la Mac</h3>
+            <p>Comprobó la salud de la API, la búsqueda de conductores y la estimación de distancia y tiempo.</p>
+            <ul>
+              <li>9 de 9 comprobaciones aprobadas</li>
+              <li>0 de 4 solicitudes HTTP fallidas</li>
+              <li>Latencia P95 de 4,96 ms</li>
+            </ul>
+          </div>
+          <div class="performance-run">
+            <h3>Prueba de carga en Grafana Cloud</h3>
+            <p>Ejecución histórica desde Windows sobre la búsqueda de conductores cercanos.</p>
+            <ul>
+              <li>Hasta 10 usuarios virtuales</li>
+              <li>0 % de solicitudes fallidas, según el registro de la entrega</li>
+            </ul>
+          </div>
+        </div>
+      </section>
     </main>
   </body>
 </html>
