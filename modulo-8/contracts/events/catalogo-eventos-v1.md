@@ -7,8 +7,7 @@ Receipts Delivery (RF-8.4), porque forma parte de la misma integración. Tambié
 registra objetivos internos comunes de M8 que RF8.6 centralizará durante la
 integración, sin afirmar que ya estén implementados fuera de RF8.3.
 
-Reemplaza a `rabbitmq-ae1.md` para la AE2. Ese archivo se conserva como
-evidencia del estado heredado de AE1.
+Reemplaza al contrato AE1 de RabbitMQ, disponible en el historial Git.
 
 ## 1. Registro de acuerdos
 
@@ -499,7 +498,7 @@ Respuesta `200`:
   "data": {
     "tripId": "trip-2026-000123",
     "receiptNumber": "CMP-2026-3176686383",
-    "url": "http://localhost:3008/api/v1/receipts/downloads/5f0c1a9e7b2d4c8e",
+    "url": "http://localhost:3000/api/v1/receipts/downloads/5f0c1a9e7b2d4c8e",
     "expiresAt": "2026-10-05T18:57:12.000Z"
   }
 }

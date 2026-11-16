@@ -65,7 +65,7 @@ describe('contrato OpenAPI de RF8.5 (openapi/rf85-support.yaml)', () => {
 
   it('documenta exactamente las rutas que registra la aplicación', () => {
     const documentadas = documentedOperations().map(({ method, path: routePath }) => `${method.toUpperCase()} ${routePath}`);
-    const registradas = SUPPORT_API_ROUTES.map(
+    const registradas = SUPPORT_API_ROUTES.filter(({ path: routePath }) => routePath !== '/events/publish').map(
       ({ method, path: routePath }) => `${method.toUpperCase()} ${routePath.replace(/:([A-Za-z]+)/g, '{$1}')}`,
     );
 
@@ -121,11 +121,10 @@ describe('contrato OpenAPI de RF8.5 (openapi/rf85-support.yaml)', () => {
     }
   });
 
-  it('marca viajeId y POST /events/publish como deprecados', () => {
+  it('conserva viajeId como deprecado y excluye la ruta histórica de eventos', () => {
     expect(contract.components.schemas.NuevoTicket.properties.viajeId.deprecated).toBe(true);
     expect(contract.components.schemas.Ticket.properties.viajeId.deprecated).toBe(true);
-    expect(contract.paths['/events/publish'].post.deprecated).toBe(true);
-    expect(contract.paths['/events/publish'].post.tags).toEqual(['RF8.6 (legacy AE1)']);
+    expect(contract.paths['/events/publish']).toBeUndefined();
   });
 
   it('documenta 503 SUPPORT_DB_UNAVAILABLE en todas las operaciones de tickets', () => {
