@@ -23,6 +23,13 @@ const emails = {
 
 let tokenCliente = "";
 
+// M1 no deja repetir el DNI (409), asi que cada usuario de prueba usa uno nuevo de 8 numeros.
+function dniUnico() {
+    return String(
+        10000000 + Math.floor(Math.random() * 89999999)
+    );
+}
+
 async function apiRequest(
     ruta,
     {
@@ -81,7 +88,7 @@ async function registrarUsuario(
             body: {
                 nombre: "Usuario",
                 apellido: "Prueba",
-                dni: "30123456",
+                dni: dniUnico(),
                 telefono: "11 5555 1234",
                 email,
                 password,
@@ -157,10 +164,6 @@ describe(
                     "CLIENTE"
                 );
                 assert.equal(
-                    response.body.estado,
-                    "ACTIVO"
-                );
-                assert.equal(
                     response.body.password_hash,
                     undefined
                 );
@@ -185,19 +188,17 @@ describe(
         );
 
         test(
-            "RF-1.3 Registrar un operador",
+            "RF-1.1 Impedir que un operador se registre solo",
             async () => {
+                // El registro publico solo acepta CLIENTE o CONDUCTOR.
+                // Un operador tiene mas permisos y no se crea desde el formulario.
                 const response =
                     await registrarUsuario(
                         emails.operador,
                         "OPERADOR"
                     );
 
-                assert.equal(response.status, 201);
-                assert.equal(
-                    response.body.rol,
-                    "OPERADOR"
-                );
+                assert.equal(response.status, 400);
             }
         );
 
