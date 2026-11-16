@@ -241,13 +241,57 @@
     },
     {
       "type": "row",
-      "title": "Pruebas de carga (k6)",
+      "title": "Alta disponibilidad",
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 10
+      },
+      "panels": []
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Pedidos por réplica",
+      "description": "Pedidos/s que atiende cada réplica de la API detrás del gateway (instance=api / api-2). Si una réplica cae, su línea baja a 0 y la otra absorbe el tráfico.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (rate(m2_http_requests_total{modulo=\"m2\", origen=~\"$origen\", route!~\"/metrics|/health.*\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Pruebas de carga (k6)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 19
       }
     },
     {
@@ -262,7 +306,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 11
+        "y": 20
       },
       "targets": [
         {
@@ -284,7 +328,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 11
+        "y": 20
       },
       "fieldConfig": {
         "defaults": {
@@ -312,7 +356,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 11
+        "y": 20
       },
       "fieldConfig": {
         "defaults": {

@@ -2,12 +2,33 @@
 // Flujo: scrape (API) y receive_http (k6) → relabel (filtra y etiqueta) → remote_write (Grafana Cloud).
 // Las credenciales salen de variables de entorno (GRAFANA_CLOUD_*), cargadas desde m2/.env.
 
-// 1. Lee las métricas de la API de M2 cada 15 s.
+// 1. Lee las métricas de cada réplica de la API de M2 cada 15 s.
+//    Sin alta disponibilidad solo existe "api"; con docker-compose.ha.yml también "api-2".
+//    Si un nombre no resuelve, simplemente no hay objetivo (no queda una réplica "caída" falsa).
+discovery.dns "m2_api" {
+  names            = ["api", "api-2"]
+  type             = "A"
+  port             = 3000
+  refresh_interval = "15s"
+}
+
+//    Cada réplica se identifica por su nombre de servicio (instance="api" / "api-2"),
+//    así sus contadores no se mezclan.
+discovery.relabel "m2_api" {
+  targets = discovery.dns.m2_api.targets
+
+  rule {
+    source_labels = ["__meta_dns_name"]
+    target_label  = "instance"
+  }
+  rule {
+    target_label = "job"
+    replacement  = "m2-clientes"
+  }
+}
+
 prometheus.scrape "m2_api" {
-  targets = [{
-    "__address__" = "api:3000",
-    "job"         = "m2-clientes",
-  }]
+  targets         = discovery.relabel.m2_api.output
   metrics_path    = "/metrics"
   scrape_interval = "15s"
   forward_to      = [prometheus.relabel.m2.receiver]
