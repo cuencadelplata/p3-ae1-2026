@@ -35,28 +35,21 @@
         <section class="form-panel" aria-labelledby="form-title">
           <div class="section-heading">
             <span class="step-number">01</span>
-            <div><p class="eyebrow" id="form-context">DATOS DE CANCELACIÓN</p><h2 id="form-title">Solicitud</h2></div>
+            <div><p class="eyebrow" id="form-context">CANCELACIÓN</p><h2 id="form-title">Motivo</h2></div>
           </div>
 
-          <form id="identity-form" class="form-stack">
-            <label id="identity-label" for="identity-id">Identificador</label>
-            <input id="identity-id" name="identityId" autocomplete="off" required>
-            <button class="button button-secondary" id="lookup-button" type="submit">Buscar viajes</button>
-          </form>
-          <p id="lookup-status" class="lookup-status" aria-live="polite" hidden></p>
-          <div id="trip-picker" class="trip-picker" hidden>
-            <label for="trip-select">Viaje cancelable</label>
-            <select id="trip-select" name="viajeId" required>
-              <option value="">Selecciona un viaje</option>
-            </select>
+          <div class="trip-context" id="trip-context" aria-live="polite">
+            <span class="context-mark" aria-hidden="true">↗</span>
+            <div><p class="eyebrow" id="trip-context-label">VIAJE ACTUAL</p><strong id="trip-context-value">Buscando viaje…</strong></div>
           </div>
+          <p id="lookup-status" class="lookup-status" aria-live="polite" hidden></p>
 
           <form id="cancel-form" class="form-stack">
             <label for="reason">Motivo</label>
             <textarea id="reason" name="motivo" rows="4" maxlength="240" placeholder="Cuéntanos por qué se cancela el viaje" required></textarea>
             <div class="field-foot"><span>Visible en el registro del evento</span><span id="reason-count">0 / 240</span></div>
 
-            <button class="button button-primary" id="review-button" type="submit" disabled>Revisar cancelación <span aria-hidden="true">↗</span></button>
+            <button class="button button-primary" id="review-button" type="submit" disabled>Cancelar viaje <span aria-hidden="true">↗</span></button>
           </form>
         </section>
 

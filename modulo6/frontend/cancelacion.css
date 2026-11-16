@@ -50,18 +50,20 @@ h1 { margin-bottom: 8px; font-size: 34px; font-weight: 600; line-height: 1.2; }
 h2 { margin-bottom: 0; font-size: 18px; font-weight: 600; }
 .form-stack { display: grid; gap: 9px; }
 .form-stack[hidden] { display: none; }
-.form-stack > label, .trip-picker label { color: var(--muted); font-size: 11px; font-weight: 600; }
-.form-stack > input, textarea, select { width: 100%; padding: 0 12px; color: var(--ink); background: #232628; border: 1px solid var(--line); border-radius: 3px; outline: none; font-size: 12px; }
+.form-stack > label { color: var(--muted); font-size: 11px; font-weight: 600; }
+.form-stack > input, textarea { width: 100%; padding: 0 12px; color: var(--ink); background: #232628; border: 1px solid var(--line); border-radius: 3px; outline: none; font-size: 12px; }
 .form-stack > input { height: 43px; }
-select { min-height: 43px; }
 textarea { min-height: 100px; padding-top: 11px; resize: vertical; line-height: 1.5; }
-input:focus, textarea:focus, select:focus { border-color: var(--lime); box-shadow: 0 0 0 3px rgb(213 255 64 / 12%); }
+input:focus, textarea:focus { border-color: var(--lime); box-shadow: 0 0 0 3px rgb(213 255 64 / 12%); }
 input::placeholder, textarea::placeholder { color: #85877D; }
 .lookup-status { margin: 12px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
 .lookup-status[data-kind="error"] { color: var(--danger); }
-.lookup-status[hidden], .trip-picker[hidden] { display: none; }
-.trip-picker { display: grid; gap: 8px; margin: 15px 0 18px; }
-.trip-picker select option { color: var(--ink); background: #232628; }
+.lookup-status[hidden] { display: none; }
+.trip-context { display: flex; align-items: center; gap: 12px; min-height: 66px; margin-bottom: 20px; padding: 12px; background: #20211E; border-left: 2px solid var(--lime); }
+.trip-context .eyebrow { margin-bottom: 4px; color: var(--lime); font-size: 9px; }
+.trip-context strong { display: block; color: var(--ink); font-size: 11px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+.trip-context[data-state="error"] { border-left-color: var(--danger); }
+.trip-context[data-state="error"] .context-mark { color: #180704; background: var(--danger); }
 .field-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: -3px; color: #85877D; font-size: 9px; }
 .button { min-height: 41px; padding: 0 14px; border: 0; border-radius: 3px; font-size: 11px; font-weight: 700; transition: transform .16s ease, background .16s ease; }
 .button:hover { transform: translateY(-1px); }

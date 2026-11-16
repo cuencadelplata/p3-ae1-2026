@@ -20,6 +20,17 @@ describe('RF-6.5 - Cancelación por cliente', () => {
     expect(await response.json()).toEqual({ clienteId: 'C-LIST', viajes: [viaje] });
   });
 
+  it('consulta un viaje recibido desde el contexto que abrió la cancelación', async () => {
+    const viaje = { id: 'V-CONTEXT', clienteId: 'C-CONTEXT', estado: 'SOLICITADO' };
+    const running = await startServices(new Map([[viaje.id, viaje]]));
+    services.api = running.api;
+
+    const response = await fetch(`${running.url}/api/viajes/V-CONTEXT`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ viaje });
+  });
+
   it('cancela con motivo, estado y cargo consultado externamente', async () => {
     const viaje = { id: 'V-200', clienteId: 'C-10', conductorId: 'D-10', estado: 'SOLICITADO' };
     const running = await startServices(new Map([[viaje.id, viaje]]));

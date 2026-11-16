@@ -105,6 +105,16 @@ export function createViajeApi(options: ViajeApiOptions): Server {
         return send(response, 200, { [actor === 'cliente' ? 'clienteId' : 'conductorId']: identityId, viajes });
       }
 
+      const tripMatch = requestPath.match(/^\/api\/viajes\/([^/]+)$/);
+      if (tripMatch && request.method === 'GET') {
+        const viajeId = decodeURIComponent(tripMatch[1]);
+        const viaje = await options.rf6Api.getViaje(viajeId);
+        if (String(viaje.id) !== viajeId) {
+          return send(response, 502, { error: 'RF-6 devolvió un identificador distinto al solicitado' });
+        }
+        return send(response, 200, { viaje });
+      }
+
       const match = request.url?.match(/^\/api\/viajes\/([^/]+)\/(cancelacion-cliente|cancelacion-conductor)$/);
       if (!match) return send(response, 404, { error: 'Ruta no encontrada' });
 

@@ -59,9 +59,9 @@ Compose inicia un simulador interno para las dependencias M3/M4/M7/M8. Los tres 
 
 ## Mini front-end RF-6.5/6.6
 
-Con el stack levantado, abre `http://localhost:3001/cliente` para RF-6.5 o `http://localhost:3001/conductor` para RF-6.6. El ID de viaje se obtiene del listado de la API y no se escribe manualmente. Si el usuario tiene varios viajes cancelables, se elige uno de la lista.
+Con el stack levantado, abre `http://localhost:3001/cliente` para RF-6.5 o `http://localhost:3001/conductor` para RF-6.6. La pantalla muestra el viaje actual y solo solicita el motivo; al confirmar, llama a la API de cancelación correspondiente. El ID llega en `?viajeId=...` desde el contexto que abre la cancelación o se obtiene automáticamente del listado de la cuenta.
 
-Para cargar automáticamente la lista, pasa la identidad conocida por el módulo que inicia el flujo: `/cliente?clienteId=...` o `/conductor?conductorId=...`. Si no se recibe en la URL, se puede ingresar el ID de cliente/conductor para consultar sus viajes. El cliente usa `GET /api/clientes/{clienteId}/viajes`; el conductor usa `GET /api/conductores/{conductorId}/viajes`, que devuelve sus viajes asignados.
+El módulo que conoce la sesión debe pasar `viajeId` directamente, o bien `clienteId`/`conductorId` para que la pantalla busque el viaje cancelable más reciente. Si falta todo contexto, la pantalla informa que no puede identificar el viaje. También usa `m6-client-id` o `m6-conductor-id` de `localStorage` como alternativa en el mismo origen.
 
 Las APIs RF-6.5/6.6 no autentican ni identifican por sí solas a la persona que abre la pantalla. Las rutas fijan el flujo, pero no sustituyen autenticación; el módulo que conoce la sesión debe pasar el `clienteId` o `conductorId` correspondiente.
 

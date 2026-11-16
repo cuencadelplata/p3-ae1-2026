@@ -1,14 +1,11 @@
 const form = document.querySelector('#cancel-form');
-const identityForm = document.querySelector('#identity-form');
-const identityInput = document.querySelector('#identity-id');
-const identityLabel = document.querySelector('#identity-label');
-const lookupButton = document.querySelector('#lookup-button');
-const lookupStatus = document.querySelector('#lookup-status');
-const tripPicker = document.querySelector('#trip-picker');
-const tripSelect = document.querySelector('#trip-select');
-const dialog = document.querySelector('#confirm-dialog');
 const reasonInput = document.querySelector('#reason');
 const reasonCount = document.querySelector('#reason-count');
+const reviewButton = document.querySelector('#review-button');
+const tripContext = document.querySelector('#trip-context');
+const tripContextValue = document.querySelector('#trip-context-value');
+const lookupStatus = document.querySelector('#lookup-status');
+const dialog = document.querySelector('#confirm-dialog');
 const confirmButton = document.querySelector('#confirm-button');
 const backButton = document.querySelector('#back-button');
 const notice = document.querySelector('#notice');
@@ -35,6 +32,7 @@ const actorContent = actor === 'conductor'
       confirmation: 'Cliente · RF-6.5',
     };
 
+let currentTrip;
 let pendingCancellation;
 
 document.querySelector('#requirement-label').textContent = actorContent.requirement;
@@ -42,76 +40,64 @@ document.querySelector('#page-title').textContent = actorContent.title;
 document.querySelector('#form-context').textContent = actorContent.form;
 document.querySelector('#role-label').textContent = actorContent.label;
 document.querySelector('#role-description').textContent = actorContent.description;
-identityLabel.textContent = actor === 'cliente' ? 'Identificador de cliente' : 'Identificador de conductor';
-identityInput.placeholder = actor === 'cliente' ? 'Ej. cliente-demo-001' : 'ID de tu cuenta de conductor';
 
 function showNotice(message) {
   notice.textContent = message;
   notice.hidden = false;
 }
 
+function clearNotice() {
+  notice.hidden = true;
+  notice.textContent = '';
+}
+
 function showLookupStatus(message, kind = 'info') {
   lookupStatus.textContent = message;
   lookupStatus.dataset.kind = kind;
   lookupStatus.hidden = false;
+  tripContext.dataset.state = kind === 'error' ? 'error' : 'loading';
 }
 
-async function loadTrips(identityId) {
-  const normalizedIdentity = identityId.trim();
-  if (!normalizedIdentity) return;
+async function loadCurrentTrip() {
+  reviewButton.disabled = true;
+  const search = new URLSearchParams(window.location.search);
+  const tripId = search.get('viajeId');
+  const identityId = search.get(actorIdName) || localStorage.getItem(actorStorageKey) || '';
 
-  lookupButton.disabled = true;
-  lookupButton.textContent = 'Buscando…';
-  lookupStatus.hidden = true;
-  tripPicker.hidden = true;
-  form.querySelector('#review-button').disabled = true;
   try {
-    const response = await fetch(`/api/${actor === 'cliente' ? 'clientes' : 'conductores'}/${encodeURIComponent(normalizedIdentity)}/viajes`);
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || `No se pudieron consultar los viajes (HTTP ${response.status}).`);
-
-    const viajes = Array.isArray(payload.viajes) ? payload.viajes : [];
-    const cancelables = viajes.filter((viaje) => ['SOLICITADO', 'CONDUCTOR_EN_CAMINO'].includes(viaje.estado));
-    tripSelect.replaceChildren(new Option('Selecciona un viaje', ''));
-    for (const viaje of cancelables) {
-      const option = new Option(`${viaje.origen || 'Origen'} → ${viaje.destino || 'Destino'} · ${viaje.estado}`, String(viaje.id));
-      tripSelect.add(option);
-    }
-
-    if (cancelables.length === 0) {
-      showLookupStatus('No se encontraron viajes que puedan cancelarse para esta cuenta.');
-      return;
-    }
-
-    tripPicker.hidden = false;
-    if (cancelables.length === 1) {
-      tripSelect.value = String(cancelables[0].id);
-      form.querySelector('#review-button').disabled = false;
-      showLookupStatus('Se encontró un viaje cancelable y quedó seleccionado.');
+    if (tripId) {
+      showLookupStatus('Consultando viaje…');
+      const response = await fetch(`/api/viajes/${encodeURIComponent(tripId)}`);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || `No se pudo consultar el viaje (HTTP ${response.status}).`);
+      currentTrip = payload.viaje;
+    } else if (identityId) {
+      showLookupStatus('Buscando el viaje activo…');
+      const listPath = actor === 'cliente' ? 'clientes' : 'conductores';
+      const response = await fetch(`/api/${listPath}/${encodeURIComponent(identityId)}/viajes`);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || `No se pudieron consultar los viajes (HTTP ${response.status}).`);
+      currentTrip = (payload.viajes ?? []).find((viaje) => ['SOLICITADO', 'CONDUCTOR_EN_CAMINO'].includes(viaje.estado));
     } else {
-      showLookupStatus(`Se encontraron ${cancelables.length} viajes cancelables. Selecciona el que deseas cancelar.`);
+      throw new Error(`No se recibió el contexto de la cuenta. Abre esta pantalla desde el viaje activo o pasa ${actorIdName} en la URL.`);
     }
-    localStorage.setItem(actorStorageKey, normalizedIdentity);
+
+    if (!currentTrip) throw new Error('No hay un viaje cancelable asociado a esta sesión.');
+    if (!['SOLICITADO', 'CONDUCTOR_EN_CAMINO'].includes(currentTrip.estado)) {
+      throw new Error(`El viaje no se puede cancelar en estado ${currentTrip.estado}.`);
+    }
+
+    tripContextValue.textContent = currentTrip.origen && currentTrip.destino
+      ? `${currentTrip.origen} → ${currentTrip.destino}`
+      : `Viaje ${currentTrip.id} · ${currentTrip.estado}`;
+    tripContext.dataset.state = 'ready';
+    lookupStatus.hidden = true;
+    reviewButton.disabled = false;
   } catch (error) {
-    showLookupStatus(error instanceof Error ? error.message : 'No se pudieron consultar los viajes.', 'error');
-  } finally {
-    lookupButton.disabled = false;
-    lookupButton.textContent = 'Buscar viajes';
+    currentTrip = undefined;
+    tripContextValue.textContent = 'No se pudo identificar un viaje activo';
+    showLookupStatus(error instanceof Error ? error.message : 'No se pudo identificar un viaje activo.', 'error');
   }
-}
-
-identityForm.addEventListener('submit', (event) => {
-  event.preventDefault();
-  void loadTrips(identityInput.value);
-});
-
-tripSelect.addEventListener('change', () => {
-  form.querySelector('#review-button').disabled = !tripSelect.value;
-});
-
-function clearNotice() {
-  notice.hidden = true;
-  notice.textContent = '';
 }
 
 reasonInput.addEventListener('input', () => {
@@ -122,16 +108,15 @@ form.addEventListener('submit', (event) => {
   event.preventDefault();
   clearNotice();
   if (!form.reportValidity()) return;
-
-  pendingCancellation = {
-    viajeId: tripSelect.value,
-    motivo: reasonInput.value.trim(),
-  };
-  if (!pendingCancellation.viajeId || !pendingCancellation.motivo) {
-    showNotice('Selecciona un viaje cancelable e indica el motivo para continuar.');
+  if (!currentTrip) {
+    showNotice('No hay un viaje activo para cancelar.');
     return;
   }
 
+  pendingCancellation = {
+    viajeId: String(currentTrip.id),
+    motivo: reasonInput.value.trim(),
+  };
   document.querySelector('#review-trip').textContent = pendingCancellation.viajeId;
   document.querySelector('#review-actor').textContent = actorContent.confirmation;
   document.querySelector('#review-reason').textContent = pendingCancellation.motivo;
@@ -147,17 +132,12 @@ confirmButton.addEventListener('click', async () => {
   confirmButton.textContent = 'Procesando…';
   clearNotice();
   try {
-    const endpoint = actor === 'cliente'
-      ? 'cancelacion-cliente'
-      : 'cancelacion-conductor';
-    const response = await fetch(
-      `/api/viajes/${encodeURIComponent(pendingCancellation.viajeId)}/${endpoint}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ motivo: pendingCancellation.motivo }),
-      },
-    );
+    const endpoint = actor === 'cliente' ? 'cancelacion-cliente' : 'cancelacion-conductor';
+    const response = await fetch(`/api/viajes/${encodeURIComponent(pendingCancellation.viajeId)}/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ motivo: pendingCancellation.motivo }),
+    });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || `No se pudo cancelar el viaje (HTTP ${response.status}).`);
 
@@ -167,8 +147,6 @@ confirmButton.addEventListener('click', async () => {
     }
 
     dialog.close();
-    identityForm.hidden = true;
-    tripPicker.hidden = true;
     form.hidden = true;
     result.innerHTML = '';
     const mark = document.createElement('span');
@@ -213,10 +191,4 @@ fetch('/health')
     status.dataset.state = 'error';
   });
 
-const initialIdentity = new URLSearchParams(window.location.search).get(actorIdName)
-  || localStorage.getItem(actorStorageKey)
-  || '';
-if (initialIdentity) {
-  identityInput.value = initialIdentity;
-  void loadTrips(initialIdentity);
-}
+void loadCurrentTrip();
