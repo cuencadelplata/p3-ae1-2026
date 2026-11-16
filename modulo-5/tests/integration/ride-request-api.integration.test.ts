@@ -470,6 +470,65 @@ describe('M5 Dispatch Service — API Integration Tests', () => {
       expect(secondCancel.status).toBe(409);
       expect(secondCancel.body.code).toBe('REQUEST_ALREADY_CANCELLED');
     });
+
+    it('CP-5.6-06: no debe permitir cancelar la solicitud de otro usuario (403 Forbidden)', async () => {
+      const clientA = getUniqueClientId('client_A');
+      const clientB = getUniqueClientId('client_B');
+
+      const createRes = await request(app)
+        .post('/api/v1/ride-requests')
+        .set('x-user-id', clientA)
+        .set('Idempotency-Key', getUniqueKey())
+        .send(validPayload);
+
+      // Intento de cancelación por clientB
+      const cancelRes = await request(app)
+        .post(`/api/v1/ride-requests/${createRes.body.id}/cancel`)
+        .set('x-user-id', clientB)
+        .send({ reason: 'Intento malicioso' });
+
+      expect(cancelRes.status).toBe(403);
+      expect(cancelRes.body.code).toBe('FORBIDDEN_ACCESS');
+
+      // Solicitud de A permanece intacta
+      const getRes = await request(app)
+        .get(`/api/v1/ride-requests/${createRes.body.id}`)
+        .set('x-user-id', clientA);
+      expect(getRes.body.status).toBe('SEARCHING');
+    });
+
+    it('CP-5.6-19: debe permitir crear una nueva solicitud tras cancelar la anterior', async () => {
+      const clientId = getUniqueClientId('client_reorder');
+
+      // 1. Crear y cancelar primera solicitud
+      const createRes1 = await request(app)
+        .post('/api/v1/ride-requests')
+        .set('x-user-id', clientId)
+        .set('Idempotency-Key', getUniqueKey())
+        .send(validPayload);
+
+      await request(app)
+        .post(`/api/v1/ride-requests/${createRes1.body.id}/cancel`)
+        .set('x-user-id', clientId)
+        .send({ reason: 'Cambio de itinerario' });
+
+      // 2. Crear nueva solicitud con datos válidos y nueva clave
+      const createRes2 = await request(app)
+        .post('/api/v1/ride-requests')
+        .set('x-user-id', clientId)
+        .set('Idempotency-Key', getUniqueKey())
+        .send(validPayload);
+
+      expect(createRes2.status).toBe(201);
+      expect(createRes2.body.id).not.toBe(createRes1.body.id);
+      expect(createRes2.body.status).toBe('SEARCHING');
+
+      // Comprobar que la primera sigue cancelada
+      const getRes1 = await request(app)
+        .get(`/api/v1/ride-requests/${createRes1.body.id}`)
+        .set('x-user-id', clientId);
+      expect(getRes1.body.status).toBe('CANCELLED');
+    });
   });
 
   // ==========================================================================
