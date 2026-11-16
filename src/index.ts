@@ -6,7 +6,6 @@ import { parse } from "yaml";
 import { config } from "./config";
 import { conectarRedis } from "./infraestructura/redis";
 import { iniciarRabbit } from "./infraestructura/rabbit";
-import { pool } from "./infraestructura/basedatos";
 
 import estimacionTarifaRouter from "./Lautaro/estimacion-tarifa/estimacion-tarifa";
 import rutaPago from "./Matilda/metodo-pago/rutaPago";
@@ -15,6 +14,7 @@ import cargoCancelacionRouter from "./Lautaro/cargo-cancelacion/cargo-cancelacio
 import rutaPagoDuplicado from "./Aylen/pago-duplicado/rutaPagoDuplicado";
 import rutaReintegro from "./Aylen/reintegro/rutaReintegro";
 import historialRouter from "./Lautaro/historial-financiero/historial-financiero";
+
 
 const app = express();
 app.use(express.json());
@@ -31,25 +31,11 @@ app.use(rutaPagoDuplicado);
 app.use(rutaReintegro);
 app.use(historialRouter);
 
-async function inicializarBD() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS reintegros (
-      id                SERIAL PRIMARY KEY,
-      id_orden          TEXT NOT NULL UNIQUE,
-      viaje_id          TEXT NOT NULL,
-      monto_cancelacion NUMERIC(12,2) NOT NULL,
-      monto_reintegro   NUMERIC(12,2) NOT NULL,
-      creado_en         TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-}
 
 async function main() {
   await conectarRedis();
   console.log("Redis conectado");
 
-  await inicializarBD();
-  console.log("Base de datos inicializada");
 
   await iniciarRabbit();
 
