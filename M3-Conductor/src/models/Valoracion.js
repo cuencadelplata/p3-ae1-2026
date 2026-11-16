@@ -7,39 +7,15 @@ class valoracion {
     }
 
     //Setters
-    setUsuarioId(usuarioId) {
-        this.usuarioId = usuarioId;
-    }
-
-    setConductorId(conductorId) {
-        this.conductorId = conductorId;
-    }
-
-    setValoracion(valoracion) {
-        this.valoracion = valoracion;
-    }
-
-    setComentario(comentario) {
-        this.comentario = comentario;
-    }
-
+    setUsuarioId(usuarioId) {this.usuarioId = usuarioId;}
+    setConductorId(conductorId) {this.conductorId = conductorId;}
+    setValoracion(valoracion) {this.valoracion = valoracion;}
+    setComentario(comentario) {this.comentario = comentario; }
     //Getters
-    getUsuarioId() {
-        return this.usuarioId;
-    }
-
-    getConductorId() {
-        return this.conductorId;
-    }
-
-    getValoracion() {
-        return this.valoracion;
-    }
-
-    getComentario() {
-        return this.comentario;
-    }
-
+    getUsuarioId() {return this.usuarioId; }
+    getConductorId() {return this.conductorId;}
+    getValoracion() {return this.valoracion;}
+    getComentario() {return this.comentario;}
 
 }
 

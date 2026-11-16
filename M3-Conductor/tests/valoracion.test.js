@@ -1,18 +1,32 @@
+const { test, expect } = require('@playwright/test');
+const path = require('path');
+const {
+  createMockFn,
+  mockModule,
+  clearModule,
+  createFakeRedis,
+  createRes,
+  clearAllMocks
+} = require('./helpers/testUtils');
+
+const SRC = path.join(__dirname, '..', 'src');
+const redisClientPath = path.join(SRC, 'config', 'redisClient.js');
+const redisRepoPath = path.join(SRC, 'repositories', 'redisRepository.js');
+const controllerPath = path.join(SRC, 'controllers', 'valoracionesController.js');
+
+mockModule(redisClientPath, createFakeRedis());
+
+const redisRepository = {
+  obtenerValoraciones: createMockFn(),
+  registrarValoracion: createMockFn()
+};
+mockModule(redisRepoPath, redisRepository);
+
+clearModule(controllerPath);
 const Valoracion = require('../src/models/Valoracion');
 const valoracionesController = require('../src/controllers/valoracionesController');
-const redisRepository = require('../src/repositories/redisRepository');
 
-// Mock del cliente redis para evitar sockets/conexiones colgadas en background
-jest.mock('../src/config/redisClient', () => ({
-  on: jest.fn(),
-  quit: jest.fn(),
-  disconnect: jest.fn()
-}));
-
-// Mock del repositorio de redis
-jest.mock('../src/repositories/redisRepository');
-
-describe('Modelo Valoracion', () => {
+test.describe('Modelo Valoracion', () => {
   test('debe instanciar correctamente una valoración y exponer sus getters', () => {
     const val = new Valoracion('usr1', 'cond1', 5, 'Excelente servicio');
 
@@ -37,29 +51,24 @@ describe('Modelo Valoracion', () => {
   });
 });
 
-describe('Controlador Valoraciones (valoracionesController)', () => {
-  let req, res;
+test.describe('Controlador Valoraciones (valoracionesController)', () => {
+  let req;
+  let res;
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    req = {
-      query: {},
-      body: {}
-    };
-    res = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn().mockReturnThis()
-    };
+  test.beforeEach(() => {
+    clearAllMocks(...Object.values(redisRepository));
+    req = { query: {}, body: {} };
+    res = createRes();
   });
 
-  describe('obtenerValoraciones', () => {
+  test.describe('obtenerValoraciones', () => {
     test('debe retornar 400 si no se envía usuarioId ni conductorId en query', async () => {
       req.query = {};
 
       await valoracionesController.obtenerValoraciones(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
+      expect(res.status.calls[0][0]).toBe(400);
+      expect(res.json.calls[0][0]).toEqual({
         error: "Debe proporcionar el parámetro 'usuarioId' en la query"
       });
     });
@@ -73,9 +82,9 @@ describe('Controlador Valoraciones (valoracionesController)', () => {
 
       await valoracionesController.obtenerValoraciones(req, res);
 
-      expect(redisRepository.obtenerValoraciones).toHaveBeenCalledWith('cond1');
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(mockValoraciones);
+      expect(redisRepository.obtenerValoraciones.calls[0][0]).toBe('cond1');
+      expect(res.status.calls[0][0]).toBe(200);
+      expect(res.json.calls[0][0]).toEqual(mockValoraciones);
     });
 
     test('debe aceptar conductorId en la query si usuarioId no está presente', async () => {
@@ -85,9 +94,9 @@ describe('Controlador Valoraciones (valoracionesController)', () => {
 
       await valoracionesController.obtenerValoraciones(req, res);
 
-      expect(redisRepository.obtenerValoraciones).toHaveBeenCalledWith('cond2');
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(mockValoraciones);
+      expect(redisRepository.obtenerValoraciones.calls[0][0]).toBe('cond2');
+      expect(res.status.calls[0][0]).toBe(200);
+      expect(res.json.calls[0][0]).toEqual(mockValoraciones);
     });
 
     test('debe retornar 500 en caso de falla del repositorio', async () => {
@@ -96,23 +105,23 @@ describe('Controlador Valoraciones (valoracionesController)', () => {
 
       await valoracionesController.obtenerValoraciones(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({
+      expect(res.status.calls[0][0]).toBe(500);
+      expect(res.json.calls[0][0]).toEqual({
         error: 'Error al obtener valoraciones desde Redis',
         detalle: 'Fallo de conexión'
       });
     });
   });
 
-  describe('crearValoracion', () => {
+  test.describe('crearValoracion', () => {
     test('debe retornar 400 si falta el ID del conductor', async () => {
       req.query = {};
       req.body = { valoracion: 5 };
 
       await valoracionesController.crearValoracion(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
+      expect(res.status.calls[0][0]).toBe(400);
+      expect(res.json.calls[0][0]).toEqual({
         error: 'Falta el ID del conductor (usuarioId en query o conductorId en body)'
       });
     });
@@ -123,8 +132,8 @@ describe('Controlador Valoraciones (valoracionesController)', () => {
 
       await valoracionesController.crearValoracion(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
+      expect(res.status.calls[0][0]).toBe(400);
+      expect(res.json.calls[0][0]).toEqual({
         error: 'La valoración debe ser un número entre 1 y 5'
       });
     });
@@ -135,8 +144,8 @@ describe('Controlador Valoraciones (valoracionesController)', () => {
 
       await valoracionesController.crearValoracion(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
+      expect(res.status.calls[0][0]).toBe(400);
+      expect(res.json.calls[0][0]).toEqual({
         error: 'La valoración debe ser un número entre 1 y 5'
       });
     });
@@ -156,14 +165,14 @@ describe('Controlador Valoraciones (valoracionesController)', () => {
 
       await valoracionesController.crearValoracion(req, res);
 
-      expect(redisRepository.registrarValoracion).toHaveBeenCalledWith({
+      expect(redisRepository.registrarValoracion.calls[0][0]).toEqual({
         conductorId: 'cond1',
         usuarioId: 'pasajero_anonimo',
         valoracion: 4,
         comentario: 'Todo bien'
       });
-      expect(res.status).toHaveBeenCalledWith(201);
-      expect(res.json).toHaveBeenCalledWith(valoracionGuardada);
+      expect(res.status.calls[0][0]).toBe(201);
+      expect(res.json.calls[0][0]).toEqual(valoracionGuardada);
     });
 
     test('debe registrar una valoración correctamente especificando usuarioId y conductorId en body', async () => {
@@ -180,14 +189,14 @@ describe('Controlador Valoraciones (valoracionesController)', () => {
 
       await valoracionesController.crearValoracion(req, res);
 
-      expect(redisRepository.registrarValoracion).toHaveBeenCalledWith({
+      expect(redisRepository.registrarValoracion.calls[0][0]).toEqual({
         conductorId: 'cond1',
         usuarioId: 'usr555',
         valoracion: 5,
         comentario: 'Excelente'
       });
-      expect(res.status).toHaveBeenCalledWith(201);
-      expect(res.json).toHaveBeenCalledWith(valoracionGuardada);
+      expect(res.status.calls[0][0]).toBe(201);
+      expect(res.json.calls[0][0]).toEqual(valoracionGuardada);
     });
 
     test('debe retornar 400 si el repositorio lanza un error', async () => {
@@ -197,8 +206,8 @@ describe('Controlador Valoraciones (valoracionesController)', () => {
 
       await valoracionesController.crearValoracion(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
+      expect(res.status.calls[0][0]).toBe(400);
+      expect(res.json.calls[0][0]).toEqual({
         error: 'Solicitud inválida al registrar valoración',
         detalle: 'Error DB'
       });

@@ -1,31 +1,47 @@
-// Tests de la lógica cache-aside del repositorio de Redis, mockeando directamente
-// el cliente de Redis y el repositorio de base de datos para verificar el
-// comportamiento de RF 3.1 (habilitación, con TTL) y RF 3.3 (disponibilidad efímera).
+const { test, expect } = require('@playwright/test');
+const path = require('path');
+const {
+  createMockFn,
+  mockModule,
+  clearModule,
+  createFakeRedis,
+  clearAllMocks
+} = require('./helpers/testUtils');
 
-jest.mock('../src/config/redisClient', () => ({
-  get: jest.fn(),
-  set: jest.fn(),
-  exists: jest.fn(),
-  smembers: jest.fn(),
-  sadd: jest.fn(),
-  lrange: jest.fn(),
-  rpush: jest.fn(),
-  on: jest.fn(),
-  quit: jest.fn(),
-  disconnect: jest.fn()
-}));
+const SRC = path.join(__dirname, '..', 'src');
+const redisClientPath = path.join(SRC, 'config', 'redisClient.js');
+const dbRepoPath = path.join(SRC, 'repositories', 'conductorDBRepository.js');
+const redisRepoPath = path.join(SRC, 'repositories', 'redisRepository.js');
 
-jest.mock('../src/repositories/conductorDBRepository');
+const redis = createFakeRedis();
+mockModule(redisClientPath, redis);
 
-const redis = require('../src/config/redisClient');
-const conductorDBRepository = require('../src/repositories/conductorDBRepository');
+const conductorDBRepository = {
+  obtenerHabilitadoPorId: createMockFn(),
+  actualizarHabilitado: createMockFn()
+};
+mockModule(dbRepoPath, conductorDBRepository);
+
+clearModule(redisRepoPath);
 const redisRepository = require('../src/repositories/redisRepository');
 
-beforeEach(() => {
-  jest.clearAllMocks();
+test.beforeEach(() => {
+  clearAllMocks(
+    redis.get,
+    redis.set,
+    redis.exists,
+    redis.smembers,
+    redis.sadd,
+    redis.lrange,
+    redis.rpush,
+    conductorDBRepository.obtenerHabilitadoPorId,
+    conductorDBRepository.actualizarHabilitado
+  );
+  redis.get.mockResolvedValue(null);
+  redis.set.mockResolvedValue('OK');
 });
 
-describe('redisRepository.obtenerHabilitado (RF 3.1 - cache-aside con TTL)', () => {
+test.describe('redisRepository.obtenerHabilitado (RF 3.1 - cache-aside con TTL)', () => {
   test('en un cache miss consulta la base de datos y guarda el resultado en Redis con TTL', async () => {
     redis.get.mockResolvedValue(null);
     conductorDBRepository.obtenerHabilitadoPorId.mockResolvedValue({
@@ -35,14 +51,12 @@ describe('redisRepository.obtenerHabilitado (RF 3.1 - cache-aside con TTL)', () 
 
     const resultado = await redisRepository.obtenerHabilitado('cond_001');
 
-    expect(redis.get).toHaveBeenCalledWith('conductor:cond_001:habilitado');
-    expect(conductorDBRepository.obtenerHabilitadoPorId).toHaveBeenCalledWith('cond_001');
-    expect(redis.set).toHaveBeenCalledWith(
-      'conductor:cond_001:habilitado',
-      JSON.stringify({ usuarioID: 'cond_001', habilitado: 'activo' }),
-      'EX',
-      expect.any(Number)
-    );
+    expect(redis.get.calls[0][0]).toBe('conductor:cond_001:habilitado');
+    expect(conductorDBRepository.obtenerHabilitadoPorId.calls[0][0]).toBe('cond_001');
+    expect(redis.set.calls[0][0]).toBe('conductor:cond_001:habilitado');
+    expect(redis.set.calls[0][1]).toBe(JSON.stringify({ usuarioID: 'cond_001', habilitado: 'activo' }));
+    expect(redis.set.calls[0][2]).toBe('EX');
+    expect(typeof redis.set.calls[0][3]).toBe('number');
     expect(resultado).toEqual({ usuarioID: 'cond_001', habilitado: 'activo', origen: 'db' });
   });
 
@@ -51,7 +65,7 @@ describe('redisRepository.obtenerHabilitado (RF 3.1 - cache-aside con TTL)', () 
 
     const resultado = await redisRepository.obtenerHabilitado('cond_001');
 
-    expect(conductorDBRepository.obtenerHabilitadoPorId).not.toHaveBeenCalled();
+    expect(conductorDBRepository.obtenerHabilitadoPorId.calls.length).toBe(0);
     expect(resultado).toEqual({ usuarioID: 'cond_001', habilitado: 'activo', origen: 'cache' });
   });
 
@@ -62,19 +76,19 @@ describe('redisRepository.obtenerHabilitado (RF 3.1 - cache-aside con TTL)', () 
     const resultado = await redisRepository.obtenerHabilitado('no_existe');
 
     expect(resultado).toBeNull();
-    expect(redis.set).not.toHaveBeenCalled();
+    expect(redis.set.calls.length).toBe(0);
   });
 });
 
-describe('redisRepository.obtenerDisponibilidad (RF 3.3 - estado efímero, sin acceso a BD)', () => {
+test.describe('redisRepository.obtenerDisponibilidad (RF 3.3 - estado efímero, sin acceso a BD)', () => {
   test('devuelve disponible=true cuando hay un heartbeat vigente en Redis', async () => {
     redis.get.mockResolvedValue(JSON.stringify({ disponible: true }));
 
     const resultado = await redisRepository.obtenerDisponibilidad('cond_001');
 
-    expect(redis.get).toHaveBeenCalledWith('conductor:cond_001:disponible');
+    expect(redis.get.calls[0][0]).toBe('conductor:cond_001:disponible');
     expect(resultado).toEqual({ usuarioID: 'cond_001', disponible: true });
-    expect(conductorDBRepository.obtenerHabilitadoPorId).not.toHaveBeenCalled();
+    expect(conductorDBRepository.obtenerHabilitadoPorId.calls.length).toBe(0);
   });
 
   test('devuelve disponible=false cuando la clave no existe (sin heartbeat o expirada)', async () => {
@@ -86,20 +100,17 @@ describe('redisRepository.obtenerDisponibilidad (RF 3.3 - estado efímero, sin a
   });
 });
 
-describe('redisRepository.actualizarDisponibilidad', () => {
+test.describe('redisRepository.actualizarDisponibilidad', () => {
   test('consulta el estado previo en Redis con redis.get antes de hacer el set y setea la clave efímera con TTL', async () => {
     redis.get.mockResolvedValue(null);
 
     const resultado = await redisRepository.actualizarDisponibilidad('cond_001', true);
 
-    // Debe hacer un get previo para conocer el valor anterior
-    expect(redis.get).toHaveBeenCalledWith('conductor:cond_001:disponible');
-    expect(redis.set).toHaveBeenCalledWith(
-      'conductor:cond_001:disponible',
-      JSON.stringify({ usuarioID: 'cond_001', disponible: true }),
-      'EX',
-      expect.any(Number)
-    );
+    expect(redis.get.calls[0][0]).toBe('conductor:cond_001:disponible');
+    expect(redis.set.calls[0][0]).toBe('conductor:cond_001:disponible');
+    expect(redis.set.calls[0][1]).toBe(JSON.stringify({ usuarioID: 'cond_001', disponible: true }));
+    expect(redis.set.calls[0][2]).toBe('EX');
+    expect(typeof redis.set.calls[0][3]).toBe('number');
     expect(resultado).toEqual({
       usuarioID: 'cond_001',
       disponible: true,
@@ -112,7 +123,7 @@ describe('redisRepository.actualizarDisponibilidad', () => {
 
     const resultado = await redisRepository.actualizarDisponibilidad('cond_001', false);
 
-    expect(redis.get).toHaveBeenCalledWith('conductor:cond_001:disponible');
+    expect(redis.get.calls[0][0]).toBe('conductor:cond_001:disponible');
     expect(resultado).toEqual({
       usuarioID: 'cond_001',
       disponible: false,
@@ -120,8 +131,7 @@ describe('redisRepository.actualizarDisponibilidad', () => {
     });
   });
 
-  test('devuelve disponibleAnterior=false cuando la clave anterior no existía o había expirado por inactividad', async () => {
-    // Clave expirada en Redis: redis.get devuelve null
+  test('devuelve disponibleAnterior=false cuando la clave anterior no existía o había expirado', async () => {
     redis.get.mockResolvedValue(null);
 
     const resultado = await redisRepository.actualizarDisponibilidad('cond_002', false);
@@ -147,7 +157,7 @@ describe('redisRepository.actualizarDisponibilidad', () => {
   });
 });
 
-describe('redisRepository.actualizarHabilitado (RF 3.1 - write-through con TTL)', () => {
+test.describe('redisRepository.actualizarHabilitado (RF 3.1 - write-through con TTL)', () => {
   test('actualiza en la base de datos y refresca la caché de Redis con TTL', async () => {
     conductorDBRepository.actualizarHabilitado.mockResolvedValue({
       usuarioID: 'cond_001',
@@ -157,13 +167,11 @@ describe('redisRepository.actualizarHabilitado (RF 3.1 - write-through con TTL)'
 
     const resultado = await redisRepository.actualizarHabilitado('cond_001', 'activo');
 
-    expect(conductorDBRepository.actualizarHabilitado).toHaveBeenCalledWith('cond_001', 'activo');
-    expect(redis.set).toHaveBeenCalledWith(
-      'conductor:cond_001:habilitado',
-      JSON.stringify({ usuarioID: 'cond_001', habilitado: 'activo' }),
-      'EX',
-      expect.any(Number)
-    );
+    expect(conductorDBRepository.actualizarHabilitado.calls[0]).toEqual(['cond_001', 'activo']);
+    expect(redis.set.calls[0][0]).toBe('conductor:cond_001:habilitado');
+    expect(redis.set.calls[0][1]).toBe(JSON.stringify({ usuarioID: 'cond_001', habilitado: 'activo' }));
+    expect(redis.set.calls[0][2]).toBe('EX');
+    expect(typeof redis.set.calls[0][3]).toBe('number');
     expect(resultado).toEqual({
       usuarioID: 'cond_001',
       habilitado: 'activo',
@@ -176,9 +184,9 @@ describe('redisRepository.actualizarHabilitado (RF 3.1 - write-through con TTL)'
 
     const resultado = await redisRepository.actualizarHabilitado('inexistente', 'activo');
 
-    expect(conductorDBRepository.actualizarHabilitado).toHaveBeenCalledWith('inexistente', 'activo');
+    expect(conductorDBRepository.actualizarHabilitado.calls[0]).toEqual(['inexistente', 'activo']);
     expect(resultado).toBeNull();
-    expect(redis.set).not.toHaveBeenCalled();
+    expect(redis.set.calls.length).toBe(0);
   });
 
   test('si falla redis.set al refrescar la caché, no lanza error y retorna el resultado de BD', async () => {
