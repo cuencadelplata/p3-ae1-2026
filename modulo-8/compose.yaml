@@ -132,6 +132,25 @@ services:
       timeout: 5s
       retries: 5
 
+  alloy:
+    profiles: [observability]
+    image: grafana/alloy:v1.22.0
+    ports:
+      - "127.0.0.1:12345:12345"
+    volumes:
+      - ./infra/observability/config.alloy:/etc/alloy/config.alloy:ro
+    environment:
+      GRAFANA_CLOUD_REMOTE_WRITE_URL: "${GRAFANA_CLOUD_REMOTE_WRITE_URL:-}"
+      GRAFANA_CLOUD_USER: "${GRAFANA_CLOUD_USER:-}"
+      GRAFANA_CLOUD_TOKEN: "${GRAFANA_CLOUD_TOKEN:-}"
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy/config.alloy
+    restart: unless-stopped
+    depends_on:
+      - m8-app
+
 volumes:
   m8-postgres:
     name: m8-postgres
