@@ -2,6 +2,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { solicitarViaje, asignarConductor, registrarArribo, iniciarViaje } from '../../../src/rf-6.1-6.2-6.3/controllers/viajes.controller.js';
 import { mockRequest, mockResponse } from '../datos-prueba/mocks.js';
 import pool from '../../../src/rf-6.1-6.2-6.3/db/pool.js';
+import { publicarEvento } from '../../../src/rf-6.1-6.2-6.3/services/rabbitmq.service.js';
+
+vi.mock('../../../src/rf-6.1-6.2-6.3/services/rabbitmq.service.js', () => ({
+  publicarEvento: vi.fn(async () => undefined),
+}));
 
 vi.mock('../../../src/rf-6.1-6.2-6.3/services/conductor.service', () => ({
   consultarEstadoConductor: vi.fn(async () => ({
@@ -28,12 +33,14 @@ vi.mock('../../../src/rf-6.1-6.2-6.3/services/qr.service.js', () => {
 describe('Ciclo Completo del Viaje', () => {
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     await pool.query('TRUNCATE viajes RESTART IDENTITY CASCADE;');
   });
 
   it('debe completar el flujo: Solicitar → Asignar → Arribo → Iniciar', async () => {
     const req1 = mockRequest({
       clienteId: 'cliente-1',
+      clientUserId: 42,
       origen: 'Calle 1',
       destino: 'Calle 2',
     });
@@ -44,7 +51,7 @@ describe('Ciclo Completo del Viaje', () => {
     expect(res1.data.estado).toBe('SOLICITADO');
 
     const viajeId = res1.data.id;
-    const req2 = mockRequest({ conductorId: 'conductor-1' }, { id: viajeId });
+    const req2 = mockRequest({ conductorId: 'conductor-1', driverUserId: 101 }, { id: viajeId });
     const res2 = mockResponse();
     await asignarConductor(req2 as any, res2 as any);
 
@@ -65,6 +72,28 @@ describe('Ciclo Completo del Viaje', () => {
 
     expect(res4.statusCode).toBe(200);
     expect(res4.data.viaje.estado).toBe('EN_CURSO');
+    expect(publicarEvento).toHaveBeenCalledWith(
+      'mobility.events',
+      'driver.arrived',
+      expect.objectContaining({
+        eventType: 'DriverArrived',
+        correlationId: viajeId,
+        producer: 'm6',
+        data: { tripId: viajeId, recipientId: 42 },
+      }),
+      'topic',
+    );
+    expect(publicarEvento).toHaveBeenCalledWith(
+      'mobility.events',
+      'trip.started',
+      expect.objectContaining({
+        eventType: 'TripStarted',
+        correlationId: viajeId,
+        producer: 'm6',
+        data: { tripId: viajeId, recipientId: 42 },
+      }),
+      'topic',
+    );
   });
 
   it('debe mantener datos del cliente a lo largo del ciclo', async () => {

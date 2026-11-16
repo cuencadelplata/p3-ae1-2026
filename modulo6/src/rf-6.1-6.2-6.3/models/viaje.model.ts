@@ -13,7 +13,11 @@ export enum EstadoViaje {
 export interface Viaje {
     id: string;
     clienteId: string;
+    clientUserId?: number | null;
     conductorId?: string;
+    driverUserId?: number | null;
+    rideRequestId?: string | null;
+    idempotencyKey?: string | null;
     estado: EstadoViaje;
     origen: string;
     destino: string;

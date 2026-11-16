@@ -113,25 +113,65 @@ async function rollback(client: PoolClient): Promise<void> {
     }
 }
 
-export async function crear(viaje: Viaje): Promise<void> {
+export async function crear(viaje: Viaje): Promise<Viaje> {
     await ensureExtensionSchema();
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
         await client.query(
-            `INSERT INTO viajes (id, cliente_id, estado, origen, destino, codigo_verificacion, fecha_creacion)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [viaje.id, viaje.clienteId, viaje.estado, viaje.origen, viaje.destino, viaje.codigoVerificacion, viaje.fechaCreacion]
+            `INSERT INTO viajes (
+                id, cliente_id, client_user_id, conductor_id, driver_user_id, ride_request_id, idempotency_key,
+                estado, origen, destino, codigo_verificacion, fecha_creacion
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+            [
+                viaje.id,
+                viaje.clienteId,
+                viaje.clientUserId ?? null,
+                viaje.conductorId ?? null,
+                viaje.driverUserId ?? null,
+                viaje.rideRequestId ?? null,
+                viaje.idempotencyKey ?? null,
+                viaje.estado,
+                viaje.origen,
+                viaje.destino,
+                viaje.codigoVerificacion,
+                viaje.fechaCreacion,
+            ]
         );
         // RF-6.7: la solicitud es el primer hecho del historial.
         await insertarTransicion(client, viaje.id, null, viaje.estado, 'Solicitud del viaje');
         await client.query('COMMIT');
+        return viaje;
     } catch (error) {
         await rollback(client);
         throw error;
     } finally {
         client.release();
     }
+}
+
+export async function buscarPorRideRequestId(rideRequestId?: string, idempotencyKey?: string): Promise<Viaje | null> {
+    const filtros: string[] = [];
+    const params: Array<string | number> = [];
+
+    if (rideRequestId && rideRequestId.trim()) {
+        params.push(rideRequestId.trim());
+        filtros.push(`ride_request_id = $${params.length}`);
+    }
+
+    if (idempotencyKey && idempotencyKey.trim()) {
+        params.push(idempotencyKey.trim());
+        filtros.push(`idempotency_key = $${params.length}`);
+    }
+
+    if (filtros.length === 0) return null;
+
+    const { rows } = await pool.query(
+        `SELECT * FROM viajes WHERE ${filtros.join(' OR ')} ORDER BY fecha_creacion DESC LIMIT 1`,
+        params
+    );
+
+    return rows.length > 0 ? mapRow(rows[0]) : null;
 }
 
 export async function actualizarQR(
@@ -295,7 +335,12 @@ export async function cancelarSiCancelable(id: string, actor?: string, motivo?: 
     }
 }
 
-export async function actualizarEstado(id: string, estado: EstadoViaje, conductorId?: string): Promise<void> {
+export async function actualizarEstado(
+    id: string,
+    estado: EstadoViaje,
+    conductorId?: string,
+    driverUserId?: number | null,
+): Promise<void> {
     await ensureExtensionSchema();
     const client = await pool.connect();
     try {
@@ -304,8 +349,12 @@ export async function actualizarEstado(id: string, estado: EstadoViaje, conducto
         if (current.rows.length > 0) {
             const estadoAnterior = current.rows[0].estado as string;
             await client.query(
-                `UPDATE viajes SET estado = $1, conductor_id = COALESCE($2, conductor_id) WHERE id = $3`,
-                [estado, conductorId ?? null, id]
+                `UPDATE viajes
+                 SET estado = $1,
+                     conductor_id = COALESCE($2, conductor_id),
+                     driver_user_id = COALESCE($3, driver_user_id)
+                 WHERE id = $4`,
+                [estado, conductorId ?? null, driverUserId ?? null, id]
             );
             if (estadoAnterior !== estado) {
                 await insertarTransicion(client, id, estadoAnterior, estado, detalleTransicion(estado));
@@ -501,10 +550,20 @@ function detalleTransicion(estado: EstadoViaje): string {
 }
 
 function mapRow(row: any): Viaje {
+    const toIntOrNull = (value: unknown): number | null => {
+        if (value === null || value === undefined || value === '') return null;
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric : null;
+    };
+
     return {
         id: row.id,
         clienteId: row.cliente_id,
+        clientUserId: toIntOrNull(row.client_user_id),
         conductorId: row.conductor_id,
+        driverUserId: toIntOrNull(row.driver_user_id),
+        rideRequestId: row.ride_request_id ?? null,
+        idempotencyKey: row.idempotency_key ?? null,
         estado: row.estado,
         origen: row.origen,
         destino: row.destino,

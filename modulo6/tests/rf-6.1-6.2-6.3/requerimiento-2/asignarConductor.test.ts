@@ -101,4 +101,39 @@ describe('RF-6.2: Arribo del Conductor', () => {
     expect(res2.data.mensaje).toBeDefined();
     expect(res2.data.mensaje).toContain('Conductor asignado');
   });
+
+  it('debe aceptar driverUserId y persistirlo en la asignación', async () => {
+    const req1 = mockRequest({
+      clienteId: 'cliente-1',
+      origen: 'Calle 1',
+      destino: 'Calle 2',
+    });
+    const res1 = mockResponse();
+    await solicitarViaje(req1 as any, res1 as any);
+    const viajeId = res1.data.id;
+
+    const req2 = mockRequest({ conductorId: 'conductor-1', driverUserId: 101 }, { id: viajeId });
+    const res2 = mockResponse();
+    await asignarConductor(req2 as any, res2 as any);
+
+    expect(res2.statusCode).toBe(200);
+    expect(res2.data.viaje.driverUserId).toBe(101);
+  });
+
+  it('debe aceptar userId como alias de driverUserId', async () => {
+    const req1 = mockRequest({
+      clienteId: 'cliente-1',
+      origen: 'Calle 1',
+      destino: 'Calle 2',
+    });
+    const res1 = mockResponse();
+    await solicitarViaje(req1 as any, res1 as any);
+
+    const req2 = mockRequest({ conductorId: 'conductor-1', userId: 101 }, { id: res1.data.id });
+    const res2 = mockResponse();
+    await asignarConductor(req2 as any, res2 as any);
+
+    expect(res2.statusCode).toBe(200);
+    expect(res2.data.viaje.driverUserId).toBe(101);
+  });
 });
