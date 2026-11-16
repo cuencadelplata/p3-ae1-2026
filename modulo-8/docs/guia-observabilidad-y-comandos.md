@@ -135,28 +135,7 @@ En la parte superior izquierda del tablero se encuentra el desplegable **`Filtra
 
 ---
 
-## 6. Procedimiento para Respaldar o Restaurar el Tablero (JSON Model)
-
-El archivo maestro del tablero está versionado en el repositorio en:
-`modulo-8/infra/observability/grafana-dashboard-m8.json`
-
-### Cómo exportar y respaldar el tablero desde Grafana 11
-Para guardar una copia de seguridad del diseño actual antes de realizar modificaciones:
-1. Abrir el tablero en Grafana Cloud.
-2. En la barra superior derecha, hacer clic en el botón **`Edit`** (ícono de lápiz).
-3. En la barra de herramientas que aparece arriba, hacer clic en el ícono de **Engranaje ⚙️** (*Dashboard options / Settings*).
-4. En el menú lateral izquierdo, seleccionar la opción **`JSON Model`**.
-5. Copiar todo el contenido JSON que aparece en la pantalla y guardarlo en un archivo local (por ejemplo `tablero-m8-backup.json`).
-
-### Cómo importar o actualizar el tablero en Grafana Cloud
-1. En Grafana Cloud, hacer clic en el botón **`+`** (esquina superior derecha) -> **`Import dashboard`**.
-2. Hacer clic en **`Upload dashboard JSON file`** y seleccionar `modulo-8/infra/observability/grafana-dashboard-m8.json`.
-3. Seleccionar la fuente de datos Prometheus del stack (**`grafanacloud-cordialtruck2630-prom`**).
-4. Hacer clic en **`Import (Overwrite)`** para aplicar los paneles actualizados y luego en **`Save`**.
-
----
-
-## 7. Coordinación del Equipo y Cuidado de la Cuota (Grafana Alloy)
+## 6. Coordinación del Equipo y Cuidado de la Cuota (Grafana Alloy)
 
 El servicio `alloy` envía las métricas de `m8-app` a la nube cada 10 segundos. Si múltiples integrantes corren `alloy` simultáneamente en computadoras distintas con el mismo token, las métricas de ambas máquinas se sumarán en el mismo tablero.
 
@@ -178,7 +157,7 @@ El servicio `alloy` envía las métricas de `m8-app` a la nube cada 10 segundos.
 
 ---
 
-## 8. Directivas de Ejecución para Agentes de Inteligencia Artificial
+## 7. Directivas de Ejecución para Agentes de Inteligencia Artificial
 
 Si esta guía es leída por un agente de IA en la máquina de otro integrante, el agente debe seguir estrictamente estas directivas:
 
