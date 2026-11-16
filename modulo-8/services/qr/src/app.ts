@@ -8,6 +8,7 @@ import type { QrService } from "./qr.service";
 
 export interface AppDeps {
   readonly qrService: QrService;
+  readonly internalApiKey?: string;
   // Comprobación de disponibilidad de Redis para /health/ready.
   readonly checkRedis: DependencyCheck;
 }
@@ -21,7 +22,7 @@ export function createApp(deps: AppDeps): Express {
   app.use(requestContext);
   app.use(express.json());
   app.use(createHealthRouter(deps.checkRedis));
-  registerQrRoutes(app, deps.qrService);
+  registerQrRoutes(app, deps.qrService, deps.internalApiKey);
   app.use(errorHandler);
 
   return app;

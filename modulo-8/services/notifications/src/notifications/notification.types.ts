@@ -102,7 +102,7 @@ export interface NormalizedTripLifecycleNotificationEvent {
   messageId: string;
   eventType: Exclude<TripNotificationEventType, "TripRequested">;
   tripId: string;
-  recipientId: string;
+  recipientId: number;
   correlationId: string;
   occurredAt: string;
 }
@@ -138,7 +138,7 @@ export interface ErrorResponse {//tipos de respuesta del error
   };
 }
 
-// --- Contrato Congelado RF8.6 -> RF8.1 (Integración Asíncrona RabbitMQ) ---
+// --- Propuesta RF8.6 -> RF8.1: eventos externos de viaje, pendiente con M5/M6 ---
 
 export const TRIP_EVENT_TYPE_MAP = {
   TripRequested: "TRIP_REQUESTED",
@@ -153,7 +153,7 @@ export type AmqpTripEventType = keyof typeof TRIP_EVENT_TYPE_MAP;
 
 export interface TripEventData {
   tripId?: string;
-  recipientId?: string;
+  recipientId?: number;
   rideRequestId?: string;
   clientUserId?: number;
   details?: Record<string, unknown>;
@@ -187,7 +187,7 @@ export interface NotificationRequestedData {
   notificationId: string;
   tripId?: string;
   rideRequestId?: string;
-  recipientId: string | number;
+  recipientId: number;
   eventType: DeliveryNotificationEventType;
   channel: NotificationChannel;
   message: string;

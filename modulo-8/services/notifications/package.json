@@ -11,6 +11,8 @@
     "test:integration": "pnpm --dir ../.. run ensure:dependencies && vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
+    "@m8/shared": "workspace:*",
+    "amqplib": "^0.10.9",
     "express": "^5.2.1",
     "pg": "8.23.0"
   },

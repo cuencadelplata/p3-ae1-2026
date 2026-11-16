@@ -1,5 +1,10 @@
 # Módulo 8: Notificaciones, Documentos y Soporte (m8-soporte)
 
+> Guía histórica del servicio independiente de Soporte (AE1). La aplicación
+> integrada de AE2 se inicia desde `modulo-8/` con su `compose.yaml` y se
+> documenta en `modulo-8/docs/RUNBOOK.md`. Este Compose independiente requiere
+> `RABBITMQ_DEFAULT_USER`, `RABBITMQ_DEFAULT_PASS` y `RABBITMQ_URL` externos.
+
 Microservicio encargado de la gestión de tickets de soporte, notificaciones y consumo asíncrono de eventos mediante RabbitMQ para la plataforma distribuida de movilidad urbana.
 
 ---
@@ -40,8 +45,7 @@ docker compose up --build -d
 
 - **Estado del Servicio / API Raíz:** [http://localhost:3000](http://localhost:3000)
 - **Documentación Interactiva OpenAPI (Scalar):** [http://localhost:3000/api-docs](http://localhost:3000/api-docs)
-- **Panel de Administración RabbitMQ (Management):** [http://localhost:15672](http://localhost:15672)  
-  *(Credenciales por defecto: Usuario: `guest` | Contraseña: `guest`)*
+- **Panel de Administración RabbitMQ (Management):** [http://localhost:15672](http://localhost:15672). Usar las credenciales configuradas para este entorno.
 - **Broker RabbitMQ (Puerto AMQP):** `amqp://localhost:5672`
 
 ### Variables de Entorno
@@ -52,8 +56,149 @@ docker compose up --build -d
 | `SUPPORT_DATABASE_URL` | — (obligatoria) | Conexión a CommunicationsDB con el rol `m8_support`. Sin ella el servicio no arranca: no hay almacenamiento alternativo. |
 | `SUPPORT_DB_SCHEMA` | `support` | Schema propio de Support. Debe ser un identificador simple. |
 | `SUPPORT_DB_RETRY_MS` | `5000` | Espera entre intentos de aplicar las migraciones al arrancar. |
-| `RABBITMQ_URL` | `amqp://localhost:5672` | Broker usado por el consumer heredado de AE1. |
+| `RABBITMQ_URL` | Obligatoria para el consumer heredado | Broker configurado por el entorno. |
 | `SUPPORT_LEGACY_EVENTS` | `on` | `on`: conecta el consumer RabbitMQ de AE1, publica `ticket.creado` / `ticket.actualizado` y expone `POST /events/publish`. `off`: Support no se conecta al broker y la API de tickets funciona igual. Cualquier otro valor impide el arranque. |
+| `M6_TRIPS_URL` | — (sin definir) | URL base del servicio de viajes de M6, por ejemplo `http://localhost:3000`. Si está definida, `POST /tickets` verifica que el viaje exista. Sin definir, la verificación queda desactivada y se avisa en el log al arrancar. |
+| `M6_TIMEOUT_MS` | `2000` | Espera máxima de cada consulta a M6. Debe ser un entero positivo; sólo se valida si `M6_TRIPS_URL` está definida. |
+| `SUPPORT_M1_IDENTITY_URL` | — (sin definir) | URL base de M1, por ejemplo `http://localhost:3001`. Si está definida, las rutas de `/tickets` exigen un Bearer que M1 valide. Sin definir, no se exige autenticación y se avisa en el log al arrancar. |
+| `M1_TIMEOUT_MS` | `2000` | Espera máxima de cada consulta a M1. Debe ser un entero positivo; Support sólo la valida si `SUPPORT_M1_IDENTITY_URL` está definida. |
+
+### Verificación del viaje contra M6
+
+Con `M6_TRIPS_URL` definida, `POST /tickets` consulta `GET /api/viajes/{id}` de
+M6 antes de crear el ticket. M6 es el dueño del viaje: Support sólo pregunta si
+existe, no lee su estado ni lo modifica, y acepta viajes en cualquier estado.
+
+| Respuesta de M6 | Respuesta de Support | Ticket |
+| --- | --- | --- |
+| `200` con el mismo `id` | `201` (o `200` en un reintento idempotente) | Se crea |
+| `404`, o `400` por un id con formato inválido | `422 SUPPORT_TRIP_NOT_FOUND` | No se crea |
+| Sin respuesta en `M6_TIMEOUT_MS`, error de red, otro status o cuerpo fuera de contrato | `503 SUPPORT_TRIP_SERVICE_UNAVAILABLE` con `Retry-After: 5` | No se crea |
+
+- **Reintentos idempotentes.** Si la `Idempotency-Key` ya creó un ticket, se
+  devuelve ese ticket (`200`) sin consultar a M6, también con M6 caído. La
+  misma clave con otro pedido responde `409`, también sin consultar a M6. El
+  viaje se verifica sólo cuando el ticket todavía no existe.
+- **Sólo la creación depende de M6.** Consultar, listar y cambiar el estado de
+  un ticket no lo consultan.
+- **Sin circuit breaker.** Cada consulta tiene su timeout, igual que la
+  consulta de Receipts a M7.
+- **Health.** Con la verificación habilitada, `GET /health/ready` agrega el
+  check `trips` (no crítico), que consulta `GET /health` de M6.
+
+#### Decisión: falla cerrado
+
+Si M6 no está disponible, el ticket **no se crea**. Es una decisión consciente:
+
+- un ticket queda siempre asociado a un viaje que M6 confirmó;
+- no hace falta un estado intermedio ni cambios en el schema;
+- el cliente no pierde el pedido: lo repite con la misma `Idempotency-Key`
+  después de `Retry-After`, sin riesgo de duplicarlo;
+- es el mismo criterio que usa Receipts con M7 y con el autorizador fiscal.
+
+El costo es que, mientras M6 está caído, no se pueden abrir tickets nuevos.
+
+**Alternativa descartada:** crear el ticket "sin verificar" y validarlo cuando
+M6 vuelva. Mejora la disponibilidad, pero admite tickets de viajes que no
+existen y exige un estado adicional del ticket, una migración y un proceso de
+reconciliación que decida qué hacer con los que nunca se confirman.
+
+#### Estado del acuerdo con M6
+
+El cliente se escribió contra `GET /api/viajes/{id}` tal como lo publica M6 en
+`modulo6/openapi.yaml` (rama `ae2/m6-codutti-diez-mordka-mortola`). Que ese
+endpoint sea el contrato canónico está **pendiente de confirmación de M6**
+(ver `docs/ae2-intermodule-agreements.md`, §11). Support no usa sandbox ni
+mock de M6: se conecta con el servicio real de M6 (rama
+`ae2/m6-codutti-diez-mordka-mortola`). El `compose.yaml` de M8 no define
+`M6_TRIPS_URL`; lo hace `compose.integracion-real.yaml`.
+
+### Autenticación con M1
+
+Con `SUPPORT_M1_IDENTITY_URL` definida, todas las rutas de `/tickets` exigen
+`Authorization: Bearer <token>`. Support no decodifica el JWT ni conoce el
+secreto de M1: reenvía la cabecera a `GET /auth/validar-identidad-y-rol` y
+sólo acepta un `200` con `valid: true`, un `userId` entero positivo y un rol
+de M1 (`CLIENTE`, `CONDUCTOR`, `OPERADOR`).
+
+| Situación | Respuesta de Support |
+| --- | --- |
+| Sin cabecera `Authorization` | `401 SUPPORT_AUTH_REQUIRED` |
+| Cabecera que no es `Bearer <token>` | `401 SUPPORT_INVALID_TOKEN`, sin consultar a M1 |
+| M1 responde `401` o `403` (token inválido, vencido o revocado) | `401 SUPPORT_INVALID_TOKEN` |
+| M1 responde `200` con `valid: false` (usuario inexistente o bloqueado) | `401 SUPPORT_INVALID_TOKEN` |
+| Sin respuesta en `M1_TIMEOUT_MS`, error de red, otro status o cuerpo fuera de contrato | `503 SUPPORT_IDENTITY_UNAVAILABLE` con `Retry-After: 5` |
+
+- **Autor del historial.** Con autenticación, `cambiadoPor` es `m1:<userId>`
+  y `X-Actor-Id` se ignora. Sin autenticación sigue saliendo de `X-Actor-Id`.
+- **Falla cerrado.** Si M1 no puede confirmar la identidad, el pedido no se
+  atiende.
+- **Alcance.** Sólo `/tickets`. `POST /events/publish` (heredado de AE1), la
+  documentación y `/health` no exigen Bearer.
+- **Health.** `GET /health/ready` agrega el check `identity` (no crítico), que
+  consulta `GET /health` de M1.
+- **Sólo autenticación.** Cualquier usuario válido de M1 puede operar sobre
+  cualquier ticket. No hay autorización por rol ni por dueño del viaje: no
+  existe una correspondencia acordada entre el `clienteId` de M6 y el `userId`
+  de M1, y la autorización de tickets sigue pendiente con M1/M2.
+
+Por qué `SUPPORT_M1_IDENTITY_URL` y no `M1_IDENTITY_URL`: en el contenedor
+único de M8 esa segunda variable ya la define Receipts (RF8.4), con la URL
+completa del endpoint. Si Support la leyera, la autenticación quedaría activa
+en el stack normal sin que nadie la pida. El timeout sí es el compartido
+`M1_TIMEOUT_MS`.
+
+El `compose.yaml` de M8 no define `SUPPORT_M1_IDENTITY_URL`; lo hace
+`compose.integracion-real.yaml`, que conecta con el M1 real (rama
+`integration/m1-ae2`). Los pasos están en `infra/integracion-real/README.md`.
+
+### Limitaciones conocidas
+
+- **La `Idempotency-Key` es global, no por usuario.** Con la autenticación
+  habilitada, si un usuario repite la misma clave y el mismo pedido que ya usó
+  otro, recibe `200` con el ticket que creó el primero, y no se crea ninguno a
+  su nombre; con otro pedido recibe `409`. No expone información nueva, porque
+  cualquier usuario autenticado puede consultar cualquier ticket, pero el
+  ticket queda a nombre de quien usó la clave primero. Los clientes deben
+  generar claves únicas (por ejemplo un UUID por pedido).
+- **En la app integrada, un JSON malformado no usa el formato de error de
+  Support.** Un `POST` o `PATCH` a `/tickets` con un cuerpo que no es JSON
+  válido responde `400` con el formato de error de QR
+  (`{ "error": { "code": "VALIDATION_ERROR", ... } }`, sin `correlationId`),
+  en lugar de `SUPPORT_VALIDATION_ERROR` como documenta el contrato. Ocurre
+  antes de la autenticación, así que el `400` llega aunque falte el Bearer.
+  La causa es el `express.json()` global que registra QR en
+  `services/qr/src/module.ts`: QR se monta antes que Support en la app común,
+  intercepta primero el cuerpo mal formado y el error lo atiende su
+  manejador. Support ya no depende de ese parser: su router
+  (`src/module.ts`) parsea el JSON de `/tickets` y convierte un cuerpo mal
+  formado en `SUPPORT_VALIDATION_ERROR` con `correlationId`, que es lo que
+  responde el router solo o la app standalone. Lo que resta es de QR (RF8.2)
+  o de la app común, no de Support.
+
+### Decisiones y límites
+
+- **Autenticación desactivada por defecto.** El M1 real no corre en el
+  `compose.yaml` común de M8 (sólo está el sandbox de M1 que usa Receipts),
+  así que en el stack normal `/tickets` no exige Bearer. Se activa definiendo
+  `SUPPORT_M1_IDENTITY_URL`, como hace `compose.integracion-real.yaml`. El
+  detalle está en [Autenticación con M1](#autenticación-con-m1).
+- **Autorización por rol o por dueño: pendiente de acuerdo con M1 y M2.**
+  Support sólo autentica: cualquier usuario válido opera sobre cualquier
+  ticket. Falta acordar con M1 los roles y con M2 la correspondencia entre
+  cliente y usuario; hasta entonces no se inventa una regla propia.
+- **Mensajería de AE1 a cargo de RF8.6.** El consumer RabbitMQ heredado, la
+  publicación de `ticket.creado` / `ticket.actualizado` y
+  `POST /events/publish` no son de RF8.5; en la app integrada están
+  desactivados. Lo que queda para la extracción está en
+  [`docs/rf86-handoff.md`](docs/rf86-handoff.md).
+- **`correlation_id` = `tripId`.** La columna `correlation_id` de `tickets`
+  guarda el `tripId`, no el `X-Correlation-Id` del pedido. Sigue la
+  convención `correlationId = tripId` de AE2 para flujos de viaje
+  ([acuerdos intermodulares](../../docs/ae2-intermodule-agreements.md),
+  sección 3, "Transporte y envelope"),
+  que responde a RNF-13 de la consigna: identificador de correlación/tripId
+  para reconstruir un flujo distribuido.
 
 ### Base de Datos (CommunicationsDB)
 
@@ -83,7 +228,7 @@ schema `support` del PostgreSQL compartido de M8, con el rol `m8_support`.
 | --- | --- |
 | `GET /health` | 200 mientras el proceso vive (forma de AE1). |
 | `GET /health/live` | 200 mientras el proceso vive. |
-| `GET /health/ready` | 200 `ok` o `degraded` (broker heredado caído); 503 `unavailable` (base caída o migraciones pendientes). Incluye el detalle de `checks`. |
+| `GET /health/ready` | 200 `ok` o `degraded` (broker heredado caído, o M6 o M1 sin responder si su integración está habilitada); 503 `unavailable` (base caída o migraciones pendientes). Incluye el detalle de `checks`. |
 
 ### Detener los Contenedores
 
@@ -119,7 +264,7 @@ El repositorio en memoria y el de PostgreSQL pasan exactamente los mismos casos
 
 ### 🟢 RF-8.5: Gestión de Tickets de Soporte
 - `GET /` - Estado del servicio y mapa de endpoints.
-- `POST /tickets` - Crear un ticket asociado a un viaje (`tripId`, `motivo`). `viajeId` se acepta como alias deprecado. Cabeceras opcionales `Idempotency-Key` y `X-Actor-Id`.
+- `POST /tickets` - Crear un ticket asociado a un viaje (`tripId`, `motivo`). `viajeId` se acepta como alias deprecado. Cabeceras opcionales `Idempotency-Key` y `X-Actor-Id`. Con `M6_TRIPS_URL` definida, verifica antes que el viaje exista en M6. Con `SUPPORT_M1_IDENTITY_URL` definida, todas las rutas de `/tickets` exigen un Bearer de M1.
 - `GET /tickets/:id` - Consultar un ticket por su ID.
 - `PATCH /tickets/:id/estado` - Cambiar el estado (`ABIERTO`, `EN_PROCESO`, `RESUELTO`) según las transiciones permitidas, con `expectedVersion` y `motivo` opcionales.
 - `GET /tickets/:id/historial` - Historial de estados del ticket, en orden cronológico.

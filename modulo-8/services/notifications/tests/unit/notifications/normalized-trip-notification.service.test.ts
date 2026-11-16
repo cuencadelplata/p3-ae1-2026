@@ -16,7 +16,7 @@ const event = {
   messageId: "message-123",
   eventType: "TripAssigned",
   tripId: "trip-123",
-  recipientId: "user-456",
+  recipientId: 456,
   correlationId: "trip-123",
   occurredAt: "2026-10-03T15:30:00.000Z",
 };

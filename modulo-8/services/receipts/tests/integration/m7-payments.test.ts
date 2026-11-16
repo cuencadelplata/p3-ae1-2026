@@ -62,6 +62,24 @@ describe('Cliente REST de M7 (Integration HTTP)', () => {
     assert.deepEqual(payment, { paymentId: 'p-1', tripId: 'trip-a', method: 'TRANSFERENCIA', status: 'APROBADO' });
   });
 
+  it('envía la clave interna de M7 cuando está configurada', async () => {
+    let receivedKey: string | undefined;
+    behavior = (req, res) => {
+      receivedKey = req.headers['x-api-key'] as string | undefined;
+      json(res, 200, { pagoId: 'p-1', viajeId: 'trip-key', tipo: 'tarjeta', estado: 'autorizado', total: 1500, moneda: 'ARS' });
+    };
+
+    const payment = await createPaymentsClient({ baseUrl, timeoutMs: TIMEOUT_MS, apiKey: 'test-private-key' }).getPayment('trip-key');
+
+    assert.equal(receivedKey, 'test-private-key');
+    assert.equal(payment?.amount?.total, 1500);
+  });
+
+  it('trata un 401 de M7 como dependencia no disponible', async () => {
+    behavior = (_req, res) => json(res, 401, { mensaje: 'API key inválida o ausente' });
+    await assert.rejects(client().getPayment('trip-key'), isUnavailable);
+  });
+
   it('un 404 de M7 debe devolver null (viaje sin pago registrado)', async () => {
     behavior = (_req, res) => json(res, 404, { mensaje: 'No se encontro un pago para ese viaje' });
     assert.equal(await client().getPayment('trip-b'), null);

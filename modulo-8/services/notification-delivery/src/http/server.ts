@@ -12,7 +12,7 @@ import { NotificationDeliveryService } from '../services/notification-delivery.s
 import { RabbitMqDeliveryConsumer } from '../infrastructure/messaging/rabbitmq-delivery-consumer.js';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3107;
-const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672';
+const RABBITMQ_URL = process.env.RABBITMQ_URL;
 const M2_API_URL = process.env.M2_API_URL || 'http://localhost:3002';
 const M2_INTERNAL_API_KEY = process.env.M2_INTERNAL_API_KEY || '';
 const configuredM2TimeoutMs = process.env.M2_TIMEOUT_MS ? Number.parseInt(process.env.M2_TIMEOUT_MS, 10) : 3000;
@@ -46,6 +46,7 @@ async function bootstrap() {
   let rabbitConsumer: RabbitMqDeliveryConsumer | null = null;
 
   try {
+    if (!RABBITMQ_URL?.trim()) throw new Error('RABBITMQ_URL no está configurada');
     amqpConn = await amqp.connect(RABBITMQ_URL);
     rabbitConsumer = new RabbitMqDeliveryConsumer({
       connection: amqpConn,
@@ -56,7 +57,7 @@ async function bootstrap() {
     console.log(`[RF8.7] Consumidor RabbitMQ conectado y escuchando en cola m8.delivery.notification-requested`);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`[RF8.7] RabbitMQ no disponible de inmediato (${RABBITMQ_URL}): ${msg}. El servicio continuará en modo degradado.`);
+    console.warn(`[RF8.7] RabbitMQ no disponible de inmediato: ${msg}. El servicio continuará en modo degradado.`);
   }
 
   const isReady = async (): Promise<{ ok: boolean; checks: Record<string, string> }> => {

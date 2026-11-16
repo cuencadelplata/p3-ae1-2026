@@ -5,7 +5,7 @@ import express, { Router } from 'express';
 
 import { closeRedis, connectRedis, isRedisReady } from './cache/redis';
 import { env } from './config/env';
-import { getDeliveryReference } from './controllers/receipt.controller';
+import { getAuthorizedDeliveryReference } from './controllers/receipt.controller';
 import { runMigrations } from './db/migrations';
 import { closePool, isDatabaseReady } from './db/pool';
 import { fiscalClient } from './integrations/fiscal-authorizer';
@@ -14,7 +14,7 @@ import { startConsumer, type RunningConsumer } from './messaging/consumer';
 import { startOutboxRelay, type RunningRelay } from './messaging/outbox-relay';
 import { PAYMENT_CONFIRMED_ROUTING_KEY, processPaymentConfirmed } from './messaging/payment-confirmed';
 import { queueTopology } from './messaging/topology';
-import type { IdentityValidator } from './middlewares/auth.middleware';
+import { createAuthenticateM1, type IdentityValidator } from './middlewares/auth.middleware';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
 import { requestContext } from './middlewares/request-context.middleware';
 import { checkReadiness, type DependencyChecks, type Readiness } from './observability/health';
@@ -140,7 +140,7 @@ export function createReceiptsModule(options: ReceiptsModuleOptions = {}): Recei
   const jsonBody = express.json({ limit: '256kb' });
 
   const internalRoutes = Router();
-  internalRoutes.get('/:tripId/delivery-reference', getDeliveryReference);
+  internalRoutes.get('/:tripId/delivery-reference', createAuthenticateM1(options.identityValidator), getAuthorizedDeliveryReference);
 
   // Cada montaje termina en su propio 404 y manejador de errores: una ruta
   // desconocida bajo /receipts responde con el formato de error del servicio,

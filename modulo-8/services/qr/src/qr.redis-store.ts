@@ -100,6 +100,8 @@ export function createRedisQrStore(options: RedisQrStoreOptions): QrStore {
   const keyFor = (tokenHash: string): string => `${keyPrefix}${tokenHash}`;
   const tripKeyFor = (tripId: string): string =>
     `${keyPrefix}trip:${createHash("sha256").update(tripId).digest("hex")}`;
+  const operationKeyFor = (operationId: string): string =>
+    `${keyPrefix}validation:${createHash("sha256").update(operationId).digest("hex")}`;
 
   async function save(record: QrRecord): Promise<void> {
     const args: SaveScriptArgs = {
@@ -130,9 +132,13 @@ export function createRedisQrStore(options: RedisQrStoreOptions): QrStore {
     return runWithTimeout("get-or-create", operationTimeoutMs, () => client.qrGetOrCreate(args));
   }
 
-  async function consumeIfValid(tokenHash: string, tripId: string, _now: Date): Promise<ConsumeOutcome> {
+  async function consumeIfValid(tokenHash: string, tripId: string, _now: Date, operationId?: string): Promise<ConsumeOutcome> {
     const key = keyFor(tokenHash);
-    return runWithTimeout("consume", operationTimeoutMs, () => client.qrConsume(key, tripKeyFor(tripId), tripId, tokenHash));
+    return runWithTimeout("consume", operationTimeoutMs, () =>
+      operationId === undefined
+        ? client.qrConsume(key, tripKeyFor(tripId), tripId, tokenHash)
+        : client.qrConsumeIdempotent(key, tripKeyFor(tripId), operationKeyFor(operationId), tripId, tokenHash),
+    );
   }
 
   return { save, getOrCreateActive, consumeIfValid };

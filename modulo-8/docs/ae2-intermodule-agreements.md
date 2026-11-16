@@ -121,7 +121,28 @@ Para RF8.7 también quedan pendientes owner, alta, actualización, revocación y
 
 ## 7. M2 ↔ M8
 
-**PENDIENTE DE ACUERDO:** la auditoría no resolvió si M2 es owner del perfil de cliente ni detectó contrato HTTP de M2. Antes de que Notifications o Receipts consulten datos se debe acordar ID, datos mínimos y si llegan como snapshot o HTTP. No se crea dependencia sin evidencia.
+**Contrato publicado por M2:** La referencia `origin/integration/m2-ae2` en
+`15a48f9` contiene la ruta, su autenticación, OpenAPI y pruebas de integración
+en los commits `02bbc03`, `696606b` y `15a48f9`. Se verificó el código de esa
+referencia; todavía no se ejecutó una prueba HTTP entre los servicios reales.
+
+- M2 sólo administra perfiles de clientes. Su `userId` es el identificador
+  numérico de M1 y no almacena device tokens.
+- Expone `GET /internal/preferences/{userId}` en el puerto 3000. Protege la
+  ruta con `x-api-key`, cuyo valor lee de `INTERNAL_API_KEY`, y acepta
+  `x-correlation-id` para trazabilidad.
+- La respuesta 200 contiene `userId`, `notificationsEnabled`, `pushEnabled` y
+  `notificationChannel`. El canal predeterminado `email` implica
+  `pushEnabled: false`; una cuenta `INACTIVO` implica
+  `notificationsEnabled: false`.
+- `404 CustomerNotFound` omite PUSH sin reintentar. `404 NotFound` significa
+  ruta mal configurada. `400`, `401` y respuestas mal formadas van a DLQ sin
+  reintentos; `503`, timeout y fallas de red conservan retry y DLQ al agotarse.
+- En el Compose conjunto, `M2_API_URL` debe apuntar al servicio M2 en el
+  puerto 3000. `M2_INTERNAL_API_KEY` de M8 debe coincidir con
+  `INTERNAL_API_KEY` de M2. La clave no se publica en Git.
+
+Para `DRIVER_DOCUMENT_REGISTERED`, RF8.7 identifica al destinatario como conductor por el tipo de hecho, omite la consulta a M2 y usa el token activo de M8 asociado al `userId` numérico. M3 ya mostró un mensaje real con el envelope y `driverId` numérico; falta acreditar que ese número corresponde al conductor de M1 y probar que M8 consumió el mensaje. El proveedor actual sigue siendo sandbox. Los hechos de viaje destinados a conductores aún requieren que M6/RF8.1 transmitan explícitamente el rol del destinatario: el `eventType` de viaje por sí solo no lo determina. Hasta cerrar ese contrato, un `CustomerNotFound` de M2 omite la entrega y no se interpreta como permiso para PUSH.
 
 ## 8. M3 ↔ M8
 
@@ -166,6 +187,24 @@ El mock histórico de M6 simula /qr y /qr/validate con codigo y valido; difiere 
 ### Receipts
 
 M6 debe acordar el snapshot de viaje que puede entregar a RF8.3. M8 no puede leer la DB de M6.
+
+### Support RF8.5: verificación de existencia del viaje
+
+**PROPUESTA M8 / PENDIENTE DE ACUERDO con M6.** Al crear un ticket, RF8.5 necesita saber si el `tripId` corresponde a un viaje real. La propuesta es consultar por REST el endpoint que M6 ya publica:
+
+- **Evidencia:** `GET /api/viajes/{id}` (`obtenerViaje`, "Obtener un viaje para integración") en `modulo6/openapi.yaml` de `origin/ae2/m6-codutti-diez-mordka-mortola`, relevado el 2026-10-13. Responde `200 { id, clienteId, conductorId, estado }`, `404 { error }` y `503 { error }`; no exige autenticación. No está en `origin/M6-Viajes`.
+- **Uso por M8:** sólo existencia. RF8.5 no lee el estado ni los ids de cliente/conductor, no filtra por estado y no modifica el viaje. M6 conserva el lifecycle.
+- **Mapeo en M8:** `404` (y `400`) → `422 SUPPORT_TRIP_NOT_FOUND`; timeout, error de red, `5xx` o cuerpo fuera de contrato → `503 SUPPORT_TRIP_SERVICE_UNAVAILABLE` con `Retry-After`. Falla cerrado: sin confirmación de M6 no se crea el ticket. Contrato en `openapi/rf85-support.yaml`.
+- **Estado en M8:** el cliente está implementado y se habilita con `M6_TRIPS_URL`. Sin esa variable la verificación está desactivada. M8 no usa sandbox ni mock de M6 (§21: un mock inventado no habilita integración): se conecta con el servicio real de M6 (rama `ae2/m6-codutti-diez-mordka-mortola`).
+
+M6 debe confirmar:
+
+1. que `GET /api/viajes/{id}` es contrato canónico y llegará a su rama compartida;
+2. que el `id` es el mismo identificador que M8 recibe como `tripId` en eventos y en los otros RF;
+3. la respuesta ante un id con formato inválido (hoy M8 trata `400` como viaje inexistente);
+4. host y puerto para integración (su Compose publica `viajes` en 3000 y `fachada` en 3002) y si habrá autenticación entre servicios.
+
+El relevamiento también muestra que la rama AE2 de M6 ya tiene un único `modulo6/openapi.yaml`. El "Estado crítico" de esta sección describe la auditoría del 2026-09-27 y debe revisarse con M6 antes de darlo por resuelto.
 
 ## 12. M7 ↔ M8
 
@@ -263,6 +302,7 @@ ningún contrato externo.
 | B-05 | M8 | Implementación de Processing→Delivery | RF8.7 está confirmado, pero faltan su implementación y campos de delivery | 8.1, 8.7 | Equipo M8 | BLOQUEANTE DE IMPLEMENTACIÓN |
 | B-06 | Transversal | Adopción o adaptación de envelope RabbitMQ por productores externos | El contrato interno M8 ya está definido; falta su adopción externa o adaptación mediante RF8.6 | 8.6, 8.7 | M5/M6/M7/M8 | BLOQUEANTE EXTERNO |
 | I-01 | M5 | Hechos notificables y owner de asignación | Define alcance de Notifications | 8.1, 8.6 | Equipos M5/M6 | IMPORTANTE |
+| I-02 | M6 | Confirmar `GET /api/viajes/{id}` como contrato canónico de consulta de viaje | RF8.5 verifica la existencia del viaje al crear un ticket; sin confirmación la verificación queda desactivada | 8.5 | Equipo M6 | IMPORTANTE |
 | N-01 | M4/M9 | Confirmar ausencia directa | Evita dependencias artificiales | — | Equipos M4/M9 | NO BLOQUEANTE |
 
 ## 24. Checklist para otros grupos
@@ -296,6 +336,7 @@ ningún contrato externo.
 - Motivo: eventos de viaje. RF: 8.1, 8.2, 8.3, 8.6. Decisión: productor, routing key, momento, payload, versión e idempotencia.
 - Motivo: QR no cambia viajes. RF: 8.2. Decisión: solicitante/validador QR y transición posterior exclusivamente M6.
 - Motivo: snapshot de receipt. RF: 8.3. Decisión: campos que M6 puede entregar sin DB compartida.
+- Motivo: verificación de existencia del viaje al crear un ticket. RF: 8.5. Decisión: confirmar `GET /api/viajes/{id}` como contrato canónico, el significado del `id`, la respuesta ante ids inválidos y el host de integración.
 
 ### Equipo M7
 
@@ -326,3 +367,4 @@ ningún contrato externo.
 | --- | --- | --- |
 | 2026-09-27 | AE2-0: auditoría contractual global | CONFIRMADO como relevamiento |
 | 2026-09-27 | AE2-1A: creación de este documento | PROPUESTA M8 / PENDIENTE DE ACUERDO |
+| 2026-10-13 | RF8.5: verificación de viaje contra `GET /api/viajes/{id}` de M6 (§11, I-02) | PROPUESTA M8 / PENDIENTE DE ACUERDO con M6 |

@@ -146,30 +146,20 @@ paths:
   /notifications:
     post:
       tags: [Notifications]
-      summary: Procesar una notificación de viaje
-      description: M8 valida el hecho, genera el mensaje y persiste la notificación lógica. No modifica el estado del viaje.
+      deprecated: true
+      summary: Ruta heredada de notificación deshabilitada
+      description: Ruta heredada de AE1. En la aplicación integrada devuelve 410 y no genera ni entrega notificaciones. La app independiente de AE1 conserva una simulación para desarrollo. El flujo real de RF8.1 se inicia mediante RabbitMQ y conserva persistencia e idempotencia.
       servers:
         - url: http://localhost:3000
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NotificationRequest'
       responses:
-        '201':
-          description: Notificación procesada.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NotificationResponse'
-        '400': { description: Solicitud inválida. }
-        '415': { description: Content-Type no admitido. }
+        '410': { description: Ruta heredada deshabilitada en la aplicación integrada; usar la integración RabbitMQ. }
   /qr:
     post:
       tags: [QR]
       summary: Generar un QR temporal
-      description: Devuelve el QR activo del viaje de forma idempotente. El QR codifica sólo un token opaco.
+      description: Devuelve el QR activo del viaje de forma idempotente. El QR codifica sólo un token opaco. Ruta interna para M6.
+      security:
+        - QrServiceKey: []
       servers:
         - url: http://localhost:3000
       requestBody:
@@ -188,12 +178,21 @@ paths:
         '400': { description: Solicitud inválida. }
         '415': { description: Content-Type no admitido. }
         '500': { description: Error interno al generar el QR. }
+        '401': { description: Clave interna ausente o inválida. }
         '503': { description: Almacenamiento de QR no disponible; incluye Retry-After. }
   /qr/validate:
     post:
       tags: [QR]
       summary: Validar y consumir un QR
-      description: La validación exitosa consume el QR. Ante concurrencia, sólo una validación puede resultar exitosa.
+      description: La validación exitosa consume el QR. M6 debe enviar un Idempotency-Key UUID y repetir la misma clave al reintentar; sólo esa misma operación recupera el 200 si se perdió la respuesta. Otra operación sobre el QR consumido recibe 409.
+      security:
+        - QrServiceKey: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: UUID de la operación de M6; obligatorio para que sus reintentos sean inequívocos.
+          schema: { type: string, format: uuid }
       servers:
         - url: http://localhost:3000
       requestBody:
@@ -210,8 +209,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/QrValidationResponse'
         '400': { description: Solicitud inválida. }
+        '401': { description: Clave interna ausente o inválida. }
         '404': { description: QR no encontrado o no corresponde al viaje. }
-        '409': { description: QR ya utilizado. }
+        '409': { description: QR ya utilizado por otra operación o Idempotency-Key reutilizada con otros datos. }
         '410': { description: QR vencido. }
         '415': { description: Content-Type no admitido. }
         '500': { description: Error interno inesperado. }
@@ -353,7 +353,9 @@ paths:
     get:
       tags: [Receipts]
       summary: Obtener una referencia interna de entrega de comprobante
-      description: Ruta interna de coordinación para obtener el enlace temporal y su vencimiento; no pertenece a la API pública.
+      description: Ruta de coordinación de M8. Requiere Bearer validado por M1 y acceso al comprobante como cliente, conductor u operador. RF8.4 usa la función interna cuando corre en la misma aplicación.
+      security:
+        - BearerAuth: []
       servers:
         - url: http://localhost:3000
       parameters:
@@ -364,6 +366,8 @@ paths:
       responses:
         '200': { description: Referencia temporal disponible. }
         '400': { description: Identificador de viaje inválido. }
+        '401': { description: Bearer de M1 ausente o inválido. }
+        '403': { description: El usuario no tiene permiso sobre el comprobante. }
         '404': { description: Comprobante no encontrado. }
         '503': { description: Dependencia requerida no disponible. }
   /tickets:
@@ -387,6 +391,9 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TicketCreationRequest'
+      security:
+        - {}
+        - BearerAuth: []
       responses:
         '201':
           description: Ticket creado.
@@ -400,9 +407,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TicketResponse'
+        '401': { description: Sólo con SUPPORT_M1_IDENTITY_URL. Falta el Bearer o M1 no acepta el token. }
         '400': { description: Solicitud inválida. }
         '409': { description: Idempotency-Key usada con otro pedido. }
-        '503': { description: Base de datos no disponible. }
+        '422': { description: El viaje no existe en M6. }
+        '503': { description: Base de datos, servicio de viajes de M6 o identidad de M1 no disponible; ante M6 y M1 incluye Retry-After. }
     get:
       tags: [Support]
       summary: Listar tickets con filtros y paginación
@@ -421,10 +430,14 @@ paths:
         - name: cursor
           in: query
           schema: { type: string }
+      security:
+        - {}
+        - BearerAuth: []
       responses:
+        '401': { description: Sólo con SUPPORT_M1_IDENTITY_URL. Falta el Bearer o M1 no acepta el token. }
         '200': { description: Página de tickets; X-Next-Cursor si hay más. }
         '400': { description: Parámetros inválidos. }
-        '503': { description: Base de datos no disponible. }
+        '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
   /tickets/{id}:
     get:
       tags: [Support]
@@ -436,10 +449,14 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      security:
+        - {}
+        - BearerAuth: []
       responses:
+        '401': { description: Sólo con SUPPORT_M1_IDENTITY_URL. Falta el Bearer o M1 no acepta el token. }
         '200': { description: Ticket encontrado. }
         '404': { description: Ticket no encontrado. }
-        '503': { description: Base de datos no disponible. }
+        '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
   /tickets/{id}/estado:
     patch:
       tags: [Support]
@@ -461,6 +478,9 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TicketStatusChangeRequest'
+      security:
+        - {}
+        - BearerAuth: []
       responses:
         '200':
           description: Ticket actualizado, o sin efecto si ya estaba en ese estado.
@@ -468,10 +488,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TicketResponse'
+        '401': { description: Sólo con SUPPORT_M1_IDENTITY_URL. Falta el Bearer o M1 no acepta el token. }
         '400': { description: Solicitud inválida. }
         '404': { description: Ticket no encontrado. }
         '409': { description: Transición no permitida o conflicto de versión. }
-        '503': { description: Base de datos no disponible. }
+        '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
   /tickets/{id}/historial:
     get:
       tags: [Support]
@@ -483,23 +504,21 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      security:
+        - {}
+        - BearerAuth: []
       responses:
+        '401': { description: Sólo con SUPPORT_M1_IDENTITY_URL. Falta el Bearer o M1 no acepta el token. }
         '200': { description: Historial en orden cronológico. }
         '404': { description: Ticket no encontrado. }
-        '503': { description: Base de datos no disponible. }
-  /events/publish:
-    post:
-      tags: [Support]
-      deprecated: true
-      summary: Publicar eventos AE1 en RabbitMQ
-      description: Heredado de AE1; sólo con SUPPORT_LEGACY_EVENTS=on. Se retira con la extracción a RF8.6.
-      servers:
-        - url: http://localhost:3000
-      responses:
-        '200': { description: Evento publicado. }
-        '400': { description: Solicitud inválida. }
+        '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
 components:
   securitySchemes:
+    QrServiceKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: Clave interna compartida por M6 y M8 mediante variables de entorno.
     BearerAuth:
       type: http
       scheme: bearer

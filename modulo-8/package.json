@@ -10,7 +10,7 @@
     "ensure:dependencies": "node scripts/ensure-test-infrastructure.mjs dependencies",
     "ensure:stack": "node scripts/ensure-test-infrastructure.mjs stack",
     "test": "pnpm run ensure:dependencies && pnpm -r --workspace-concurrency=1 --if-present run test && pnpm run build && pnpm run test:unified && pnpm run test:notifications:integration",
-    "test:unified": "node --test tests/integration/m8-application.test.mjs",
+    "test:unified": "node --test tests/integration/m8-application.test.mjs tests/integration/runtime-config.test.mjs",
     "test:notifications": "pnpm --filter @m8/notifications-processing run test",
     "test:notifications:integration": "pnpm --filter @m8/notifications-processing run test:integration",
     "test:qr": "pnpm --filter @m8/qr run test",
@@ -24,6 +24,7 @@
     "compose:build": "docker compose build",
     "compose:up": "docker compose up -d",
     "compose:down": "docker compose down --remove-orphans",
+    "db:studio": "prisma studio --config infra/db-ui/prisma.config.ts",
     "smoke:all": "node tests/stress/run-k6.mjs all",
     "smoke:notifications": "node tests/stress/run-k6.mjs notifications",
     "smoke:qr": "node tests/stress/run-k6.mjs qr",
@@ -55,6 +56,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.4",
     "@types/pg": "^8.23.1",
+    "prisma": "7.10.1",
     "typescript": "^7.0.2"
   }
 }

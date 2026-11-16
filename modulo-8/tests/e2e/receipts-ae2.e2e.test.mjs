@@ -199,7 +199,11 @@ test("el enlace temporal descarga el PDF y deja de funcionar al vencer", async (
   await publish("payment.confirmed", event, event.messageId);
   await waitFor(async () => (await receiptFetch(`/api/v1/receipts/${tripId}`)).ok, { what: "la emision" });
 
-  const reference = await fetch(`${RECEIPTS}/internal/receipts/${tripId}/delivery-reference`);
+  const denied = await fetch(`${RECEIPTS}/internal/receipts/${tripId}/delivery-reference`);
+  assert.equal(denied.status, 401);
+  const reference = await fetch(`${RECEIPTS}/internal/receipts/${tripId}/delivery-reference`, {
+    headers: { authorization: RECEIPTS_AUTHORIZATION },
+  });
   assert.equal(reference.status, 200);
   const { url, expiresAt } = (await reference.json()).data;
   assert.ok(!url.includes(tripId), "el enlace no debe revelar el tripId");

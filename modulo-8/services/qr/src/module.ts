@@ -23,6 +23,10 @@ export function createQrModule(): QrModule {
   if (config.redisUrl === undefined) {
     throw new Error('REDIS_URL es obligatoria para montar el módulo QR.');
   }
+  const internalApiKey = process.env.QR_INTERNAL_API_KEY;
+  if (internalApiKey === undefined || internalApiKey.trim().length < 16 || internalApiKey.startsWith('replace-with-')) {
+    throw new Error('QR_INTERNAL_API_KEY debe configurarse con al menos 16 caracteres para montar el módulo QR.');
+  }
 
   const redis = createQrRedisClient({ url: config.redisUrl });
   const service = createQrService({
@@ -34,7 +38,7 @@ export function createQrModule(): QrModule {
     log: createLogger('qr'),
   });
   const router = Router();
-  router.use(requestContext, express.json(), createQrRouter(service), errorHandler);
+  router.use(requestContext, express.json(), createQrRouter(service, internalApiKey), errorHandler);
 
   return {
     name: 'qr',
