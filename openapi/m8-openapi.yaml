@@ -16,7 +16,9 @@ tags:
   - name: QR
     description: RF8.2. QR temporal, vencimiento y consumo de un solo uso.
   - name: Receipts
-    description: RF8.3 y RF8.4. Emisión, consulta, descarga y reenvío de comprobantes.
+    description: RF8.3. Emisión, consulta y descarga de comprobantes.
+  - name: ReceiptResend
+    description: RF8.4. Reenvío de un comprobante existente.
   - name: Support
     description: RF8.5. Contrato completo en rf85-support.yaml.
   - name: NotificationDelivery
@@ -27,17 +29,6 @@ paths:
       tags: [Notifications, QR, Receipts, Support, NotificationDelivery]
       summary: Health check agregado del servicio M8
       description: Alias de disponibilidad del único servicio HTTP de M8.
-      servers:
-        - url: http://localhost:3000
-          description: Notifications
-        - url: http://localhost:3000
-          description: QR
-        - url: http://localhost:3000
-          description: Receipts
-        - url: http://localhost:3000
-          description: Support
-        - url: http://localhost:3000
-          description: NotificationDelivery
       responses:
         '200':
           description: Servicio disponible.
@@ -47,22 +38,12 @@ paths:
     get:
       tags: [QR, NotificationDelivery]
       summary: Vitalidad del proceso, sin consultar dependencias
-      servers:
-        - url: http://localhost:3000
-          description: QR
-        - url: http://localhost:3000
-          description: NotificationDelivery
       responses:
         '200': { description: Proceso vivo. }
   /health/ready:
     get:
       tags: [QR, NotificationDelivery]
       summary: Disponibilidad del servicio y sus dependencias críticas
-      servers:
-        - url: http://localhost:3000
-          description: QR
-        - url: http://localhost:3000
-          description: NotificationDelivery
       responses:
         '200': { description: Servicio disponible. }
         '503': { description: Una dependencia crítica del servicio no está disponible. }
@@ -72,8 +53,6 @@ paths:
       summary: Registrar o actualizar un device token del usuario autenticado
       security:
         - BearerAuth: []
-      servers:
-        - url: http://localhost:3000
       requestBody:
         required: true
         content:
@@ -89,8 +68,6 @@ paths:
       summary: Listar los device tokens activos del usuario autenticado
       security:
         - BearerAuth: []
-      servers:
-        - url: http://localhost:3000
       responses:
         '200': { description: Tokens activos del usuario. }
         '401': { description: JWT de M1 ausente o inválido. }
@@ -100,8 +77,6 @@ paths:
       summary: Desactivar un device token del usuario autenticado
       security:
         - BearerAuth: []
-      servers:
-        - url: http://localhost:3000
       parameters:
         - name: token
           in: path
@@ -118,8 +93,6 @@ paths:
       description: Solo el destinatario de la entrega o un operador autenticado puede consultarla. La respuesta no expone el device token.
       security:
         - BearerAuth: []
-      servers:
-        - url: http://localhost:3000
       parameters:
         - name: notificationId
           in: path
@@ -135,8 +108,6 @@ paths:
       tags: [NotificationDelivery]
       summary: Simular el procesamiento de una solicitud de entrega
       description: Endpoint técnico disponible fuera de producción para verificar el procesamiento idempotente de `NotificationRequested`.
-      servers:
-        - url: http://localhost:3000
       responses:
         '200': { description: Solicitud procesada o duplicado reconocido de forma idempotente. }
         '400': { description: Envelope de notificación inválido. }
@@ -149,8 +120,6 @@ paths:
       deprecated: true
       summary: Ruta heredada de notificación deshabilitada
       description: Ruta heredada de AE1. En la aplicación integrada devuelve 410 y no genera ni entrega notificaciones. La app independiente de AE1 conserva una simulación para desarrollo. El flujo real de RF8.1 se inicia mediante RabbitMQ y conserva persistencia e idempotencia.
-      servers:
-        - url: http://localhost:3000
       responses:
         '410': { description: Ruta heredada deshabilitada en la aplicación integrada; usar la integración RabbitMQ. }
   /qr:
@@ -160,8 +129,6 @@ paths:
       description: Devuelve el QR activo del viaje de forma idempotente. El QR codifica sólo un token opaco. Ruta interna para M6.
       security:
         - QrServiceKey: []
-      servers:
-        - url: http://localhost:3000
       requestBody:
         required: true
         content:
@@ -193,8 +160,6 @@ paths:
           required: false
           description: UUID de la operación de M6; obligatorio para que sus reintentos sean inequívocos.
           schema: { type: string, format: uuid }
-      servers:
-        - url: http://localhost:3000
       requestBody:
         required: true
         content:
@@ -221,8 +186,6 @@ paths:
       tags: [Receipts]
       summary: Emitir un comprobante
       description: RF8.3. La emisión es idempotente por `tripId` y requiere el snapshot de viaje y pago validado por el servicio.
-      servers:
-        - url: http://localhost:3000
       requestBody:
         required: true
         content:
@@ -242,14 +205,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReceiptResponse'
+        '400': { description: Solicitud inválida. }
+        '409': { description: Pago pendiente o no registrado en M7; se puede reintentar después. }
+        '422': { description: Datos inválidos, pago rechazado o autorización fiscal rechazada. }
+        '500': { description: Error interno inesperado. }
+        '503': { description: M7, el autorizador fiscal o una dependencia requerida no disponible. }
   /api/v1/receipts/{tripId}:
     get:
       tags: [Receipts]
       summary: Consultar un comprobante
       security:
         - BearerAuth: []
-      servers:
-        - url: http://localhost:3000
       parameters:
         - name: tripId
           in: path
@@ -257,6 +223,7 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Comprobante encontrado. }
+        '400': { description: Identificador de viaje inválido. }
         '401': { description: JWT de M1 ausente o inválido. }
         '403': { description: El usuario autenticado no puede acceder al comprobante. }
         '404': { description: Comprobante no encontrado. }
@@ -267,8 +234,6 @@ paths:
       summary: Descargar PDF del comprobante
       security:
         - BearerAuth: []
-      servers:
-        - url: http://localhost:3000
       parameters:
         - name: tripId
           in: path
@@ -276,16 +241,17 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: PDF, content type application/pdf. }
+        '400': { description: Identificador de viaje inválido. }
         '401': { description: JWT de M1 ausente o inválido. }
         '403': { description: El usuario autenticado no puede acceder al comprobante. }
         '404': { description: Comprobante no encontrado. }
+        '409': { description: El PDF del comprobante todavía no está disponible. }
+        '503': { description: Dependencia requerida no disponible. }
   /api/v1/receipts/downloads/{token}:
     get:
       tags: [Receipts]
       summary: Descargar un comprobante mediante enlace temporal
       description: Descarga el PDF a partir de un token temporal; no expone ni requiere datos adicionales del viaje.
-      servers:
-        - url: http://localhost:3000
       parameters:
         - name: token
           in: path
@@ -293,16 +259,16 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: PDF, content type application/pdf. }
+        '409': { description: El PDF del comprobante todavía no está disponible. }
         '410': { description: Enlace temporal vencido o inexistente. }
+        '503': { description: Dependencia requerida no disponible. }
   /api/v1/receipts/{tripId}/resend:
     post:
-      tags: [Receipts]
+      tags: [ReceiptResend]
       summary: Reenviar un comprobante existente
       description: RF8.4. Registra un reenvío sin regenerar el PDF y aplica autorización de M1, bloqueo distribuido y límite de solicitudes.
       security:
         - BearerAuth: []
-      servers:
-        - url: http://localhost:3000
       parameters:
         - name: tripId
           in: path
@@ -326,13 +292,11 @@ paths:
         '503': { description: Dependencia requerida no disponible. }
   /api/v1/receipts/resend:
     post:
-      tags: [Receipts]
+      tags: [ReceiptResend]
       summary: Reenviar un comprobante indicando el viaje en el cuerpo
       description: Variante de RF8.4 que recibe `tripId` dentro del cuerpo JSON.
       security:
         - BearerAuth: []
-      servers:
-        - url: http://localhost:3000
       requestBody:
         required: true
         content:
@@ -356,8 +320,6 @@ paths:
       description: Ruta de coordinación de M8. Requiere Bearer validado por M1 y acceso al comprobante como cliente, conductor u operador. RF8.4 usa la función interna cuando corre en la misma aplicación.
       security:
         - BearerAuth: []
-      servers:
-        - url: http://localhost:3000
       parameters:
         - name: tripId
           in: path
@@ -374,8 +336,6 @@ paths:
     post:
       tags: [Support]
       summary: Crear un ticket de soporte
-      servers:
-        - url: http://localhost:3000
       parameters:
         - name: Idempotency-Key
           in: header
@@ -411,12 +371,11 @@ paths:
         '400': { description: Solicitud inválida. }
         '409': { description: Idempotency-Key usada con otro pedido. }
         '422': { description: El viaje no existe en M6. }
+        '500': { description: Error interno inesperado. }
         '503': { description: Base de datos, servicio de viajes de M6 o identidad de M1 no disponible; ante M6 y M1 incluye Retry-After. }
     get:
       tags: [Support]
       summary: Listar tickets con filtros y paginación
-      servers:
-        - url: http://localhost:3000
       parameters:
         - name: tripId
           in: query
@@ -437,13 +396,12 @@ paths:
         '401': { description: Sólo con SUPPORT_M1_IDENTITY_URL. Falta el Bearer o M1 no acepta el token. }
         '200': { description: Página de tickets; X-Next-Cursor si hay más. }
         '400': { description: Parámetros inválidos. }
+        '500': { description: Error interno inesperado. }
         '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
   /tickets/{id}:
     get:
       tags: [Support]
       summary: Consultar un ticket
-      servers:
-        - url: http://localhost:3000
       parameters:
         - name: id
           in: path
@@ -456,13 +414,12 @@ paths:
         '401': { description: Sólo con SUPPORT_M1_IDENTITY_URL. Falta el Bearer o M1 no acepta el token. }
         '200': { description: Ticket encontrado. }
         '404': { description: Ticket no encontrado. }
+        '500': { description: Error interno inesperado. }
         '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
   /tickets/{id}/estado:
     patch:
       tags: [Support]
       summary: Actualizar el estado de un ticket
-      servers:
-        - url: http://localhost:3000
       parameters:
         - name: id
           in: path
@@ -492,13 +449,12 @@ paths:
         '400': { description: Solicitud inválida. }
         '404': { description: Ticket no encontrado. }
         '409': { description: Transición no permitida o conflicto de versión. }
+        '500': { description: Error interno inesperado. }
         '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
   /tickets/{id}/historial:
     get:
       tags: [Support]
       summary: Consultar el historial de estados de un ticket
-      servers:
-        - url: http://localhost:3000
       parameters:
         - name: id
           in: path
@@ -511,6 +467,7 @@ paths:
         '401': { description: Sólo con SUPPORT_M1_IDENTITY_URL. Falta el Bearer o M1 no acepta el token. }
         '200': { description: Historial en orden cronológico. }
         '404': { description: Ticket no encontrado. }
+        '500': { description: Error interno inesperado. }
         '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
 components:
   securitySchemes:
@@ -532,33 +489,6 @@ components:
       properties:
         token: { type: string, minLength: 1 }
         platform: { type: string, enum: [ANDROID, IOS, WEB], default: ANDROID }
-    NotificationRequest:
-      type: object
-      additionalProperties: false
-      required: [tripId, recipientId, eventType, channels]
-      properties:
-        tripId: { type: string, minLength: 1 }
-        recipientId: { type: string, minLength: 1 }
-        eventType:
-          type: string
-          enum: [TRIP_REQUESTED, DRIVER_ASSIGNED, DRIVER_ARRIVED, TRIP_STARTED, TRIP_CANCELLED, TRIP_COMPLETED]
-        channels:
-          type: array
-          minItems: 1
-          uniqueItems: true
-          items: { type: string, enum: [PUSH] }
-    NotificationResponse:
-      type: object
-      required: [notificationId, tripId, recipientId, eventType, channels, message, status, createdAt]
-      properties:
-        notificationId: { type: string }
-        tripId: { type: string }
-        recipientId: { type: string }
-        eventType: { type: string }
-        channels: { type: array, items: { type: string } }
-        message: { type: string }
-        status: { type: string, enum: [PROCESSED] }
-        createdAt: { type: string, format: date-time }
     QrGenerationRequest:
       type: object
       additionalProperties: false

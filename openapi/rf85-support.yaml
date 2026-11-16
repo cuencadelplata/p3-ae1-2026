@@ -43,10 +43,6 @@ servers:
 tags:
   - name: Tickets (RF8.5)
     description: Tickets de soporte asociados a un viaje y su historial.
-  - name: RF8.6 (legacy AE1)
-    description: |
-      Publicación de prueba heredada de AE1. No pertenece a RF8.5: se retira
-      cuando RF8.6 extraiga el consumer RabbitMQ.
 
 paths:
   /tickets:
@@ -454,89 +450,6 @@ paths:
           $ref: '#/components/responses/ErrorInterno'
         '503':
           $ref: '#/components/responses/BaseNoDisponible'
-
-  /events/publish:
-    post:
-      tags: [RF8.6 (legacy AE1)]
-      deprecated: true
-      summary: Publica eventos de prueba en RabbitMQ (heredado de AE1)
-      operationId: publicarEvento
-      description: |
-        Publica un evento, o una ráfaga, en el exchange `viajes_exchange` de
-        AE1 para pruebas y monitoreo.
-
-        Sólo existe cuando Support arranca con `SUPPORT_LEGACY_EVENTS=on` (el
-        valor por defecto); con `off` la ruta no se registra y responde `404`.
-        No pertenece a RF8.5: se retira cuando RF8.6 extraiga el consumer
-        RabbitMQ. Sus respuestas de error conservan el formato de AE1.
-      parameters:
-        - $ref: '#/components/parameters/CorrelationId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [routingKey, payload]
-              properties:
-                routingKey:
-                  type: string
-                  description: Clave de enrutamiento (ej. viaje.completado, viaje.asignado, ticket.creado).
-                  example: viaje.completado
-                payload:
-                  type: object
-                  description: Objeto JSON con los datos del evento.
-                  example:
-                    viajeId: viaje-100
-                    importe: 2500
-                count:
-                  type: integer
-                  description: Cantidad de mensajes a publicar (por defecto 1, máximo 50).
-                  example: 5
-      responses:
-        '200':
-          description: |
-            Pedido procesado. `enviadosExitosamente` es 0 si el broker no está
-            disponible.
-          headers:
-            X-Correlation-Id:
-              $ref: '#/components/headers/X-Correlation-Id'
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  mensaje:
-                    type: string
-                  routingKey:
-                    type: string
-                  solicitados:
-                    type: integer
-                  enviadosExitosamente:
-                    type: integer
-              examples:
-                publicado:
-                  value:
-                    mensaje: Eventos enviados a RabbitMQ
-                    routingKey: viaje.completado
-                    solicitados: 1
-                    enviadosExitosamente: 1
-        '400':
-          description: Faltan `routingKey` o `payload`. Formato de error de AE1.
-          headers:
-            X-Correlation-Id:
-              $ref: '#/components/headers/X-Correlation-Id'
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-              examples:
-                faltanCampos:
-                  value:
-                    error: routingKey y payload son requeridos
 
 components:
   securitySchemes:

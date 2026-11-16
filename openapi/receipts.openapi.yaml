@@ -2,10 +2,9 @@ openapi: 3.0.3
 info:
   title: M8 - Notificaciones, Documentos y Soporte (Comprobantes PDF)
   description: |
-    Microservicio de la **Plataforma Distribuida de Movilidad Urbana (ISI - Paradigmas 3)**.
+    API de comprobantes del Módulo 8 de la Plataforma de Movilidad Urbana.
     Responsable de la **emisión, consulta, descarga y reenvío de comprobantes de viaje en PDF**.
 
-    **Versión 2.3.0: evolución individual AE2 (Juan Gualtieri) sobre la versión 1.0.0 del Grupo 14 (AE1).**
     - **RF-8.3:** Comprobante PDF. Además de `POST /receipts`, se emite de forma asincrónica al consumir
       `payment.confirmed` (RabbitMQ). Persistencia en PostgreSQL (esquema `receipts`).
     - **RF-8.4:** Reenvío de comprobante (entrega simulada) y descarga mediante enlace temporal (Redis).
@@ -21,8 +20,6 @@ info:
     Los contratos asincrónicos (`payment.confirmed`, `receipt.issued`) y el contrato interno con Receipts
     Delivery están en `contracts/events/catalogo-eventos-v1.md`; no forman parte de esta API pública.
   version: 2.3.0
-  contact:
-    name: Grupo 14 - M8 Comprobantes
 servers:
   - url: http://localhost:3000/api/v1
     description: Aplicación única de M8
@@ -198,6 +195,7 @@ paths:
       description: >-
         Devuelve la información detallada del comprobante emitido, su historial de entregas y los enlaces de descarga.
         Requiere un Bearer de usuario validado por M1 y autorización sobre el comprobante.
+        RF8.4 puede servir metadatos desde la caché de Redis con TTL; ante un fallo de caché consulta PostgreSQL.
       operationId: getReceipt
       security:
         - BearerAuth: []
@@ -393,6 +391,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationErrorResponse'
+        '429':
+          description: Límite de reenvíos superado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
 
@@ -404,6 +408,8 @@ paths:
       description: |
         Vuelve a solicitar el envío del comprobante por correo electrónico, SMS o notificación push.
         Si no se indica destino en el cuerpo, utiliza el email registrado del cliente.
+        RF8.4 no regenera el PDF. Valida permisos con M1, registra el intento y aplica
+        bloqueo distribuido y límite de solicitudes en Redis cuando está disponible.
       operationId: resendReceipt
       security:
         - BearerAuth: []
@@ -436,7 +442,7 @@ paths:
           content:
             application/json:
               schema:
-              $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -459,6 +465,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationErrorResponse'
+        '429':
+          description: Límite de reenvíos superado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
 
@@ -898,7 +910,7 @@ components:
           properties:
             downloadUrl:
               type: string
-              example: "http://localhost:3008/api/v1/receipts/trip-2026-000123/pdf"
+              example: "http://localhost:3000/api/v1/receipts/trip-2026-000123/pdf"
 
     FiscalAuthorization:
       type: object
@@ -974,7 +986,7 @@ components:
                       properties:
                         url:
                           type: string
-                          example: "http://localhost:3008/api/v1/receipts/downloads/random-token-here"
+                          example: "http://localhost:3000/api/v1/receipts/downloads/random-token-here"
                         expiresAt:
                           type: string
                           format: date-time
