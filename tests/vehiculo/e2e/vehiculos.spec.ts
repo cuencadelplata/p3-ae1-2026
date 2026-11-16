@@ -41,6 +41,16 @@ test.describe("POST /drivers/:driverId/vehicles — RF-3.2 registrar vehículo",
     expect(body.activo).toBe(false);
   });
 
+  test("rechaza con 400 si el driverId no es el userId numérico de M1", async ({
+    request,
+  }) => {
+    const response = await request.post(`/api/v1/drivers/driver-abc/vehicles`, {
+      data: { patente: patenteUnica(), tipoServicio: "AUTO", anio: 2020 },
+    });
+
+    expect(response.status()).toBe(400);
+  });
+  
   test("rechaza con 400 si falta la patente", async ({ request }) => {
     const response = await request.post(
       `/api/v1/drivers/${driverIdUnico()}/vehicles`,

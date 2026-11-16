@@ -1,4 +1,5 @@
 //server.js
+require("./instrumentation");
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
@@ -10,6 +11,20 @@ const { startValoracionHabilitadaConsumer } = require("./modules/valoraciones/co
 const conductorRoutes = require("./routes/conductorRoutes");
 const { seedRedisIfEmpty } = require("./repositories/redisRepository");
 const rabbitmq = require("./config/rabbitmqClient");
+
+const redis = require("./config/redisClient");
+
+// Espera hasta 5 segundos a que Redis esté conectado.
+function esperarRedis(ms = 5000) {
+  if (redis.status === "ready") return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), ms);
+    redis.once("ready", () => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -50,8 +65,12 @@ app.listen(PORT, async () => {
   console.log(`   ➜ RabbitMQ:  http://localhost:${PORT}/rabbitmq`);
   console.log(`====================================================`);
 
-  // Poblar datos mock en Redis
-  await seedRedisIfEmpty();
+  // Poblar datos mock en Redis, recién cuando la conexión está lista
+  if (await esperarRedis()) {
+    await seedRedisIfEmpty();
+  } else {
+    console.warn("[Redis] No se conectó a tiempo: no se sembraron los mocks.");
+  }
 
   // Conexión anticipada del publisher de eventos de conductores (RNF-07). Si
   // falla, el servidor sigue funcionando y el publisher reintenta en el próximo evento.

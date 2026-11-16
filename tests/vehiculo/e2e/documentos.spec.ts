@@ -107,6 +107,21 @@ test.describe("POST /drivers/:driverId/documents — RF-3.4 registrar documentac
     expect(response.status()).toBe(400);
   });
 
+  test("rechaza con 400 si el driverId no es el userId numérico de M1", async ({
+    request,
+  }) => {
+    const response = await request.post(`/api/v1/drivers/driver-abc/documents`, {
+      data: {
+        tipoDocumento: "LICENCIA_CONDUCIR",
+        numeroDocumento: "LIC-900",
+        fechaVencimiento: fechaFutura(),
+        archivoUrl: "https://ejemplo.com/x.pdf",
+      },
+    });
+
+    expect(response.status()).toBe(400);
+  });
+
   test("rechaza con 400 si falta numeroDocumento", async ({ request }) => {
     const response = await request.post(
       `/api/v1/drivers/${driverIdUnico()}/documents`,
