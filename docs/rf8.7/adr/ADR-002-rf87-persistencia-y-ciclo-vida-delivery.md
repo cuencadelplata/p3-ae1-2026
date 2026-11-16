@@ -19,7 +19,7 @@ Para completar el ciclo de entrega de notificaciones en AE2:
 ## 2. Decisiones de Diseño
 
 ### Decisión 1: Esquema `notification_delivery` y Rol Dedicado (RNF-04)
-El script [`modulo-8/infra/postgres/init/04-notification-delivery.sh`](file:///d:/Projects/p3-ae1-2026/modulo-8/infra/postgres/init/04-notification-delivery.sh) configura:
+El script [`infra/postgres/init/04-notification-delivery.sh`](../../../infra/postgres/init/04-notification-delivery.sh) configura:
 - **Rol:** `m8_notification_delivery`.
 - **Esquema:** `notification_delivery`.
 - **Tablas:**
@@ -31,7 +31,7 @@ El script [`modulo-8/infra/postgres/init/04-notification-delivery.sh`](file:///d
 - Los endpoints REST (`POST /devices/tokens`, `GET /devices/tokens`, `DELETE /devices/tokens/:token`) exigen header `Authorization: Bearer <jwt>`.
 - El `userId` **nunca se toma de campos del body**; se extrae estrictamente del claim `sub` / `userId` del JWT de M1.
 - Si no hay token o es inválido, se rechaza inmediatamente con `401 Unauthorized`.
-- Especificación OpenAPI documentada en [`modulo-8/openapi/notification-delivery.openapi.yaml`](file:///d:/Projects/p3-ae1-2026/modulo-8/openapi/notification-delivery.openapi.yaml).
+- Especificación HTTP detallada en el [OpenAPI de RF8.7](../../../openapi/notification-delivery.openapi.yaml); la aplicación única también la expone en el [OpenAPI integrado](../../../openapi/m8-openapi.yaml).
 
 ### Decisión 3: Integración Desacoplada con M2 (Preferencias)
 - Autenticación: header `x-api-key: ${M2_INTERNAL_API_KEY}` configurado por variable de entorno externa (nunca hardcodeado).
