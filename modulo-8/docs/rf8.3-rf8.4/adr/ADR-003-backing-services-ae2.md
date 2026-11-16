@@ -4,8 +4,7 @@
 * **Fecha:** 2026-09-30
 * **Autor:** Juan Gualtieri (evolución individual AE2)
 * **Requerimientos:** RF-8.3, RF-8.4, RF-8.6, RNF-08, RNF-09, RNF-10
-* **Reemplaza parcialmente a:** [ADR-001](ADR-001-m8-comprobantes-ae1.md), punto 4 (candado en memoria)
-* **Contratos:** [catálogo de eventos v1](../../../../contracts/events/catalogo-eventos-v1.md)
+* **Contratos:** [catálogo de eventos v1](../../../contracts/events/catalogo-eventos-v1.md)
 
 ---
 
@@ -17,8 +16,8 @@ comprobante debe emitirse cuando M7 confirma el pago, sin que M7 dependa de que 
 servicio de comprobantes esté disponible en ese momento, y el PDF debe entregarse por
 un enlace que no se pueda adivinar ni usar indefinidamente.
 
-La cátedra fijó RabbitMQ para la mensajería y aprobó Redis para el estado efímero.
-Este ADR registra **cómo** se usan y qué alternativas se descartaron en cada punto.
+La arquitectura de M8 usa RabbitMQ para la mensajería y Redis para el estado
+efímero. Este ADR registra **cómo** se usan y qué alternativas se descartaron.
 
 ## Decisión 1: la emisión se dispara por evento, no por llamada síncrona
 

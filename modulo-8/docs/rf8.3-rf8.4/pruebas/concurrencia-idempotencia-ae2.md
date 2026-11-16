@@ -1,7 +1,6 @@
 # Concurrencia e idempotencia de la emisión (AE2)
 
 **Requerimientos:** RF-8.3, RNF-08 (idempotencia), RNF-09 (consistencia y concurrencia)
-**Reemplaza para AE2 a:** [reporte-pruebas-concurrencia.md](reporte-pruebas-concurrencia.md) (AE1, se conserva como evidencia)
 
 ## 1. El problema: consultar y después insertar
 
@@ -72,20 +71,13 @@ Cada réplica es un proceso Node aparte (`tests/helpers/replica.ts`), con su
 propio pool de PostgreSQL, su propia conexión a RabbitMQ y su propio servidor
 HTTP. No comparten memoria, igual que dos contenedores.
 
-## 4. Demostración con dos contenedores
+## 4. Cómo repetir la comprobación actual
 
-Desde `modulo-8`:
+Desde `modulo-8`, ejecutar `pnpm run test:receipts`. La suite de concurrencia
+levanta dos procesos Node independientes con sus propias conexiones y verifica
+que los pedidos simultáneos dejan un solo comprobante y un solo evento. Para
+comprobar además la app integrada y RabbitMQ, ejecutar `pnpm run test:e2e`.
 
-```bash
-docker compose --profile replicas up -d --build   # receipts (3008) y receipts-replica (3018)
-cd services/receipts
-pnpm run prueba:replicas                          # 8 POST simultáneos repartidos entre las dos
-pnpm run demo:pago                                # payment.confirmed + reentrega con las dos consumiendo la cola
-cd ../..
-docker compose --profile replicas logs receipts receipts-replica
-docker compose --profile replicas down
-```
-
-Resultado esperado de `prueba:replicas`: un `201 Created`, siete `200 OK`,
-un único `receiptId`. En los logs de `demo:pago` suele verse que una réplica
-emite el comprobante y la otra descarta la reentrega como repetida.
+El Compose actual levanta un solo contenedor de aplicación `m8-app`; ya no tiene
+el perfil `replicas` de la configuración individual anterior. La prueba con
+dos procesos sigue verificando la restricción de unicidad entre instancias.
