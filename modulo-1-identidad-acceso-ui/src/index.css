@@ -130,6 +130,15 @@ body {
   border: 1px solid var(--line);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
+/* Que el autocompletado de Chrome no ponga el campo en blanco */
+.input-field:-webkit-autofill,
+.input-field:-webkit-autofill:hover,
+.input-field:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text);
+  -webkit-box-shadow: 0 0 0 1000px var(--surface-2) inset;
+  caret-color: var(--text);
+  transition: background-color 9999s ease-out;
+}
 .input-field::placeholder {
   color: var(--text-dim);
 }

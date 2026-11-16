@@ -65,8 +65,8 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin }: Registe
   const roles: { value: UserRole; label: string }[] = [
     { value: 'CLIENTE', label: 'Cliente' },
     { value: 'CONDUCTOR', label: 'Conductor' },
-    { value: 'OPERADOR', label: 'Operador' },
   ]
+  // OPERADOR no va: M1 no deja que un operador se registre solo (responde 400).
 
   return (
     <div className="w-full max-w-md">
@@ -151,7 +151,7 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin }: Registe
 
           <div>
             <label className="field-label">Tipo de usuario</label>
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-2 gap-2.5">
               {roles.map((r) => (
                 <button
                   key={r.value}
