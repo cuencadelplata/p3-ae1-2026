@@ -372,8 +372,16 @@ paths:
       tags: [Finalización]
       summary: Finalizar un viaje y autorizar el pago
       description: |
-        Requiere estado EN_CURSO. M6 obtiene métricas estimadas de M4, calcula la tarifa y solicita
-        autorización del pago a M7. La fachada RF-6.4 reenvía la solicitud y la respuesta al servicio central.
+        Requiere estado EN_CURSO. Registra el tiempo real del viaje (desde la transición a EN_CURSO
+        hasta `horaFin`), la distancia estimada por M4 entre origen y destino y la tarifa calculada por M7
+        con esos valores. Luego registra el pago en M7 (`x-api-key`): con `tarjeta` lo autoriza enviando
+        los datos tokenizados de Mercado Pago; con `efectivo` o `transferencia` queda `pendiente`.
+
+        Idempotente: si el viaje ya está COMPLETADO, devuelve la finalización registrada con
+        `idempotente: true` y no vuelve a llamar a M7. Las finalizaciones concurrentes del mismo viaje se
+        serializan. Al completar, publica `viaje.finalizado` (M3, `viajes.events`), `trip.completed`
+        (M8, `mobility.events`) y `viaje.finalizado` (M4, `trip.events`) mediante un outbox transaccional.
+        La fachada RF-6.4 reenvía la solicitud y la respuesta al servicio central.
       operationId: finalizarViaje
       servers:
         - url: http://localhost:3000
@@ -400,15 +408,25 @@ paths:
               tipoVehiculo: auto
               horaFin: '2026-10-05T18:00:00Z'
               metodoPago: tarjeta
+              pago:
+                token: token-de-tarjeta-generado-por-mercado-pago
+                paymentMethodId: visa
+                email: cliente@example.com
       responses:
         '200':
-          description: Viaje finalizado y pago autorizado
+          description: Viaje finalizado (o finalización ya registrada, con idempotente=true)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/FinalizarViajeResponse'
         '400':
           description: Datos inválidos o el viaje no está EN_CURSO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '402':
+          description: La pasarela de pagos rechazó la tarjeta; el viaje sigue EN_CURSO
           content:
             application/json:
               schema:
@@ -787,14 +805,44 @@ components:
         metodoPago:
           type: string
           enum: [efectivo, tarjeta, transferencia]
+        pago:
+          type: object
+          description: Obligatorio si metodoPago es tarjeta. Se reenvía a M7 y no se persiste en M6.
+          required: [token, paymentMethodId, email]
+          properties:
+            token:
+              type: string
+            paymentMethodId:
+              type: string
+            email:
+              type: string
+              format: email
     FinalizarViajeResponse:
       type: object
-      required: [viaje, paymentId, metricasEstimadas, fuenteMetrica]
+      required: [viaje, paymentId, estadoPago, metricasEstimadas, fuenteMetrica, idempotente]
       properties:
+        idempotente:
+          type: boolean
+          description: true si el viaje ya estaba finalizado y se devolvió la finalización registrada
+        estadoPago:
+          type: string
+          enum: [pendiente, autorizado]
         viaje:
           type: object
-          required: [id, clienteId, estado, horaFin, total, distanciaKm, tiempoMinutos]
+          required: [id, clienteId, estado, inicio, horaFin, total, distanciaKm, tiempoMinutos]
           properties:
+            inicio:
+              type: string
+              format: date-time
+              description: Momento real de inicio (transición a EN_CURSO)
+            tiempoEstimadoMinutos:
+              type: number
+              description: ETA estimado por M4, como referencia
+            moneda:
+              type: string
+            estadoPago:
+              type: string
+              enum: [pendiente, autorizado]
             id:
               type: string
             clienteId:
@@ -810,8 +858,10 @@ components:
               format: date-time
             tiempoMinutos:
               type: number
+              description: Duración real (horaFin - inicio), mínimo 1
             distanciaKm:
               type: number
+              description: Distancia estimada por M4 entre origen y destino
             metodoPago:
               type: string
             total:
@@ -847,13 +897,19 @@ components:
             $ref: '#/components/schemas/TransicionViaje'
     TransicionViaje:
       type: object
+      description: |
+        Registro de solo inserción (TripDB rechaza UPDATE y DELETE). La primera transición de cada viaje
+        es la solicitud, con `from: null`.
       required: [from, to, timestamp]
       properties:
         from:
           type: string
-          description: Estado anterior en la transición
+          nullable: true
+          enum: [solicitado, asignado, conductor en camino, arribado, en curso, completado, cancelado, null]
+          description: Estado anterior; null en la transición de solicitud
         to:
           type: string
+          enum: [solicitado, asignado, conductor en camino, arribado, en curso, completado, cancelado]
           description: Estado nuevo en la transición
         timestamp:
           type: string

@@ -11,8 +11,9 @@ import {
     ErrorServicioFinalizacion,
     type CoordenadasFinalizacion,
     type DatosFinalizacion,
+    type DatosPagoTarjeta,
 } from '../services/finalizacion.service.js';
-import { estadoHistorial } from '../repositories/viaje.repository.js';
+import { despacharEventosPendientes } from '../services/eventos-viaje.service.js';
 
 class ErrorValidacionFinalizacion extends Error {}
 
@@ -192,13 +193,37 @@ function validarDatosFinalizacion(input: unknown, inicio: Date): DatosFinalizaci
     if (Number.isNaN(horaFin.getTime()) || horaFin < inicio) {
         throw new ErrorValidacionFinalizacion('horaFin debe ser una fecha válida posterior al inicio del viaje');
     }
+    if (horaFin.getTime() > Date.now() + MARGEN_RELOJ_MS) {
+        throw new ErrorValidacionFinalizacion('horaFin no puede estar en el futuro');
+    }
     return {
         origen,
         destino,
         tipoVehiculo: body.tipoVehiculo,
         horaFin,
         metodoPago: body.metodoPago,
+        ...(body.metodoPago === 'tarjeta' ? { pago: validarDatosPagoTarjeta(body.pago) } : {}),
     };
+}
+
+/** Tolerancia ante relojes desincronizados entre la app del conductor y el servidor. */
+const MARGEN_RELOJ_MS = 2 * 60_000;
+
+// M7 autoriza tarjetas con Mercado Pago: la app del cliente tokeniza la tarjeta y M6
+// sólo reenvía el token. Estos datos no se persisten ni se registran en logs (RNF-23).
+function validarDatosPagoTarjeta(value: unknown): DatosPagoTarjeta {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new ErrorValidacionFinalizacion('El pago con tarjeta requiere pago.token, pago.paymentMethodId y pago.email');
+    }
+    const { token, paymentMethodId, email } = value as Record<string, unknown>;
+    if (
+        typeof token !== 'string' || !token.trim() ||
+        typeof paymentMethodId !== 'string' || !paymentMethodId.trim() ||
+        typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
+    ) {
+        throw new ErrorValidacionFinalizacion('El pago con tarjeta requiere pago.token, pago.paymentMethodId y un pago.email válido');
+    }
+    return { token: token.trim(), paymentMethodId: paymentMethodId.trim(), email: email.trim() };
 }
 
 export const finalizarViaje = async (req: Request, res: Response): Promise<any> => {
@@ -210,7 +235,7 @@ export const finalizarViaje = async (req: Request, res: Response): Promise<any> 
     try {
         const result = await viajeRepo.finalizarSiEnCurso(id, async (viaje, inicio) => {
             const data = validarDatosFinalizacion(req.body, inicio);
-            return ejecutarServiciosFinalizacion(viaje, data);
+            return ejecutarServiciosFinalizacion(viaje, data, inicio);
         });
         if (result.kind === 'not-found') return res.status(404).json({ error: 'Viaje no encontrado' });
         if (result.kind === 'invalid-state') {
@@ -219,17 +244,26 @@ export const finalizarViaje = async (req: Request, res: Response): Promise<any> 
             });
         }
 
-        const { viaje, finalizacion } = result;
+        const { viaje, finalizacion, repetida } = result;
+        if (!repetida) {
+            // Publicación inmediata; si RabbitMQ falla, el relay periódico la reintenta.
+            void despacharEventosPendientes();
+        }
         const { paymentId, ...datosFinalizacion } = finalizacion;
         return res.json({
             viaje: {
-                ...viaje,
-                estado: 'completado',
+                id: viaje.id,
+                clienteId: viaje.clienteId,
+                conductorId: viaje.conductorId ?? null,
+                fechaCreacion: viaje.fechaCreacion,
                 ...datosFinalizacion,
+                estado: 'completado',
             },
             paymentId,
+            estadoPago: finalizacion.estadoPago,
             metricasEstimadas: true,
             fuenteMetrica: 'M4',
+            idempotente: repetida,
         });
     } catch (error) {
         if (error instanceof ErrorServicioFinalizacion) {
@@ -254,8 +288,8 @@ export const obtenerHistorialTransiciones = async (req: Request, res: Response):
         if (!result.exists) return res.status(404).json({ error: 'Viaje no encontrado' });
         return res.json({
             historial: result.historial.map((transicion) => ({
-                from: estadoHistorial(transicion.from),
-                to: estadoHistorial(transicion.to),
+                from: viajeRepo.estadoHistorial(transicion.from),
+                to: viajeRepo.estadoHistorial(transicion.to),
                 timestamp: transicion.timestamp,
                 ...(transicion.detalle ? { detalle: transicion.detalle } : {}),
             })),

@@ -7,22 +7,33 @@ export interface CoordenadasFinalizacion {
     address?: string;
 }
 
+/** Datos de Mercado Pago que la app del cliente obtiene al tokenizar la tarjeta. */
+export interface DatosPagoTarjeta {
+    token: string;
+    paymentMethodId: string;
+    email: string;
+}
+
+export type MetodoPago = 'efectivo' | 'tarjeta' | 'transferencia';
+
 export interface DatosFinalizacion {
     origen: CoordenadasFinalizacion;
     destino: CoordenadasFinalizacion;
     tipoVehiculo: 'auto' | 'moto';
     horaFin: Date;
-    metodoPago: 'efectivo' | 'tarjeta' | 'transferencia';
+    metodoPago: MetodoPago;
+    pago?: DatosPagoTarjeta;
 }
 
 export class ErrorServicioFinalizacion extends Error {
-    constructor(message: string, readonly status: 502 | 503) {
+    constructor(message: string, readonly status: 402 | 502 | 503) {
         super(message);
         this.name = 'ErrorServicioFinalizacion';
     }
 }
 
 interface RespuestaExterna {
+    status: number;
     body: Record<string, unknown>;
 }
 
@@ -35,20 +46,35 @@ function baseUrl(environmentKey: string, defaultUrl: string): string {
     return (process.env[environmentKey] || defaultUrl).replace(/\/+$/, '');
 }
 
-async function postJson(url: string, input: unknown): Promise<RespuestaExterna> {
+/** M7 protege /metodo-pago con una API key interna (RNF-10/RNF-11: se configura por entorno). */
+function headersM7(): Record<string, string> {
+    const apiKey = process.env.M7_API_KEY;
+    return apiKey ? { 'x-api-key': apiKey } : {};
+}
+
+async function requestJson(
+    method: 'GET' | 'POST',
+    url: string,
+    input?: unknown,
+    headers: Record<string, string> = {},
+    statusAceptados: number[] = [],
+): Promise<RespuestaExterna> {
     let response: Response;
     try {
         response = await fetch(url, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(input),
+            method,
+            headers: {
+                ...(input !== undefined ? { 'content-type': 'application/json' } : {}),
+                ...headers,
+            },
+            body: input !== undefined ? JSON.stringify(input) : undefined,
             signal: AbortSignal.timeout(timeoutMs),
         });
     } catch {
         throw new ErrorServicioFinalizacion(`Servicio externo no disponible: ${url}`, 503);
     }
 
-    if (!response.ok) {
+    if (!response.ok && !statusAceptados.includes(response.status)) {
         throw new ErrorServicioFinalizacion(
             `El servicio externo respondió ${response.status}: ${url}`,
             response.status >= 500 ? 503 : 502,
@@ -64,21 +90,90 @@ async function postJson(url: string, input: unknown): Promise<RespuestaExterna> 
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
         throw new ErrorServicioFinalizacion(`Respuesta inválida del servicio externo: ${url}`, 502);
     }
-    return { body: body as Record<string, unknown> };
+    return { status: response.status, body: body as Record<string, unknown> };
 }
 
 function positiveFiniteNumber(value: unknown): value is number {
     return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
+/** Duración real del viaje: desde la transición a EN_CURSO hasta horaFin (mínimo 1 minuto). */
+export function minutosTranscurridos(inicio: Date, fin: Date): number {
+    return Math.max(1, Math.ceil((fin.getTime() - inicio.getTime()) / 60_000));
+}
+
+interface EstadoPago {
+    pagoId: string;
+    estado: 'pendiente' | 'autorizado';
+}
+
+function leerPago(body: Record<string, unknown>, contexto: string): { pagoId: string; estado: string } {
+    if (typeof body.pagoId !== 'string' || body.pagoId.length === 0 || typeof body.estado !== 'string') {
+        throw new ErrorServicioFinalizacion(`M7 devolvió una respuesta inválida al ${contexto}`, 502);
+    }
+    return { pagoId: body.pagoId, estado: body.estado };
+}
+
+/**
+ * Registra y, si corresponde, autoriza el pago en M7.
+ * Es idempotente: si un intento anterior ya registró o autorizó el pago del viaje
+ * (por ejemplo, M7 autorizó pero falló el COMMIT en TripDB), se reutiliza.
+ */
+async function procesarPago(
+    viaje: Viaje,
+    data: DatosFinalizacion,
+    total: number,
+    moneda: string,
+): Promise<EstadoPago> {
+    const m7 = baseUrl('M7_URL', 'http://localhost:3001');
+    const rutaPago = `${m7}/metodo-pago/${encodeURIComponent(viaje.id)}`;
+
+    const existente = await requestJson('GET', rutaPago, undefined, headersM7(), [404]);
+    let pago = existente.status === 404
+        ? leerPago((await requestJson('POST', `${m7}/metodo-pago`, {
+            clienteId: viaje.clienteId,
+            viajeId: viaje.id,
+            tipo: data.metodoPago,
+        }, headersM7())).body, 'registrar el método de pago')
+        : leerPago(existente.body, 'consultar el pago del viaje');
+
+    if (pago.estado === 'autorizado') return { pagoId: pago.pagoId, estado: 'autorizado' };
+    if (pago.estado !== 'pendiente') {
+        throw new ErrorServicioFinalizacion(`El pago del viaje está en estado ${pago.estado}`, 402);
+    }
+
+    // Efectivo y transferencia se cobran fuera de la pasarela: el pago queda pendiente en M7.
+    if (data.metodoPago !== 'tarjeta') return { pagoId: pago.pagoId, estado: 'pendiente' };
+
+    const autorizacion = await requestJson('POST', `${rutaPago}/autorizar`, {
+        idOrden: `ORD-${viaje.id}`,
+        total,
+        moneda,
+        token: data.pago!.token,
+        paymentMethodId: data.pago!.paymentMethodId,
+        email: data.pago!.email,
+    }, headersM7(), [402]);
+    if (autorizacion.status === 402) {
+        throw new ErrorServicioFinalizacion('El pago con tarjeta fue rechazado por la pasarela', 402);
+    }
+    pago = leerPago(autorizacion.body, 'autorizar el pago');
+    if (pago.estado !== 'autorizado') {
+        throw new ErrorServicioFinalizacion('M7 no confirmó la autorización del pago', 502);
+    }
+    return { pagoId: pago.pagoId, estado: 'autorizado' };
+}
+
 export async function ejecutarServiciosFinalizacion(
     viaje: Viaje,
     data: DatosFinalizacion,
+    inicio: Date,
 ): Promise<FinalizacionPersistida> {
     const m4 = baseUrl('M4_URL', 'http://localhost:3001/api/v1');
     const m7 = baseUrl('M7_URL', 'http://localhost:3001');
+    const tiempoMinutos = minutosTranscurridos(inicio, data.horaFin);
 
-    const estimacion = (await postJson(`${m4}/estimate`, {
+    // M6 no recibe el recorrido GPS: la distancia se estima con M4 a partir de origen y destino.
+    const estimacion = (await requestJson('POST', `${m4}/estimate`, {
         origin: { latitude: data.origen.latitude, longitude: data.origen.longitude },
         destination: { latitude: data.destino.latitude, longitude: data.destino.longitude },
     })).body;
@@ -86,7 +181,7 @@ export async function ejecutarServiciosFinalizacion(
         throw new ErrorServicioFinalizacion('M4 devolvió una estimación de distancia o ETA inválida', 502);
     }
 
-    const tarifa = (await postJson(`${m7}/tarifa/estimacion`, {
+    const tarifa = (await requestJson('POST', `${m7}/tarifa/estimacion`, {
         origen: {
             lat: data.origen.latitude,
             lng: data.origen.longitude,
@@ -98,49 +193,31 @@ export async function ejecutarServiciosFinalizacion(
             direccion: data.destino.address ?? '',
         },
         distanciaKm: estimacion.distanceKm,
-        tiempoEstimadoMin: estimacion.estimatedEtaMinutes,
+        tiempoEstimadoMin: tiempoMinutos,
         vehicleType: data.tipoVehiculo,
     })).body;
     if (typeof tarifa.estimatedFare !== 'number' || !Number.isFinite(tarifa.estimatedFare) || tarifa.estimatedFare < 0) {
-        throw new ErrorServicioFinalizacion('M7 devolvió una tarifa estimada inválida', 502);
+        throw new ErrorServicioFinalizacion('M7 devolvió una tarifa inválida', 502);
     }
+    const moneda = typeof tarifa.currency === 'string' && tarifa.currency ? tarifa.currency : 'ARS';
 
-    const registroPago = (await postJson(`${m7}/metodo-pago`, {
-        clienteId: viaje.clienteId,
-        viajeId: viaje.id,
-        tipo: data.metodoPago,
-    })).body;
-    if (
-        typeof registroPago.pagoId !== 'string' ||
-        registroPago.pagoId.length === 0 ||
-        registroPago.estado !== 'pendiente'
-    ) {
-        throw new ErrorServicioFinalizacion('M7 devolvió una respuesta inválida al registrar el método de pago', 502);
-    }
-
-    const autorizacion = (await postJson(
-        `${m7}/metodo-pago/${encodeURIComponent(viaje.id)}/autorizar`,
-        { idOrden: `ORD-${viaje.id}` },
-    )).body;
-    if (
-        typeof autorizacion.pagoId !== 'string' ||
-        autorizacion.pagoId.length === 0 ||
-        autorizacion.estado !== 'autorizado'
-    ) {
-        throw new ErrorServicioFinalizacion('M7 no confirmó la autorización del pago', 502);
-    }
+    const pago = await procesarPago(viaje, data, tarifa.estimatedFare, moneda);
 
     return {
-        tiempoMinutos: estimacion.estimatedEtaMinutes,
-        distanciaKm: estimacion.distanceKm,
+        inicio,
         horaFin: data.horaFin,
+        tiempoMinutos,
+        tiempoEstimadoMinutos: estimacion.estimatedEtaMinutes,
+        distanciaKm: estimacion.distanceKm,
         metodoPago: data.metodoPago,
         total: tarifa.estimatedFare,
+        moneda,
         origen: data.origen,
         destino: data.destino,
         tipoVehiculo: data.tipoVehiculo,
         fuenteMetrica: 'M4',
         metricasEstimadas: true,
-        paymentId: autorizacion.pagoId,
+        estadoPago: pago.estado,
+        paymentId: pago.pagoId,
     };
 }
