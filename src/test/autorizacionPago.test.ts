@@ -7,7 +7,7 @@ vi.mock("../supabaseClient", () => ({
 }));
 
 import { supabase } from "../supabaseClient";
-import { autorizarPago, rechazarPago } from "../metodo-pago/procesoPago";
+import { autorizarPago, rechazarPago } from "../Matilda/metodo-pago/procesoPago";
 
 let builder: any;
 

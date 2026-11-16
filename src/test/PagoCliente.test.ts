@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { procesarPagoMercadoPago } from "../metodo-pago/PagoCliente";
-
+import { procesarPagoMercadoPago } from "../Matilda/metodo-pago/PagoCliente";
 const fetchOriginal = globalThis.fetch;
 
 describe("procesarPagoMercadoPago (cliente del mock de Mercado Pago)", () => {
@@ -18,8 +17,7 @@ describe("procesarPagoMercadoPago (cliente del mock de Mercado Pago)", () => {
       json: async () => ({ id: "mp-mock-abc", status: "approved", transaction_amount: 2000 }),
     });
 
-    const resultado = await procesarPagoMercadoPago("viaje-1", 2000);
-
+        const resultado = await procesarPagoMercadoPago({ idOrden: "orden-1", viajeId: "viaje-1", total: 2000, token: "tok", paymentMethodId: "visa", email: "a@b.com" });
     expect(resultado.paymentId).toBe("mp-mock-abc");
     expect(resultado.status).toBe("approved");
   });
@@ -31,8 +29,8 @@ describe("procesarPagoMercadoPago (cliente del mock de Mercado Pago)", () => {
       json: async () => ({}),
     });
 
-    await expect(procesarPagoMercadoPago("viaje-2", 1000)).rejects.toThrow(
-      "Mercado Pago (mock) respondió 500"
+        await expect(procesarPagoMercadoPago({ idOrden: "orden-2", viajeId: "viaje-2", total: 1000, token: "tok", paymentMethodId: "visa", email: "a@b.com" })).rejects.toThrow(
+      "Mercado Pago respondió 500"
     );
   });
 });

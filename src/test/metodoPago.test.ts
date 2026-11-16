@@ -9,8 +9,7 @@ vi.mock("../supabaseClient", () => {
 });
 
 import { supabase } from "../supabaseClient";
-import { registrarMetodoPago, buscarPagoPorViaje } from "../metodo-pago/procesoPago";
-
+import { registrarMetodoPago, buscarPagoPorViaje } from "../Matilda/metodo-pago/procesoPago";
 let builder: any;
 
 function filaPago(overrides: Record<string, any> = {}) {

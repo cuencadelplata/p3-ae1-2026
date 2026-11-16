@@ -25,7 +25,7 @@ vi.mock("../infraestructura/redis", () => {
 
 import { supabase } from "../supabaseClient";
 import { redis } from "../infraestructura/redis";
-import rutaPago from "../metodo-pago/rutaPago";
+import rutaPago from "../Matilda/metodo-pago/rutaPago";
 
 const app = express();
 app.use(express.json());

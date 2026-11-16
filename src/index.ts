@@ -10,7 +10,6 @@ import { registry } from "./infraestructura/metricas";
 
 import estimacionTarifaRouter from "./Lautaro/estimacion-tarifa/estimacion-tarifa";
 import rutaPago from "./Matilda/metodo-pago/rutaPago";
-import mockMercadoPagoAPI from "./Matilda/mock/mercadoPagoAPI";
 import cargoCancelacionRouter from "./Lautaro/cargo-cancelacion/cargo-cancelacion";
 import rutaPagoDuplicado from "./Aylen/pago-duplicado/rutaPagoDuplicado";
 import rutaReintegro from "./Aylen/reintegro/rutaReintegro";
@@ -29,7 +28,6 @@ app.get("/metrics", async (_req, res) => {
 
 app.use(estimacionTarifaRouter);
 app.use(rutaPago);
-app.use(mockMercadoPagoAPI);
 app.use(cargoCancelacionRouter);
 app.use(rutaPagoDuplicado);
 app.use(rutaReintegro);
