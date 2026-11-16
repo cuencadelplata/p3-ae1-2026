@@ -115,6 +115,27 @@ describe('Políticas compartidas de resiliencia', () => {
     expect(getCircuitStates().soporte).toBe('open');
   });
 
+  it('trata un fetch que corta la conexión como caída y abre el circuito (M1 caído)', async () => {
+    // Given: M1 corta la conexión sin responder (undici: UND_ERR_SOCKET)
+    let calls = 0;
+    const policy = createPolicy('m1');
+    const operation = async (): Promise<never> => {
+      calls += 1;
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' })
+      });
+    };
+
+    // When: 3 fallas consecutivas (umbral por defecto) y un cuarto intento
+    for (let i = 0; i < 4; i++) {
+      await expect(policy.execute(operation, { idempotent: false })).rejects.toBeInstanceOf(ServiceUnavailableError);
+    }
+
+    // Then: el cuarto intento ya no llega a M1
+    expect(calls).toBe(3);
+    expect(getCircuitStates().m1).toBe('open');
+  });
+
   it('calcula Retry-After hasta la próxima prueba del circuito', async () => {
     const policy = createPolicy('redis');
     const operation = async (): Promise<never> => { throw networkError(); };

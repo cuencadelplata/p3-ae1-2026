@@ -38,6 +38,15 @@ describe('Clasificación de errores de infraestructura (RF-2.1)', () => {
     expect(isServiceUnavailableError(aggregate)).toBe(true);
   });
 
+  it('debe reconocer las fallas de red de fetch (dependencia que corta la conexión)', () => {
+    const socketClosed = Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' });
+    expect(isServiceUnavailableError(new TypeError('fetch failed', { cause: socketClosed }))).toBe(true);
+    expect(isServiceUnavailableError(new TypeError('fetch failed', { cause: errorWithCode('connect ECONNREFUSED', 'ECONNREFUSED') }))).toBe(true);
+    expect(isServiceUnavailableError(errorWithCode('Connect Timeout Error', 'UND_ERR_CONNECT_TIMEOUT'))).toBe(true);
+    // Causa desconocida: igual es una falla de red de fetch
+    expect(isServiceUnavailableError(new TypeError('fetch failed', { cause: new Error('bad port') }))).toBe(true);
+  });
+
   it('no debe confundir errores de datos o bugs con una caída', () => {
     expect(isServiceUnavailableError(errorWithCode('duplicate key value', '23505'))).toBe(false);
     expect(isServiceUnavailableError(new TypeError('Cannot read properties of undefined'))).toBe(false);

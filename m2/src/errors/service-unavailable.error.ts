@@ -27,8 +27,17 @@ const NETWORK_ERROR_CODES = new Set([
   'EAI_AGAIN',
   'EHOSTUNREACH',
   'ENETUNREACH',
-  'EPIPE'
+  'EPIPE',
+  // undici (fetch nativo de Node): la dependencia cortó o no respondió a tiempo
+  'UND_ERR_SOCKET',
+  'UND_ERR_CLOSED',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT'
 ]);
+
+// fetch nativo envuelve cualquier falla de red en TypeError('fetch failed', { cause })
+const FETCH_FAILED_MESSAGE = 'fetch failed';
 
 // Códigos SQLSTATE de PostgreSQL que indican caída, reinicio o timeout del servidor
 const POSTGRES_UNAVAILABLE_CODES = new Set([
@@ -64,6 +73,8 @@ export function describeError(error: any): string {
 export function isServiceUnavailableError(error: unknown, depth = 0): boolean {
   if (!error || typeof error !== 'object' || depth > 3) return false;
   if (error instanceof ServiceUnavailableError) return true;
+  // Falla de red de fetch, aunque la causa traiga un código que no está en la lista
+  if (error instanceof TypeError && error.message === FETCH_FAILED_MESSAGE) return true;
 
   const { code, message, cause, errors } = error as {
     code?: unknown;
