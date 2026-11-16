@@ -1,0 +1,150 @@
+{
+  "title": "M2 Clientes",
+  "uid": "m2-clientes",
+  "description": "Las 3 métricas de M2 (tráfico y errores, latencia p95, estado de dependencias) y los resultados de k6. Fuente: Alloy → Grafana Cloud.",
+  "tags": ["m2", "clientes", "k6"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-30m", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Fuente de datos",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Métricas del módulo",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "1. Tráfico y errores (pedidos/s por código)",
+      "description": "m2_http_requests_total: pedidos por segundo agrupados por código HTTP. Los 5xx indican errores del módulo.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status_code) (rate(m2_http_requests_total{modulo=\"m2\"}[$__rate_interval]))",
+          "legendFormat": "{{status_code}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "2. Latencia p95 por ruta",
+      "description": "m2_http_request_duration_seconds: el 95 % de los pedidos tardó menos que este valor. La línea roja es 1,8 s, el plazo acordado con M8 para /internal/preferences/:userId.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1.8 }
+            ]
+          },
+          "custom": { "thresholdsStyle": { "mode": "line" } }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(m2_http_request_duration_seconds_bucket{modulo=\"m2\", route!~\"unmatched|/__stubs.*|/metrics\"}[$__rate_interval])))",
+          "legendFormat": "{{route}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "state-timeline",
+      "title": "3. Estado de las dependencias",
+      "description": "m2_circuit_state: circuit breaker de cada dependencia. closed = normal; open = M2 dejó de llamarla y responde degradado; half_open = probando si volvió.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 1 },
+      "options": { "showValue": "auto", "mergeValues": true },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "closed", "color": "green", "index": 0 },
+                "1": { "text": "half_open", "color": "yellow", "index": 1 },
+                "2": { "text": "open", "color": "red", "index": 2 },
+                "3": { "text": "isolated", "color": "purple", "index": 3 }
+              }
+            }
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (dependency) (m2_circuit_state{modulo=\"m2\", state=\"half_open\"}) * 1 + max by (dependency) (m2_circuit_state{modulo=\"m2\", state=\"open\"}) * 2 + max by (dependency) (m2_circuit_state{modulo=\"m2\", state=\"isolated\"}) * 3",
+          "legendFormat": "{{dependency}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Pruebas de carga (k6)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 10 }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Usuarios virtuales de k6",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 11 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (testid) (k6_vus{modulo=\"m2\"})", "legendFormat": "{{testid}}" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Latencia p95 vista por k6",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 11 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "max by (testid, name) (k6_http_req_duration_p95{modulo=\"m2\", name!=\"setup\"})", "legendFormat": "{{testid}} {{name}}" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Pedidos fallidos según k6",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 11 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "avg by (testid) (k6_http_req_failed_rate{modulo=\"m2\"})", "legendFormat": "{{testid}}" }
+      ]
+    }
+  ]
+}
