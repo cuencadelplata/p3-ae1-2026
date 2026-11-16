@@ -13,7 +13,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
- 
+
   rabbitmq:
     image: rabbitmq:4-management
     container_name: m3-rabbitmq
@@ -34,7 +34,7 @@ services:
     networks:
       - default
       - p3-shared   # red compartida con otros módulos (M5, M6...)
- 
+
   # ---------------- RF-3.2 / RF-3.4: Vehículos y Documentos ----------------
   m3-vehiculos:
     build:
@@ -45,12 +45,12 @@ services:
     restart: unless-stopped
     env_file:
       - ./m3-vehiculos/.env.docker
-    # environment pisa lo que venga en .env.docker: siempre apunta a los
-    # contenedores compartidos, aunque el .env diga localhost.
     environment:
       PORT: 8083
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
+      OTEL_SERVICE_NAME: m3-vehiculos-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://grafana-alloy:4318
     ports:
       - "8083:8083"
     depends_on:
@@ -64,8 +64,8 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
- 
-    # ---------------- RF-3.1 / RF-3.3 / Valoraciones: Conductores ----------------
+
+  # ---------------- RF-3.1 / RF-3.3 / Valoraciones: Conductores ----------------
   m3-conductor-api:
     build:
       context: ./M3-Conductor
@@ -88,6 +88,8 @@ services:
       RABBITMQ_PASSWORD: admin123
       RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
       RABBITMQ_EXCHANGE: m3.conductores.events
+      OTEL_SERVICE_NAME: m3-conductor-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://grafana-alloy:4318
     ports:
       - "5000:3000"
     networks:
@@ -137,6 +139,25 @@ services:
       m3-conductor-api:
         condition: service_healthy
 
+  # ---------------- Observabilidad: Collector OpenTelemetry + Docker -> Grafana Cloud ----------------
+  grafana-alloy:
+    image: grafana/alloy:latest
+    container_name: m3-grafana-alloy
+    restart: unless-stopped
+    env_file:
+      - path: ./.env
+        required: false
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy/config.alloy
+
 networks:
   p3-shared:
     name: p3-shared
@@ -144,5 +165,3 @@ networks:
 volumes:
   redis_data:
   rabbitmq_data:
-  
- 
