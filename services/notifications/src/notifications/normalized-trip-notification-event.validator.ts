@@ -48,7 +48,7 @@ export function validateNormalizedTripNotificationEvent(
   let eventType: TripNotificationEventType | undefined;
   let tripId: string | undefined;
   let rideRequestId: string | undefined;
-  let recipientId: string | number | undefined;
+  let recipientId: number | undefined;
   let correlationId: string | undefined;
   let occurredAt: string | undefined;
 
@@ -79,7 +79,7 @@ export function validateNormalizedTripNotificationEvent(
     } else {
       rideRequestId = value.rideRequestId;
     }
-    if (!Number.isInteger(value.recipientId) || (value.recipientId as number) <= 0) {
+    if (!Number.isSafeInteger(value.recipientId) || (value.recipientId as number) <= 0) {
       details.push({ field: "recipientId", reason: "Debe ser el clientUserId numerico positivo." });
     } else {
       recipientId = value.recipientId as number;
@@ -93,10 +93,10 @@ export function validateNormalizedTripNotificationEvent(
     } else {
       tripId = value.tripId;
     }
-    if (typeof value.recipientId !== "string" || value.recipientId.length < 1) {
-      details.push({ field: "recipientId", reason: "Debe ser un string con longitud minima de 1." });
+    if (!Number.isSafeInteger(value.recipientId) || (value.recipientId as number) <= 0) {
+      details.push({ field: "recipientId", reason: "Debe ser el userId numerico positivo de M1." });
     } else {
-      recipientId = value.recipientId;
+      recipientId = value.recipientId as number;
     }
   }
 
@@ -147,6 +147,6 @@ export function validateNormalizedTripNotificationEvent(
 
   return {
     valid: true,
-    data: { messageId, eventType, tripId, recipientId: recipientId as string, correlationId, occurredAt },
+    data: { messageId, eventType, tripId, recipientId, correlationId, occurredAt },
   };
 }

@@ -20,7 +20,7 @@ function createNotification(overrides: Partial<LogicalNotification> = {}): Logic
     sourceMessageId: `source-${randomUUID()}`,
     tripId: "trip-123",
     rideRequestId: null,
-    recipientId: "user-456",
+    recipientId: "456",
     eventType: "TripAssigned",
     title: "Conductor asignado",
     message: "Se asignó un conductor a tu viaje.",
@@ -209,7 +209,7 @@ describe("PostgreSQL NotificationRepository", () => {
 
   it("permite el mismo source_message_id para destinatarios distintos", async () => {
     const first = createNotification();
-    const second = createNotification({ sourceMessageId: first.sourceMessageId, recipientId: "user-789" });
+    const second = createNotification({ sourceMessageId: first.sourceMessageId, recipientId: "789" });
 
     expect((await repository.saveIdempotent(first)).created).toBe(true);
     expect((await repository.saveIdempotent(second)).created).toBe(true);
@@ -276,7 +276,7 @@ describe("PostgreSQL NotificationRepository", () => {
       payload: {
         notificationId: notification.notificationId,
         tripId: notification.tripId,
-        recipientId: notification.recipientId,
+        recipientId: Number(notification.recipientId),
         eventType: "DRIVER_ASSIGNED",
         channel: "PUSH",
         message: notification.message,
@@ -287,6 +287,14 @@ describe("PostgreSQL NotificationRepository", () => {
     expect(saved.outbox.messageId).not.toBe(notification.sourceMessageId);
     expect(await countRows(notification.sourceMessageId, notification.recipientId)).toBe(1);
     expect(await countOutboxRows(notification.sourceMessageId, notification.recipientId)).toBe(1);
+  });
+
+  it("no persiste ni publica una intención para un destinatario libre de M6", async () => {
+    const notification = createNotification({ recipientId: "cliente-123" });
+
+    await expect(outboxRepository.saveWithOutbox(notification)).rejects.toBeInstanceOf(NotificationPersistenceError);
+    expect(await countRows(notification.sourceMessageId, notification.recipientId)).toBe(0);
+    expect(await countOutboxRows(notification.sourceMessageId, notification.recipientId)).toBe(0);
   });
 
   it("persiste una notificación de documento de conductor y su Outbox una sola vez", async () => {
@@ -352,7 +360,7 @@ describe("PostgreSQL NotificationRepository", () => {
 
   it("crea una notificación y Outbox distintos para otro destinatario", async () => {
     const first = createNotification();
-    const second = createNotification({ sourceMessageId: first.sourceMessageId, recipientId: "user-789" });
+    const second = createNotification({ sourceMessageId: first.sourceMessageId, recipientId: "789" });
 
     const firstSaved = await outboxRepository.saveWithOutbox(first);
     const secondSaved = await outboxRepository.saveWithOutbox(second);
@@ -436,7 +444,7 @@ describe("PostgreSQL NotificationRepository", () => {
         payload: {
           notificationId: notification.notificationId,
           tripId: notification.tripId,
-          recipientId: notification.recipientId,
+          recipientId: Number(notification.recipientId),
           eventType: "DRIVER_ASSIGNED",
           channel: "PUSH",
           message: notification.message,
@@ -566,7 +574,7 @@ describe("PostgreSQL NotificationRepository", () => {
       messageId: `external-rollback-${randomUUID()}`,
       eventType: "TripStarted",
       tripId: "trip-external-rollback",
-      recipientId: "user-external",
+      recipientId: 901,
       correlationId: "trip-external-rollback",
       occurredAt: "2026-10-03T18:10:00.000Z",
     };
@@ -620,7 +628,7 @@ describe("PostgreSQL NotificationRepository", () => {
       messageId: `component-${randomUUID()}`,
       eventType: "TripCompleted",
       tripId: "trip-component-123",
-      recipientId: "user-component-456",
+      recipientId: 456,
       correlationId: "trip-component-123",
       occurredAt: "2026-10-03T18:00:00.000Z",
     };
@@ -636,7 +644,7 @@ describe("PostgreSQL NotificationRepository", () => {
 
     const intent = pendingBefore.find((item) => item.sourceMessageId === event.messageId);
     expect(intent).toMatchObject({
-      recipientId: event.recipientId,
+      recipientId: String(event.recipientId),
       tripId: event.tripId,
       notificationEventType: event.eventType,
       correlationId: event.correlationId,

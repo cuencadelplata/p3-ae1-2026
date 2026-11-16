@@ -17,7 +17,7 @@ const validEvent = {
   messageId: "message-123",
   eventType: "TripAssigned",
   tripId: "trip-123",
-  recipientId: "user-456",
+  recipientId: 456,
   correlationId: "trip-123",
   occurredAt: "2026-10-03T15:30:00.000Z",
 };
@@ -93,7 +93,9 @@ describe("RF8.1 AE2 - evento normalizado de notificacion", () => {
     ["messageId faltante", { ...validEvent, messageId: undefined }, "messageId"],
     ["messageId vacio", { ...validEvent, messageId: "" }, "messageId"],
     ["tripId vacio", { ...validEvent, tripId: "" }, "tripId"],
-    ["recipientId vacio", { ...validEvent, recipientId: "" }, "recipientId"],
+    ["recipientId de texto", { ...validEvent, recipientId: "cliente-123" }, "recipientId"],
+    ["recipientId cero", { ...validEvent, recipientId: 0 }, "recipientId"],
+    ["recipientId inseguro", { ...validEvent, recipientId: Number.MAX_SAFE_INTEGER + 1 }, "recipientId"],
     ["correlationId vacio", { ...validEvent, correlationId: "" }, "correlationId"],
     ["correlationId distinto", { ...validEvent, correlationId: "another-trip" }, "correlationId"],
     ["occurredAt invalido", { ...validEvent, occurredAt: "not-a-date" }, "occurredAt"],
@@ -147,7 +149,7 @@ describe("RF8.1 AE2 - TripEventEnvelope RF8.6 a RF8.1", () => {
     producer: "m6-viajes",
     data: {
       tripId: "trip-2026-000123",
-      recipientId: "usr-0091",
+      recipientId: 91,
       details: { ignored: true },
     },
   };
@@ -207,6 +209,18 @@ describe("RF8.1 AE2 - TripEventEnvelope RF8.6 a RF8.1", () => {
     expect(result).toMatchObject({ valid: false });
     if (!result.valid) {
       expect(result.details).toContainEqual(expect.objectContaining({ field: "data.clientUserId" }));
+    }
+  });
+
+  it("rechaza un evento de viaje con clienteId libre en lugar del userId de M1", () => {
+    const result = mapTripEventEnvelope({
+      ...envelope,
+      data: { ...envelope.data, recipientId: "cliente-123" },
+    });
+
+    expect(result).toMatchObject({ valid: false });
+    if (!result.valid) {
+      expect(result.details).toContainEqual(expect.objectContaining({ field: "data.recipientId" }));
     }
   });
 
@@ -291,6 +305,14 @@ describe("RF8.1 AE2 - handleTripNotificationEvent", () => {
 });
 
 describe("RF8.1 AE2 - NotificationRequested", () => {
+  it("mantiene numérico el userId aunque PostgreSQL lo lea como texto", () => {
+    const notification = handleTripNotificationEvent(validEvent);
+    if (!notification.valid) throw new Error("No se generó la notificación de prueba.");
+
+    expect(createNotificationRequestedData({ ...notification.data, recipientId: "456" }).recipientId).toBe(456);
+    expect(() => createNotificationRequestedData({ ...notification.data, recipientId: "cliente-123" })).toThrow();
+  });
+
   it.each(expectedContent)("genera payload contractual para %s", (eventType, _title, message) => {
     const notification = handleTripNotificationEvent(eventFor(eventType));
 

@@ -58,7 +58,7 @@ function validateDriverDocumentRegisteredEvent(
     details.push({ field: "documentId", reason: "Debe ser un string con longitud minima de 1." });
   }
 
-  const driverId = Number.isInteger(value.driverId) && (value.driverId as number) > 0 ? value.driverId as number : undefined;
+  const driverId = Number.isSafeInteger(value.driverId) && (value.driverId as number) > 0 ? value.driverId as number : undefined;
   if (driverId === undefined) {
     details.push({ field: "driverId", reason: "Debe ser el userId numerico positivo canonico de M1." });
   }
