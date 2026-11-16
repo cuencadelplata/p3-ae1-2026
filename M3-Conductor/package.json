@@ -6,11 +6,12 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "consumer": "node src/consumers/driverEventsConsumer.js",
-    "test": "jest",
+    "test": "playwright test --project=unit",
+    "test:unit": "playwright test --project=unit",
     "test:front": "npx serve public",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "test:e2e:headed": "playwright test --headed",
+    "test:e2e": "playwright test --project=e2e",
+    "test:e2e:ui": "playwright test --project=e2e --ui",
+    "test:e2e:headed": "playwright test --project=e2e --headed",
     "test:e2e:report": "playwright show-report",
     "mock:viaje-finalizado": "node src/mocks/viajes/viajeFinalizado.publisher.mock.js"
   },
@@ -29,12 +30,7 @@
     "ioredis": "^5.4.1"
   },
   "devDependencies": {
-    "jest": "^30.5.2"
-  },
-  "jest": {
-    "testPathIgnorePatterns": [
-      "/node_modules/",
-      "/tests/e2e/"
-    ]
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.4"
   }
 }

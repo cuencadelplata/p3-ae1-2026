@@ -1,21 +1,35 @@
+const { test, expect } = require('@playwright/test');
+const path = require('path');
+const {
+  createMockFn,
+  mockModule,
+  clearModule,
+  clearAllMocks
+} = require('./helpers/testUtils');
+
+const SRC = path.join(__dirname, '..', 'src');
+const rabbitmqPath = path.join(SRC, 'config', 'rabbitmqClient.js');
+const eventPublisherPath = path.join(SRC, 'events', 'eventPublisher.js');
+
+const rabbitmq = {
+  getChannel: createMockFn(),
+  EXCHANGE: 'm3.conductores.events'
+};
+mockModule(rabbitmqPath, rabbitmq);
+
+clearModule(eventPublisherPath);
 const {
   EVENTOS,
   driverAvailabilityUpdated,
   driverStatusChanged
 } = require('../src/events/driverEvents');
-const rabbitmq = require('../src/config/rabbitmqClient');
 const eventPublisher = require('../src/events/eventPublisher');
 
-jest.mock('../src/config/rabbitmqClient', () => ({
-  getChannel: jest.fn(),
-  EXCHANGE: 'm3.conductores.events'
-}));
-
-beforeEach(() => {
-  jest.clearAllMocks();
+test.beforeEach(() => {
+  clearAllMocks(rabbitmq.getChannel);
 });
 
-describe('driverEvents (RNF-07 - Definición de contratos y envelopes)', () => {
+test.describe('driverEvents (RNF-07 - Definición de contratos y envelopes)', () => {
   const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   test('EVENTOS define los tipos y routing keys esperados', () => {
@@ -44,7 +58,7 @@ describe('driverEvents (RNF-07 - Definición de contratos y envelopes)', () => {
     expect(evento.eventVersion).toBe(1);
     expect(evento.source).toBe('M3-Conductor');
     expect(evento.occurredAt).toBeDefined();
-    expect(Date.parse(evento.occurredAt)).not.toBeNaN();
+    expect(Number.isNaN(Date.parse(evento.occurredAt))).toBe(false);
     expect(evento.data).toEqual({
       usuarioID: 'cond_001',
       disponible: true,
@@ -81,13 +95,13 @@ describe('driverEvents (RNF-07 - Definición de contratos y envelopes)', () => {
   });
 });
 
-describe('eventPublisher (RNF-07 - Publicación con ConfirmChannel)', () => {
+test.describe('eventPublisher (RNF-07 - Publicación con ConfirmChannel)', () => {
   let mockChannel;
 
-  beforeEach(() => {
+  test.beforeEach(() => {
     mockChannel = {
-      publish: jest.fn(),
-      waitForConfirms: jest.fn().mockResolvedValue()
+      publish: createMockFn(),
+      waitForConfirms: createMockFn().mockResolvedValue()
     };
     rabbitmq.getChannel.mockResolvedValue(mockChannel);
   });
@@ -102,21 +116,23 @@ describe('eventPublisher (RNF-07 - Publicación con ConfirmChannel)', () => {
     const resultado = await eventPublisher.publicar('driver.availability.updated', mockEvento);
 
     expect(resultado).toBe(true);
-    expect(rabbitmq.getChannel).toHaveBeenCalledTimes(1);
-    expect(mockChannel.publish).toHaveBeenCalledWith(
-      'm3.conductores.events',
-      'driver.availability.updated',
-      Buffer.from(JSON.stringify(mockEvento)),
-      expect.objectContaining({
-        persistent: true,
-        contentType: 'application/json',
-        messageId: mockEvento.eventId,
-        type: 'DriverAvailabilityUpdated',
-        appId: 'M3-Conductor',
-        timestamp: expect.any(Number)
-      })
-    );
-    expect(mockChannel.waitForConfirms).toHaveBeenCalledTimes(1);
+    expect(rabbitmq.getChannel.calls.length).toBe(1);
+    expect(mockChannel.publish.calls.length).toBe(1);
+
+    const [exchange, routingKey, buffer, props] = mockChannel.publish.calls[0];
+    expect(exchange).toBe('m3.conductores.events');
+    expect(routingKey).toBe('driver.availability.updated');
+    expect(Buffer.isBuffer(buffer)).toBe(true);
+    expect(JSON.parse(buffer.toString())).toEqual(mockEvento);
+    expect(props).toMatchObject({
+      persistent: true,
+      contentType: 'application/json',
+      messageId: mockEvento.eventId,
+      type: 'DriverAvailabilityUpdated',
+      appId: 'M3-Conductor'
+    });
+    expect(typeof props.timestamp).toBe('number');
+    expect(mockChannel.waitForConfirms.calls.length).toBe(1);
   });
 
   test('publicarDriverAvailabilityUpdated publica con la routing key driver.availability.updated', async () => {
@@ -127,12 +143,11 @@ describe('eventPublisher (RNF-07 - Publicación con ConfirmChannel)', () => {
     });
 
     expect(resultado).toBe(true);
-    expect(mockChannel.publish).toHaveBeenCalledWith(
-      'm3.conductores.events',
-      'driver.availability.updated',
-      expect.any(Buffer),
-      expect.objectContaining({ type: 'DriverAvailabilityUpdated' })
-    );
+    const [exchange, routingKey, buffer, props] = mockChannel.publish.calls[0];
+    expect(exchange).toBe('m3.conductores.events');
+    expect(routingKey).toBe('driver.availability.updated');
+    expect(Buffer.isBuffer(buffer)).toBe(true);
+    expect(props.type).toBe('DriverAvailabilityUpdated');
   });
 
   test('publicarDriverStatusChanged publica con la routing key driver.status.changed', async () => {
@@ -144,31 +159,34 @@ describe('eventPublisher (RNF-07 - Publicación con ConfirmChannel)', () => {
     });
 
     expect(resultado).toBe(true);
-    expect(mockChannel.publish).toHaveBeenCalledWith(
-      'm3.conductores.events',
-      'driver.status.changed',
-      expect.any(Buffer),
-      expect.objectContaining({ type: 'DriverStatusChanged' })
-    );
+    const [exchange, routingKey, , props] = mockChannel.publish.calls[0];
+    expect(exchange).toBe('m3.conductores.events');
+    expect(routingKey).toBe('driver.status.changed');
+    expect(props.type).toBe('DriverStatusChanged');
   });
 
-  test('si RabbitMQ no está disponible o falla, nunca lanza excepción y devuelve false (resiliencia)', async () => {
+  test('si RabbitMQ no está disponible o falla, nunca lanza excepción y devuelve false', async () => {
     rabbitmq.getChannel.mockRejectedValue(new Error('Broker unreachable'));
 
-    const spyError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const originalError = console.error;
+    const errorCalls = [];
+    console.error = (...args) => {
+      errorCalls.push(args);
+    };
 
-    const mockEvento = driverStatusChanged({
-      usuarioID: 'cond_001',
-      habilitado: 'suspendido'
-    });
+    try {
+      const mockEvento = driverStatusChanged({
+        usuarioID: 'cond_001',
+        habilitado: 'suspendido'
+      });
 
-    const resultado = await eventPublisher.publicar('driver.status.changed', mockEvento);
+      const resultado = await eventPublisher.publicar('driver.status.changed', mockEvento);
 
-    expect(resultado).toBe(false);
-    expect(spyError).toHaveBeenCalledWith(
-      expect.stringContaining('[RabbitMQ] No se pudo publicar DriverStatusChanged')
-    );
-
-    spyError.mockRestore();
+      expect(resultado).toBe(false);
+      expect(errorCalls.length).toBeGreaterThan(0);
+      expect(String(errorCalls[0][0])).toContain('[RabbitMQ] No se pudo publicar DriverStatusChanged');
+    } finally {
+      console.error = originalError;
+    }
   });
 });
