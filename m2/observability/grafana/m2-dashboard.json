@@ -16,6 +16,17 @@
         "type": "datasource",
         "query": "prometheus",
         "current": {}
+      },
+      {
+        "name": "requisito",
+        "label": "Requisito",
+        "description": "Filtra los paneles 1 y 2 por las rutas de cada RF de M2.",
+        "type": "custom",
+        "query": "Todos : .*,RF-2.1 Perfil y preferencias : /v1/customers|/v1/customers/me|/v1/customers/:id|/internal/preferences/:userId,RF-2.2 Direcciones : /api/v1/(direcciones|geocodificacion).*,RF-2.3 Historial de viajes : /v1/customers/:id/trips,RF-2.4 Calificaciones : (/api/v1)?/calificaciones.*,RF-2.5 Estado de cuenta : /v1/customers/:id/status",
+        "current": { "text": "Todos", "value": ".*" },
+        "options": [],
+        "includeAll": false,
+        "multi": false
       }
     ]
   },
@@ -40,7 +51,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (status_code) (rate(m2_http_requests_total{modulo=\"m2\"}[$__rate_interval]))",
+          "expr": "sum by (status_code) (rate(m2_http_requests_total{modulo=\"m2\", route=~\"$requisito\"}[$__rate_interval]))",
           "legendFormat": "{{status_code}}"
         }
       ]
@@ -69,7 +80,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(m2_http_request_duration_seconds_bucket{modulo=\"m2\", route!~\"unmatched|/__stubs.*|/metrics\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(m2_http_request_duration_seconds_bucket{modulo=\"m2\", route=~\"$requisito\", route!~\"unmatched|/__stubs.*|/metrics\"}[$__rate_interval])))",
           "legendFormat": "{{route}}"
         }
       ]
