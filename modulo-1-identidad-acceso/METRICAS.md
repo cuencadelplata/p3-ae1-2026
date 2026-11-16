@@ -23,6 +23,7 @@ No son métricas de negocio, pero sostienen la demo de resiliencia y el test de 
 
 | Métrica | Qué muestra |
 | --- | --- |
+| `m1_eventos_credenciales_total{evento,resultado}` | RF-1.4 (Ana): eventos `auth.recuperacion_solicitada` y `auth.credenciales_revocadas` que M1 publicó en RabbitMQ (`publicado`) o que no pudo publicar (`error`) |
 | `m1_dependencia_disponible{dependencia}` | 1 o 0 según Redis y RabbitMQ estén conectados |
 | `m1_http_request_duration_seconds{metodo,ruta,codigo}` | Tiempo de respuesta de cada ruta (de acá sale el p95) y pedidos por código HTTP |
 | `m1_process_*`, `m1_nodejs_*` | Métricas automáticas del proceso de Node (memoria, CPU) |
@@ -36,6 +37,7 @@ No son métricas de negocio, pero sostienen la demo de resiliencia y el test de 
 | `m1_logins_total` bloqueado | `src/middleware/login-rate-limit.middleware.ts` |
 | `m1_validaciones_identidad_total` | `src/controllers/auth.controller.ts` (función `validateToken`) y `src/middleware/validation-metrics.middleware.ts` (tokens rechazados) |
 | `m1_credenciales_total` | `src/controllers/recovery.controller.ts` y `src/controllers/revocation.controller.ts` |
+| `m1_eventos_credenciales_total` | `src/messaging/recovery.publisher.ts` |
 | `m1_dependencia_disponible` | `src/config/redis.ts` y `src/config/rabbitmq.ts` |
 | Duración HTTP y `GET /metrics` | `src/app.ts` |
 
@@ -50,6 +52,9 @@ sum by (resultado) (rate(m1_validaciones_identidad_total[1m])) * 60
 
 # RF-1.4: operaciones de credenciales en la última hora
 sum by (operacion, resultado) (increase(m1_credenciales_total[1h]))
+
+# RF-1.4: eventos publicados en RabbitMQ por minuto
+sum by (evento, resultado) (rate(m1_eventos_credenciales_total[1m])) * 60
 ```
 
 ## Demo rápida
@@ -66,3 +71,5 @@ sum by (operacion, resultado) (increase(m1_credenciales_total[1h]))
 | `tests/integration/metrics.integration.test.ts` | `m1_logins_total` y que las 3 existan |
 | `tests/integration/metrics-validacion.integration.test.ts` | `m1_validaciones_identidad_total` |
 | `tests/integration/metrics-credenciales.integration.test.ts` | `m1_credenciales_total` |
+| `tests/unit/recovery.publisher.unit.test.ts` | `m1_eventos_credenciales_total` |
+| `tests/e2e/rf-1.4-ae4.e2e.test.mjs` | `m1_credenciales_total` y `m1_eventos_credenciales_total` con M1, Redis y RabbitMQ reales |
