@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { calculoReintegro } from "./calculoReintegro";
 import { ejecutarReintegroMP } from "./reintegroMP";
-import { supabase } from "../../supabaseClient";
+import { insertarReintegro, existeViaje } from "./reintegroBD";
 
 const router = Router();
 
@@ -32,17 +32,20 @@ router.post("/reintegro", async (req: Request, res: Response) => {
   }
 
   const idOrden = `${viajeId}-reintegro`;
-  await supabase.from("reintegros").upsert(
-    {
-      id_orden: idOrden,
-      viaje_id: viajeId,
-      monto_cancelacion: montoCancelacion,
-      monto_reintegro: montoReintegro,
-    },
-    { onConflict: "id_orden" }
-  );
+  await insertarReintegro({
+    idOrden,
+    viajeId,
+    montoCancelacion: Number(montoCancelacion),
+    montoReintegro,
+  });
 
   res.status(200).json({ viajeId, montoCancelacion: Number(montoCancelacion), montoReintegro, refundId });
+});
+
+router.get("/pagos/:viajeId/duplicado", async (req: Request, res: Response) => {
+  const { viajeId } = req.params;
+  const esDuplicado = await existeViaje(viajeId);
+  res.status(200).json({ esDuplicado });
 });
 
 export default router;
