@@ -4,6 +4,8 @@ const {resolve}=require('node:path');
 const {existsSync,mkdirSync}=require('node:fs');
 const root=resolve(__dirname,'..');
 const images=['ae2-rf22:local','postgres:15-alpine','redis:7-alpine','rabbitmq:4-management-alpine'];
+// Observabilidad (docker-compose.observability.yml): mismas versiones fijas que en ese compose.
+const observabilityImages=['grafana/alloy:v1.9.0','prom/prometheus:v2.53.0','grafana/grafana:11.6.0','grafana/k6:1.0.0'];
 const compose=['compose','-f','docker-compose.yml','-f','docker-compose.offline.yml'];
 function run(args){console.log('docker '+args.join(' '));const r=spawnSync('docker',args,{cwd:root,stdio:'inherit'});if(r.error)throw r.error;if(r.status!==0)throw Error(`Docker terminó con código ${r.status}`);}
 const mode=process.argv[2],archive=resolve(root,process.argv[3]||'offline/ae2-images.tar');
@@ -11,8 +13,9 @@ try{
  if(mode==='prepare'){
   if(!existsSync(resolve(root,'.env')))throw Error('Primero ejecutar node scripts/setup.cjs');
   run(['compose','pull','postgres','redis','rabbitmq']);run(['compose','build','api']);
+  for(const image of observabilityImages)run(['pull',image]);
  }else if(mode==='export'){
-  mkdirSync(require('node:path').dirname(archive),{recursive:true});run(['image','save','--output',archive,...images]);
+  mkdirSync(require('node:path').dirname(archive),{recursive:true});run(['image','save','--output',archive,...images,...observabilityImages]);
  }else if(mode==='load'){
   if(!existsSync(archive))throw Error('No existe '+archive);run(['image','load','--input',archive]);
  }else if(mode==='start'){
