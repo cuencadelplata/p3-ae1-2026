@@ -1,0 +1,112 @@
+# Reglas de alerta de M9 (formato Prometheus/Mimir ruler).
+# Importar en Grafana Cloud (data source-managed) con mimirtool, o recrearlas como
+# Grafana-managed siguiendo observability/documentacion/alertas.md (incluye No Data / Error).
+#
+# Los UMBRALES son hipótesis iniciales para calibrar con datos reales de k6; NO son SLA
+# aprobados ni exigencias docentes. No se configura ninguna notificación a terceros: las
+# alertas quedan visibles en Grafana Alerting; el contact point lo decide el equipo.
+namespace: m9-reservas
+groups:
+  - name: m9-http
+    interval: 1m
+    rules:
+      - alert: M9Http5xxSostenido
+        # >5 % de 5xx en negocio con volumen mínimo (0.1 req/s ≈ 6 req/min) para evitar
+        # falsos positivos con 1 solicitud fallida en una ventana sin tráfico.
+        expr: |
+          (
+            sum by (deployment_environment_name) (rate(http_server_request_duration_seconds_count{service_name="m9-reservas",m9_route_kind="business",http_response_status_code=~"5.."}[5m]))
+            /
+            sum by (deployment_environment_name) (rate(http_server_request_duration_seconds_count{service_name="m9-reservas",m9_route_kind="business"}[5m]))
+          ) > 0.05
+          and
+          sum by (deployment_environment_name) (rate(http_server_request_duration_seconds_count{service_name="m9-reservas",m9_route_kind="business"}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          module: m9
+        annotations:
+          summary: 'M9: más del 5 % de respuestas 5xx en /reservas'
+          description: 'Errores internos sostenidos 5 min con volumen mínimo. Revisar logs de error y trazas con status=error; verificar readiness de PostgreSQL/Redis/RabbitMQ.'
+
+      - alert: M9LatenciaP95Alta
+        expr: |
+          histogram_quantile(0.95, sum by (le, deployment_environment_name) (rate(http_server_request_duration_seconds_bucket{service_name="m9-reservas",m9_route_kind="business"}[5m]))) > 0.5
+          and
+          sum by (deployment_environment_name) (rate(http_server_request_duration_seconds_count{service_name="m9-reservas",m9_route_kind="business"}[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          module: m9
+        annotations:
+          summary: 'M9: p95 de /reservas mayor a 500 ms'
+          description: 'Comparar p95 por ruta (GET /reservas sin paginación es candidato), duración de PostgreSQL por operación y llamadas a M7.'
+
+  - name: m9-dependencias
+    interval: 1m
+    rules:
+      - alert: M9DependenciaCaida
+        expr: min by (dependency, deployment_environment_name) (m9_dependency_up{service_name="m9-reservas"}) == 0
+        for: 2m
+        labels:
+          severity: critical
+          module: m9
+        annotations:
+          summary: 'M9: dependencia {{ $labels.dependency }} no responde'
+          description: 'El chequeo periódico de readiness falla. Redis caído: la caché degrada a PostgreSQL pero los locks rechazan operaciones (503). RabbitMQ caído: el Outbox acumula pendientes.'
+
+      - alert: M9TelemetriaAusente
+        # Sin muestras del servicio: proceso caído, Alloy caído o credenciales inválidas.
+        expr: absent_over_time(http_server_active_requests{service_name="m9-reservas"}[10m])
+        for: 5m
+        labels:
+          severity: warning
+          module: m9
+        annotations:
+          summary: 'M9: no llegan métricas del servicio'
+          description: 'Verificar contenedor m9-reservas, UI de Alloy (http://localhost:12345) y credenciales OTLP. Mientras dure, las demás alertas no pueden evaluarse.'
+
+  - name: m9-procesamiento
+    interval: 1m
+    rules:
+      - alert: M9SchedulerSinProgreso
+        # Compose ejecuta el scheduler cada 5 s (fuera de Compose: 30 s). 120 s = varias
+        # ejecuciones perdidas, no una demora puntual.
+        expr: time() - max by (deployment_environment_name) (m9_scheduler_last_success_timestamp_seconds{service_name="m9-reservas"}) > 120
+        for: 2m
+        labels:
+          severity: critical
+          module: m9
+        annotations:
+          summary: 'M9: el scheduler no completa ejecuciones'
+          description: 'Revisar logs reservation_scheduler_error y m9_scheduler_runs_total{result="error"}. Las reservas vencidas no se activarán.'
+
+      - alert: M9OutboxEnvejecido
+        expr: max by (deployment_environment_name) (m9_outbox_oldest_pending_age_seconds{service_name="m9-reservas"}) > 60
+        for: 5m
+        labels:
+          severity: warning
+          module: m9
+        annotations:
+          summary: 'M9: eventos Outbox pendientes hace más de 60 s'
+          description: 'El poll es de 5 s: 60 s indica RabbitMQ caído o publicaciones fallando. Ver m9_outbox_failures_total y m9_messaging_published_total{result="error"}.'
+
+      - alert: M9ActivandoEstancadas
+        expr: max by (deployment_environment_name) (m9_reservations_stuck_activating{service_name="m9-reservas"}) > 0
+        for: 5m
+        labels:
+          severity: warning
+          module: m9
+        annotations:
+          summary: 'M9: reservas en ACTIVANDO sin resolverse'
+          description: 'Reservas sin respuesta de M5 por encima del umbral (120 s por defecto). Revisar cola m5, m9_inbox_results_total y DLQ.'
+
+      - alert: M9DlqConMensajes
+        expr: max by (queue, deployment_environment_name) (m9_rabbitmq_queue_messages{service_name="m9-reservas",queue_role="dead_letter"}) > 0
+        for: 1m
+        labels:
+          severity: warning
+          module: m9
+        annotations:
+          summary: 'M9: mensajes en la DLQ {{ $labels.queue }}'
+          description: 'Mensajes que agotaron los reintentos. Inspeccionar en la UI de RabbitMQ (http://localhost:15672) y buscar la traza por traceparent conservado en los headers.'

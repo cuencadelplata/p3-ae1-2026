@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+coverage
+**/coverage
+*.log
+.env
+observabilidad
+.env.*
+!.env.example

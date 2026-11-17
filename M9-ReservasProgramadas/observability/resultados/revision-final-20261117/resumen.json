@@ -1,0 +1,27 @@
+{
+  "CheckedAt": "2026-11-17T04:40:57-03:00",
+  "Commit": "b975a3f7306faced72e08109fff5a060c235dfc1",
+  "Node": "v22.15.0",
+  "Health": {
+    "service": "m9-reservas-programadas",
+    "status": "ok"
+  },
+  "Readiness": {
+    "status": "ready",
+    "dependencies": {
+      "postgres": "up",
+      "redis": "up",
+      "rabbitmq": "up"
+    }
+  },
+  "UnitTests": {
+    "Passed": 85,
+    "Total": 85
+  },
+  "CloudSmokeRun": "https://proudgecko1373.grafana.net/a/k6-app/runs/9033072",
+  "CloudStressRun": "https://proudgecko1373.grafana.net/a/k6-app/runs/9033169",
+  "CloudStressRequests": 801,
+  "CloudStressHttpErrors": 0,
+  "OwnAlertSearch": "No matching rules found",
+  "Report": "REVISION_FINAL_OBSERVABILIDAD.md"
+}

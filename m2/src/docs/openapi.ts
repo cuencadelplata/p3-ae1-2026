@@ -1,0 +1,515 @@
+/**
+ * OpenAPI 3.0.3 Specification for Module 2 (Customers)
+ * Generated according to SPECM5 requirements
+ */
+// allow: SIZE_OK — declarative OpenAPI document; keeping one contract preserves Scalar's single source.
+export const openApiSpec = {
+  openapi: '3.0.3',
+  info: {
+    title: 'Módulo 2 - Servicio de Clientes (API)',
+    version: '1.0.0',
+    description: 'API RESTful del perfil de clientes y sus preferencias (RF-2.1). La identidad, el nombre, el teléfono y el correo se validan en M1; M2 solo persiste userId y las preferencias del perfil.'
+  },
+  servers: [
+    {
+      url: 'http://localhost:3000',
+      description: 'Servidor Local de Desarrollo'
+    }
+  ],
+  paths: {
+    '/v1/customers': {
+      post: {
+        summary: 'Crear perfil de cliente (RF-2.1)',
+        description: 'Requiere un JWT de M1 con rol CLIENTE. El userId se toma del token; el cuerpo solo contiene preferencias opcionales.',
+        operationId: 'createCustomerProfile',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  preferences: { $ref: '#/components/schemas/PreferencesInput' }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          '201': {
+            description: 'Perfil creado con éxito',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/CustomerProfile' } } }
+          },
+          '400': { $ref: '#/components/responses/BadRequest' },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '403': { $ref: '#/components/responses/Forbidden' },
+          '409': { $ref: '#/components/responses/ProfileAlreadyExists' },
+          '500': { $ref: '#/components/responses/InternalServerError' },
+          '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        }
+      },
+      get: {
+        summary: 'Listar todos los clientes (Helper para UI)',
+        description: 'Listado público. Cuando se usa userId se devuelve el perfil asociado a ese identificador; los consumidores internos deben enviar el JWT de usuario.',
+        operationId: 'listCustomers',
+        parameters: [
+          {
+            name: 'userId',
+            in: 'query',
+            required: false,
+            description: 'Identificador de usuario de M1 para filtrar el listado.',
+            schema: { type: 'integer', format: 'int32', minimum: 1 },
+            example: 12
+          }
+        ],
+        responses: {
+          '200': {
+            description: 'Lista de perfiles',
+            content: {
+              'application/json': {
+                schema: { type: 'array', items: { $ref: '#/components/schemas/CustomerProfile' } }
+              }
+            }
+          },
+          '400': { $ref: '#/components/responses/BadRequest' },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '500': { $ref: '#/components/responses/InternalServerError' },
+          '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        }
+      }
+    },
+    '/v1/customers/me': {
+      get: {
+        summary: 'Obtener mi perfil (RF-2.1)',
+        description: 'Requiere un JWT de M1. Devuelve 404 si el userId autenticado todavía no tiene perfil. Incluye en identity los datos personales del usuario (M1 GET /auth/me); identity es null si M1 no responde.',
+        operationId: 'getCurrentCustomerProfile',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Perfil autenticado',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/CustomerProfileWithIdentity' } } }
+          },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '404': { $ref: '#/components/responses/NotFound' },
+          '500': { $ref: '#/components/responses/InternalServerError' },
+          '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        }
+      }
+    },
+    '/v1/customers/{id}': {
+      get: {
+        summary: 'Obtener perfil de cliente por ID (RF-2.1)',
+        description: 'Requiere un JWT de usuario. El identificador es el customerId interno cust_xxx. identity trae los datos personales de M1 solo cuando quien consulta es el dueño del perfil; para otros usuarios, o si M1 no responde, es null.',
+        operationId: 'getCustomerProfile',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' }, example: 'cust_823a7b9c' }
+        ],
+        responses: {
+          '200': {
+            description: 'Perfil encontrado',
+            headers: {
+              'X-Data-Source': { description: 'Origen del perfil devuelto', schema: { type: 'string', enum: ['cache', 'database'] } }
+            },
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/CustomerProfileWithIdentity' } } }
+          },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '404': { $ref: '#/components/responses/NotFound' },
+          '500': { $ref: '#/components/responses/InternalServerError' },
+          '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        }
+      },
+      put: {
+        summary: 'Actualizar preferencias del cliente (RF-2.1)',
+        description: 'Requiere un JWT y solo permite al dueño del perfil actualizar sus preferencias. No acepta nombre, teléfono, correo ni direcciones.',
+        operationId: 'updateCustomerPreferences',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' }, example: 'cust_823a7b9c' }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['preferences'],
+                properties: {
+                  preferences: { $ref: '#/components/schemas/PreferencesInput' }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          '200': {
+            description: 'Preferencias actualizadas',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['customerId', 'preferences', 'status'],
+                  properties: {
+                    customerId: { type: 'string', pattern: '^cust_[A-Za-z0-9]+$' },
+                    preferences: { $ref: '#/components/schemas/Preferences' },
+                    status: { $ref: '#/components/schemas/CustomerStatus' }
+                  }
+                }
+              }
+            }
+          },
+          '400': { $ref: '#/components/responses/BadRequest' },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '403': { $ref: '#/components/responses/Forbidden' },
+          '404': { $ref: '#/components/responses/NotFound' },
+          '500': { $ref: '#/components/responses/InternalServerError' },
+          '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        }
+      }
+    },
+    '/v1/customers/{id}/status': {
+      get: {
+        summary: 'Consultar estado de cuenta — recalcula con penalizaciones de Soporte (RF-2.5)',
+        description:
+          'Acepta JWT de usuario (Authorization: Bearer), que solo permite consultar el estado del propio perfil, o X-Secret-Key para que módulos internos consulten cualquier cliente. ' +
+          'Consulta las penalizaciones vigentes de Soporte y recalcula el estado: 2+ penalizaciones → BLOQUEADO_TEMPORAL, 3+ → BLOQUEADO_PERMANENTE (configurable). ' +
+          'Si Soporte está caído, devuelve el último estado guardado sin falla.',
+        operationId: 'getAccountStatus',
+        security: [{ bearerAuth: [] }, { secretKey: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' }, example: 'cust_823a7b9c' }
+        ],
+        responses: {
+          '200': {
+            description: 'Estado de cuenta (puede haber sido recalculado)',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/AccountStatusResponse' } } }
+          },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '403': { $ref: '#/components/responses/Forbidden' },
+          '404': { $ref: '#/components/responses/NotFound' },
+          '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        }
+      },
+      put: {
+        summary: 'Cambiar estado de cuenta: baja (INACTIVO) o bloqueo manual (RF-2.5)',
+        description:
+          'Requiere JWT de usuario y solo lo permite el dueño del perfil. Los clientes nunca se eliminan: la baja es status INACTIVO. ' +
+          'El bloqueo aplicado aquí se registra como MANUAL y no lo revierten automáticamente las penalizaciones.',
+        operationId: 'updateAccountStatus',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' }, example: 'cust_823a7b9c' }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['status', 'reason'],
+                properties: {
+                  status: { $ref: '#/components/schemas/CustomerStatus' },
+                  reason: { type: 'string', minLength: 3, example: 'Baja solicitada por el cliente' }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          '200': {
+            description: 'Estado de cuenta actualizado',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/AccountStatusResponse' } } }
+          },
+          '400': { $ref: '#/components/responses/BadRequest' },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '403': { $ref: '#/components/responses/Forbidden' },
+          '404': { $ref: '#/components/responses/NotFound' },
+          '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        }
+      }
+    },
+    '/v1/customers/{id}/trips': {
+      get: {
+        summary: 'Consultar historial de viajes consumiendo síncronamente M6 (RF-2.3)',
+        description:
+          'Requiere JWT de usuario y solo lo permite el dueño del perfil. Consulta M6 (GET /api/clientes/{clienteId}/viajes) con el userId del perfil como clienteId. ' +
+          'Si M6 está caído devuelve una lista vacía con degraded: true (respuesta degradada, no 503).',
+        operationId: 'getCustomerTrips',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' }, example: 'cust_823a7b9c' }
+        ],
+        responses: {
+          '200': {
+            description: 'Historial consolidado de viajes del cliente. Con degraded: true la lista vacía no significa "sin viajes": M6 no respondió.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/CustomerTripsResponse' } } }
+          },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '403': { $ref: '#/components/responses/Forbidden' },
+          '404': { $ref: '#/components/responses/NotFound' },
+          '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        }
+      }
+    },
+    '/internal/preferences/{userId}': {
+      get: {
+        summary: 'Preferencias de notificación para M8 (RF8.7)',
+        description: 'Servicio a servicio. pushEnabled es true solo si notificationChannel es "push" (el default "email" implica false). notificationsEnabled es false solo si la cuenta está INACTIVO. Responde en menos de 1800 ms (INTERNAL_PREFERENCES_DEADLINE_MS) o devuelve 503.',
+        security: [{ internalApiKey: [] }],
+        parameters: [
+          { name: 'userId', in: 'path', required: true, description: 'Id numérico del usuario en M1', schema: { type: 'integer', minimum: 1 } },
+          { name: 'x-correlation-id', in: 'header', required: false, description: 'Se registra en los logs y se devuelve en la respuesta', schema: { type: 'string' } }
+        ],
+        responses: {
+          '200': {
+            description: 'Preferencias del cliente',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['userId', 'notificationsEnabled', 'pushEnabled', 'notificationChannel'],
+                  properties: {
+                    userId: { type: 'integer', example: 91 },
+                    notificationsEnabled: { type: 'boolean', example: true },
+                    pushEnabled: { type: 'boolean', example: true },
+                    notificationChannel: { type: 'string', enum: ['email', 'push'], example: 'push' }
+                  }
+                }
+              }
+            }
+          },
+          '400': { description: 'userId no es un entero positivo' },
+          '401': { description: 'Falta x-api-key, es incorrecta o INTERNAL_API_KEY no está configurada' },
+          '404': { description: '{"error":"CustomerNotFound"}: el usuario no tiene perfil de cliente en M2' },
+          '503': { description: 'PostgreSQL no disponible o plazo vencido; incluye Retry-After' }
+        }
+      }
+    },
+    '/health': {
+      get: {
+        summary: 'Estado de salud del módulo',
+        description: 'Endpoint público para comprobar PostgreSQL, Redis y las dependencias registradas.',
+        operationId: 'getHealth',
+        security: [],
+        responses: {
+          '200': {
+            description: 'Estado de salud disponible',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/HealthResponse' } } }
+          },
+          '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        }
+      }
+    },
+    '/metrics': {
+      get: {
+        summary: 'Métricas Prometheus',
+        description: 'Endpoint público para métricas HTTP, caché y circuit breakers. La respuesta se sirve como text/plain en formato Prometheus.',
+        operationId: 'getMetrics',
+        security: [],
+        responses: {
+          '200': {
+            description: 'Métricas Prometheus',
+            content: { 'text/plain': { schema: { type: 'string' } } }
+          }
+        }
+      }
+    }
+  },
+  components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'JWT HS256 emitido y validado por M1. El token incluye userId, role, iat y exp.'
+      },
+      secretKey: {
+        type: 'apiKey',
+        in: 'header',
+        name: 'X-Secret-Key',
+        description: 'Clave de servicio a servicio para que módulos internos consulten el estado de cuenta sin un token de usuario.'
+      },
+      internalApiKey: {
+        type: 'apiKey',
+        in: 'header',
+        name: 'x-api-key',
+        description: 'Clave de servicio (INTERNAL_API_KEY) para las rutas /internal consumidas por M8.'
+      }
+    },
+    schemas: {
+      PreferencesInput: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          preferredVehicleType: { type: 'string', enum: ['auto', 'moto'], default: 'auto' },
+          notificationChannel: { type: 'string', enum: ['email', 'push'], default: 'email' }
+        }
+      },
+      Preferences: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['preferredVehicleType', 'notificationChannel'],
+        properties: {
+          preferredVehicleType: { type: 'string', enum: ['auto', 'moto'] },
+          notificationChannel: { type: 'string', enum: ['email', 'push'] }
+        }
+      },
+      CustomerStatus: {
+        type: 'string',
+        enum: ['ACTIVO', 'INACTIVO', 'BLOQUEADO_TEMPORAL', 'BLOQUEADO_PERMANENTE', 'EN_REVISIÓN']
+      },
+      CustomerProfile: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['customerId', 'userId', 'preferences', 'status', 'createdAt'],
+        properties: {
+          customerId: { type: 'string', pattern: '^cust_[A-Za-z0-9]+$', example: 'cust_823a7b9c' },
+          userId: { type: 'integer', format: 'int32', minimum: 1, example: 12 },
+          preferences: { $ref: '#/components/schemas/Preferences' },
+          status: { $ref: '#/components/schemas/CustomerStatus' },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' }
+        }
+      },
+      CustomerIdentity: {
+        type: 'object',
+        description: 'Datos personales del usuario, propiedad de M1 (GET /auth/me). M2 no los guarda: los consulta en cada request.',
+        required: ['nombre', 'apellido', 'email', 'rol', 'estado'],
+        properties: {
+          nombre: { type: 'string', example: 'Ana' },
+          apellido: { type: 'string', example: 'Pérez' },
+          dni: { type: 'string', nullable: true, example: '30111222' },
+          telefono: { type: 'string', nullable: true, example: '+54 9 362 4111222' },
+          email: { type: 'string', format: 'email', example: 'ana.perez@example.com' },
+          rol: { type: 'string', example: 'CLIENTE' },
+          estado: { type: 'string', example: 'ACTIVO' },
+          creadoEn: { type: 'string', format: 'date-time', nullable: true }
+        }
+      },
+      CustomerProfileWithIdentity: {
+        type: 'object',
+        required: ['customerId', 'userId', 'preferences', 'status', 'createdAt', 'identity'],
+        properties: {
+          customerId: { type: 'string', pattern: '^cust_[A-Za-z0-9]+$', example: 'cust_823a7b9c' },
+          userId: { type: 'integer', format: 'int32', minimum: 1, example: 12 },
+          preferences: { $ref: '#/components/schemas/Preferences' },
+          status: { $ref: '#/components/schemas/CustomerStatus' },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+          identity: {
+            allOf: [{ $ref: '#/components/schemas/CustomerIdentity' }],
+            nullable: true,
+            description: 'null si quien consulta no es el dueño del perfil o si M1 no responde.'
+          }
+        }
+      },
+      ErrorResponse: {
+        type: 'object',
+        required: ['error', 'message'],
+        properties: {
+          error: { type: 'string', example: 'Unauthorized' },
+          message: { type: 'string' },
+          details: { type: 'array', items: { type: 'object', additionalProperties: true } },
+          retryAfter: { type: 'integer', minimum: 1, description: 'Segundos sugeridos para reintentar.' }
+        }
+      },
+      HealthResponse: {
+        type: 'object',
+        required: ['status', 'service', 'checks', 'circuits', 'criticalHealthy'],
+        properties: {
+          status: { type: 'string', enum: ['UP', 'DEGRADED'] },
+          service: { type: 'string', example: 'm2-clientes-api' },
+          checks: { type: 'object', additionalProperties: { type: 'object', properties: {
+            status: { type: 'string', enum: ['UP', 'DOWN'] }, responseTimeMs: { type: 'number' }
+          } } },
+          circuits: { type: 'object', additionalProperties: { type: 'string', enum: ['closed', 'open', 'half_open', 'isolated'] } },
+          criticalHealthy: { type: 'boolean' }
+        }
+      },
+      AccountStatusResponse: {
+        type: 'object',
+        required: ['customerId', 'status', 'reason', 'updatedAt'],
+        properties: {
+          customerId: { type: 'string', pattern: '^cust_[A-Za-z0-9]+$', example: 'cust_823a7b9c' },
+          status: { $ref: '#/components/schemas/CustomerStatus' },
+          reason: { type: 'string', example: 'Bloqueado automáticamente por 2 penalización(es) vigente(s)' },
+          blockOrigin: {
+            type: 'string',
+            enum: ['AUTOMATICO', 'MANUAL'],
+            nullable: true,
+            description: 'Presente solo cuando hay un bloqueo activo. AUTOMATICO (penalizaciones, reversible) o MANUAL (usuario/admin).'
+          },
+          updatedAt: { type: 'string', format: 'date-time' }
+        }
+      },
+      TripSummary: {
+        type: 'object',
+        required: ['tripId', 'origin', 'destination', 'fare', 'status', 'createdAt'],
+        properties: {
+          tripId: { type: 'string', example: 'trip_99217c2f' },
+          origin: { type: 'string', example: 'Av. Colón 1200, Córdoba' },
+          destination: { type: 'string', example: 'Av. General Paz 250, Córdoba' },
+          fare: { type: 'number', nullable: true, example: 1850.0, description: 'Total cobrado (finalización de M6); null si el viaje todavía no terminó.' },
+          status: {
+            type: 'string',
+            example: 'COMPLETADO',
+            description: 'Estado del viaje en M6: SOLICITADO, ASIGNADO, CONDUCTOR_EN_CAMINO, ARRIBADO, EN_CURSO, COMPLETADO o CANCELADO.'
+          },
+          createdAt: { type: 'string', format: 'date-time' }
+        }
+      },
+      CustomerTripsResponse: {
+        type: 'object',
+        required: ['customerId', 'tripsCount', 'trips', 'degraded'],
+        properties: {
+          customerId: { type: 'string', pattern: '^cust_[A-Za-z0-9]+$', example: 'cust_823a7b9c' },
+          tripsCount: { type: 'integer', example: 2 },
+          trips: { type: 'array', items: { $ref: '#/components/schemas/TripSummary' } },
+          degraded: {
+            type: 'boolean',
+            description: 'true cuando M6 no respondió y la lista vacía es una respuesta degradada; false cuando los datos vienen de M6.'
+          }
+        }
+      }
+    },
+    responses: {
+      BadRequest: {
+        description: 'Datos de entrada inválidos',
+        content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+      },
+      Unauthorized: {
+        description: 'Falta el bearer token o el token no es válido. Si M1 está caído, la respuesta es 503.',
+        content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+      },
+      Forbidden: {
+        description: 'El rol no permite la operación o el perfil pertenece a otro usuario.',
+        content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+      },
+      ProfileAlreadyExists: {
+        description: 'El userId autenticado ya tiene un perfil.',
+        content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+      },
+      NotFound: {
+        description: 'No se encontró el perfil solicitado.',
+        content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+      },
+      InternalServerError: {
+        description: 'Error inesperado. La respuesta no incluye detalles internos.',
+        content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+      },
+      ServiceUnavailable: {
+        description: 'PostgreSQL o un servicio externo no está disponible. El servidor incluye Retry-After.',
+        headers: {
+          'Retry-After': {
+            description: 'Segundos que conviene esperar antes de reintentar.',
+            schema: { type: 'integer', minimum: 1, example: 10 }
+          }
+        },
+        content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+      }
+    }
+  }
+};

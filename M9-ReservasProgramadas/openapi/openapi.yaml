@@ -1,0 +1,323 @@
+openapi: 3.0.3
+info:
+  title: M9 – Reservas Programadas
+  version: 2.0.0
+  description: >
+    API REST para administrar reservas programadas. M9 estima tarifas con M7 al crear
+    o modificar y solicita el despacho a M5 únicamente al llegar el horario programado.
+    M9 no implementa autenticación propia; el token de servicio para M5 depende de M1.
+servers:
+  - url: http://localhost:3000
+    description: Ejecución local predeterminada
+security: []
+tags:
+  - name: Salud
+  - name: Documentación
+  - name: Reservas
+paths:
+  /health:
+    get:
+      tags: [Salud]
+      summary: Consultar el estado básico del servicio
+      operationId: getHealth
+      responses:
+        '200':
+          description: Servicio disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /readiness:
+    get:
+      tags: [Salud]
+      summary: Comprobar PostgreSQL, Redis y RabbitMQ
+      operationId: getReadiness
+      responses:
+        '200':
+          description: PostgreSQL, Redis y RabbitMQ disponibles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          description: Una dependencia no está disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+  /openapi.json:
+    get:
+      tags: [Documentación]
+      summary: Obtener la especificación OpenAPI servida por M9
+      operationId: getOpenApiDocument
+      responses:
+        '200':
+          description: Especificación OpenAPI
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /reservas:
+    post:
+      tags: [Reservas]
+      summary: Crear una reserva programada
+      description: >
+        Resuelve el recorrido, consulta M7 y guarda la reserva PROGRAMADA. No invoca M5
+        ni asigna conductor durante la creación.
+      operationId: crearReserva
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearReservaRequest'
+            example:
+              clienteId: 20000000-0000-4000-8000-000000000001
+              origen: Terminal de Ómnibus
+              destino: Aeropuerto
+              vehiculo: AUTO
+              fechaHoraProgramada: '2099-01-01T17:30:00.000Z'
+      responses:
+        '201':
+          description: Reserva guardada en estado PROGRAMADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reserva'
+              example:
+                id: 10000000-0000-4000-8000-000000000001
+                clienteId: 20000000-0000-4000-8000-000000000001
+                origen: Terminal de Ómnibus
+                destino: Aeropuerto
+                vehiculo: AUTO
+                fechaHoraProgramada: '2099-01-01T17:30:00.000Z'
+                estado: PROGRAMADA
+                tarifaEstimada: 2500
+                moneda: ARS
+                estimacionTarifaId: est_1234567890
+                routeSnapshot:
+                  origin: { latitude: -27.4514, longitude: -58.9867, address: Terminal de Ómnibus }
+                  destination: { latitude: -27.4692, longitude: -58.8306, address: Aeropuerto }
+                  distanceKm: 18.4
+                  estimatedDurationMin: 28
+                criterioAsignacion: null
+                idSolicitud: null
+                assignedDriverId: null
+                creadoEn: '2099-01-01T14:00:00.000Z'
+                actualizadoEn: '2099-01-01T14:00:00.000Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Reservas]
+      summary: Listar reservas
+      operationId: listarReservas
+      responses:
+        '200':
+          description: Reservas ordenadas por fecha programada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reservas]
+                properties:
+                  reservas:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Reserva'
+  /reservas/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Reservas]
+      summary: Obtener una reserva
+      operationId: obtenerReserva
+      responses:
+        '200':
+          description: Reserva encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reserva'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Reservas]
+      summary: Modificar una reserva PROGRAMADA
+      description: >
+        Recalcula RouteSnapshot y tarifa M7 al cambiar origen o destino; al cambiar
+        vehículo reutiliza la ruta. Cambiar solo fecha/hora no invoca M7.
+      operationId: actualizarReserva
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActualizarReservaRequest'
+            example: { destino: Puerto de Buenos Aires, vehiculo: MOTO }
+      responses:
+        '200':
+          description: Reserva actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reserva'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Reservas]
+      summary: Cancelar una reserva PROGRAMADA o ACTIVANDO
+      description: >
+        Si la reserva ACTIVANDO todavía no tiene idSolicitud, responde 409 para no competir
+        con el despacho asíncrono. Si tiene idSolicitud, primero invoca la cancelación de M5;
+        un conflicto 409 de M5 se propaga y la reserva local no se marca cancelada.
+      operationId: cancelarReserva
+      responses:
+        '200':
+          description: Reserva cancelada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reserva'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: M5 no disponible para confirmar la cancelación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    CrearReservaRequest:
+      type: object
+      additionalProperties: false
+      required: [clienteId, origen, destino, vehiculo, fechaHoraProgramada]
+      properties:
+        clienteId: { type: string, format: uuid }
+        origen: { type: string, minLength: 1, maxLength: 500 }
+        destino: { type: string, minLength: 1, maxLength: 500 }
+        vehiculo: { type: string, enum: [AUTO, MOTO] }
+        fechaHoraProgramada: { type: string, format: date-time }
+    ActualizarReservaRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        origen: { type: string, minLength: 1, maxLength: 500 }
+        destino: { type: string, minLength: 1, maxLength: 500 }
+        vehiculo: { type: string, enum: [AUTO, MOTO] }
+        fechaHoraProgramada: { type: string, format: date-time }
+    GeoLocation:
+      type: object
+      additionalProperties: false
+      required: [latitude, longitude, address]
+      properties:
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        address: { type: string }
+    RouteSnapshot:
+      type: object
+      additionalProperties: false
+      required: [origin, destination, distanceKm, estimatedDurationMin]
+      properties:
+        origin: { $ref: '#/components/schemas/GeoLocation' }
+        destination: { $ref: '#/components/schemas/GeoLocation' }
+        distanceKm: { type: number, minimum: 0 }
+        estimatedDurationMin: { type: number, minimum: 0 }
+    Reserva:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - clienteId
+        - origen
+        - destino
+        - vehiculo
+        - fechaHoraProgramada
+        - estado
+        - tarifaEstimada
+        - moneda
+        - estimacionTarifaId
+        - routeSnapshot
+        - criterioAsignacion
+        - idSolicitud
+        - assignedDriverId
+        - creadoEn
+        - actualizadoEn
+      properties:
+        id: { type: string, format: uuid }
+        clienteId: { type: string, format: uuid }
+        origen: { type: string }
+        destino: { type: string }
+        vehiculo: { type: string, enum: [AUTO, MOTO] }
+        fechaHoraProgramada: { type: string, format: date-time }
+        estado: { type: string, enum: [PROGRAMADA, ACTIVANDO, ACTIVADA, CANCELADA, FALLIDA] }
+        tarifaEstimada: { type: number, nullable: true }
+        moneda: { type: string, nullable: true }
+        estimacionTarifaId: { type: string, nullable: true }
+        routeSnapshot:
+          allOf:
+            - $ref: '#/components/schemas/RouteSnapshot'
+          nullable: true
+        criterioAsignacion: { type: string, nullable: true }
+        idSolicitud: { type: string, format: uuid, nullable: true }
+        assignedDriverId: { type: string, nullable: true }
+        creadoEn: { type: string, format: date-time, nullable: true }
+        actualizadoEn: { type: string, format: date-time, nullable: true }
+    HealthResponse:
+      type: object
+      required: [service, status]
+      properties:
+        service: { type: string }
+        status: { type: string, enum: [ok] }
+    ReadinessResponse:
+      type: object
+      required: [status, dependencies]
+      properties:
+        status: { type: string, enum: [ready, degraded] }
+        dependencies:
+          type: object
+          additionalProperties: { type: string, enum: [up, down] }
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [codigo, mensaje]
+          properties:
+            codigo: { type: string }
+            mensaje: { type: string }
+  responses:
+    BadRequest:
+      description: Datos inválidos
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Reserva no encontrada
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: Conflicto de estado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    InternalError:
+      description: Error interno
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }

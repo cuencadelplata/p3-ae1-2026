@@ -1,0 +1,23 @@
+docker compose -f docker-compose.yml -f docker-compose.offline.yml exec -T -e TEST_API_URL=http://api:3000 -e M8_BASE_URL=http://m8:4008 api node --test tests/offline.test.cjs tests/stack.test.cjs
+TAP version 13
+# Subtest: Sin salida pública: GET mapas, token local y consulta directa M6 siguen operando
+ok 1 - Sin salida pública: GET mapas, token local y consulta directa M6 siguen operando
+  ---
+  duration_ms: 60.940416
+  type: 'test'
+  ...
+# Subtest: Stack real: M6 → RabbitMQ → M2 y M2 → outbox → RabbitMQ → M8
+ok 2 - Stack real: M6 → RabbitMQ → M2 y M2 → outbox → RabbitMQ → M8
+  ---
+  duration_ms: 3261.622085
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3304.459293
