@@ -1,17 +1,13 @@
 const redis = require("../config/redisClient");
 const conductorDBRepository = require("./conductorDBRepository");
 const redisHealth = require("../services/redisHealth");
-const { mockConductores, mockValoraciones } = require("../mocks/conductor/mockData");
 
-// Fallback en memoria por si Redis no está activo momentáneamente
+// Fallback en memoria por si Redis no está activo momentáneamente.
+// Arranca vacío: no se siembran datos mock, solo lo que llega por la API.
 const inMemoryConductores = new Map();
 const inMemoryValoraciones = [];
 // Fallback en memoria puro para el estado efímero de disponibilidad (RF 3.3)
 const inMemoryDisponibilidad = new Map();
-
-// Inicializar mocks en memoria por defecto
-mockConductores.forEach((c) => inMemoryConductores.set(c.usuarioID, c));
-mockValoraciones.forEach((v) => inMemoryValoraciones.push(v));
 
 // TTL (segundos) del caché de habilitación (RF 3.1). Al vencer, el próximo GET
 // vuelve a consultar la base de datos y recarga la caché.
@@ -22,43 +18,6 @@ const TTL_DISPONIBLE = parseInt(process.env.REDIS_TTL_DISPONIBLE || "60", 10);
 
 const keyHabilitado = (id) => `conductor:${id}:habilitado`;
 const keyDisponible = (id) => `conductor:${id}:disponible`;
-
-/**
- * Inicializa los datos mock en Redis si la base está vacía.
- */
-async function seedRedisIfEmpty() {
-  try {
-    const exists = await redis.exists("conductores:ids");
-    if (!exists) {
-      console.log("[Redis] Sembrando datos mock en Redis...");
-
-      for (const c of mockConductores) {
-        await redis.sadd("conductores:ids", c.usuarioID);
-        await redis.set(`conductor:${c.usuarioID}`, JSON.stringify(c));
-        // Semilla del estado efímero de disponibilidad (RF 3.3) a partir de
-        // estado_conexion, con el mismo TTL tipo heartbeat que usa el resto del flujo.
-        await redis.set(
-          keyDisponible(c.usuarioID),
-          JSON.stringify({ disponible: c.estado_conexion === "conectado" }),
-          "EX",
-          TTL_DISPONIBLE
-        );
-      }
-
-      for (const v of mockValoraciones) {
-        const evaluadorId = v.evaluadorId || v.conductorId;
-        await redis.rpush(
-          `conductor:${evaluadorId}:valoraciones`,
-          JSON.stringify(v)
-        );
-      }
-
-      console.log("[Redis] Mocks sembrados con éxito.");
-    }
-  } catch (err) {
-    console.warn(`[Redis Seed] No se pudo conectar a Redis (${err.message}). Usando fallback en memoria.`);
-  }
-}
 
 /**
  * Obtener todos los conductores
@@ -122,6 +81,9 @@ async function crearConductor(datos) {
   } catch (err) {
     console.warn(`[Redis] Fallo al persistir en Redis, guardando en memoria: ${err.message}`);
   }
+
+  // Fuente de verdad de la habilitación (RF 3.1)
+  await conductorDBRepository.crearConductor(nuevoConductor);
 
   inMemoryConductores.set(nuevoConductor.usuarioID, nuevoConductor);
   return nuevoConductor;
@@ -296,6 +258,17 @@ async function actualizarHabilitado(id, habilitado) {
     console.warn(`[Redis] Fallo al refrescar la caché de habilitación de '${id}': ${err.message}`);
   }
 
+  // Mantener sincronizado el registro completo (lo usa GET /conductor/:id/estado)
+  if (redisHealth.isUp()) try {
+    const raw = await redis.get(`conductor:${id}`);
+    if (raw) {
+      await redis.set(`conductor:${id}`, JSON.stringify({ ...JSON.parse(raw), habilitado }));
+    }
+  } catch (err) {
+    redisHealth.markDown(err);
+    console.warn(`[Redis] Fallo al actualizar el registro de '${id}': ${err.message}`);
+  }
+
   const conductor = inMemoryConductores.get(id);
   if (conductor) {
     inMemoryConductores.set(id, { ...conductor, habilitado });
@@ -388,7 +361,6 @@ async function listarValoracionesPendientes() {
 }
 
 module.exports = {
-  seedRedisIfEmpty,
   obtenerConductores,
   obtenerConductorPorId,
   crearConductor,
