@@ -1,12 +1,13 @@
 name: movilidad-urbana
 
 include:
-  - path: ./modulo-3/docker-compose.yml
+  - path: ./modulo-3/compose.integracion.yml
   - path: ./M9-ReservasProgramadas/docker-compose.yml
   - path: ./modulo6/compose.integracion.yml
   - path: ./m2/docker-compose.app.yml
   - path: ./modulo7/compose.integracion.yml
   - path: ./modulo8/compose.integracion.yaml
+  - path: ./modulo-1-identidad-acceso/compose.integracion.yml
 
 services:
   m4-api:
