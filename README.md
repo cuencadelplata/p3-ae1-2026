@@ -1,210 +1,105 @@
-# Módulo 8 — Notificaciones, Documentos y Soporte
+# Módulo 8 — Notificaciones, QR, comprobantes y soporte
 
-Este directorio reúne el backend del Módulo 8. RF8.1 a RF8.7 se ejecutan en
-una única aplicación HTTP (`m8-app`) y conservan las
-responsabilidades de cada requerimiento separadas internamente. PostgreSQL,
-Redis y RabbitMQ se ejecutan como infraestructura compartida del módulo.
+M8 es el servicio de comunicaciones de la plataforma de movilidad urbana. Tiene **una aplicación Node.js y una imagen Docker**. PostgreSQL guarda los datos duraderos, Redis mantiene los QR temporales y RabbitMQ transporta eventos. M8 no crea viajes ni cambia sus estados: eso le corresponde a M6.
 
-M8 no administra el ciclo de vida del viaje: no crea viajes, no los inicia ni
-modifica el estado `EN_CURSO`; esas decisiones pertenecen a M6.
+## Requerimientos
 
-## Qué resuelve M8
+- **RF8.1 — Notificaciones:** convierte hechos de viaje y documentos en avisos persistidos para el usuario correcto, evita duplicados y solicita la entrega a RF8.7.
+- **RF8.2 — QR:** genera QR temporales para un `tripId`, con vencimiento y consumo atómico de un solo uso en Redis. M6 decide si inicia el viaje.
+- **RF8.3 — Comprobantes:** consulta el pago de M7 por REST, emite un comprobante por viaje, guarda el PDF y sus datos, y publica `ReceiptIssued` mediante Outbox.
+- **RF8.4 — Reenvío:** solicita otra entrega del comprobante existente y crea un enlace temporal; reutiliza el PDF.
+- **RF8.5 — Soporte:** crea tickets asociados a viajes y conserva estados e historial.
+- **RF8.6 — Mensajería:** conecta RabbitMQ, valida eventos, deduplica con Inbox, confirma con ACK tras procesar y aplica retry y DLQ. Consume `documento.registrado` desde `m3.eventos` y los eventos de viaje acordados desde `mobility.events`.
+- **RF8.7 — Entrega PUSH:** administra tokens de dispositivos, solicitudes, intentos y resultados. Un intento registrado no demuestra por sí solo una entrega real en un teléfono.
 
-- **RF8.1 — Notificaciones:** interpreta hechos notificables, genera y
-  persiste la notificación lógica e impide duplicados de negocio.
-- **RF8.2 — QR:** genera QR temporales con token opaco, TTL y consumo atómico
-  de un solo uso.
-- **RF8.3 — Comprobantes:** emite, guarda y permite consultar comprobantes PDF.
-- **RF8.4 — Reenvío:** vuelve a solicitar el envío de un comprobante sin
-  regenerar su PDF.
-- **RF8.5 — Soporte:** crea tickets asociados a un viaje, conserva historial y
-  controla idempotencia y concurrencia.
-- **RF8.6 — Mensajería:** administra el transporte RabbitMQ, envelope, Inbox,
-  reintentos, DLQ y adaptadores de eventos.
-- **RF8.7 — Entrega:** administra dispositivos, intentos e idempotencia de la
-  entrega PUSH.
+Los destinatarios usan el `userId` **numérico** de M1. M8 no lee tablas ni Redis de otros módulos. Las integraciones externas son por REST o RabbitMQ. El [índice de contratos](contracts/README.md) enlaza el [OpenAPI integrado](openapi/m8-openapi.yaml) y el [catálogo de eventos](contracts/events/catalogo-eventos-v1.md).
 
-Cada RF tiene su propia responsabilidad dentro de la misma aplicación. Sus
-contratos y guías se encuentran en los índices enlazados más abajo.
+## Organización
 
-Cada RF conserva ownership lógico de sus datos. M8 no consulta directamente
-bases de datos, Redis ni tablas de otros módulos: toda integración externa se
-realiza por HTTP/OpenAPI documentado o por eventos RabbitMQ acordados.
+- `src/`: servidor, rutas y arranque único.
+- `services/`: lógica interna por RF; `shared/` reúne mensajería común.
+- `openapi/` y `contracts/events/`: contratos HTTP y RabbitMQ.
+- `infra/`: PostgreSQL local, observabilidad y simuladores de otros servicios para pruebas.
+- `tests/`: integración, E2E, resiliencia y carga.
+- `frontend/m8.js`: vistas reutilizables de comprobantes, soporte y dispositivos. `frontend/preview/` contiene solamente el menú y acceso manual con JWT de la demo; **no se incorpora esa navegación al frontend común**.
+- `docs/`: [guías](docs/README.md), [RUNBOOK](docs/RUNBOOK.md) y [escenarios de observabilidad](docs/matriz-escenarios-observabilidad.md).
 
-## Requisitos
-- Node.js 24;
-- pnpm 10.33.0;
-- Docker Desktop con Docker Compose.
+`dist/` y `node_modules/` son generados. Prisma Studio sólo inspecciona PostgreSQL: la aplicación usa SQL y migraciones propias, no Prisma ORM.
 
-## Dónde está cada parte
+## Requisitos y configuración
 
-M8 es una sola aplicación backend. `src/` la inicia y monta los paquetes de
-`services/`: notificaciones (RF8.1), QR (RF8.2), comprobantes y reenvío (RF8.3
-y RF8.4), soporte (RF8.5), mensajería compartida (RF8.6) y entrega (RF8.7).
-`infra/` contiene la infraestructura **local de M8** y los simuladores usados
-en las pruebas; no es la infraestructura definitiva de los otros módulos.
-
-Los contratos se encuentran desde un único [índice por RF](contracts/README.md):
-HTTP en `openapi/` y RabbitMQ en `contracts/events/`. Las guías y decisiones
-están en el [índice de documentación](docs/README.md). Las versiones anteriores
-se pueden consultar en el historial Git. `dist/` y `node_modules/` son generados.
-
-M8 todavía no contiene un frontend de usuario. Sus pantallas se incorporarán
-al frontend común del proyecto; `/docs` es documentación interactiva de la API.
-
-## Ejecución local desde el código fuente
-Abrir PowerShell dentro de `modulo-8` y crear el archivo de configuración local
-una sola vez:
+Para desarrollar: **Node.js 24**, **pnpm 10.33.0** y Docker Desktop con Docker Compose. Ejecutá los comandos desde `modulo-8/` en PowerShell.
 
 ```powershell
-Copy-Item .env.example .env -ErrorAction SilentlyContinue
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 pnpm install --frozen-lockfile
-pnpm run build
 ```
 
-Antes de iniciar Compose, reemplazar **todos** los valores `replace-with-*` del
-`.env` local: claves de RabbitMQ, PostgreSQL, QR, M1 y M2. Configurar las dos
-URL de RabbitMQ con el mismo usuario y contraseña definidos para el broker.
-Si ya existe un volumen PostgreSQL, conservar las contraseñas con que se crearon
-sus roles. M6 deberá enviar `QR_INTERNAL_API_KEY` en `x-api-key` al llamar a
-`POST /qr` y `POST /qr/validate`. No publicar claves en Git ni en capturas.
-Para reintentar una validación, M6 debe conservar el mismo UUID en el header
-`Idempotency-Key`; una solicitud distinta usa un UUID nuevo.
+Si `.env` ya existe, no lo sobrescribas. Reemplazá los marcadores `replace-with-*` por valores privados: contraseñas de PostgreSQL y RabbitMQ y claves internas de QR, M1 y M2. `M8_RABBITMQ_URL` debe usar el usuario y contraseña configurados para el broker. **No subas `.env`, claves ni capturas de sus valores.** `.env.example` contiene sólo nombres y marcadores.
 
-Ejecutar la suite principal:
+El Compose local usa simuladores de M1, M2, M7 y del servicio fiscal. En la integración común sus URL se reemplazan por las de los servicios reales. Las conexiones se configuran por variables de entorno.
+
+## Despliegue local con Docker
 
 ```powershell
-pnpm run test
-```
-
-El script prepara las dependencias de prueba necesarias. Para levantar la
-topología completa y la aplicación integrada:
-
-```powershell
-docker compose --env-file .env up -d --build
-docker compose --env-file .env ps
-Invoke-WebRequest http://localhost:3000/health/live -UseBasicParsing
-```
-
-La aplicación queda publicada en `http://localhost:3000` por defecto. El
-puerto se configura con `M8_HOST_PORT`.
-
-## Rutas de verificación
-
-- `GET /health/live`: confirma que el proceso Node sigue vivo.
-- `GET /health/ready` y `GET /health`: muestran la disponibilidad agregada de
-  módulos y dependencias. Devuelven `503` cuando alguna dependencia crítica no
-  está disponible, aunque el proceso continúe vivo.
-- `GET /openapi.yaml`: entrega el contrato OpenAPI integrado en YAML.
-- `GET /docs`: muestra Scalar, la documentación navegable e interactiva.
-
-`openapi: 3.0.3` indica la versión de la especificación OpenAPI utilizada;
-`info.version: 2.0.1` identifica la versión actual del contrato integrado.
-
-## Imagen y demostración
-
-Una imagen publicada anteriormente es `juanmainval/m8-notificaciones-qr:2.0.1`. Necesita
-la misma infraestructura compartida, por lo que debe levantarse con Compose y
-no mediante un `docker run` aislado.
-Esa etiqueta corresponde a una versión anterior: para medir o demostrar
-los cambios de esta rama, construir la imagen local con `docker compose
---env-file .env up -d --build --wait`. La imagen resultante se llama
-`modulo-8-m8-app:local` por defecto y el servicio Compose es `m8-app`.
-
-```powershell
-docker image ls juanmainval/m8-notificaciones-qr
-docker pull juanmainval/m8-notificaciones-qr:2.0.1
-$env:M8_IMAGE = "juanmainval/m8-notificaciones-qr:2.0.1"
-docker compose --env-file .env up -d --no-build
-docker compose --env-file .env ps
-Invoke-RestMethod http://localhost:3000/health/ready | ConvertTo-Json -Depth 8
-```
-
-Para volver a usar la imagen construida localmente:
-
-```powershell
-Remove-Item Env:M8_IMAGE -ErrorAction SilentlyContinue
-```
-
-### Pruebas de carga de M8
-
-Cada integrante puede clonar esta rama, crear su propio `.env` local y levantar
-el Compose anterior. M8 escucha en `http://localhost:3000` de **esa PC**; la
-imagen de M8 sola no incluye PostgreSQL, Redis ni RabbitMQ. Para comprobar el
-entorno antes de cargarlo:
-
-```powershell
+docker compose --env-file .env up -d --build --wait
 docker compose --env-file .env ps
 Invoke-RestMethod http://localhost:3000/health/ready
 ```
 
-M8 expone `GET /metrics`. La [guía de observabilidad](docs/guia-observabilidad-y-comandos.md)
-explica cómo ejecutar el smoke HTTP de k6 y habilitar Grafana Alloy para enviar
-las métricas a Grafana Cloud. El smoke no sustituye las pruebas de RabbitMQ ni
-una prueba de carga con varios usuarios virtuales.
+Compose construye `modulo-8-m8-app:local` e inicia `m8-app` y sus dependencias. El puerto HTTP del host es `3000` por defecto; se cambia con `M8_HOST_PORT`. La URL interna de otros contenedores de esta red Compose es `http://m8-app:3000`; en la rama común se confirmará el nombre final de servicio.
 
-## Calidad e infraestructura
+- `/health/live`: confirma que el proceso responde.
+- `/health/ready` y `/health`: indican si M8 puede atender con sus dependencias.
+- `/docs`: documentación interactiva de la API.
+- `/openapi.yaml`: contrato HTTP integrado.
+- `/metrics`: métricas que lee Grafana Alloy.
 
-### Explorar PostgreSQL como tablas
+Tras cambiar código, reconstruí la aplicación con `docker compose --env-file .env up -d --build m8-app`. Para diagnosticar: `docker compose --env-file .env ps` y `docker compose --env-file .env logs --tail=100 m8-app`.
 
-Prisma Studio es una interfaz visual de desarrollo para ver y filtrar filas de
-PostgreSQL. Se conecta a la base M8 existente y reconoce sus tablas; no usamos
-Prisma ORM en la aplicación ni cambiamos las migraciones SQL. Corre en la PC,
-fuera del contenedor M8. Necesita que el servicio PostgreSQL de Compose esté
-levantado y que `.env` tenga `POSTGRES_USER`, `POSTGRES_PASSWORD`,
-`POSTGRES_DB` y `POSTGRES_HOST_PORT`.
+Para detener sin borrar datos: `docker compose --env-file .env down --remove-orphans`. **No uses `down -v` para una demostración:** elimina el volumen PostgreSQL.
 
-Desde `modulo-8/`:
+## PostgreSQL, Redis y RabbitMQ
+
+La base local se llama `m8` por defecto. Sus esquemas separan `messaging`, `notifications`, `notification_delivery`, `receipts` y `support`. PostgreSQL es la fuente de verdad de avisos, intentos, comprobantes y tickets. Redis guarda QR que vencen; RabbitMQ transporta mensajes.
+
+Para inspeccionar tablas sin cambiar la aplicación:
 
 ```powershell
 docker compose --env-file .env up -d postgres
-pnpm install --frozen-lockfile
 pnpm run db:studio
 ```
 
-Abrí la dirección local que imprime Studio. Si el puerto habitual está ocupado,
-puede elegir otro, como `http://localhost:51212`. Si aparece
-**Could not load schema metadata**, comprobá primero que Docker Desktop esté
-iniciado y que `docker compose --env-file .env ps postgres` muestre PostgreSQL
-en ejecución; después pulsá **Retry** en Studio. En el panel de tablas vas a
-encontrar los esquemas `messaging`, `notification_delivery`, `notifications`,
-`receipts` y `support`.
-Por ejemplo, abrí `receipts.receipts` para ver los comprobantes. Para detener
-Studio, presioná `Ctrl+C` en la terminal donde se inició. La configuración
-`infra/db-ui/prisma.config.ts` construye la conexión a partir del `.env` local;
-no se guarda una URL con contraseña en Git. La interfaz permite editar filas,
-por lo que corresponde usarla sólo con datos de desarrollo.
+Prisma Studio imprime una URL local; elegí el esquema arriba. La interfaz permite editar filas, así que usala sólo para desarrollo. RabbitMQ Management está en `http://localhost:15672` y usa las credenciales privadas de `.env`.
 
-Con el entorno levantado se pueden ejecutar las verificaciones de demostración:
+El evento externo de M3 llega a `m8.notificaciones.documento-registrado`. M8 mantiene `mobility.events` y su DLX para mensajería interna. Los contratos exactos están en el [catálogo](contracts/events/catalogo-eventos-v1.md). RF8.6 no recibe `documento.registrado` por una API REST.
+
+## Pruebas
 
 ```powershell
-pnpm run test:infrastructure
+pnpm run build
+pnpm run test
 pnpm run test:e2e
-pnpm run test:resiliencia
+pnpm run check:secrets
 ```
 
-`test:infrastructure` verifica PostgreSQL y los schemas lógicos de M8, Redis,
-RabbitMQ, el exchange `mobility.events` y su DLX. `test:e2e` comprueba los
-flujos HTTP integrados y luego la recuperación frente a caídas controladas de
-dependencias. Estas pruebas pueden demorar varios minutos porque detienen y
-restauran infraestructura de forma controlada; no deben ejecutarse en paralelo
-con otra demostración manual.
+`test` prepara dependencias locales, prueba paquetes y verifica el arranque integrado. `test:e2e` usa Compose y provoca fallas controladas; ejecutalo sin otras pruebas o demos simultáneas. Los tests pueden insertar datos de ejemplo. También existen `test:qr`, `test:receipts`, `test:support`, `test:delivery`, `test:notifications` y `test:infrastructure`.
 
-La guía paso a paso de demostración está en [`../test.md`](../test.md), el
-procedimiento operativo ampliado en [docs/RUNBOOK.md](docs/RUNBOOK.md) y una
-demo manual específica de Support en
-[guía de soporte](docs/rf8.5/generaciontickets.md).
+`pnpm run smoke:http` recorre las rutas HTTP. Para RF8.1/RF8.6, que procesan RabbitMQ, `pnpm run scenario:m3` permite revisar Inbox, aviso e intento de entrega. La [guía de escenarios](docs/matriz-escenarios-observabilidad.md) indica qué probar por RF.
 
-Antes de preparar commits, ejecutar `pnpm run check:secrets`. La plantilla
-`.env.example` sólo contiene marcadores para las credenciales; el `.env` real
-permanece ignorado por Git. El CI genera sus propias claves temporales y repite
-esa comprobación.
+## Carga y Grafana Cloud
 
-## Apagado
+M8 expone métricas en `/metrics`. El perfil opcional `observability` inicia Grafana Alloy y envía las métricas a Grafana Cloud cuando las tres variables `GRAFANA_CLOUD_*` están configuradas de forma privada en `.env`:
 
 ```powershell
-docker compose --env-file .env down --remove-orphans
+docker compose --env-file .env --profile observability up -d alloy
+pnpm run smoke:http
 ```
 
-Este comando elimina los contenedores y la red del entorno, pero conserva las
-imágenes descargadas y el volumen de desarrollo de PostgreSQL.
+Los scripts k6 viven en `tests/stress/`. `pnpm run load:ramp45` incrementa usuarios durante unos 45 segundos; `pnpm run load:capacity` busca una zona de saturación. **Los resultados describen el Compose local con simuladores**, no certifican la capacidad del sistema integrado. El [paso a paso](docs/guia-observabilidad-y-comandos.md) explica paneles, límites y escenarios.
+
+## Frontend e integración común
+
+Las vistas que M8 puede aportar hoy son comprobantes (RF8.3/8.4), soporte (RF8.5) y dispositivos PUSH (RF8.7). El frontend común debe aportar navegación, sesión de M1, autorización y estilo compartido. El código de las vistas está en `frontend/m8.js`; `frontend/preview/` es sólo una herramienta local. RF8.2 se muestra en el viaje de M6, RF8.6 no necesita pantalla y RF8.1 requiere un endpoint seguro de consulta antes de prometer una bandeja de avisos. Ver la [guía del frontend](frontend/README.md).
+
+Queda por acreditar en la rama común el flujo con **M1/M2/M3/M5/M6/M7 reales**, infraestructura compartida, bases separadas y un proveedor PUSH real con token válido. Hay que verificar los destinatarios numéricos de M1, las preferencias reales de M2, las rutas QR con M6 sin delegar el cambio de estado, el pago real de M7 y que repetir un `messageId` no duplique aviso ni entrega. Las pruebas locales con simuladores no reemplazan esa prueba conjunta.
