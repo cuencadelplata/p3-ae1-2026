@@ -1,0 +1,78 @@
+{
+  "runs": [
+    {
+      "scenario": "smoke",
+      "runId": "revision-smoke-20261117",
+      "code": 99
+    },
+    {
+      "scenario": "activation",
+      "runId": "revision-activation-20261117",
+      "code": 0
+    }
+  ],
+  "telemetry": {
+    "services": [
+      "m7-stub",
+      "m5-stub",
+      "m9-reservas"
+    ],
+    "metrics": [
+      "http.client.request.duration",
+      "http.server.active_requests",
+      "http.server.request.duration",
+      "m9.cache.requests",
+      "m9.db.operation.duration",
+      "m9.dependency.request.duration",
+      "m9.dependency.requests",
+      "m9.dependency.up",
+      "m9.inbox.results",
+      "m9.lock.acquisitions",
+      "m9.messaging.consumed",
+      "m9.messaging.process.duration",
+      "m9.messaging.published",
+      "m9.outbox.batch.duration",
+      "m9.outbox.failed",
+      "m9.outbox.oldest_pending.age",
+      "m9.outbox.pending",
+      "m9.outbox.published",
+      "m9.rabbitmq.queue.consumers",
+      "m9.rabbitmq.queue.messages",
+      "m9.redis.operation.duration",
+      "m9.reservation.activation.delay",
+      "m9.reservation.activation.resolution",
+      "m9.reservation.operations",
+      "m9.reservation.transitions",
+      "m9.reservations.by_status",
+      "m9.reservations.oldest_activating.age",
+      "m9.reservations.oldest_overdue.age",
+      "m9.reservations.overdue_pending",
+      "m9.reservations.stuck_activating",
+      "m9.scheduler.last_success.timestamp",
+      "m9.scheduler.reservations.found",
+      "m9.scheduler.run.duration",
+      "m9.scheduler.runs",
+      "m9.state_collector.up",
+      "nodejs.eventloop.delay.max",
+      "nodejs.eventloop.delay.mean",
+      "nodejs.eventloop.delay.min",
+      "nodejs.eventloop.delay.p50",
+      "nodejs.eventloop.delay.p90",
+      "nodejs.eventloop.delay.p99",
+      "nodejs.eventloop.delay.stddev",
+      "nodejs.eventloop.time",
+      "nodejs.eventloop.utilization",
+      "process.cpu.time",
+      "process.memory.usage",
+      "v8js.gc.duration",
+      "v8js.memory.heap.space.available_size",
+      "v8js.memory.heap.space.physical_size",
+      "v8js.memory.heap.space.size",
+      "v8js.memory.heap.used",
+      "v8js.resource.active"
+    ],
+    "logs": 14,
+    "spans": 4131
+  },
+  "note": "Receptor OTLP local; no acredita Grafana Cloud. Generador y servicios comparten equipo."
+}

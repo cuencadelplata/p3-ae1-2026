@@ -1,0 +1,74 @@
+// Grafana Alloy — recolector local de M9 (AE4).
+//
+// Recorrido de las señales (una sola vía por señal, sin Prometheus):
+//   M9 / m5-stub / m7-stub  --OTLP/HTTP:4318-->  Alloy  --OTLP/HTTP + Basic Auth-->  Grafana Cloud
+//     trazas  -> Tempo
+//     métricas -> Mimir (se consultan con PromQL desde Grafana)
+//     logs    -> Loki (atributos como structured metadata, NO como labels indexados)
+//
+// Credenciales: solo por variables de entorno (archivo local ignorado .env.grafana-cloud).
+
+otelcol.receiver.otlp "apps" {
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    metrics = [otelcol.processor.memory_limiter.default.input]
+    logs    = [otelcol.processor.memory_limiter.default.input]
+    traces  = [otelcol.processor.memory_limiter.default.input]
+  }
+}
+
+// Protege al recolector si Grafana Cloud no responde y se acumulan datos.
+otelcol.processor.memory_limiter "default" {
+  check_interval = "5s"
+  limit          = "256MiB"
+  spike_limit    = "64MiB"
+
+  output {
+    metrics = [otelcol.processor.transform.labels.input]
+    logs    = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.batch.default.input]
+  }
+}
+
+// Copia el entorno del recurso a cada punto de métrica para poder filtrar por
+// `deployment_environment` en los dashboards. Es un valor de cardinalidad 1 por despliegue.
+otelcol.processor.transform "labels" {
+  error_mode = "ignore"
+
+  metric_statements {
+    context    = "datapoint"
+    statements = [
+      `set(attributes["deployment.environment.name"], resource.attributes["deployment.environment.name"])`,
+      `set(attributes["service.name"], resource.attributes["service.name"])`,
+    ]
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  timeout = "5s"
+
+  output {
+    metrics = [otelcol.exporter.otlphttp.grafana_cloud.input]
+    logs    = [otelcol.exporter.otlphttp.grafana_cloud.input]
+    traces  = [otelcol.exporter.otlphttp.grafana_cloud.input]
+  }
+}
+
+otelcol.auth.basic "grafana_cloud" {
+  username = sys.env("GRAFANA_CLOUD_OTLP_INSTANCE_ID")
+  password = sys.env("GRAFANA_CLOUD_OTLP_TOKEN")
+}
+
+otelcol.exporter.otlphttp "grafana_cloud" {
+  client {
+    endpoint = sys.env("GRAFANA_CLOUD_OTLP_ENDPOINT")
+    auth     = otelcol.auth.basic.grafana_cloud.handler
+  }
+}

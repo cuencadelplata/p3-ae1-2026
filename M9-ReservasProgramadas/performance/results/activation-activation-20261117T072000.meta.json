@@ -1,0 +1,25 @@
+{
+  "scenario": "activation",
+  "runId": "activation-20261117T072000",
+  "startedAt": "2026-11-17T07:20:03.195Z",
+  "mode": "run local",
+  "generator": "contenedor grafana/k6:2.3.0 en red m9-reservas-programadas_reservas-network",
+  "k6Version": "k6 v2.3.0 (commit/e088784614, go1.27.1, linux/amd64)",
+  "baseUrl": "http://m9-reservas:3000",
+  "parameters": {
+    "BASE_URL": "http://m9-reservas:3000",
+    "RUN_ID": "activation-20261117T072000",
+    "SCENARIO_NAME": "activation"
+  },
+  "host": {
+    "platform": "win32 10.0.26300",
+    "cpus": 8,
+    "cpuModel": "AMD Ryzen 3 5300U with Radeon Graphics         ",
+    "totalMemoryGb": 5.9
+  },
+  "generatorSharesMachineWithApp": true,
+  "note": "Generador y aplicación comparten equipo: los resultados incluyen esa contención.",
+  "finishedAt": "2026-11-17T07:20:46.435Z",
+  "exitCode": 0,
+  "thresholdsPassed": true
+}

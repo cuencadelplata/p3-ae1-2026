@@ -1,0 +1,16 @@
+{
+  "totalReservas": 21,
+  "respuestaQueConsumeLaPantalla": {
+    "page": 1,
+    "cantidad": 20
+  },
+  "paginaQueLaPantallaNoSolicita": {
+    "page": 2,
+    "cantidad": 1
+  },
+  "logOTLP": {
+    "body": "http_request",
+    "tieneAtributoMessage": false
+  },
+  "assertions": "OK: ambos hallazgos reproducidos con el código compilado y repositorio en memoria"
+}
