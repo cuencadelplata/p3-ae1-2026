@@ -1,4 +1,8 @@
+import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { join, resolve } from 'node:path';
+import { observarSolicitud, responderMetricas } from '../observabilidad/http.js';
+import { asociarViaje, logger, requestIdActual } from '../observabilidad/logger.js';
 import { BadGatewayError, ServiceUnavailableError } from './errors.js';
 
 interface UpstreamResponse {
@@ -10,13 +14,23 @@ export interface ViajesApiClient {
   crearViaje(input: { clienteId: string; origen: string; destino: string }): Promise<UpstreamResponse>;
   finalizarViaje(id: string, input: Record<string, unknown>): Promise<UpstreamResponse>;
   obtenerHistorial(id: string): Promise<UpstreamResponse>;
+  /** RF-6.7: registro de viajes filtrado (query ya saneada). */
+  buscarViajes?(query: URLSearchParams): Promise<UpstreamResponse>;
 }
+
+/** Parámetros que la fachada reenvía al registro de viajes; el resto se descarta. */
+export const FILTROS_REGISTRO = ['clienteId', 'conductorId', 'estado', 'limit', 'offset'] as const;
 
 export class HttpViajesApiClient implements ViajesApiClient {
   constructor(private readonly baseUrl: string) {}
 
   crearViaje(input: { clienteId: string; origen: string; destino: string }): Promise<UpstreamResponse> {
     return this.request('/api/viajes', 'POST', input);
+  }
+
+  buscarViajes(query: URLSearchParams): Promise<UpstreamResponse> {
+    const texto = query.toString();
+    return this.request(`/api/viajes${texto ? `?${texto}` : ''}`, 'GET');
   }
 
   finalizarViaje(id: string, input: Record<string, unknown>): Promise<UpstreamResponse> {
@@ -30,9 +44,14 @@ export class HttpViajesApiClient implements ViajesApiClient {
   private async request(path: string, method: 'GET' | 'POST', input?: unknown): Promise<UpstreamResponse> {
     let response: Response;
     try {
+      const requestId = requestIdActual();
       response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}${path}`, {
         method,
-        headers: method === 'POST' ? { 'content-type': 'application/json' } : undefined,
+        headers: {
+          ...(method === 'POST' ? { 'content-type': 'application/json' } : {}),
+          // Mismo X-Request-Id en la fachada y en Viajes para correlacionar logs.
+          ...(requestId ? { 'x-request-id': requestId } : {}),
+        },
         body: method === 'POST' ? JSON.stringify(input) : undefined,
         signal: AbortSignal.timeout(5000),
       });
@@ -57,13 +76,79 @@ export interface ViajeApiOptions {
 }
 
 export function createViajeApi(options: ViajeApiOptions): Server {
-  return createServer(async (request, response) => {
+  return createServer((request, response) => {
+    const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
+    observarSolicitud(request, response, () => rutaParametrizada(pathname), () => {
+      void atender(options, request, response, pathname);
+    });
+  });
+}
+
+/** Rutas sin ids, para que las métricas no creen una serie por viaje. */
+function rutaParametrizada(pathname: string): string {
+  if (pathname.startsWith('/api/viajes/')) {
+    return pathname.replace(/^\/api\/viajes\/[^/]+/, '/api/viajes/:id');
+  }
+  if (['/', '/health', '/metrics', '/api/viajes'].includes(pathname) || ARCHIVOS_FRONT[pathname]) return pathname;
+  return 'sin_ruta';
+}
+
+// Front de RF-6.4/6.7. Lista cerrada de archivos: no se sirve ninguna otra ruta del disco.
+const ARCHIVOS_FRONT: Record<string, { archivo: string; tipo: string }> = {
+  '/': { archivo: 'index.html', tipo: 'text/html; charset=utf-8' },
+  '/registro.js': { archivo: 'registro.js', tipo: 'text/javascript; charset=utf-8' },
+  '/registro.css': { archivo: 'registro.css', tipo: 'text/css; charset=utf-8' },
+};
+const DIRECTORIO_FRONT = resolve(process.env.FRONTEND_RF64_RF67_DIR ?? 'frontend-rf-6.4-6.7');
+
+async function servirFront(response: ServerResponse, pathname: string): Promise<boolean> {
+  const entrada = ARCHIVOS_FRONT[pathname];
+  if (!entrada) return false;
+  try {
+    const contenido = await readFile(join(DIRECTORIO_FRONT, entrada.archivo));
+    response.writeHead(200, {
+      'content-type': entrada.tipo,
+      'cache-control': 'no-cache',
+      'x-content-type-options': 'nosniff',
+      'content-security-policy': "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; frame-ancestors 'none'",
+    });
+    response.end(contenido);
+  } catch {
+    send(response, 404, { error: 'Front no disponible' });
+  }
+  return true;
+}
+
+async function atender(
+  options: ViajeApiOptions,
+  request: IncomingMessage,
+  response: ServerResponse,
+  pathname: string,
+): Promise<void> {
     try {
-      if (request.method === 'GET' && request.url === '/health') {
+      if (request.method === 'GET' && pathname === '/health') {
         return send(response, 200, { status: 'ok' });
       }
 
-      if (request.method === 'POST' && request.url === '/api/viajes') {
+      if (request.method === 'GET' && pathname === '/metrics') {
+        return responderMetricas(response);
+      }
+
+      if (request.method === 'GET' && await servirFront(response, pathname)) return;
+
+      if (request.method === 'GET' && pathname === '/api/viajes') {
+        if (!options.viajesApi.buscarViajes) return send(response, 501, { error: 'Búsqueda no disponible' });
+        const recibidos = new URL(request.url ?? '/', 'http://localhost').searchParams;
+        const query = new URLSearchParams();
+        for (const nombre of FILTROS_REGISTRO) {
+          const valor = recibidos.get(nombre);
+          if (valor) query.set(nombre, valor);
+        }
+        const result = await options.viajesApi.buscarViajes(query);
+        return send(response, result.status, result.body);
+      }
+
+      if (request.method === 'POST' && pathname === '/api/viajes') {
         const input = await readJson(request);
         const { clienteId, origen, destino } = input;
         if (
@@ -107,10 +192,11 @@ export function createViajeApi(options: ViajeApiOptions): Server {
         });
       }
 
-      const match = request.url?.match(/^\/api\/viajes\/([^/]+)\/(finalizacion|historial-transiciones)$/);
+      const match = pathname.match(/^\/api\/viajes\/([^/]+)\/(finalizacion|historial-transiciones)$/);
       if (!match) return send(response, 404, { error: 'Ruta no encontrada' });
 
       const id = decodeURIComponent(match[1]);
+      asociarViaje(id);
       if (request.method === 'POST' && match[2] === 'finalizacion') {
         const input = await readJson(request);
         const result = await options.viajesApi.finalizarViaje(id, input);
@@ -125,20 +211,19 @@ export function createViajeApi(options: ViajeApiOptions): Server {
       return send(response, 404, { error: 'Ruta no encontrada' });
     } catch (error) {
       if (error instanceof ServiceUnavailableError) {
-        console.error('ERROR conectando con el módulo Viajes:', error.message);
+        logger.error({ causa: error.message }, 'No se pudo conectar con el módulo Viajes');
         return send(response, 503, { error: error.message });
       }
       if (error instanceof BadGatewayError) {
-        console.error('ERROR en la respuesta del módulo Viajes:', error.message);
+        logger.error({ causa: error.message }, 'Respuesta inválida del módulo Viajes');
         return send(response, 502, { error: error.message });
       }
       if (error instanceof SyntaxError) {
         return send(response, 400, { error: 'El cuerpo debe contener JSON válido' });
       }
-      console.error('ERROR procesando solicitud RF-6.4/6.7:', error);
+      logger.error({ err: error }, 'Error procesando solicitud RF-6.4/6.7');
       return send(response, 500, { error: 'Error interno del servidor' });
     }
-  });
 }
 
 async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {

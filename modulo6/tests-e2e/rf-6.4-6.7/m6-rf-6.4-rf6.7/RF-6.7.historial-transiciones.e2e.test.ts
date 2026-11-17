@@ -27,6 +27,24 @@ describe('RF-6.7 - Historial de transiciones en Docker', () => {
     expect(body.historial.every(({ timestamp }) => !Number.isNaN(Date.parse(timestamp)))).toBe(true);
   });
 
+  it('el registro de la fachada filtra por conductor y cliente, y sirve el front', async () => {
+    const sufijo = Date.now();
+    const v1 = await crearViaje({ clienteId: `E2E-67-reg-a-${sufijo}`, iniciar: true });
+    await crearViaje({ clienteId: `E2E-67-reg-b-${sufijo}`, iniciar: true });
+
+    const porConductor = await fetch(`${apiUrl}/api/viajes?conductorId=conductor-E2E-67-reg-a-${sufijo}`);
+    const cuerpo = await porConductor.json() as { total: number; viajes: Array<{ id: string; estado: string; historialTransiciones: unknown[] }> };
+    expect(porConductor.status).toBe(200);
+    expect(cuerpo.total).toBe(1);
+    expect(cuerpo.viajes[0]).toMatchObject({ id: v1, estado: 'EN_CURSO' });
+    expect(cuerpo.viajes[0].historialTransiciones).toHaveLength(4);
+
+    const front = await fetch(`${apiUrl}/`);
+    expect(front.status).toBe(200);
+    expect(await front.text()).toContain('Registro de viajes');
+    expect((await fetch(`${apiUrl}/metrics`)).status).toBe(200);
+  });
+
   it('un viaje recién creado tiene sólo la transición de solicitud', async () => {
     const viajeId = await crearViaje({ clienteId: `E2E-67-nuevo-${Date.now()}` });
 
