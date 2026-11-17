@@ -215,7 +215,11 @@ services:
       rabbitmq:
         condition: service_healthy
 
-  # Frontend de pruebas (nginx). Hace proxy de /api/ hacia http://api:3000
+  # Frontends React de M3-Conductor/src/app (alta-conductor.tsx y valoraciones.tsx),
+  # compilados en Dockerfile.client y servidos por Nginx en :4000.
+  #   http://localhost:4000/alta-conductor.html
+  #   http://localhost:4000/valoraciones.html
+  # Nginx hace proxy de /api/ hacia http://api:3000
   m3-conductor-frontend:
     build:
       context: ./M3-Conductor
