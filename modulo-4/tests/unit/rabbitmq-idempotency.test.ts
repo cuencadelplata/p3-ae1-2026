@@ -66,7 +66,7 @@ describe('RabbitMQ, Adaptación M6 e Idempotencia (RNF-07 / RNF-08 / Requerimien
           tripId: 'trip-99',
           driverId: 100, // ID entero
           eventType: 'viaje.iniciado', // Adaptación propuesta M6
-          timestamp: new Date().toISOString()
+          occurredAt: new Date().toISOString()
         })
       ),
       properties: { headers: {} },

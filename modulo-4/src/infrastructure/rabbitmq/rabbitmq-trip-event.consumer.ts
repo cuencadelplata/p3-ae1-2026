@@ -93,7 +93,7 @@ export class RabbitMQTripEventConsumer {
         tripId,
         driverId,
         eventType: rawEventType as TripEvent['eventType'],
-        timestamp: String(payload.timestamp || new Date().toISOString())
+        timestamp: String(payload.occurredAt || payload.timestamp || new Date().toISOString())
       };
 
       // 2. Procesar la actualización en Redis y emitir disponibilidad (RNF-07)
