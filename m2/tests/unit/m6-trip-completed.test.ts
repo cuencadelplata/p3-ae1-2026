@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { tripEventSchema } from '../../src/direcciones/domain';
-import { sincronizarViajeCompletado } from '../../src/direcciones/importar-viaje';
-import { modulo6Client, Modulo6UnavailableError } from '../../src/clients/modulo6.client';
+import { sincronizarViajeCompletado, importarViaje } from '../../src/direcciones/importar-viaje';
+import { modulo6Client, Modulo6UnavailableError, TripNotFoundError } from '../../src/clients/modulo6.client';
 
 // Mismo sobre que publica M6 en mobility.events / trip.completed
 // (modulo6/src/rf-6.1-6.2-6.3/services/eventos-viaje.service.ts, eventosViajeFinalizado).
@@ -99,6 +99,51 @@ describe('sincronizarViajeCompletado', () => {
     vi.spyOn(modulo6Client, 'obtenerViajeDeCliente').mockResolvedValue(m6Trip(event.viajeId, { clienteId: '99' }) as any);
     const service = { recordJourney: vi.fn() };
     await expect(sincronizarViajeCompletado(event, service as any)).rejects.toMatchObject({ code: 'M6_INVALID_CONTRACT' });
+    expect(service.recordJourney).not.toHaveBeenCalled();
+  });
+});
+
+describe('importarViaje (importación manual) contra M6 real', () => {
+  // GET /api/viajes/{id} de M6 real: sin origen ni destino
+  const legacy = (id: string) => ({ id, clienteId: '42', conductorId: '7', estado: 'COMPLETADO' });
+
+  it('si el viaje por id no trae direcciones, las busca en el historial del cliente', async () => {
+    const viajeId = randomUUID();
+    vi.spyOn(modulo6Client, 'obtenerViajePorId').mockResolvedValue(legacy(viajeId) as any);
+    const historial = vi.spyOn(modulo6Client, 'obtenerViajeDeCliente').mockResolvedValue(m6Trip(viajeId) as any);
+    const service = { recordJourney: vi.fn().mockResolvedValue(undefined) };
+
+    const result = await importarViaje(viajeId, '42', 'corr-1', service as any);
+
+    expect(historial).toHaveBeenCalledWith('42', viajeId);
+    expect(result).toMatchObject({ viajeId, sincronizado: true, fechaReferencia: 'CREACION' });
+    expect(service.recordJourney).toHaveBeenCalledWith(expect.objectContaining({
+      viajeId, clienteId: '42',
+      origen: { direccion: 'Av. Siempre Viva 742', latitud: null, longitud: null },
+      destino: { direccion: 'Terminal de Ómnibus', latitud: null, longitud: null },
+    }));
+  });
+
+  it('si el viaje por id ya trae direcciones, no consulta el historial', async () => {
+    const viajeId = randomUUID();
+    vi.spyOn(modulo6Client, 'obtenerViajePorId').mockResolvedValue(m6Trip(viajeId) as any);
+    const historial = vi.spyOn(modulo6Client, 'obtenerViajeDeCliente');
+    const service = { recordJourney: vi.fn().mockResolvedValue(undefined) };
+
+    await importarViaje(viajeId, '42', 'corr-2', service as any);
+
+    expect(historial).not.toHaveBeenCalled();
+    expect(service.recordJourney).toHaveBeenCalledOnce();
+  });
+
+  it('traduce las fallas del historial a 404 y 503', async () => {
+    const viajeId = randomUUID();
+    const service = { recordJourney: vi.fn() };
+    vi.spyOn(modulo6Client, 'obtenerViajePorId').mockResolvedValue(legacy(viajeId) as any);
+    vi.spyOn(modulo6Client, 'obtenerViajeDeCliente').mockRejectedValueOnce(new TripNotFoundError(viajeId));
+    await expect(importarViaje(viajeId, '42', 'c', service as any)).rejects.toMatchObject({ status: 404, code: 'TRIP_NOT_FOUND' });
+    vi.spyOn(modulo6Client, 'obtenerViajeDeCliente').mockRejectedValueOnce(new Modulo6UnavailableError());
+    await expect(importarViaje(viajeId, '42', 'c', service as any)).rejects.toMatchObject({ status: 503, code: 'M6_UNAVAILABLE' });
     expect(service.recordJourney).not.toHaveBeenCalled();
   });
 });

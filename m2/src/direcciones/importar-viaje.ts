@@ -20,6 +20,18 @@ export async function importarViaje(viajeId:string,clienteId:string,correlationI
   if(raw?.id!==viajeId||typeof raw?.clienteId!=='string'||typeof raw?.estado!=='string')
     throw new ApiError(502,'M6_INVALID_CONTRACT','M6 devolvió un viaje inválido');
   if(raw.clienteId!==clienteId) throw new ApiError(404,'TRIP_NOT_FOUND','Viaje no encontrado');
+  // GET /api/viajes/{id} de M6 real no trae direcciones: se buscan en el historial del cliente.
+  if(raw.origen==null||raw.destino==null) {
+    try {raw=await modulo6Client.obtenerViajeDeCliente(clienteId,viajeId);}
+    catch(e) {
+      if(e instanceof TripNotFoundError) throw new ApiError(404,'TRIP_NOT_FOUND','Viaje no encontrado');
+      if(e instanceof Modulo6UnavailableError) throw new ApiError(503,'M6_UNAVAILABLE','M6 no está accesible. Tus direcciones guardadas siguen disponibles; reintentá la importación al recuperarse.');
+      throw e;
+    }
+    if(raw?.id!==viajeId||String(raw?.clienteId)!==clienteId||typeof raw?.estado!=='string')
+      throw new ApiError(502,'M6_INVALID_CONTRACT','M6 devolvió un viaje inválido');
+    raw={...raw,clienteId:String(raw.clienteId)};
+  }
   if(raw.estado.toLowerCase()!=='completado') throw new ApiError(409,'TRIP_NOT_COMPLETED','Sólo se importan direcciones de viajes completados para sugerir el regreso');
   const parsed=tripWithAddresses.safeParse(raw);
   if(!parsed.success) throw new ApiError(502,'M6_ADDRESSES_REQUIRED','M6 debe devolver origen y destino como texto o puntos válidos');
