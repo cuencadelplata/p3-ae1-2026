@@ -1,0 +1,221 @@
+services:
+  viajes:
+    image: p3-ae1-2026-modulo6:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "--import", "./dist/src/observabilidad/telemetria.js", "dist/src/rf-6.1-6.2-6.3/index.js"]
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # Trazas y logs OTLP hacia Alloy (perfil observability). Sin Alloy se descartan sin afectar la API.
+      OTEL_SERVICE_NAME: m6-viajes
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://alloy:4318}
+      M8_URL: http://simulador:3001
+      M8_QR_API_KEY: ${M8_QR_API_KEY:-}
+      M3_URL: http://simulador:3001
+      M4_URL: http://simulador:3001/api/v1
+      M7_URL: http://simulador:3001
+      # Clave interna acordada con M7; en entornos publicados se inyecta desde un secreto.
+      M7_API_KEY: ${M7_API_KEY:-m7-clave-local}
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      DB_HOST: tripdb
+      DB_PORT: 5432
+      DB_USER: m6
+      DB_PASSWORD: m6pass
+      DB_NAME: tripdb
+    depends_on:
+      tripdb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      simulador:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  cancelacion:
+    image: p3-ae1-2026-modulo6:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "dist/src/rf-6.5-6.6/service-server.js"]
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      RF6_API_URL: http://viajes:3000
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      viajes:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  fachada:
+    image: p3-ae1-2026-modulo6:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "--import", "./dist/src/observabilidad/telemetria.js", "dist/src/rf-6.4-6.7/server.js"]
+    ports:
+      # API RF-6.4/6.7 y front de registro de viajes: http://localhost:3002/
+      - "3002:3000"
+    environment:
+      PORT: 3000
+      RF6_API_URL: http://viajes:3000
+      OTEL_SERVICE_NAME: m6-fachada-rf-6.4-6.7
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://alloy:4318}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      viajes:
+        condition: service_healthy
+    restart: unless-stopped
+
+  simulador:
+    image: p3-ae1-2026-modulo6:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "dist/simulator/rf-6.4-6.7/m6-rf-6.4-rf6.7/server.js"]
+    environment:
+      M7_API_KEY: ${M7_API_KEY:-m7-clave-local}
+    expose:
+      - "3001"
+
+  tripdb:
+    image: p3-ae1-2026-modulo6-db:local
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: m6
+      POSTGRES_PASSWORD: m6pass
+      POSTGRES_DB: tripdb
+    volumes:
+      - tripdb-data-v3:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U m6 -d tripdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      # RabbitMQ abre el puerto AMQP sólo al terminar de arrancar. `rabbitmq-diagnostics ping`
+      # levanta una VM de Erlang por chequeo y en equipos cargados supera el timeout.
+      test: ["CMD-SHELL", "nc -z localhost 5672"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  # ---------- Observabilidad (opcional): docker compose --profile observability up -d ----------
+  # Alloy recibe métricas (scrape), trazas y logs (OTLP) de M6 y los envía al stack local
+  # y, con ALLOY_CONFIG=config.cloud.alloy y las credenciales del .env, también a Grafana Cloud.
+  alloy:
+    image: grafana/alloy:v1.5.1
+    profiles: ["observability"]
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data", "/etc/alloy/${ALLOY_CONFIG:-config.local.alloy}"]
+    volumes:
+      - ./observabilidad/alloy:/etc/alloy:ro
+    environment:
+      GRAFANA_CLOUD_PROM_URL: ${GRAFANA_CLOUD_PROM_URL:-}
+      GRAFANA_CLOUD_PROM_USER: ${GRAFANA_CLOUD_PROM_USER:-}
+      GRAFANA_CLOUD_OTLP_URL: ${GRAFANA_CLOUD_OTLP_URL:-}
+      GRAFANA_CLOUD_OTLP_USER: ${GRAFANA_CLOUD_OTLP_USER:-}
+      GRAFANA_CLOUD_TOKEN: ${GRAFANA_CLOUD_TOKEN:-}
+    ports:
+      - "${M6_ALLOY_PORT:-12345}:12345"
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    profiles: ["observability"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--web.enable-remote-write-receiver", "--storage.tsdb.retention.time=2d"]
+    volumes:
+      - ./observabilidad/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Conserva el historial de métricas aunque se recreen los contenedores.
+      - prometheus-data:/prometheus
+    ports:
+      - "${M6_PROMETHEUS_PORT:-9090}:9090"
+
+  loki:
+    image: grafana/loki:3.3.2
+    profiles: ["observability"]
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    ports:
+      - "${M6_LOKI_PORT:-3100}:3100"
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    profiles: ["observability"]
+    # Sólo para la demo local: la imagen escribe en /var/tempo con otro usuario.
+    user: "0"
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./observabilidad/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+    ports:
+      - "${M6_TEMPO_PORT:-3200}:3200"
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/m6-rf64-rf67.json
+    volumes:
+      - ./observabilidad/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observabilidad/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      # Grafana local: http://localhost:3003 (admin / GRAFANA_ADMIN_PASSWORD)
+      - "${M6_GRAFANA_PORT:-3003}:3000"
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+
+volumes:
+  tripdb-data-v3:
+  prometheus-data:
+
+networks:
+  default:
+    name: m6_viajes_default

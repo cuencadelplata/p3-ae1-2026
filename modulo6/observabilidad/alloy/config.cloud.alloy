@@ -1,0 +1,86 @@
+// Grafana Alloy de M6 — modo Grafana Cloud.
+// Envía lo mismo que config.local.alloy al stack local y, además, a Grafana Cloud:
+// - Métricas por Prometheus remote write (como M1, M2, M7 y M8).
+// - Trazas y logs por el OTLP gateway de Grafana Cloud.
+// Las credenciales se leen del entorno (.env privado, nunca en Git):
+//   GRAFANA_CLOUD_PROM_URL, GRAFANA_CLOUD_PROM_USER  → Prometheus remote write
+//   GRAFANA_CLOUD_OTLP_URL, GRAFANA_CLOUD_OTLP_USER  → OTLP gateway (trazas y logs)
+//   GRAFANA_CLOUD_TOKEN → Access Policy token con metrics:write, logs:write y traces:write
+
+prometheus.scrape "m6" {
+  job_name        = "m6"
+  scrape_interval = "15s"
+  scrape_timeout  = "5s"
+  metrics_path    = "/metrics"
+  targets = [
+    { "__address__" = "viajes:3000", "instance" = "viajes" },
+    { "__address__" = "fachada:3000", "instance" = "fachada-rf-6.4-6.7" },
+  ]
+  forward_to = [
+    prometheus.remote_write.local.receiver,
+    prometheus.remote_write.grafana_cloud.receiver,
+  ]
+}
+
+prometheus.remote_write "local" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_CLOUD_PROM_URL")
+    basic_auth {
+      username = sys.env("GRAFANA_CLOUD_PROM_USER")
+      password = sys.env("GRAFANA_CLOUD_TOKEN")
+    }
+  }
+}
+
+otelcol.receiver.otlp "m6" {
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  output {
+    traces = [otelcol.processor.batch.m6.input]
+    logs   = [otelcol.processor.batch.m6.input]
+  }
+}
+
+otelcol.processor.batch "m6" {
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input, otelcol.exporter.otlphttp.grafana_cloud.input]
+    logs   = [otelcol.exporter.otlphttp.loki.input, otelcol.exporter.otlphttp.grafana_cloud.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
+    }
+  }
+}
+
+otelcol.exporter.otlphttp "loki" {
+  client {
+    endpoint = "http://loki:3100/otlp"
+  }
+}
+
+otelcol.auth.basic "grafana_cloud" {
+  username = sys.env("GRAFANA_CLOUD_OTLP_USER")
+  password = sys.env("GRAFANA_CLOUD_TOKEN")
+}
+
+otelcol.exporter.otlphttp "grafana_cloud" {
+  client {
+    endpoint = sys.env("GRAFANA_CLOUD_OTLP_URL")
+    auth     = otelcol.auth.basic.grafana_cloud.handler
+  }
+}
