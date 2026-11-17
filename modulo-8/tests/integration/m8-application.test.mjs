@@ -133,6 +133,20 @@ test('expone /metrics en formato Prometheus, clasifica por RF y excluye /health 
   receipts.router.get('/api/v1/receipts/:tripId/pdf', (_req, res) => res.status(200).send('PDF'));
 
   const metricsTracker = createM8MetricsTracker('m8-test');
+  const initialMetrics = await metricsTracker.register.metrics();
+  const initialTicketSeries = initialMetrics.split('\n').find((line) =>
+    line.startsWith('m8_business_operations_total{')
+    && line.includes('rf="RF8.5"')
+    && line.includes('operation="Creación de ticket de soporte"')
+    && line.includes('result="Abierto"'));
+  assert.match(initialTicketSeries, / 0$/);
+  const initialFiscalErrorSeries = initialMetrics.split('\n').find((line) =>
+    line.startsWith('http_requests_total{')
+    && line.includes('method="POST"')
+    && line.includes('route="/api/v1/receipts"')
+    && line.includes('status_code="503"')
+    && line.includes('rf="RF8.3"'));
+  assert.match(initialFiscalErrorSeries, / 0$/);
   const application = createM8ApplicationFromModules({
     receipts,
     qr,
