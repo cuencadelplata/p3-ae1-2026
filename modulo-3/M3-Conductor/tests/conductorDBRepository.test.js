@@ -17,9 +17,39 @@ mockModule(supabasePath, getSupabaseClient);
 clearModule(repoPath);
 const conductorDBRepository = require('../src/repositories/conductorDBRepository');
 
+// Sin datos mock sembrados: los conductores se dan de alta por el propio repositorio.
+test.beforeAll(async () => {
+  getSupabaseClient.mockReturnValue(null);
+  await conductorDBRepository.crearConductor({ usuarioID: 'cond_001', ciudad: 'Corrientes', tipovehiculo: 'auto', habilitado: 'activo' });
+  await conductorDBRepository.crearConductor({ usuarioID: 'cond_002', ciudad: 'Resistencia', tipovehiculo: 'moto', habilitado: 'activo' });
+  await conductorDBRepository.crearConductor({ usuarioID: 'cond_003', ciudad: 'Posadas', tipovehiculo: 'auto' });
+});
+
 test.beforeEach(() => {
   clearAllMocks(getSupabaseClient);
   getSupabaseClient.mockReturnValue(null);
+});
+
+test.describe('conductorDBRepository.crearConductor', () => {
+  test('da de alta en memoria con habilitado=pendiente por defecto', async () => {
+    await conductorDBRepository.crearConductor({ usuarioID: 'cond_alta_1', ciudad: 'Posadas', tipovehiculo: 'moto' });
+    expect(await conductorDBRepository.obtenerHabilitadoPorId('cond_alta_1')).toEqual({
+      usuarioID: 'cond_alta_1',
+      habilitado: 'pendiente'
+    });
+  });
+
+  test('hace upsert en Supabase cuando está configurado', async () => {
+    const upsert = createMockFn().mockResolvedValue({ error: null });
+    const from = createMockFn().mockReturnValue({ upsert });
+    getSupabaseClient.mockReturnValue({ from });
+
+    await conductorDBRepository.crearConductor({ usuarioID: 'cond_alta_2', ciudad: 'Corrientes', tipovehiculo: 'auto' });
+
+    expect(from.mock.calls[0]).toEqual(['conductores']);
+    expect(upsert.mock.calls[0][0]).toMatchObject({ usuario_id: 'cond_alta_2', tipo_vehiculo: 'auto', habilitado: 'pendiente' });
+    expect(upsert.mock.calls[0][1]).toEqual({ onConflict: 'usuario_id' });
+  });
 });
 
 test.describe('conductorDBRepository (RF 3.1 - Persistencia y fallback en memoria)', () => {

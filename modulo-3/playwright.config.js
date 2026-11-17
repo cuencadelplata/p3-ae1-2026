@@ -70,6 +70,11 @@ module.exports = defineConfig({
       use: { baseURL: process.env.CONDUCTOR_URL || "http://127.0.0.1:5000" },
     },
     {
+      name: "m1-m3-conductor",
+      testMatch: "conductor/e2e/m1-conductor.spec.js",
+      use: { baseURL: process.env.CONDUCTOR_URL || "http://127.0.0.1:5000" },
+    },
+    {
       name: "m1-m3-valoraciones",
       testMatch: "conductor/e2e/m1-valoraciones.spec.js",
       use: { baseURL: process.env.CONDUCTOR_URL || "http://127.0.0.1:5000" },
