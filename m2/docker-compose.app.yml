@@ -1,7 +1,8 @@
-# Módulo 2 (Clientes) para la app integrada del grupo.
+# Módulo 2 (Clientes) para la app integrada del grupo (stack movilidad-urbana).
 # Esquema acordado: RabbitMQ y Redis compartidos, base de datos propia por módulo,
-# una imagen por módulo. Este archivo NO levanta Redis ni RabbitMQ: los define el
-# docker-compose.yml de la raíz con los nombres de servicio "redis" y "rabbitmq".
+# una imagen por módulo. Este archivo NO levanta Redis ni RabbitMQ: usa los "redis" y
+# "rabbitmq" del stack común (hoy definidos por M9), en la red reservas-network.
+# m2-api y m2-worker se unen a esa red; m2-db queda solo en la red interna de M2.
 #
 # Uso desde el compose raíz:
 #   include:
@@ -18,9 +19,10 @@ x-m2-env: &m2-env
   DATABASE_URL: postgresql://postgres:${M2_POSTGRES_PASSWORD:-postgres}@m2-db:5432/profiles?schema=public&connection_limit=10&connect_timeout=3&pool_timeout=5
   # Infraestructura compartida (definida en el compose raíz)
   REDIS_URL: ${M2_REDIS_URL:-redis://redis:6379}
-  RABBITMQ_URL: ${M2_RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672}
-  # Otros módulos, por nombre de servicio dentro de la red de Docker
-  M6_BASE_URL: ${M2_M6_BASE_URL:-http://viajes:3000}
+  # Mismas variables que el resto del stack (M4, M6, M9): un cambio de credenciales aplica a todos.
+  RABBITMQ_URL: ${M2_RABBITMQ_URL:-amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672}
+  # Otros módulos, por nombre de servicio dentro de reservas-network
+  M6_BASE_URL: ${M2_M6_BASE_URL:-http://m6-viajes:3000}
   M4_BASE_URL: ${M2_M4_BASE_URL:-http://m4:4004}
   INTEGRATION_SECRET: ${M2_INTEGRATION_SECRET:-integration-dev}
   CACHE_TTL_SECONDS: ${M2_CACHE_TTL_SECONDS:-60}
@@ -38,23 +40,24 @@ services:
       DB_USER: postgres
       DB_PASSWORD: ${M2_POSTGRES_PASSWORD:-postgres}
       DB_NAME: profiles
-      # M1 y Soporte todavía no están en el repo: se usan los stubs internos de M2.
-      # Cuando existan, apuntar M2_M1_SERVICE_URL / M2_SOPORTE_SERVICE_URL a sus servicios.
+      # M1 todavía no está en el stack común y Soporte (M8) no expone penalizaciones:
+      # se usan los stubs internos de M2. Cuando M1 entre al stack:
+      #   M2_M1_SERVICE_URL=http://m1-identidad-acceso:3001
       STUBS_ENABLED: ${M2_STUBS_ENABLED:-true}
       M1_SERVICE_URL: ${M2_M1_SERVICE_URL:-http://localhost:3000/__stubs/m1}
       SOPORTE_SERVICE_URL: ${M2_SOPORTE_SERVICE_URL:-http://localhost:3000/__stubs/soporte}
-      # M6 real (servicio "viajes" de modulo6)
-      M6_SERVICE_URL: ${M2_M6_SERVICE_URL:-http://viajes:3000}
+      # M6 real (servicio m6-viajes de modulo6/compose.integracion.yml)
+      M6_SERVICE_URL: ${M2_M6_SERVICE_URL:-http://m6-viajes:3000}
       SOPORTE_SECRET_KEY: ${M2_SOPORTE_SECRET_KEY:-secret-m2}
       STATUS_SECRET_KEY: ${M2_STATUS_SECRET_KEY:-secret-status}
       # Clave que M8 envía en x-api-key a /internal/preferences (= M2_INTERNAL_API_KEY de M8)
       INTERNAL_API_KEY: ${M2_INTERNAL_API_KEY:-internal-dev}
       PENALIZACIONES_TEMPORAL: "2"
       PENALIZACIONES_PERMANENTE: "3"
-    # Sin puerto publicado: el front y los otros módulos llegan por http://m2-api:3000.
-    # Para exponerla en el host durante pruebas: M2_API_PORT=3020 y descomentar.
-    # ports:
-    #   - "${M2_API_PORT:-3020}:3000"
+    # Los otros módulos llegan por http://m2-api:3000. En el host, rango de M2 (11000).
+    ports:
+      - "127.0.0.1:${M2_API_PORT:-11000}:3000"
+    networks: [default, reservas-network]
     depends_on:
       m2-db:
         condition: service_healthy
@@ -82,6 +85,7 @@ services:
     <<: *m2-app
     environment: *m2-env
     command: ["node", "dist/worker.js"]
+    networks: [default, reservas-network]
     depends_on:
       m2-migrate:
         condition: service_completed_successfully
@@ -90,7 +94,7 @@ services:
     image: ${M2_CLIENT_IMAGE:-leangau/integration-m2-ae2:client}
     restart: unless-stopped
     ports:
-      - "${M2_CLIENT_PORT:-5173}:80"
+      - "${M2_CLIENT_PORT:-11001}:80"
     volumes:
       # La imagen apunta a http://api:3000; acá el servicio se llama m2-api.
       - ./integrated/client.conf:/etc/nginx/conf.d/app.conf:ro
@@ -116,3 +120,8 @@ services:
 
 volumes:
   m2_postgres_data:
+
+# Red del stack común (la define M9). Al declararla con el mismo nombre, Compose la une
+# a la existente en lugar de crear otra.
+networks:
+  reservas-network: {}
