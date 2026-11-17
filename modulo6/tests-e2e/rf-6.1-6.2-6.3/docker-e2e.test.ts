@@ -55,7 +55,7 @@ describe('E2E Tests - Docker Container', () => {
     console.log('Iniciando contenedor de Docker...');
     try {
       const containerArgs = [
-        'run', '-d', '--network', 'm6_viajes_default', '--add-host', 'host.docker.internal:host-gateway',
+        'run', '-d', '--network', process.env.M6_NETWORK ?? 'm6_viajes_default', '--add-host', 'host.docker.internal:host-gateway',
         '-e', 'DB_HOST=tripdb', '-e', 'DB_PORT=5432', '-e', 'DB_USER=m6', '-e', 'DB_PASSWORD=m6pass',
         '-e', 'DB_NAME=tripdb', '-e', 'REDIS_URL=redis://redis:6379',
         '-e', 'RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672', '-e', `M8_URL=${M8_URL}`,

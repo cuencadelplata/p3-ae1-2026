@@ -20,6 +20,8 @@ npm run test:e2e
 npm run docker:down
 ```
 
+Para verificar de una vez todos los RF de M6, ejecuta `npm run test:all-rf`. El runner crea un proyecto Docker aislado con todos los servicios de M6 y proveedores de prueba para M7/M8, ejecuta build, unitarios, E2E y K6 (smoke, carga y estrés), y baja los contenedores al terminar. Esta suite valida los contratos desde M6; no reemplaza la integración contra las APIs reales de M7/M8. El volumen de PostgreSQL del proyecto de prueba se conserva.
+
 Antes de levantar Compose:
 
 - En `modulo6/.env`, configura `M7_URL` y `M7_API_KEY` para la API real de M7.

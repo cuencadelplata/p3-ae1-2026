@@ -218,4 +218,4 @@ volumes:
 
 networks:
   default:
-    name: m6_viajes_default
+    name: ${M6_NETWORK:-m6_viajes_default}

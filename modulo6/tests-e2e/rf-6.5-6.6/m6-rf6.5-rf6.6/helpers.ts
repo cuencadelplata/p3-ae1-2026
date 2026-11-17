@@ -1,6 +1,6 @@
 import amqp, { type Channel, type ChannelModel } from 'amqplib';
 
-export const apiUrl = process.env.E2E_API_URL ?? 'http://127.0.0.1:3001';
+export const apiUrl = process.env.E2E_CANCELACION_URL ?? process.env.E2E_API_URL ?? 'http://127.0.0.1:3001';
 export const rf6ApiUrl = process.env.RF6_API_URL ?? 'http://127.0.0.1:3000';
 export const rabbitMqUrl = process.env.RABBITMQ_URL ?? 'amqp://127.0.0.1:5672';
 
