@@ -46,6 +46,9 @@ jspm_packages/
 docs/
 entrega-ae2/
 
+# Resultados locales de trabajo
+/output/
+
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
