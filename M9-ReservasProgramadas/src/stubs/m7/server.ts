@@ -1,3 +1,6 @@
+// Primer import: telemetría opcional del stub (OTEL_SERVICE_NAME=m7-stub en Compose).
+import '../../observability/register.js';
+
 import { createM7StubApp } from './app.js';
 
 const port = Number(process.env.PORT ?? 3002);

@@ -41,6 +41,11 @@ build/Release
 node_modules/
 jspm_packages/
 
+#Documentos
+
+docs/
+entrega-ae2/
+
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
@@ -49,6 +54,7 @@ web_modules/
 
 # Optional npm cache directory
 .npm
+.npm-cache/
 
 # Optional eslint cache
 .eslintcache

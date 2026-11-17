@@ -1,255 +1,220 @@
-import { randomUUID } from 'node:crypto';
-
+import type { ErrorRequestHandler, RequestHandler } from 'express';
 import express from 'express';
 import { z } from 'zod';
 
-import { asignacionSchema } from '../../clients/asignacion.client.js';
-import type { AsignacionChofer, TipoVehiculo } from '../../domain/reserva.js';
-import { Ofertas, type RespuestaSimulada } from './ofertas.js';
+import {
+  createM5StubState,
+  M5StubDispatchService,
+  M5StubError,
+  type M5StubState,
+  type OfferAction,
+} from './dispatch.js';
 
-export interface ChoferStub {
-  id: string;
-  nombre: string;
-  valoracion: number;
-  vehiculo: TipoVehiculo;
-  respuestaSimulada?: RespuestaSimulada;
-}
+export { createM5StubState } from './dispatch.js';
+export type { M5StubState, RideRequestStub } from './dispatch.js';
 
-export const CHOFERES_DEMO: ChoferStub[] = [
-  {
-    id: '30000000-0000-4000-8000-000000000001',
-    nombre: 'Chofer Auto A (demo)',
-    valoracion: 4.9,
-    vehiculo: 'AUTO',
-  },
-  {
-    id: '30000000-0000-4000-8000-000000000002',
-    nombre: 'Chofer Auto B (demo)',
-    valoracion: 4.7,
-    vehiculo: 'AUTO',
-  },
-  {
-    id: '30000000-0000-4000-8000-000000000003',
-    nombre: 'Chofer Moto A (demo)',
-    valoracion: 4.8,
-    vehiculo: 'MOTO',
-  },
-];
-
-const reservaSchema = z.object({
-  id: z.string().uuid(),
-  clienteId: z.string().uuid(),
-  origen: z.string().min(1),
-  destino: z.string().min(1),
-  vehiculo: z.enum(['AUTO', 'MOTO']),
-  fechaHoraProgramada: z.string().datetime({ offset: true }),
-  criterioAsignacion: z.literal('MEJOR_CALIFICACION'),
-});
-const rideRequestLocationSchema = z.object({
+const geoLocationSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   address: z.string().min(1),
 });
-const rideRequestSchema = z.object({
-  origin: rideRequestLocationSchema,
-  destination: rideRequestLocationSchema,
-  vehicleType: z.enum(['AUTO', 'MOTO']),
+const createRideRequestSchema = z
+  .object({
+    origin: geoLocationSchema,
+    destination: geoLocationSchema,
+    vehicleType: z.enum(['AUTO', 'MOTO']),
+  })
+  .strict();
+const candidateSearchSchema = z
+  .object({
+    radiusKm: z.number().min(0.1).max(50).default(5),
+    maxCandidates: z.number().int().min(1).max(50).default(5),
+  })
+  .strict();
+const sendOffersSchema = z
+  .object({
+    driverIds: z.array(z.string().min(1)).min(1).optional(),
+    ttlSeconds: z.number().int().min(5).max(180).default(30),
+  })
+  .strict();
+const respondOfferSchema = z
+  .object({
+    action: z.enum(['ACCEPT', 'REJECT']),
+    driverId: z.string().min(1).optional(),
+  })
+  .strict();
+
+const error = (code: string, message: string) => ({
+  code,
+  message,
+  timestamp: new Date().toISOString(),
 });
-type DatosReserva = z.infer<typeof reservaSchema>;
-interface Ocupacion {
-  reserva: DatosReserva;
-  asignacion: AsignacionChofer;
-}
-const mismoViaje = (a: DatosReserva, b: DatosReserva): boolean =>
-  a.origen === b.origen &&
-  a.destino === b.destino &&
-  a.vehiculo === b.vehiculo &&
-  Date.parse(a.fechaHoraProgramada) === Date.parse(b.fechaHoraProgramada);
+const pathParam = (value: string | string[] | undefined): string => z.string().parse(value);
+
+const requireBearer: RequestHandler = (request, response, next) => {
+  if (request.header('authorization')?.startsWith('Bearer ') !== true) {
+    response.status(401).json(error('UNAUTHORIZED', 'Bearer requerido.'));
+    return;
+  }
+  next();
+};
+
+const asyncRoute =
+  (handler: RequestHandler): RequestHandler =>
+  (request, response, next) => {
+    Promise.resolve(handler(request, response, next)).catch(next);
+  };
 
 export const createM5StubApp = (
-  choferes: readonly ChoferStub[] = CHOFERES_DEMO,
-  opciones: { plazoOfertaMs?: number; demoraRespuestaMs?: number } = {},
+  source: M5StubState | M5StubDispatchService = createM5StubState(),
 ) => {
-  const plazo = opciones.plazoOfertaMs ?? 200;
-  const demora = opciones.demoraRespuestaMs ?? 10;
-  if (!Number.isFinite(plazo) || plazo <= 0 || !Number.isFinite(demora) || demora < 0)
-    throw new Error('Los tiempos de oferta deben ser válidos.');
+  const dispatch =
+    source instanceof M5StubDispatchService ? source : new M5StubDispatchService(source);
   const app = express();
-  const ofertas = new Ofertas();
-  const ocupaciones = new Map<string, Ocupacion>();
-  const rondas = new Map<
-    string,
-    { id: string; reserva: DatosReserva; resultado: Promise<AsignacionChofer | null> }
-  >();
-  const enOferta = new Map<string, { choferId: string; reserva: DatosReserva }>();
-  const solicitudes = new Map<string, { solicitudId: string; estado: string }>();
-  const solapa = (a: DatosReserva, b: DatosReserva) =>
-    Math.abs(Date.parse(a.fechaHoraProgramada) - Date.parse(b.fechaHoraProgramada)) < 3_600_000;
-  const invalidar = (id: string) => {
-    const ronda = rondas.get(id);
-    rondas.delete(id);
-    ocupaciones.delete(id);
-    if (ronda) {
-      ofertas.cancelarRonda(ronda.id);
-      enOferta.delete(ronda.id);
-    }
-  };
-  const buscar = async (
-    reserva: DatosReserva,
-    rondaId: string,
-  ): Promise<AsignacionChofer | null> => {
-    const candidatos = choferes
-      .filter((c) => c.vehiculo === reserva.vehiculo)
-      .sort((a, b) => b.valoracion - a.valoracion || a.id.localeCompare(b.id));
-    for (const chofer of candidatos) {
-      if (rondas.get(reserva.id)?.id !== rondaId) return null;
-      if (
-        [...enOferta.values()].some(
-          (o) => o.choferId === chofer.id && solapa(o.reserva, reserva),
-        ) ||
-        [...ocupaciones.values()].some(
-          (o) => o.asignacion.choferId === chofer.id && solapa(o.reserva, reserva),
-        )
-      )
-        continue;
-      // La toma del candidato no contiene await: evita ofertas simultáneas solapadas.
-      enOferta.set(rondaId, { choferId: chofer.id, reserva });
-      const oferta = await ofertas.abrir(
-        reserva.id,
-        rondaId,
-        chofer.id,
-        chofer.respuestaSimulada ?? 'ACEPTAR',
-        plazo,
-        demora,
-      );
-      enOferta.delete(rondaId);
-      if (rondas.get(reserva.id)?.id !== rondaId) return null;
-      if (oferta.estado !== 'ACEPTADA') continue;
-      const asignacion = {
-        id: oferta.id,
-        choferId: chofer.id,
-        nombreChofer: chofer.nombre,
-        valoracion: chofer.valoracion,
-      };
-      ocupaciones.set(reserva.id, { reserva, asignacion });
-      return asignacion;
-    }
-    return null;
-  };
   app.disable('x-powered-by');
   app.use(express.json());
   app.get('/health', (_request, response) => response.status(200).json({ status: 'ok' }));
+  app.use('/api/v1', requireBearer);
+
   app.post('/api/v1/ride-requests', (request, response) => {
-    const idempotencyKey = z.string().uuid().safeParse(request.header('Idempotency-Key'));
-    const clientId = z.string().uuid().safeParse(request.header('x-client-id'));
-    const rideRequest = rideRequestSchema.safeParse(request.body);
-    if (!idempotencyKey.success || !clientId.success || !rideRequest.success) {
-      response.status(400).json({ error: 'Solicitud de viaje inválida.' });
+    const idempotencyKey = request.header('idempotency-key');
+    if (!z.string().uuid().safeParse(idempotencyKey).success) {
+      response.status(400).json(error('VALIDATION_ERROR', 'Idempotency-Key inválida.'));
       return;
     }
-
-    const ocupacion = ocupaciones.get(idempotencyKey.data);
-    if (
-      ocupacion === undefined ||
-      ocupacion.reserva.clienteId !== clientId.data ||
-      ocupacion.reserva.origen !== rideRequest.data.origin.address ||
-      ocupacion.reserva.destino !== rideRequest.data.destination.address ||
-      ocupacion.reserva.vehiculo !== rideRequest.data.vehicleType
-    ) {
-      response.status(409).json({ error: 'La asignación no está vigente para este viaje.' });
-      return;
-    }
-
-    let solicitud = solicitudes.get(idempotencyKey.data);
-    if (solicitud === undefined) {
-      solicitud = { solicitudId: randomUUID(), estado: 'CREADA' };
-      solicitudes.set(idempotencyKey.data, solicitud);
-    }
-    response.status(201).json(solicitud);
-  });
-  app.get('/asignaciones/:id/ofertas', (request, response) => {
-    response.json({ ofertas: ofertas.listar(request.params.id) });
-  });
-  app.post('/ofertas/:id/respuesta', (request, response) => {
-    const parsed = z
-      .object({ choferId: z.string().uuid(), decision: z.enum(['ACEPTAR', 'RECHAZAR']) })
-      .strict()
-      .safeParse(request.body);
+    const parsed = createRideRequestSchema.safeParse(request.body);
     if (!parsed.success) {
-      response.status(400).json({ error: 'Respuesta inválida.' });
+      response.status(400).json(error('VALIDATION_ERROR', 'Body inválido.'));
       return;
     }
-    const oferta = ofertas.responder(request.params.id, parsed.data.choferId, parsed.data.decision);
-    if (!oferta) {
-      response
-        .status(409)
-        .json({ error: 'La oferta no está vigente o no pertenece al conductor.' });
-      return;
-    }
-    response.json({ oferta });
-  });
-  app.put('/asignaciones/:id', async (request, response) => {
-    const parsed = reservaSchema.safeParse(request.body?.reserva);
-    if (!parsed.success || parsed.data.id !== request.params.id) {
-      response.status(400).json({ error: 'Reserva inválida.' });
-      return;
-    }
-    const reserva = parsed.data;
-    if (solicitudes.has(reserva.id)) {
-      response.status(409).json({ error: 'El despacho ya fue activado.' });
-      return;
-    }
-    const anterior = rondas.get(reserva.id);
-    if (anterior && mismoViaje(anterior.reserva, reserva)) {
-      response.json({ asignacion: await anterior.resultado });
-      return;
-    }
-    invalidar(reserva.id);
-    const ronda = {
-      id: randomUUID(),
-      reserva,
-      resultado: Promise.resolve<AsignacionChofer | null>(null),
-    };
-    rondas.set(reserva.id, ronda);
-    ronda.resultado = buscar(reserva, ronda.id);
-    const asignacion = await ronda.resultado;
-    // Sin aceptación, un próximo ciclo puede abrir otra ronda con nueva disponibilidad.
-    if (asignacion === null && rondas.get(reserva.id) === ronda) rondas.delete(reserva.id);
-    response.json({ asignacion });
-  });
-  app.delete('/asignaciones/:id', (request, response) => {
-    if (solicitudes.has(request.params.id)) {
-      response.status(409).json({ error: 'El despacho ya fue activado.' });
-      return;
-    }
-    invalidar(request.params.id);
-    response.sendStatus(204);
-  });
-  app.post('/solicitudes', (request, response) => {
-    const parsed = reservaSchema
-      .extend({ asignacion: asignacionSchema })
-      .safeParse(request.body?.reserva);
-    if (!parsed.success) {
-      response.status(400).json({ error: 'Se requiere una reserva con asignación.' });
-      return;
-    }
-    const reserva = parsed.data;
-    const ocupacion = ocupaciones.get(reserva.id);
     if (
-      ocupacion === undefined ||
-      ocupacion.asignacion.id !== reserva.asignacion.id ||
-      ocupacion.asignacion.choferId !== reserva.asignacion.choferId ||
-      !mismoViaje(ocupacion.reserva, reserva)
+      parsed.data.origin.latitude === parsed.data.destination.latitude &&
+      parsed.data.origin.longitude === parsed.data.destination.longitude
     ) {
-      response.status(409).json({ error: 'La asignación no está vigente para este viaje.' });
+      response.status(422).json(error('SEMANTIC_ERROR', 'Origen y destino idénticos.'));
       return;
     }
-    let solicitud = solicitudes.get(reserva.id);
-    if (solicitud === undefined) {
-      solicitud = { solicitudId: randomUUID(), estado: 'CREADA' };
-      solicitudes.set(reserva.id, solicitud);
-    }
-    response.status(201).json(solicitud);
+    response.status(201).json(dispatch.createRequest(parsed.data, idempotencyKey!));
   });
+
+  app.get('/api/v1/ride-requests/:requestId', (request, response) => {
+    response.json(dispatch.getRequest(pathParam(request.params.requestId)));
+  });
+
+  app.post('/api/v1/ride-requests/:requestId/cancel', (request, response) => {
+    const ride = dispatch.cancelRequest(pathParam(request.params.requestId));
+    response.json({
+      requestId: ride.id,
+      clientId: ride.clientId,
+      status: 'CANCELLED',
+      reason: typeof request.body?.reason === 'string' ? request.body.reason : null,
+      cancelledAt: ride.updatedAt,
+      message: 'Solicitud de viaje cancelada exitosamente por el cliente.',
+    });
+  });
+
+  app.post('/api/v1/ride-requests/:requestId/candidates', (request, response) => {
+    const parsed = candidateSearchSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      response.status(400).json(error('VALIDATION_ERROR', 'Parámetros de búsqueda inválidos.'));
+      return;
+    }
+    const ride = dispatch.getRequest(pathParam(request.params.requestId));
+    const candidates = dispatch.searchCandidates(ride.id, parsed.data);
+    if (candidates.length === 0) {
+      response.status(404).json(error('NO_DRIVERS_AVAILABLE', 'No hay candidatos disponibles.'));
+      return;
+    }
+    response.json({
+      requestId: ride.id,
+      vehicleType: ride.vehicleType,
+      searchRadiusKm: parsed.data.radiusKm,
+      candidatesCount: candidates.length,
+      candidates: candidates.map(
+        ({ driverId, vehicleType, distanceKm, estimatedEtaMinutes, rating }) => ({
+          driverId,
+          vehicleType,
+          distanceKm,
+          estimatedEtaMinutes,
+          rating,
+        }),
+      ),
+      searchTimestamp: new Date().toISOString(),
+    });
+  });
+
+  app.post(
+    '/api/v1/ride-requests/:requestId/offers',
+    asyncRoute(async (request, response) => {
+      const parsed = sendOffersSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        response.status(400).json(error('VALIDATION_ERROR', 'Parámetros de oferta inválidos.'));
+        return;
+      }
+      const requestId = pathParam(request.params.requestId);
+      const offers = await dispatch.sendOffers(requestId, parsed.data);
+      response.status(201).json({
+        requestId,
+        offersSentCount: offers.length,
+        offers,
+        message: `Oferta enviada a ${offers.length} conductor(es).`,
+      });
+    }),
+  );
+
+  app.get('/api/v1/ride-requests/:requestId/offers', (request, response) => {
+    const requestId = pathParam(request.params.requestId);
+    const offers = dispatch.getOffers(requestId);
+    response.json({
+      requestId,
+      offersCount: offers.length,
+      offers,
+    });
+  });
+
+  const respond = async (offerId: string, action: OfferAction, driverId?: string) =>
+    dispatch.respondToOffer(offerId, action, driverId);
+
+  app.post(
+    '/api/v1/offers/:offerId/respond',
+    asyncRoute(async (request, response) => {
+      const parsed = respondOfferSchema.safeParse(request.body);
+      if (!parsed.success) {
+        response.status(400).json(error('VALIDATION_ERROR', 'Respuesta de oferta inválida.'));
+        return;
+      }
+      response.json(
+        await respond(pathParam(request.params.offerId), parsed.data.action, parsed.data.driverId),
+      );
+    }),
+  );
+
+  for (const action of ['accept', 'reject'] as const) {
+    app.post(
+      `/api/v1/offers/:offerId/${action}`,
+      asyncRoute(async (request, response) => {
+        response.json(
+          await respond(
+            pathParam(request.params.offerId),
+            action === 'accept' ? 'ACCEPT' : 'REJECT',
+            typeof request.body?.driverId === 'string' ? request.body.driverId : undefined,
+          ),
+        );
+      }),
+    );
+  }
+
+  app.get('/api/v1/offers/:offerId', (request, response) => {
+    response.json(dispatch.getOffer(pathParam(request.params.offerId)));
+  });
+
+  const errorHandler: ErrorRequestHandler = (cause, _request, response, _next) => {
+    if (cause instanceof M5StubError) {
+      response.status(cause.statusCode).json(error(cause.code, cause.message));
+      return;
+    }
+    response.status(500).json(error('INTERNAL_ERROR', 'Error interno del stub M5.'));
+  };
+  app.use(errorHandler);
   return app;
 };

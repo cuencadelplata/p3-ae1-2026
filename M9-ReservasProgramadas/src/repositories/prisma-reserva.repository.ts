@@ -1,315 +1,231 @@
+import { randomUUID } from 'node:crypto';
+
 import {
   Prisma,
-  PrismaClient,
-  EstadoReserva as PrismaEstadoReserva,
-  TipoVehiculo as PrismaTipoVehiculo,
+  type PrismaClient,
+  type Reservation as PersistenceReservation,
 } from '@prisma/client';
+import { z } from 'zod';
+
 import type {
   CambiosReserva,
   CambioEstadoReserva,
   CrearReserva,
   EstadoReserva,
   Reserva,
-  TipoVehiculo,
 } from '../domain/reserva.js';
+import { getRequestContext } from '../integration/request-context.js';
+import { measureDb } from '../observability/db.js';
+import { recordTransition } from '../observability/metrics.js';
+import { persistableTraceContext } from '../observability/tracing.js';
+import { createEventEnvelope, type EventEnvelope } from '../messaging/event-envelope.js';
+import {
+  createReservationReferenceEvent,
+  RESERVATION_EVENT_TYPES,
+  type ReadyForDispatchPayload,
+} from '../messaging/reservation-events.js';
 import type { ReservaRepository } from './reserva.repository.js';
 
-const mapEstado = (estado: PrismaEstadoReserva): EstadoReserva => estado as EstadoReserva;
-const mapTipoVehiculo = (vehiculo: PrismaTipoVehiculo): TipoVehiculo => vehiculo as TipoVehiculo;
+const routeSnapshotSchema = z.object({
+  origin: z.object({ latitude: z.number(), longitude: z.number(), address: z.string() }),
+  destination: z.object({ latitude: z.number(), longitude: z.number(), address: z.string() }),
+  distanceKm: z.number().nonnegative(),
+  estimatedDurationMin: z.number().nonnegative(),
+});
 
-const decimalToNumber = (
-  value: Prisma.Decimal | number | string | null | undefined,
-): number | null => {
-  if (value === null || value === undefined) return null;
-  return Number(value);
-};
+const toJson = (value: unknown): Prisma.InputJsonValue => value as Prisma.InputJsonValue;
 
-const mapAsignacion = (
-  asignacionId: string | null,
-  choferId: string | null,
-  nombreChofer: string | null,
-  valoracion: Prisma.Decimal | number | null,
-): Reserva['asignacion'] => {
-  if (!asignacionId || !choferId || !nombreChofer) {
-    return null;
-  }
+const toDomain = (reservation: PersistenceReservation): Reserva => ({
+  id: reservation.id,
+  clienteId: reservation.clientId,
+  origen: reservation.origin,
+  destino: reservation.destination,
+  vehiculo: reservation.vehicleType,
+  fechaHoraProgramada: reservation.scheduledAt.toISOString(),
+  estado: reservation.status,
+  tarifaEstimada: reservation.estimatedFare?.toNumber() ?? null,
+  moneda: reservation.currency,
+  estimacionTarifaId: reservation.fareEstimateId,
+  routeSnapshot:
+    reservation.routeSnapshot === null
+      ? null
+      : routeSnapshotSchema.parse(reservation.routeSnapshot),
+  criterioAsignacion: reservation.assignmentCriteria,
+  idSolicitud: reservation.dispatchRequestId,
+  assignedDriverId: reservation.assignedDriverId,
+  creadoEn: reservation.createdAt.toISOString(),
+  actualizadoEn: reservation.updatedAt.toISOString(),
+});
 
+/**
+ * El contexto de traza se captura AL CREAR el evento, dentro de la misma transacción, para que
+ * la publicación posterior (incluso tras reiniciar el proceso) continúe la traza original.
+ */
+export const outboxData = (
+  routingKey: string,
+  event: EventEnvelope,
+): Prisma.OutboxEventCreateInput => {
+  const traceContext = persistableTraceContext();
   return {
-    id: asignacionId,
-    choferId,
-    nombreChofer,
-    valoracion: decimalToNumber(valoracion) ?? 0,
+    id: randomUUID(),
+    eventId: event.eventId,
+    aggregateId: event.aggregateId,
+    eventType: event.eventType,
+    eventVersion: event.eventVersion,
+    routingKey,
+    payload: toJson(event),
+    correlationId: event.correlationId,
+    traceContext: traceContext === null ? Prisma.DbNull : toJson(traceContext),
   };
 };
 
-const reservaFromPrisma = (reserva: {
-  id: string;
-  clienteId: string;
-  origen: string;
-  destino: string;
-  vehiculo: PrismaTipoVehiculo;
-  fechaHoraProgramada: Date;
-  estado: PrismaEstadoReserva;
-  asignacionId: string | null;
-  choferId: string | null;
-  nombreChofer: string | null;
-  valoracion: Prisma.Decimal | number | null;
-  tarifaEstimada: Prisma.Decimal | number | null;
-  moneda: string | null;
-  criterioAsignacion: string | null;
-  idSolicitud: string | null;
-  version: number;
-  creadoEn: Date;
-  actualizadoEn: Date;
-}): Reserva => ({
-  id: reserva.id,
-  clienteId: reserva.clienteId,
-  origen: reserva.origen,
-  destino: reserva.destino,
-  vehiculo: mapTipoVehiculo(reserva.vehiculo),
-  fechaHoraProgramada: reserva.fechaHoraProgramada.toISOString(),
-  estado: mapEstado(reserva.estado),
-  asignacion: mapAsignacion(
-    reserva.asignacionId,
-    reserva.choferId,
-    reserva.nombreChofer,
-    reserva.valoracion,
-  ),
-  tarifaEstimada: decimalToNumber(reserva.tarifaEstimada),
-  moneda: reserva.moneda,
-  criterioAsignacion: reserva.criterioAsignacion,
-  idSolicitud: reserva.idSolicitud,
-  creadoEn: reserva.creadoEn.toISOString(),
-  actualizadoEn: reserva.actualizadoEn.toISOString(),
-});
-
-const reservaVersionData = (
-  reserva: Parameters<typeof reservaFromPrisma>[0],
-): Prisma.ReservaVersionUncheckedCreateInput => ({
-  reservaId: reserva.id,
-  version: reserva.version,
-  clienteId: reserva.clienteId,
-  origen: reserva.origen,
-  destino: reserva.destino,
-  vehiculo: reserva.vehiculo,
-  fechaHoraProgramada: reserva.fechaHoraProgramada,
-  estado: reserva.estado,
-  asignacionId: reserva.asignacionId,
-  choferId: reserva.choferId,
-  nombreChofer: reserva.nombreChofer,
-  valoracion: reserva.valoracion,
-  tarifaEstimada: reserva.tarifaEstimada,
-  moneda: reserva.moneda,
-  criterioAsignacion: reserva.criterioAsignacion,
-  idSolicitud: reserva.idSolicitud,
-  creadoEn: reserva.creadoEn,
-  actualizadoEn: reserva.actualizadoEn,
-});
-
 export class PrismaReservaRepository implements ReservaRepository {
-  public constructor(private readonly prisma: PrismaClient = new PrismaClient()) {}
-
-  public async close(): Promise<void> {
-    await this.prisma.$disconnect();
-  }
+  public constructor(private readonly prisma: PrismaClient) {}
 
   public async crear(input: CrearReserva): Promise<Reserva> {
-    const reserva = await this.prisma.$transaction(async (tx) => {
-      const creada = await tx.reserva.create({
-        data: {
-          clienteId: input.clienteId,
-          origen: input.origen,
-          destino: input.destino,
-          vehiculo: input.vehiculo as PrismaTipoVehiculo,
-          fechaHoraProgramada: new Date(input.fechaHoraProgramada),
-          estado: PrismaEstadoReserva.PENDIENTE_ASIGNACION,
-          tarifaEstimada:
-            input.tarifaEstimada === null || input.tarifaEstimada === undefined
-              ? null
-              : new Prisma.Decimal(input.tarifaEstimada),
-          moneda: input.moneda ?? 'ARS',
-          criterioAsignacion: 'MEJOR_CALIFICACION',
-        },
-      });
-
-      await tx.outboxEvent.create({
-        data: {
-          tipo: 'ReservaCreada',
-          aggregateType: 'Reserva',
-          aggregateId: creada.id,
-          payload: {
-            reservaId: creada.id,
-            clienteId: creada.clienteId,
-            estado: creada.estado,
-            fechaHoraProgramada: creada.fechaHoraProgramada.toISOString(),
+    const id = randomUUID();
+    const correlationId = this.correlationId();
+    const created = await measureDb('reservation.create', () =>
+      this.prisma.$transaction(async (transaction) => {
+        const reservation = await transaction.reservation.create({
+          data: {
+            id,
+            clientId: input.clienteId,
+            origin: input.origen,
+            destination: input.destino,
+            vehicleType: input.vehiculo,
+            scheduledAt: new Date(input.fechaHoraProgramada),
+            estimatedFare: input.tarifaEstimada,
+            currency: input.moneda ?? 'ARS',
+            fareEstimateId: input.estimacionTarifaId,
+            routeSnapshot:
+              input.routeSnapshot === null || input.routeSnapshot === undefined
+                ? Prisma.DbNull
+                : toJson(input.routeSnapshot),
           },
-          status: 'PENDING',
-          reservaId: creada.id,
-        },
-      });
-      await tx.reservaVersion.create({ data: reservaVersionData(creada) });
-
-      return creada;
-    });
-
-    return reservaFromPrisma(reserva);
+        });
+        const domain = toDomain(reservation);
+        const event = createReservationReferenceEvent({
+          eventType: RESERVATION_EVENT_TYPES.created,
+          correlationId,
+          reservation: domain,
+        });
+        await transaction.outboxEvent.create({ data: outboxData(event.eventType, event) });
+        return domain;
+      }),
+    );
+    // La transacción ya confirmó: recién ahora se cuenta el efecto.
+    recordTransition('NONE', created.estado);
+    return created;
   }
 
   public async obtenerPorId(id: string): Promise<Reserva | null> {
-    const reserva = await this.prisma.reserva.findUnique({ where: { id } });
-    return reserva === null ? null : reservaFromPrisma(reserva);
+    const reservation = await measureDb('reservation.find_by_id', () =>
+      this.prisma.reservation.findUnique({ where: { id } }),
+    );
+    return reservation === null ? null : toDomain(reservation);
   }
 
   public async listar(): Promise<Reserva[]> {
-    const reservas = await this.prisma.reserva.findMany({
-      orderBy: [{ fechaHoraProgramada: 'asc' }, { id: 'asc' }],
-    });
-    return reservas.map(reservaFromPrisma);
+    const reservations = await measureDb('reservation.list', () =>
+      this.prisma.reservation.findMany({
+        orderBy: { scheduledAt: 'asc' },
+      }),
+    );
+    return reservations.map(toDomain);
   }
 
+  /** Listado paginado (aportado por la rama M9): orden estable fecha + id, máx. 100 por página. */
   public async listarPaginado(page = 1, pageSize = 20): Promise<Reserva[]> {
-    const offset = (page - 1) * pageSize;
-    const reservas = await this.prisma.reserva.findMany({
-      orderBy: [{ fechaHoraProgramada: 'asc' }, { id: 'asc' }],
-      skip: offset,
-      take: pageSize,
-    });
-    return reservas.map(reservaFromPrisma);
+    const reservations = await measureDb('reservation.list_page', () =>
+      this.prisma.reservation.findMany({
+        orderBy: [{ scheduledAt: 'asc' }, { id: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    );
+    return reservations.map(toDomain);
   }
 
   public async actualizarProgramada(id: string, input: CambiosReserva): Promise<Reserva | null> {
-    const actual = await this.prisma.reserva.findUnique({ where: { id } });
-    if (actual === null) return null;
-
-    if (
-      actual.estado !== PrismaEstadoReserva.PROGRAMADA &&
-      actual.estado !== PrismaEstadoReserva.PENDIENTE_ASIGNACION
-    ) {
-      return null;
-    }
-
-    const actualizada = await this.prisma.$transaction(async (tx) => {
-      const actualizacion = await tx.reserva.update({
-        where: { id },
-        data: {
-          origen: input.origen ?? actual.origen,
-          destino: input.destino ?? actual.destino,
-          vehiculo: input.vehiculo ? (input.vehiculo as PrismaTipoVehiculo) : actual.vehiculo,
-          fechaHoraProgramada: input.fechaHoraProgramada
-            ? new Date(input.fechaHoraProgramada)
-            : actual.fechaHoraProgramada,
-          tarifaEstimada:
-            input.tarifaEstimada === undefined
-              ? actual.tarifaEstimada
-              : input.tarifaEstimada === null
-                ? null
-                : new Prisma.Decimal(input.tarifaEstimada),
-          moneda: input.moneda ?? actual.moneda,
-          asignacionId:
-            input.asignacion === undefined ? actual.asignacionId : (input.asignacion?.id ?? null),
-          choferId:
-            input.asignacion === undefined ? actual.choferId : (input.asignacion?.choferId ?? null),
-          nombreChofer:
-            input.asignacion === undefined
-              ? actual.nombreChofer
-              : (input.asignacion?.nombreChofer ?? null),
-          valoracion:
-            input.asignacion === undefined
-              ? actual.valoracion
-              : input.asignacion === null
-                ? null
-                : new Prisma.Decimal(input.asignacion.valoracion),
-          criterioAsignacion: actual.criterioAsignacion ?? 'MEJOR_CALIFICACION',
-          version: { increment: 1 },
-          estado:
-            input.asignacion === undefined
-              ? actual.estado
-              : input.asignacion === null
-                ? PrismaEstadoReserva.PENDIENTE_ASIGNACION
-                : PrismaEstadoReserva.PROGRAMADA,
-          actualizadoEn: new Date(),
-        },
-      });
-      await tx.reservaVersion.create({ data: reservaVersionData(actualizacion) });
-
-      await tx.outboxEvent.create({
-        data: {
-          tipo: 'ReservaActualizada',
-          aggregateType: 'Reserva',
-          aggregateId: actualizacion.id,
-          payload: {
-            reservaId: actualizacion.id,
-            estado: actualizacion.estado,
-            actualizadoEn: actualizacion.actualizadoEn.toISOString(),
+    const correlationId = this.correlationId();
+    return measureDb('reservation.update', () =>
+      this.prisma.$transaction(async (transaction) => {
+        const result = await transaction.reservation.updateMany({
+          where: { id, status: 'PROGRAMADA' },
+          data: {
+            ...(input.origen === undefined ? {} : { origin: input.origen }),
+            ...(input.destino === undefined ? {} : { destination: input.destino }),
+            ...(input.vehiculo === undefined ? {} : { vehicleType: input.vehiculo }),
+            ...(input.fechaHoraProgramada === undefined
+              ? {}
+              : { scheduledAt: new Date(input.fechaHoraProgramada) }),
+            ...(input.tarifaEstimada === undefined ? {} : { estimatedFare: input.tarifaEstimada }),
+            ...(input.moneda === undefined ? {} : { currency: input.moneda }),
+            ...(input.estimacionTarifaId === undefined
+              ? {}
+              : { fareEstimateId: input.estimacionTarifaId }),
+            ...(input.routeSnapshot === undefined
+              ? {}
+              : {
+                  routeSnapshot:
+                    input.routeSnapshot === null ? Prisma.DbNull : toJson(input.routeSnapshot),
+                }),
+            version: { increment: 1 },
           },
-          status: 'PENDING',
-          reservaId: actualizacion.id,
-        },
-      });
-
-      return actualizacion;
-    });
-
-    return actualizada === null ? null : reservaFromPrisma(actualizada);
+        });
+        if (result.count === 0) return null;
+        const reservation = await transaction.reservation.findUniqueOrThrow({ where: { id } });
+        const domain = toDomain(reservation);
+        const event = createReservationReferenceEvent({
+          eventType: RESERVATION_EVENT_TYPES.updated,
+          correlationId,
+          reservation: domain,
+        });
+        await transaction.outboxEvent.create({ data: outboxData(event.eventType, event) });
+        return domain;
+      }),
+    );
   }
 
-  public async cancelarProgramada(id: string): Promise<Reserva | null> {
-    const cancelada = await this.prisma.$transaction(async (tx) => {
-      const reserva = await tx.reserva.findUnique({ where: { id } });
-      if (reserva === null) return null;
-      if (
-        reserva.estado !== PrismaEstadoReserva.PROGRAMADA &&
-        reserva.estado !== PrismaEstadoReserva.PENDIENTE_ASIGNACION
-      ) {
-        return null;
-      }
-
-      const actualizada = await tx.reserva.update({
-        where: { id },
-        data: {
-          estado: PrismaEstadoReserva.CANCELADA,
-          asignacionId: null,
-          choferId: null,
-          nombreChofer: null,
-          valoracion: null,
-          version: { increment: 1 },
-          actualizadoEn: new Date(),
-        },
-      });
-      await tx.reservaVersion.create({ data: reservaVersionData(actualizada) });
-
-      await tx.outboxEvent.create({
-        data: {
-          tipo: 'ReservaCancelada',
-          aggregateType: 'Reserva',
-          aggregateId: actualizada.id,
-          payload: {
-            reservaId: actualizada.id,
-            estado: actualizada.estado,
-          },
-          status: 'PENDING',
-          reservaId: actualizada.id,
-        },
-      });
-
-      return actualizada;
-    });
-
-    return cancelada === null ? null : reservaFromPrisma(cancelada);
+  public async cancelar(id: string, estadoEsperado: EstadoReserva): Promise<Reserva | null> {
+    const correlationId = this.correlationId();
+    const cancelled = await measureDb('reservation.cancel', () =>
+      this.prisma.$transaction(async (transaction) => {
+        const result = await transaction.reservation.updateMany({
+          where: { id, status: estadoEsperado },
+          data: { status: 'CANCELADA', version: { increment: 1 } },
+        });
+        if (result.count === 0) return null;
+        const reservation = await transaction.reservation.findUniqueOrThrow({ where: { id } });
+        const domain = toDomain(reservation);
+        const event = createReservationReferenceEvent({
+          eventType: RESERVATION_EVENT_TYPES.cancelled,
+          correlationId,
+          reservation: domain,
+        });
+        await transaction.outboxEvent.create({ data: outboxData(event.eventType, event) });
+        return domain;
+      }),
+    );
+    if (cancelled !== null) recordTransition(estadoEsperado, cancelled.estado);
+    return cancelled;
   }
 
   public async buscarPendientes(fechaLimite: Date, limite = 100): Promise<Reserva[]> {
-    const reservas = await this.prisma.reserva.findMany({
-      where: {
-        estado: { in: [PrismaEstadoReserva.PROGRAMADA, PrismaEstadoReserva.ACTIVANDO] },
-        asignacionId: { not: null },
-        fechaHoraProgramada: { lte: fechaLimite },
-      },
-      orderBy: { fechaHoraProgramada: 'asc' },
-      take: limite,
-    });
-
-    return reservas.map(reservaFromPrisma);
+    const reservations = await measureDb('reservation.find_pending', () =>
+      this.prisma.reservation.findMany({
+        where: {
+          OR: [
+            { status: 'ACTIVANDO' },
+            { status: 'PROGRAMADA', scheduledAt: { lte: fechaLimite } },
+          ],
+        },
+        orderBy: { scheduledAt: 'asc' },
+        take: limite,
+      }),
+    );
+    return reservations.map(toDomain);
   }
 
   public async cambiarEstado(
@@ -318,42 +234,94 @@ export class PrismaReservaRepository implements ReservaRepository {
     nuevoEstado: EstadoReserva,
     cambio: CambioEstadoReserva = {},
   ): Promise<Reserva | null> {
-    const actual = await this.prisma.$transaction(async (tx) => {
-      const existente = await tx.reserva.findUnique({ where: { id } });
-      if (existente === null || mapEstado(existente.estado) !== estadoEsperado) {
-        return null;
-      }
-
-      const actualizada = await tx.reserva.update({
-        where: { id },
-        data: {
-          estado: nuevoEstado as PrismaEstadoReserva,
-          idSolicitud: cambio.idSolicitud ?? existente.idSolicitud,
-          version: { increment: 1 },
-          actualizadoEn: new Date(),
-        },
-      });
-      await tx.reservaVersion.create({ data: reservaVersionData(actualizada) });
-
-      await tx.outboxEvent.create({
-        data: {
-          tipo: 'ReservaEstadoCambiado',
-          aggregateType: 'Reserva',
-          aggregateId: actualizada.id,
-          payload: {
-            reservaId: actualizada.id,
-            estadoAnterior: estadoEsperado,
-            estadoNuevo: nuevoEstado,
-            idSolicitud: actualizada.idSolicitud,
+    const correlationId = this.correlationId();
+    const changed = await measureDb('reservation.change_status', () =>
+      this.prisma.$transaction(async (transaction) => {
+        const idempotencyKey =
+          estadoEsperado === 'PROGRAMADA' && nuevoEstado === 'ACTIVANDO' ? randomUUID() : undefined;
+        const result = await transaction.reservation.updateMany({
+          where: { id, status: estadoEsperado },
+          data: {
+            status: nuevoEstado,
+            ...(cambio.idSolicitud === undefined ? {} : { dispatchRequestId: cambio.idSolicitud }),
+            ...(cambio.assignedDriverId === undefined
+              ? {}
+              : { assignedDriverId: cambio.assignedDriverId }),
+            ...(cambio.criterioAsignacion === undefined
+              ? {}
+              : { assignmentCriteria: cambio.criterioAsignacion }),
+            ...(cambio.routeSnapshot === undefined
+              ? {}
+              : {
+                  routeSnapshot:
+                    cambio.routeSnapshot === null ? Prisma.DbNull : toJson(cambio.routeSnapshot),
+                }),
+            ...(idempotencyKey === undefined ? {} : { dispatchIdempotencyKey: idempotencyKey }),
+            version: { increment: 1 },
           },
-          status: 'PENDING',
-          reservaId: actualizada.id,
+        });
+        if (result.count === 0) return null;
+        const reservation = await transaction.reservation.findUniqueOrThrow({ where: { id } });
+        const domain = toDomain(reservation);
+        const event = this.transitionEvent(
+          domain,
+          correlationId,
+          reservation.dispatchIdempotencyKey,
+          estadoEsperado,
+          nuevoEstado,
+        );
+        if (event !== null) {
+          await transaction.outboxEvent.create({ data: outboxData(event.eventType, event) });
+        }
+        return domain;
+      }),
+    );
+    // Solo transiciones efectivamente confirmadas; un updateMany con count=0 no cuenta.
+    if (changed !== null && estadoEsperado !== nuevoEstado) {
+      recordTransition(estadoEsperado, nuevoEstado);
+    }
+    return changed;
+  }
+
+  private transitionEvent(
+    reservation: Reserva,
+    correlationId: string,
+    idempotencyKey: string | null,
+    previousStatus: EstadoReserva,
+    nextStatus: EstadoReserva,
+  ): EventEnvelope | null {
+    if (
+      previousStatus === 'PROGRAMADA' &&
+      nextStatus === 'ACTIVANDO' &&
+      reservation.routeSnapshot !== null &&
+      idempotencyKey !== null
+    ) {
+      return createEventEnvelope<ReadyForDispatchPayload>({
+        eventType: RESERVATION_EVENT_TYPES.readyForDispatch,
+        correlationId,
+        aggregateId: reservation.id,
+        payload: {
+          reservationId: reservation.id,
+          status: reservation.estado,
+          vehicleType: reservation.vehiculo,
+          route: reservation.routeSnapshot,
+          idempotencyKey,
         },
       });
+    }
 
-      return actualizada;
-    });
+    const eventType =
+      reservation.estado === 'ACTIVADA'
+        ? RESERVATION_EVENT_TYPES.activated
+        : reservation.estado === 'FALLIDA'
+          ? RESERVATION_EVENT_TYPES.failed
+          : null;
+    return eventType === null
+      ? null
+      : createReservationReferenceEvent({ eventType, correlationId, reservation });
+  }
 
-    return actual === null ? null : reservaFromPrisma(actual);
+  private correlationId(): string {
+    return getRequestContext()?.correlationId ?? randomUUID();
   }
 }
