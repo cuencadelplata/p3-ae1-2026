@@ -43,7 +43,7 @@ router.post("/reintegro", async (req: Request, res: Response) => {
 });
 
 router.get("/pagos/:viajeId/duplicado", async (req: Request, res: Response) => {
-  const { viajeId } = req.params;
+  const viajeId = String(req.params["viajeId"]);
   const esDuplicado = await existeViaje(viajeId);
   res.status(200).json({ esDuplicado });
 });
