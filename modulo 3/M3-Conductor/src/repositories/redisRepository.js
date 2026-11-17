@@ -1,5 +1,6 @@
 const redis = require("../config/redisClient");
 const conductorDBRepository = require("./conductorDBRepository");
+const redisHealth = require("../services/redisHealth");
 const { mockConductores, mockValoraciones } = require("../mocks/conductor/mockData");
 
 // Fallback en memoria por si Redis no está activo momentáneamente
@@ -45,7 +46,11 @@ async function seedRedisIfEmpty() {
       }
 
       for (const v of mockValoraciones) {
-        await redis.rpush(`conductor:${v.conductorId}:valoraciones`, JSON.stringify(v));
+        const evaluadorId = v.evaluadorId || v.conductorId;
+        await redis.rpush(
+          `conductor:${evaluadorId}:valoraciones`,
+          JSON.stringify(v)
+        );
       }
 
       console.log("[Redis] Mocks sembrados con éxito.");
@@ -137,12 +142,13 @@ async function crearConductor(datos) {
  * @returns {Promise<{ usuarioID: string, habilitado: string, origen: 'cache'|'db' } | null>}
  */
 async function obtenerHabilitado(id) {
-  try {
+  if (redisHealth.isUp()) try {
     const raw = await redis.get(keyHabilitado(id));
     if (raw) {
       return { ...JSON.parse(raw), origen: "cache" };
     }
   } catch (err) {
+    redisHealth.markDown(err);
     console.warn(`[Redis] Fallo al leer caché de habilitación, se consulta la base de datos: ${err.message}`);
   }
 
@@ -153,9 +159,10 @@ async function obtenerHabilitado(id) {
   }
 
   const resultado = { usuarioID: desdeDB.usuarioID, habilitado: desdeDB.habilitado };
-  try {
+  if (redisHealth.isUp()) try {
     await redis.set(keyHabilitado(id), JSON.stringify(resultado), "EX", TTL_HABILITADO);
   } catch (err) {
+    redisHealth.markDown(err);
     console.warn(`[Redis] Fallo al guardar en caché la habilitación de '${id}': ${err.message}`);
   }
 
@@ -177,22 +184,41 @@ async function obtenerHabilitado(id) {
  * @returns {Promise<{ usuarioID: string, disponible: boolean }>}
  */
 async function obtenerDisponibilidad(id) {
-  try {
+  if (redisHealth.isUp()) try {
     const raw = await redis.get(keyDisponible(id));
     if (raw) {
       const { disponible } = JSON.parse(raw);
       return { usuarioID: id, disponible: Boolean(disponible) };
     }
-  } catch (err) {
-    console.warn(`[Redis] Fallo al leer disponibilidad, usando fallback en memoria: ${err.message}`);
-    const enMemoria = inMemoryDisponibilidad.get(id);
-    if (enMemoria !== undefined) {
-      return { usuarioID: id, disponible: enMemoria };
+    // Redis UP y sin clave = heartbeat vencido = no disponible. Si la BD aún dice
+    // true, se sincroniza a false (sin re-cachear ni emitir evento).
+    try {
+      const desdeDB = await conductorDBRepository.obtenerDisponiblePorId(id);
+      if (desdeDB && desdeDB.disponible) {
+        await conductorDBRepository.actualizarDisponible(id, false);
+      }
+    } catch (err) {
+      console.warn(`[DB] Fallo al sincronizar disponibilidad vencida de '${id}': ${err.message}`);
     }
+    inMemoryDisponibilidad.set(id, false);
+    return { usuarioID: id, disponible: false };
+  } catch (err) {
+    redisHealth.markDown(err);
+    console.warn(`[Redis] Fallo al leer disponibilidad, se consulta la base de datos: ${err.message}`);
   }
 
-  // Sin clave vigente en Redis = sin heartbeat reciente = no disponible
-  return { usuarioID: id, disponible: false };
+  // Redis caído: la BD (columna `disponible`) es la fuente
+  let disponible;
+  try {
+    const desdeDB = await conductorDBRepository.obtenerDisponiblePorId(id);
+    if (desdeDB) disponible = Boolean(desdeDB.disponible);
+  } catch (err) {
+    console.warn(`[DB] Fallo al leer disponibilidad de '${id}': ${err.message}`);
+  }
+  if (disponible === undefined) {
+    disponible = inMemoryDisponibilidad.get(id) === true;
+  }
+  return { usuarioID: id, disponible };
 }
 
 /**
@@ -205,10 +231,19 @@ async function obtenerDisponibilidad(id) {
 async function actualizarDisponibilidad(id, disponible) {
   const { disponible: disponibleAnterior } = await obtenerDisponibilidad(id);
   const valor = { usuarioID: id, disponible: Boolean(disponible) };
-  try {
+  if (redisHealth.isUp()) try {
     await redis.set(keyDisponible(id), JSON.stringify(valor), "EX", TTL_DISPONIBLE);
   } catch (err) {
-    console.warn(`[Redis] Fallo al actualizar disponibilidad de '${id}', usando memoria: ${err.message}`);
+    redisHealth.markDown(err);
+    console.warn(`[Redis] Fallo al actualizar disponibilidad de '${id}': ${err.message}`);
+  }
+  // La BD se escribe solo cuando el valor cambió (no en cada heartbeat)
+  if (valor.disponible !== disponibleAnterior) {
+    try {
+      await conductorDBRepository.actualizarDisponible(id, valor.disponible);
+    } catch (err) {
+      console.warn(`[DB] Fallo al persistir disponibilidad de '${id}': ${err.message}`);
+    }
   }
   inMemoryDisponibilidad.set(id, Boolean(disponible));
   return { ...valor, disponibleAnterior };
@@ -229,7 +264,7 @@ async function actualizarHabilitado(id, habilitado) {
     return null;
   }
 
-  try {
+  if (redisHealth.isUp()) try {
     await redis.set(
       keyHabilitado(id),
       JSON.stringify({ usuarioID: id, habilitado }),
@@ -237,6 +272,7 @@ async function actualizarHabilitado(id, habilitado) {
       TTL_HABILITADO
     );
   } catch (err) {
+    redisHealth.markDown(err);
     console.warn(`[Redis] Fallo al refrescar la caché de habilitación de '${id}': ${err.message}`);
   }
 
@@ -249,11 +285,16 @@ async function actualizarHabilitado(id, habilitado) {
 }
 
 /**
- * Obtener valoraciones de un conductor
+ * Obtener valoraciones hechas por un conductor (evaluador) sobre pasajeros.
+ * @param {string} evaluadorId - usuarioID del conductor que valoró
  */
-async function obtenerValoraciones(conductorId) {
+async function obtenerValoraciones(evaluadorId) {
   try {
-    const lista = await redis.lrange(`conductor:${conductorId}:valoraciones`, 0, -1);
+    const lista = await redis.lrange(
+      `conductor:${evaluadorId}:valoraciones`,
+      0,
+      -1
+    );
     if (lista && lista.length > 0) {
       return lista.map((item) => JSON.parse(item));
     }
@@ -261,25 +302,31 @@ async function obtenerValoraciones(conductorId) {
     console.warn(`[Redis] Fallo al leer valoraciones de Redis: ${err.message}`);
   }
 
-  return inMemoryValoraciones.filter((v) => v.conductorId === conductorId);
+  return inMemoryValoraciones.filter(
+    (v) => (v.evaluadorId || v.conductorId) === evaluadorId
+  );
 }
 
 /**
- * Registrar una valoración para un conductor
+ * Registrar una valoración: conductor (evaluador) → pasajero (evaluado).
  */
 async function registrarValoracion(datos) {
+  const evaluadorId = datos.evaluadorId || datos.conductorId;
+  const evaluadoId = datos.evaluadoId || datos.clienteId || datos.usuarioId;
+
   const nuevaValoracion = {
     id: `val_${Date.now()}`,
-    usuarioId: datos.usuarioId,
-    conductorId: datos.conductorId,
+    evaluadorId,
+    evaluadoId,
     valoracion: Number(datos.valoracion),
     comentario: datos.comentario || "",
+    viajeId: datos.viajeId || null,
     fecha: new Date().toISOString()
   };
 
   try {
     await redis.rpush(
-      `conductor:${nuevaValoracion.conductorId}:valoraciones`,
+      `conductor:${nuevaValoracion.evaluadorId}:valoraciones`,
       JSON.stringify(nuevaValoracion)
     );
   } catch (err) {

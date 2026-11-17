@@ -12,6 +12,7 @@ module.exports = {
 
   routingKeys: {
     VIAJE_FINALIZADO: "viaje.finalizado",
-    VALORACION_HABILITADA: "valoracion.habilitada"
+    VALORACION_HABILITADA: "valoracion.habilitada",
+    VALORACION_REGISTRADA: "valoracion.registrada"
   }
 };

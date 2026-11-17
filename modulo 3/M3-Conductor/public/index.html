@@ -323,19 +323,19 @@
         },
         "/conductor/valoraciones": {
           "get": {
-            "summary": "Obtener las valoraciones de un conductor",
+            "summary": "Listar valoraciones hechas por un conductor (evaluador) sobre pasajeros",
             "parameters": [
-              { "name": "usuarioId", "in": "query", "required": true, "description": "ID del conductor para obtener sus valoraciones" }
+              { "name": "evaluadorId", "in": "query", "required": true, "description": "usuarioID del conductor evaluador (alias: conductorId)" }
             ],
             "responses": {
               "200": { "description": "Valoraciones obtenidas correctamente" },
-              "404": { "description": "Conductor no encontrado" }
+              "400": { "description": "Falta evaluadorId o conductorId" }
             }
           },
           "post": {
-            "summary": "Registrar la valoracion de un conductor",
+            "summary": "Registrar valoración del pasajero hecha por el conductor",
             "parameters": [
-              { "name": "usuarioId", "in": "query", "required": true, "description": "ID del conductor para registrar su valoracion" }
+              { "name": "evaluadorId", "in": "query", "required": false, "description": "usuarioID del conductor evaluador (alias: conductorId)" }
             ],
             "requestBody": {
               "required": true,
@@ -343,12 +343,13 @@
                 "application/json": {
                   "schema": {
                     "type": "object",
-                    "required": ["usuarioId", "valoracion"],
+                    "required": ["evaluadoId", "valoracion"],
                     "properties": {
-                      "usuarioId": { "type": "string", "example": "pasajero_3321" },
-                      "conductorId": { "type": "string", "example": "usr_9988" },
+                      "evaluadorId": { "type": "string", "example": "cond_001" },
+                      "evaluadoId": { "type": "string", "example": "pasajero_101" },
                       "valoracion": { "type": "number", "minimum": 1, "maximum": 5, "example": 5 },
-                      "comentario": { "type": "string", "example": "Excelente viaje, conductor puntual y muy amable." }
+                      "comentario": { "type": "string", "example": "Pasajero puntual y respetuoso." },
+                      "viajeId": { "type": "string", "example": "viaje-123" }
                     }
                   }
                 }
@@ -400,25 +401,26 @@
       get_valoraciones: {
         method: 'GET',
         path: '/conductor/valoraciones',
-        description: 'Obtener las valoraciones y calificaciones recibidas por un conductor.',
+        description: 'Listar valoraciones hechas por el conductor (evaluador) sobre pasajeros (evaluados).',
         params: [
-          { name: 'usuarioId', in: 'query', label: 'usuarioId / Conductor ID (Query param)', default: 'usr_9988', required: true }
+          { name: 'evaluadorId', in: 'query', label: 'evaluadorId / Conductor ID (Query)', default: 'cond_001', required: true }
         ],
         hasBody: false
       },
       post_valoracion: {
         method: 'POST',
         path: '/conductor/valoraciones',
-        description: 'Registrar una nueva valoración/reseña para un conductor.',
+        description: 'El conductor (evaluador) registra una valoración del pasajero (evaluado).',
         params: [
-          { name: 'usuarioId', in: 'query', label: 'usuarioId / Conductor ID (Query param)', default: 'usr_9988', required: true }
+          { name: 'evaluadorId', in: 'query', label: 'evaluadorId / Conductor ID (Query)', default: 'cond_001', required: false }
         ],
         hasBody: true,
         defaultBody: {
-          "usuarioId": "pasajero_3321",
-          "conductorId": "usr_9988",
+          "evaluadorId": "cond_001",
+          "evaluadoId": "pasajero_101",
           "valoracion": 5,
-          "comentario": "Excelente viaje, conductor puntual y muy amable."
+          "comentario": "Pasajero puntual y respetuoso.",
+          "viajeId": "viaje-123"
         }
       }
     };

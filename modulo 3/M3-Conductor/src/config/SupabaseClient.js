@@ -7,7 +7,17 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 let supabase = null;
 
 if (supabaseUrl && supabaseKey) {
-  supabase = createClient(supabaseUrl, supabaseKey);
+  try {
+    supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      realtime: { params: { eventsPerSecond: 0 } }
+    });
+  } catch (err) {
+    console.warn(
+      `[Supabase] No se pudo inicializar el cliente (${err.message}). Se usa Redis/memoria.`
+    );
+    supabase = null;
+  }
 } else {
   console.warn(
     "[Supabase] Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY: el módulo operará sin base de datos persistente (solo Redis/fallback en memoria)."

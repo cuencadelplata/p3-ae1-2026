@@ -2,8 +2,15 @@ const { getRabbitChannel } = require("../../../infraestructure/rabbimq.client");
 const topology = require("../../../infraestructure/rabbitmq.topology");
 const { procesarViajeFinalizado } = require("../valoraciones.service");
 
+let escuchando = false;
+
 async function startViajeFinalizadoConsumer() {
+  if (escuchando) return;
   const channel = getRabbitChannel();
+  escuchando = true;
+  channel.on("close", () => {
+    escuchando = false;
+  });
 
   const exchange = topology.exchanges.VIAJES;
   const queue = topology.queues.VIAJE_FINALIZADO_VALORACIONES;
