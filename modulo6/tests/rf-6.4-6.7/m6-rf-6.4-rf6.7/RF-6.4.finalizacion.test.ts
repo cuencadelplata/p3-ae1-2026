@@ -104,7 +104,7 @@ describe('RF-6.4 - Fachada de finalización', () => {
     expect(response.status).toBe(502);
   });
 
-  it('simula los contratos HTTP de tarifas y pagos de M7', async () => {
+  it('no simula las APIs de tarifas ni pagos provistas por M7', async () => {
     const running = await startServices();
     services.api = running.api;
     services.simulator = running.simulator;
@@ -114,16 +114,14 @@ describe('RF-6.4 - Fachada de finalización', () => {
     const fareResponse = await fetch(`${simulatorUrl}/tarifa/estimacion`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        origen: { lat: -34.6, lng: -58.4 },
-        destino: { lat: -34.7, lng: -58.5 },
-        distanciaKm: 18.5,
-        tiempoEstimadoMin: 42,
-        vehicleType: 'auto',
-      }),
+      body: JSON.stringify({}),
     });
-    const fare = await fareResponse.json() as { estimatedFare: number; currency: string };
-    expect(fareResponse.status).toBe(200);
-    expect(fare).toMatchObject({ estimatedFare: 7225, currency: 'ARS' });
+    const paymentResponse = await fetch(`${simulatorUrl}/metodo-pago`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(fareResponse.status).toBe(404);
+    expect(paymentResponse.status).toBe(404);
   });
 });

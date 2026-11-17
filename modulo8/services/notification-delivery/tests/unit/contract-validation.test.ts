@@ -6,6 +6,26 @@ import {
 } from '../../src/domain/notification-requested.contract.js';
 
 test('Validador de Contrato NotificationRequested', async (t) => {
+  await t.test('acepta cancelacion previa con rideRequestId y sin tripId', () => {
+    const raw = {
+      messageId: '7c9e1d2a-8b3f-4e5c-9d0a-1f2e3d4c5b6a',
+      eventType: 'NotificationRequested', version: 1,
+      occurredAt: '2026-11-17T12:31:00.000Z',
+      correlationId: 'req_550e8400', producer: 'm8-notifications',
+      data: {
+        notificationId: 'a1b2c3d4-e5f6-4a8b-9c0d-1e2f3a4b5c6d',
+        rideRequestId: 'req_550e8400', recipientId: 105,
+        eventType: 'TRIP_CANCELLED', channel: 'PUSH',
+        message: 'Tu solicitud de viaje fue cancelada.',
+        createdAt: '2026-11-17T12:31:00.000Z',
+      },
+    };
+    assert.equal(validateNotificationRequestedEnvelope(raw).data.tripId, undefined);
+    assert.throws(() => validateNotificationRequestedEnvelope({
+      ...raw, data: { ...raw.data, rideRequestId: undefined },
+    }), ContractValidationError);
+  });
+
   await t.test('debe validar exitosamente un envelope completo y conforme al contrato', () => {
     const raw = {
       messageId: '7c9e1d2a-8b3f-4e5c-9d0a-1f2e3d4c5b6a',

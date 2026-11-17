@@ -43,8 +43,10 @@ const timeoutMs = Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 
     ? configuredTimeoutMs
     : 2500;
 
-function baseUrl(environmentKey: string, defaultUrl: string): string {
-    return (process.env[environmentKey] || defaultUrl).replace(/\/+$/, '');
+function baseUrl(environmentKey: string, defaultUrl?: string): string {
+    const url = process.env[environmentKey] || defaultUrl;
+    if (!url) throw new ErrorServicioFinalizacion(`Falta configurar ${environmentKey}`, 503);
+    return url.replace(/\/+$/, '');
 }
 
 /** M7 protege /metodo-pago con una API key interna (RNF-10/RNF-11: se configura por entorno). */
@@ -138,7 +140,7 @@ async function procesarPago(
     total: number,
     moneda: string,
 ): Promise<EstadoPago> {
-    const m7 = baseUrl('M7_URL', 'http://localhost:3001');
+    const m7 = baseUrl('M7_URL');
     const rutaPago = `${m7}/metodo-pago/${encodeURIComponent(viaje.id)}`;
 
     const existente = await requestJson({ dependencia: 'm7', operacion: 'consultar_pago' }, 'GET', rutaPago, undefined, headersM7(), [404]);
@@ -182,7 +184,7 @@ export async function ejecutarServiciosFinalizacion(
     inicio: Date,
 ): Promise<FinalizacionPersistida> {
     const m4 = baseUrl('M4_URL', 'http://localhost:3001/api/v1');
-    const m7 = baseUrl('M7_URL', 'http://localhost:3001');
+    const m7 = baseUrl('M7_URL');
     const tiempoMinutos = minutosTranscurridos(inicio, data.horaFin);
 
     // M6 no recibe el recorrido GPS: la distancia se estima con M4 a partir de origen y destino.

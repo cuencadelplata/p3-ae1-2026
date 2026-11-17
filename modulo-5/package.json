@@ -1,0 +1,57 @@
+{
+  "name": "p3-ae2-m5-dispatch-service",
+  "version": "2.0.0",
+  "description": "Módulo 5: Solicitud y Despacho - Plataforma de Movilidad Urbana (AE2)",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "jest",
+    "test:unit": "jest --selectProjects unit",
+    "test:integration": "jest --selectProjects integration",
+    "test:e2e": "playwright test",
+    "test:stress": "k6 run tests/stress/stress-ride-request-flow.js",
+    "test:stress:concurrency": "k6 run tests/stress/stress-concurrency-acceptance.js",
+    "test:stress:cancellation": "k6 run tests/stress/stress-cancellation-race.js",
+    "test:stress:all": "powershell -ExecutionPolicy Bypass -File tests/stress/run-all-stress-tests.ps1"
+  },
+  "keywords": [
+    "microservices",
+    "mobility",
+    "dispatch",
+    "typescript",
+    "rest",
+    "openapi"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@opentelemetry/api": "^1.10.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.301.2",
+    "@opentelemetry/resources": "^3.1.1",
+    "@opentelemetry/sdk-metrics": "^3.1.1",
+    "@opentelemetry/semantic-conventions": "^1.45.0",
+    "@prisma/client": "^5.22.0",
+    "amqplib": "^2.2.0",
+    "dotenv": "^18.0.5",
+    "express": "^4.19.2",
+    "ioredis": "^6.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/amqplib": "^0.10.8",
+    "@types/express": "^4.17.21",
+    "@types/ioredis": "^4.28.10",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.14.9",
+    "@types/supertest": "^7.2.1",
+    "jest": "^30.5.1",
+    "prisma": "^5.22.0",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.2"
+  }
+}

@@ -5,7 +5,7 @@ import { crearViaje, datosFinalizacion, post } from './helpers.js';
 const rabbitUrl = process.env.E2E_RABBITMQ_URL ?? 'amqp://guest:guest@127.0.0.1:5672';
 
 describe('RF-6.4 - Finalización del viaje en Docker', () => {
-  it('registra tiempo real, distancia, tarifa y autoriza el pago con tarjeta en M7 (simulador)', async () => {
+  it('registra tiempo real, distancia, tarifa y autoriza el pago con tarjeta en M7', async () => {
     const viajeId = await crearViaje({ clienteId: `E2E-64-${Date.now()}`, iniciar: true });
 
     const { response, body } = await post(`/api/viajes/${viajeId}/finalizacion`, datosFinalizacion());
@@ -13,7 +13,7 @@ describe('RF-6.4 - Finalización del viaje en Docker', () => {
     expect(response.status).toBe(200);
     expect(body.viaje).toMatchObject({
       estado: 'completado',
-      // Simulador M7: (500 + 1,11 km × 250 + 1 min × 50) × 1 (auto)
+      // M7: (500 + 1,11 km × 250 + 1 min × 50) × 1 (auto)
       total: 827.5,
       tiempoMinutos: 1,
       tiempoEstimadoMinutos: 3,
@@ -59,7 +59,7 @@ describe('RF-6.4 - Finalización del viaje en Docker', () => {
     expect(primera.response.status).toBe(200);
     expect(segunda.response.status).toBe(200);
     expect(segunda.body).toMatchObject({ idempotente: true, paymentId: primera.body.paymentId });
-    // Si M6 hubiera vuelto a autorizar, el simulador de M7 respondería 400 (orden ya procesada).
+    // Si M6 hubiera vuelto a autorizar, M7 respondería 400 (orden ya procesada).
   });
 
   it('finalizaciones concurrentes: una sola transición a completado', async () => {

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>M4 - Ubicacion y disponibilidad</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Plataforma de movilidad urbana · AE4</p>
+        <h1>M4 - Ubicacion y disponibilidad</h1>
+        <p class="subtitle">Panel independiente para demostrar ubicaciones temporales y conductores cercanos.</p>
+      </div>
+      <nav aria-label="Enlaces del servicio">
+        <span id="health" class="status pending">Comprobando API...</span>
+        <a class="secondary" href="/docs">Abrir Scalar</a>
+        <a
+          class="secondary"
+          href="https://patientoregano22.grafana.net/public-dashboards/7466b2418ef24de6afdbc4561ffb3eb1"
+          target="_blank"
+          rel="noopener noreferrer"
+        >Ver métricas k6</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="card intro">
+        <div><p class="eyebrow">Recorrido sugerido</p><h2>Autenticar, publicar y buscar</h2><p>Ingresá un token de conductor emitido por M1, publicá su ubicación y buscá candidatos. Redis conserva el estado vigente y PostgreSQL el historial.</p></div>
+        <div class="steps" aria-label="Pasos del recorrido"><span><b>1</b> Publicar</span><span><b>2</b> Buscar</span><span><b>3</b> Actualizar</span></div>
+      </section>
+
+      <div class="grid">
+        <section class="card">
+          <div class="section-title"><div><p class="eyebrow">RF-4.1</p><h2>Ubicacion del conductor</h2></div><span class="tag">TTL 60 s</span></div>
+          <form id="location-form">
+            <label>Token JWT de M1<input id="auth-token" type="password" placeholder="Pegá el token sin escribir Bearer" required /></label>
+            <label>User ID del conductor<input id="driver-id" type="number" min="1" step="1" value="13" required /></label>
+            <div class="two-columns"><label>Latitud<input id="latitude" type="number" step="any" value="-27.4692" required /></label><label>Longitud<input id="longitude" type="number" step="any" value="-58.8306" required /></label></div>
+            <div class="two-columns"><label>Vehiculo<select id="vehicle-type"><option>AUTO</option><option>MOTO</option></select></label><label>Estado<select id="available"><option value="true">Disponible</option><option value="false">No disponible</option></select></label></div>
+            <div class="actions"><button type="submit">Publicar ubicación autenticada</button></div>
+          </form>
+        </section>
+
+        <section class="card">
+          <div class="section-title"><div><p class="eyebrow">RF-4.2 y RF-4.3</p><h2>Conductores cercanos</h2></div><span class="tag">AUTO / MOTO</span></div>
+          <form id="search-form">
+            <div class="two-columns"><label>Latitud de origen<input id="search-latitude" type="number" step="any" value="-27.4692" required /></label><label>Longitud de origen<input id="search-longitude" type="number" step="any" value="-58.8306" required /></label></div>
+            <div class="two-columns"><label>Vehiculo<select id="search-vehicle"><option>AUTO</option><option>MOTO</option></select></label><label>Radio (km)<input id="radius" type="number" min="0.1" max="50" step="0.1" value="5" required /></label></div>
+            <button type="submit">Buscar candidatos</button>
+          </form>
+          <div id="candidates" class="empty">Todavia no se realizo una busqueda.</div>
+        </section>
+      </div>
+
+      <section class="card result-card">
+        <div class="section-title"><div><p class="eyebrow">Respuesta del servicio</p><h2>Ultima operacion</h2></div><span id="response-status" class="tag">Sin solicitudes</span></div>
+        <pre id="output" aria-live="polite">Usá uno de los formularios para probar la API.</pre>
+      </section>
+
+      <section class="card performance-card" aria-labelledby="performance-title">
+        <h2 id="performance-title">Rendimiento de M4</h2>
+        <div class="grid performance-runs">
+          <div class="performance-run">
+            <h3>Prueba rápida con k6 en la Mac</h3>
+            <p>Comprobó la salud de la API, la búsqueda de conductores y la estimación de distancia y tiempo.</p>
+            <ul>
+              <li>9 de 9 comprobaciones aprobadas</li>
+              <li>0 de 4 solicitudes HTTP fallidas</li>
+            </ul>
+            <figure class="latency-chart">
+              <figcaption>Latencia HTTP de la prueba rápida (ms)</figcaption>
+              <div class="latency-row"><span>Mínimo</span><meter min="0" max="6" value="1.4" aria-label="Latencia mínima en milisegundos"></meter><span>1,40</span></div>
+              <div class="latency-row"><span>Mediana</span><meter min="0" max="6" value="1.78" aria-label="Latencia mediana en milisegundos"></meter><span>1,78</span></div>
+              <div class="latency-row"><span>P90</span><meter min="0" max="6" value="4.43" aria-label="Latencia P90 en milisegundos"></meter><span>4,43</span></div>
+              <div class="latency-row"><span>P95</span><meter min="0" max="6" value="4.96" aria-label="Latencia P95 en milisegundos"></meter><span>4,96</span></div>
+              <div class="latency-row"><span>Máximo</span><meter min="0" max="6" value="5.5" aria-label="Latencia máxima en milisegundos"></meter><span>5,50</span></div>
+            </figure>
+            <details class="performance-evidence">
+              <summary>Ver salida de k6</summary>
+              <pre>Prueba rápida de M4 en macOS
+Extracto de la salida compartida desde Terminal
+
+docker compose --profile performance run --rm k6 run /scripts/smoke.js
+
+     execution: local
+        script: /scripts/smoke.js
+        output: -
+
+  █ THRESHOLDS
+
+    checks
+    ✓ &#x27;rate==1&#x27; rate=100.00%
+
+    http_req_duration
+    ✓ &#x27;p(95)&lt;1000&#x27; p(95)=4.96ms
+
+    http_req_failed
+    ✓ &#x27;rate&lt;0.01&#x27; rate=0.00%
+
+  █ TOTAL RESULTS
+
+    checks_succeeded...: 100.00% 9 out of 9
+    checks_failed......: 0.00%   0 out of 9
+
+    ✓ liveness responde 200
+    ✓ liveness informa UP
+    ✓ readiness responde 200
+    ✓ readiness informa UP
+    ✓ nearby responde 200
+    ✓ nearby devuelve drivers
+    ✓ estimate responde 200
+    ✓ estimate devuelve distancia
+    ✓ estimate devuelve ETA
+
+    HTTP
+    http_req_duration..............: avg=2.61ms  min=1.4ms   med=1.78ms  max=5.5ms   p(90)=4.43ms  p(95)=4.96ms
+    http_req_failed................: 0.00%  0 out of 4</pre>
+            </details>
+          </div>
+          <div class="performance-run">
+            <h3>Prueba de carga en Grafana Cloud</h3>
+            <p>Ejecución histórica desde Windows sobre la búsqueda de conductores cercanos.</p>
+            <ul>
+              <li>Hasta 10 usuarios virtuales</li>
+              <li>0 % de solicitudes fallidas, según el registro de la entrega</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,83 @@
+// Configuración de Prisma para Módulo 5 (Solicitud y Despacho) - DispatchDB
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ----------------------------------------------------
+// Entidad: Solicitud de Viaje (RideRequest)
+// ----------------------------------------------------
+model RideRequest {
+  id                  String       @id
+  clientId            String
+  originLat           Float
+  originLng           Float
+  originAddress       String
+  destLat             Float
+  destLng             Float
+  destAddress         String
+  vehicleType         String       // 'AUTO' | 'MOTO'
+  status              String       // 'PENDING' | 'SEARCHING' | 'OFFERED' | 'ASSIGNED' | 'EXPIRED' | 'NO_DRIVERS_AVAILABLE' | 'CANCELLED'
+  estimatedAmount     Float
+  currency            String       @default("ARS")
+  estimatedDistanceKm Float
+  estimatedDurationMin Int
+  fareToken           String?
+  assignedDriverId    String?
+  idempotencyKey      String       @unique
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  expiresAt           DateTime
+  cancelledAt         DateTime?
+  cancellationReason  String?
+
+  // Relaciones
+  offers              RideOffer[]
+  logs                DispatchLog[]
+
+  @@index([clientId])
+  @@index([status])
+}
+
+// ----------------------------------------------------
+// Entidad: Oferta de Viaje despachada a Conductor (RideOffer)
+// ----------------------------------------------------
+model RideOffer {
+  id           String      @id
+  requestId    String
+  driverId     String
+  status       String      // 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED'
+  ttlSeconds   Int
+  createdAt    DateTime    @default(now())
+  expiresAt    DateTime
+  respondedAt  DateTime?
+
+  // Relación con la solicitud padre
+  request      RideRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@index([driverId])
+  @@index([status])
+}
+
+// ----------------------------------------------------
+// Entidad de Auditoría Append-Only (DispatchLog)
+// Cumple con la restricción técnica de no realizar deletes
+// ----------------------------------------------------
+model DispatchLog {
+  id          String      @id @default(uuid())
+  requestId   String
+  eventType   String      // 'REQUEST_CREATED', 'OFFER_SENT', 'OFFER_ACCEPTED', 'OFFER_REJECTED', 'REQUEST_ASSIGNED', 'REQUEST_CANCELLED'
+  driverId    String?
+  details     String?
+  createdAt   DateTime    @default(now())
+
+  request     RideRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@index([eventType])
+}

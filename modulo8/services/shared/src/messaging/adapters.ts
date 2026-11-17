@@ -23,6 +23,7 @@ const EXTERNAL_EVENT_TYPE_MAP: Record<string, string> = {
   'trip.started': 'TripStarted',
   'trip_cancelled': 'TripCancelled',
   'trip.cancelled': 'TripCancelled',
+  'ride_request.cancelled': 'TripCancelled',
   'trip_completed': 'TripCompleted',
   'trip.completed': 'TripCompleted',
   'payment_confirmed': 'PaymentConfirmed',
