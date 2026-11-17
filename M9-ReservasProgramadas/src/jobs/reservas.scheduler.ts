@@ -1,8 +1,12 @@
+import { randomUUID } from 'node:crypto';
+
 import cron from 'node-cron';
 
+import { runWithRequestContext } from '../integration/request-context.js';
+import { markSchedulerSuccess, now, recordSchedulerRun } from '../observability/metrics.js';
+import { withSpan } from '../observability/tracing.js';
 import type { ReservaRepository } from '../repositories/reserva.repository.js';
 import type { ActivacionReservaService } from '../services/activacion-reserva.service.js';
-import type { ReservaService } from '../services/reserva.service.js';
 
 export interface ResultadoEjecucionScheduler {
   encontradas: number;
@@ -18,7 +22,6 @@ export class ReservasScheduler {
     private readonly activacionService: ActivacionReservaService,
     private readonly expresionCron: string,
     private readonly onError: (error: unknown) => void = console.error,
-    private readonly reservaService?: ReservaService,
   ) {}
 
   public start(): void {
@@ -37,31 +40,57 @@ export class ReservasScheduler {
     this.task = null;
   }
 
+  /**
+   * Trabajo diferido: cada ejecución inicia una traza NUEVA (`scheduler.run`); no se mantiene
+   * abierto ningún span desde la creación de la reserva hasta su fecha programada.
+   */
   public async ejecutar(fechaLimite = new Date()): Promise<ResultadoEjecucionScheduler> {
-    if (this.reservaService !== undefined) {
-      const sinChofer = (await this.repository.listar())
-        .filter(
-          (reserva) =>
-            reserva.estado === 'PENDIENTE_ASIGNACION' &&
-            Date.parse(reserva.fechaHoraProgramada) > Date.now(),
-        )
-        .slice(0, 100);
-      await Promise.allSettled(
-        sinChofer.map(({ id }) => this.reservaService!.reintentarAsignacion(id)),
-      );
-    }
+    return withSpan(
+      'scheduler.run',
+      async (span) => {
+        const startMs = now();
+        try {
+          const resultado = await this.ejecutarLote(fechaLimite);
+          span.setAttributes({
+            'm9.scheduler.found': resultado.encontradas,
+            'm9.scheduler.failed': resultado.fallidas,
+          });
+          recordSchedulerRun('success', startMs, resultado.encontradas);
+          markSchedulerSuccess();
+          return resultado;
+        } catch (error) {
+          recordSchedulerRun('error', startMs, 0);
+          throw error;
+        }
+      },
+      { root: true },
+    );
+  }
+
+  private async ejecutarLote(fechaLimite: Date): Promise<ResultadoEjecucionScheduler> {
     const pendientes = await this.repository.buscarPendientes(fechaLimite);
     const resultados = await Promise.allSettled(
-      pendientes.map(({ id }) => this.activacionService.activar(id)),
+      pendientes.map(({ id }) => {
+        const correlationId = randomUUID();
+        return runWithRequestContext({ correlationId }, () =>
+          withSpan('reservation.activate', () => this.activacionService.activar(id), {
+            attributes: { 'm9.reservation_id': id, 'm9.correlation_id': correlationId },
+          }),
+        );
+      }),
     );
     const activadas = resultados.filter(
       (result) => result.status === 'fulfilled' && result.value.activada,
+    ).length;
+    const fallidas = resultados.filter(
+      (result) =>
+        result.status === 'rejected' || (result.status === 'fulfilled' && result.value.fallida),
     ).length;
 
     return {
       encontradas: pendientes.length,
       activadas,
-      fallidas: resultados.length - activadas,
+      fallidas,
     };
   }
 }

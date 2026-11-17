@@ -48,20 +48,20 @@ const waitForHealth = async () => {
   throw new Error('M9 no quedó saludable dentro de 60 segundos.');
 };
 
+const dockerEnvironment = {
+  ...process.env,
+  PORT: '3909',
+  RESERVATION_JOB_INTERVAL: '*/1 * * * * *',
+};
 let composeStarted = false;
 try {
-  const dockerEnvironment = {
-    ...process.env,
-    PORT: '3909',
-    M5_OFERTAS_ESCENARIO: 'ACEPTAN',
-    RESERVATION_JOB_INTERVAL: '*/1 * * * * *',
-  };
+  run('docker', ['compose', 'down', '--remove-orphans'], dockerEnvironment);
   composeStarted = true;
   run('docker', ['compose', '--parallel', '1', 'up', '--build', '-d'], dockerEnvironment);
   await waitForHealth();
   run(
     'docker',
-    ['compose', 'exec', '-T', 'm9-reservas', 'wget', '-qO-', 'http://m5-stub:3005/health'],
+    ['compose', 'exec', '-T', 'm9-reservas', 'wget', '-qO-', 'http://m5-stub:3001/health'],
     dockerEnvironment,
   );
   run(
@@ -75,6 +75,6 @@ try {
   });
 } finally {
   if (composeStarted) {
-    run('docker', ['compose', 'down']);
+    run('docker', ['compose', 'down'], dockerEnvironment);
   }
 }

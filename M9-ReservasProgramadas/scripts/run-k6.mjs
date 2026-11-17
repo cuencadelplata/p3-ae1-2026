@@ -1,0 +1,154 @@
+/**
+ * Ejecuta un escenario k6 de M9 y registra metadatos reproducibles de la corrida.
+ *
+ *   node scripts/run-k6.mjs <escenario> [--cloud] [--host-k6]
+ *
+ * Por defecto usa la imagen grafana/k6 DENTRO de la red Compose (BASE_URL=http://m9-reservas:3000),
+ * así no hace falta instalar k6 en Windows. Con --host-k6 usa el binario `k6` local contra
+ * http://localhost:3000. Con --cloud ejecuta `k6 cloud run --local-execution`: el generador
+ * corre en esta PC y solo los RESULTADOS van a Grafana Cloud k6 (los generadores cloud no
+ * pueden llegar al localhost de esta máquina). Se usa --no-archive-upload para no subir scripts.
+ *
+ * Secretos: solo se pasan K6_CLOUD_TOKEN / K6_CLOUD_STACK_ID / K6_CLOUD_PROJECT_ID leídos de
+ * observability/.env.grafana-cloud; el token de ingesta OTLP nunca llega a k6.
+ */
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+const K6_IMAGE = 'grafana/k6:2.3.0';
+const NETWORK = process.env.K6_DOCKER_NETWORK ?? 'm9-reservas-programadas_reservas-network';
+const SCENARIOS = ['smoke', 'load', 'stress', 'spike', 'cache', 'concurrency', 'activation'];
+const PASSTHROUGH = [
+  'PROFILE',
+  'VUS',
+  'DURATION',
+  'MODE',
+  'STRESS_STEPS',
+  'STRESS_RPS',
+  'PRE_ALLOCATED_VUS',
+  'MAX_VUS',
+  'BASE_VUS',
+  'SPIKE_VUS',
+  'CACHE_SET_SIZE',
+  'CACHE_TTL_SECONDS',
+  'SHARED_RESERVATIONS',
+  'ITERATIONS',
+  'ACTIVATION_LEAD_SECONDS',
+  'ACTIVATION_TIMEOUT_SECONDS',
+  'POLL_INTERVAL_SECONDS',
+  'THINK_TIME_SECONDS',
+];
+const CLOUD_VARS = ['K6_CLOUD_TOKEN', 'K6_CLOUD_STACK_ID', 'K6_CLOUD_PROJECT_ID'];
+
+const [scenario, ...flags] = process.argv.slice(2);
+if (!SCENARIOS.includes(scenario)) {
+  console.error(`Uso: node scripts/run-k6.mjs <${SCENARIOS.join('|')}> [--cloud] [--host-k6]`);
+  process.exit(2);
+}
+const cloud = flags.includes('--cloud');
+const hostK6 = flags.includes('--host-k6');
+const moduleDir = path.resolve(import.meta.dirname, '..');
+const resultsDir = path.join(moduleDir, 'performance', 'results');
+mkdirSync(resultsDir, { recursive: true });
+
+const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '');
+const runId = process.env.RUN_ID ?? `${scenario}-${stamp}`;
+const baseUrl =
+  process.env.BASE_URL ?? (hostK6 ? 'http://localhost:3000' : 'http://m9-reservas:3000');
+
+const readCloudEnv = () => {
+  const file = path.join(moduleDir, 'observability', '.env.grafana-cloud');
+  const values = {};
+  if (existsSync(file)) {
+    for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
+      const match = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
+      if (match && CLOUD_VARS.includes(match[1])) values[match[1]] = match[2];
+    }
+  }
+  for (const name of CLOUD_VARS) if (process.env[name]) values[name] = process.env[name];
+  if (!values.K6_CLOUD_TOKEN || values.K6_CLOUD_TOKEN === 'REEMPLAZAR') {
+    console.error(
+      'Falta K6_CLOUD_TOKEN en observability/.env.grafana-cloud (ver guía Grafana Cloud).',
+    );
+    process.exit(2);
+  }
+  return values;
+};
+
+const scriptEnv = { BASE_URL: baseUrl, RUN_ID: runId, SCENARIO_NAME: scenario };
+for (const name of PASSTHROUGH)
+  if (process.env[name] !== undefined) scriptEnv[name] = process.env[name];
+const cloudEnv = cloud ? readCloudEnv() : {};
+
+const k6Args = [
+  ...(cloud ? ['cloud', 'run', '--local-execution', '--no-archive-upload'] : ['run']),
+  ...Object.entries(scriptEnv).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
+  `performance/k6/${scenario}.js`,
+];
+
+let command;
+let args;
+if (hostK6) {
+  command = 'k6';
+  args = k6Args;
+} else {
+  command = 'docker';
+  args = [
+    'run',
+    '--rm',
+    '--network',
+    NETWORK,
+    '-v',
+    `${path.join(moduleDir, 'performance')}:/work/performance`,
+    '-w',
+    '/work',
+    ...Object.keys(cloudEnv).flatMap((name) => ['-e', name]),
+    K6_IMAGE,
+    ...k6Args,
+  ];
+}
+
+const versionProbe = hostK6
+  ? spawnSync('k6', ['version'], { encoding: 'utf8' })
+  : spawnSync('docker', ['run', '--rm', K6_IMAGE, 'version'], { encoding: 'utf8' });
+
+const metadata = {
+  scenario,
+  runId,
+  startedAt: new Date().toISOString(),
+  mode: cloud ? 'cloud run --local-execution (resultados a Grafana Cloud k6)' : 'run local',
+  generator: hostK6 ? 'k6 instalado en el host' : `contenedor ${K6_IMAGE} en red ${NETWORK}`,
+  k6Version: (versionProbe.stdout || versionProbe.stderr || 'desconocida').trim(),
+  baseUrl,
+  parameters: scriptEnv,
+  host: {
+    platform: `${os.platform()} ${os.release()}`,
+    cpus: os.cpus().length,
+    cpuModel: os.cpus()[0]?.model,
+    totalMemoryGb: Math.round((os.totalmem() / 1024 ** 3) * 10) / 10,
+  },
+  generatorSharesMachineWithApp: true,
+  note: 'Generador y aplicación comparten equipo: los resultados incluyen esa contención.',
+};
+
+console.log(`k6 ${scenario} · RUN_ID=${runId} · ${metadata.generator}`);
+const result = spawnSync(command, args, {
+  cwd: moduleDir,
+  stdio: 'inherit',
+  env: { ...process.env, ...cloudEnv },
+});
+metadata.finishedAt = new Date().toISOString();
+metadata.exitCode = result.status;
+metadata.thresholdsPassed = result.status === 0;
+writeFileSync(
+  path.join(resultsDir, `${scenario}-${runId}.meta.json`),
+  JSON.stringify(metadata, null, 2),
+);
+console.log(
+  `Resultado: ${result.status === 0 ? 'thresholds OK' : `código ${result.status} (thresholds incumplidos o error)`}` +
+    ` · resumen en performance/results/${scenario}-${runId}.json`,
+);
+// Se propaga el código de k6: un incumplimiento NO se oculta.
+process.exit(result.status ?? 1);
