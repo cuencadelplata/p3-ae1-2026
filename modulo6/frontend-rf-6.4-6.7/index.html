@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#000000">
+    <title>Viajes | Registro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="/registro.css">
+    <script type="module" src="/registro.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#resultados">Saltar a los resultados</a>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Viajes, registro">
+        <span class="brand-mark" aria-hidden="true">V</span>
+        <span class="brand-name">VIAJES<span> / REGISTRO</span></span>
+      </a>
+      <div class="topbar-right">
+        <span class="api-status" id="api-status" data-estado="cargando">
+          <span class="status-dot" aria-hidden="true"></span><span id="api-status-texto">Conectando…</span>
+        </span>
+        <button class="button button-quiet" id="actualizar" type="button" title="Actualizar resultados">Actualizar</button>
+      </div>
+    </header>
+
+    <main class="shell">
+      <section class="page-heading">
+        <div>
+          <p class="eyebrow">HISTORIAL · FINALIZACIÓN</p>
+          <h1>Registro de viajes</h1>
+        </div>
+        <div class="summary" aria-label="Resumen de resultados">
+          <div class="summary-item"><strong id="cuenta-curso">0</strong><span>En curso</span></div>
+          <div class="summary-item"><strong id="cuenta-completados">0</strong><span>Completados</span></div>
+          <div class="summary-item"><strong id="cuenta-total">0</strong><span>Encontrados</span></div>
+        </div>
+      </section>
+
+      <div class="workspace">
+        <aside class="filter-panel">
+          <div class="section-heading">
+            <span class="step-number">01</span>
+            <div><p class="eyebrow">BÚSQUEDA</p><h2>Filtrar viajes</h2></div>
+          </div>
+
+          <form id="filtros" class="form-stack" role="search" aria-label="Filtrar viajes">
+            <label for="f-cliente">Cliente</label>
+            <input id="f-cliente" name="clienteId" autocomplete="off" maxlength="50" placeholder="ID de cliente">
+
+            <label for="f-conductor">Conductor</label>
+            <input id="f-conductor" name="conductorId" autocomplete="off" maxlength="50" placeholder="ID de conductor">
+
+            <label for="f-estado">Estado</label>
+            <select id="f-estado" name="estado">
+              <option value="">Todos</option>
+              <option value="SOLICITADO">Solicitado</option>
+              <option value="CONDUCTOR_EN_CAMINO">Conductor en camino</option>
+              <option value="ARRIBADO">Arribado</option>
+              <option value="EN_CURSO">En curso</option>
+              <option value="COMPLETADO">Completado</option>
+              <option value="CANCELADO">Cancelado</option>
+            </select>
+
+            <button class="button button-primary" type="submit">Buscar <span aria-hidden="true">↗</span></button>
+            <button class="button button-quiet" type="reset" id="limpiar">Limpiar filtros</button>
+          </form>
+
+          <div class="panel-rule"></div>
+          <p class="panel-note">Combiná cliente, conductor y estado. El historial de cada viaje es de solo lectura: las transiciones registradas no se modifican.</p>
+        </aside>
+
+        <section class="operations" id="resultados" aria-labelledby="titulo-resultados">
+          <div class="list-heading">
+            <div><p class="eyebrow">SEGUIMIENTO</p><h2 id="titulo-resultados">Viajes encontrados</h2></div>
+            <nav class="pager" aria-label="Paginación">
+              <button class="button button-quiet" type="button" id="anterior" aria-label="Página anterior">←</button>
+              <span id="resumen" class="pager-text" aria-live="polite"></span>
+              <button class="button button-quiet" type="button" id="siguiente" aria-label="Página siguiente">→</button>
+            </nav>
+          </div>
+
+          <div class="content-grid">
+            <section class="trip-list-panel" aria-label="Lista de viajes">
+              <div class="list-meta"><span id="list-caption">Sin viajes cargados</span><span class="list-arrow">ID / ESTADO</span></div>
+              <div id="lista" class="trip-list" role="listbox" aria-label="Viajes"></div>
+              <div id="vacio" class="empty-state" hidden>
+                <span class="empty-mark">—</span>
+                <h3>No hay viajes para mostrar</h3>
+                <p>Probá con otro cliente, conductor o estado.</p>
+              </div>
+            </section>
+
+            <section id="detalle" class="detail-panel" aria-live="polite" aria-label="Detalle del viaje">
+              <div class="detail-empty">
+                <span class="detail-index">02 / 02</span>
+                <p>Seleccioná un viaje para ver su historial y, si está en curso, finalizarlo.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+
+      <div id="aviso" class="notice" role="status" aria-live="polite" hidden></div>
+    </main>
+    <footer class="footer"><span>Viajes · Registro e historial</span><span>Entorno de integración</span></footer>
+
+    <template id="tpl-finalizar">
+      <form class="action-area finish-form" novalidate>
+        <p class="action-title">Finalizar viaje</p>
+        <p class="hint">La hora de fin es el momento del envío. El tiempo se calcula desde el inicio real del viaje.</p>
+        <fieldset class="coords">
+          <legend>Origen (lat, lng)</legend>
+          <input name="origenLat" type="number" step="any" min="-90" max="90" value="-34.6037" aria-label="Latitud de origen" required>
+          <input name="origenLng" type="number" step="any" min="-180" max="180" value="-58.3816" aria-label="Longitud de origen" required>
+        </fieldset>
+        <fieldset class="coords">
+          <legend>Destino (lat, lng)</legend>
+          <input name="destinoLat" type="number" step="any" min="-90" max="90" value="-34.6118" aria-label="Latitud de destino" required>
+          <input name="destinoLng" type="number" step="any" min="-180" max="180" value="-58.3960" aria-label="Longitud de destino" required>
+        </fieldset>
+        <label class="stacked">Vehículo
+          <select name="tipoVehiculo">
+            <option value="auto">Auto</option>
+            <option value="moto">Moto</option>
+          </select>
+        </label>
+        <fieldset class="pay">
+          <legend>Método de pago</legend>
+          <label><input type="radio" name="metodoPago" value="efectivo" checked> Efectivo</label>
+          <label><input type="radio" name="metodoPago" value="transferencia"> Transferencia</label>
+          <label><input type="radio" name="metodoPago" value="tarjeta"> Tarjeta</label>
+        </fieldset>
+        <fieldset class="card" hidden>
+          <legend>Tarjeta (token de prueba)</legend>
+          <label class="stacked">Token <input name="token" autocomplete="off" value="tok-demo"></label>
+          <label class="stacked">Medio <input name="paymentMethodId" autocomplete="off" value="visa"></label>
+          <label class="stacked">Email <input name="email" type="email" autocomplete="off" value="cliente@example.com"></label>
+          <p class="hint">En el entorno de prueba, el token <code>rechazado</code> simula un pago rechazado.</p>
+        </fieldset>
+        <button class="button button-primary" type="submit">Finalizar viaje <span aria-hidden="true">↗</span></button>
+      </form>
+    </template>
+  </body>
+</html>

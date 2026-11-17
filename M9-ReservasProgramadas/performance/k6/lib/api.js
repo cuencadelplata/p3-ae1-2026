@@ -1,0 +1,153 @@
+// Cliente HTTP de M9 para k6. Nombres de request estables (`name`) y etiqueta `op` para que
+// Grafana Cloud k6 agrupe por operación y nunca por URL con UUID.
+import { check } from 'k6';
+import http from 'k6/http';
+import { Counter, Rate } from 'k6/metrics';
+
+import { BASE_URL, RUN_ID } from './config.js';
+
+export const unexpectedErrors = new Rate('m9_unexpected_errors');
+export const expectedConflicts = new Counter('m9_expected_conflicts');
+export const pricingDegraded = new Rate('m9_pricing_degraded');
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ESTADOS = ['PROGRAMADA', 'ACTIVANDO', 'ACTIVADA', 'CANCELADA', 'FALLIDA'];
+
+let sequence = 0;
+const headers = () => {
+  sequence += 1;
+  return {
+    'Content-Type': 'application/json',
+    // Correlación k6 → logs de M9 (caracteres válidos para el middleware).
+    'x-correlation-id': `${RUN_ID}-${__VU}-${__ITER}-${sequence}`.slice(0, 128),
+  };
+};
+
+const params = (name, op, extra = {}) => ({
+  headers: headers(),
+  tags: { name, op, ...extra.tags },
+  ...(extra.expected === undefined
+    ? {}
+    : { responseCallback: http.expectedStatuses(...extra.expected) }),
+});
+
+export const parse = (response) => {
+  try {
+    return response.json();
+  } catch {
+    return null;
+  }
+};
+
+export const isReserva = (body) =>
+  body !== null &&
+  typeof body === 'object' &&
+  UUID.test(String(body.id)) &&
+  ESTADOS.includes(body.estado) &&
+  typeof body.fechaHoraProgramada === 'string';
+
+/** Registra si el status no es el esperado (los 409 esperados se cuentan aparte). */
+const track = (response, okStatuses) => {
+  const ok = okStatuses.includes(response.status);
+  unexpectedErrors.add(!ok);
+  return ok;
+};
+
+export const crear = (payload, extraTags = {}) => {
+  const response = http.post(
+    `${BASE_URL}/reservas`,
+    JSON.stringify(payload),
+    params('POST /reservas', 'create', { tags: extraTags }),
+  );
+  track(response, [201]);
+  const body = parse(response);
+  check(response, {
+    'crear: 201': (r) => r.status === 201,
+    'crear: esquema Reserva': () => isReserva(body),
+    'crear: estado PROGRAMADA': () => body?.estado === 'PROGRAMADA',
+  });
+  if (response.status === 201) pricingDegraded.add(body?.tarifaEstimada === null);
+  return response.status === 201 ? body : null;
+};
+
+export const obtener = (id, name = 'GET /reservas/:id', op = 'get') => {
+  const response = http.get(`${BASE_URL}/reservas/${id}`, params(name, op));
+  track(response, [200]);
+  const body = parse(response);
+  check(response, {
+    [`${op}: 200`]: (r) => r.status === 200,
+    [`${op}: misma reserva`]: () => body?.id === id && isReserva(body),
+  });
+  return response.status === 200 ? body : null;
+};
+
+export const listar = () => {
+  const response = http.get(`${BASE_URL}/reservas`, params('GET /reservas', 'list'));
+  track(response, [200]);
+  check(response, {
+    'listar: 200': (r) => r.status === 200,
+    'listar: { reservas: [] }': (r) => Array.isArray(parse(r)?.reservas),
+  });
+  return response;
+};
+
+export const actualizar = (id, cambios) => {
+  const response = http.patch(
+    `${BASE_URL}/reservas/${id}`,
+    JSON.stringify(cambios),
+    params('PATCH /reservas/:id', 'update'),
+  );
+  track(response, [200]);
+  const body = parse(response);
+  check(response, {
+    'actualizar: 200': (r) => r.status === 200,
+    'actualizar: cambio aplicado': () =>
+      Object.entries(cambios).every(([key, value]) =>
+        key === 'fechaHoraProgramada'
+          ? Date.parse(body?.[key]) === Date.parse(value)
+          : body?.[key] === value,
+      ),
+  });
+  return response.status === 200 ? body : null;
+};
+
+export const cancelar = (id) => {
+  const response = http.del(
+    `${BASE_URL}/reservas/${id}`,
+    null,
+    params('DELETE /reservas/:id', 'cancel'),
+  );
+  track(response, [200]);
+  const body = parse(response);
+  check(response, {
+    'cancelar: 200': (r) => r.status === 200,
+    // DELETE es cancelación lógica: la reserva persiste en estado CANCELADA.
+    'cancelar: estado CANCELADA': () => body?.estado === 'CANCELADA',
+  });
+  return response.status === 200 ? body : null;
+};
+
+/**
+ * Variante para concurrencia: 409 es un resultado ESPERADO solo aquí y se cuenta en
+ * `m9_expected_conflicts`; cualquier otro status distinto de 200 sigue siendo inesperado.
+ */
+export const conflictive = (method, id, body) => {
+  const url = `${BASE_URL}/reservas/${id}`;
+  const name = method === 'PATCH' ? 'PATCH /reservas/:id' : 'DELETE /reservas/:id';
+  const op = method === 'PATCH' ? 'update' : 'cancel';
+  const options = params(name, op, { expected: [200, 409], tags: { concurrency: 'shared' } });
+  const response =
+    method === 'PATCH'
+      ? http.patch(url, JSON.stringify(body), options)
+      : http.del(url, null, options);
+  if (response.status === 409) {
+    expectedConflicts.add(1, { op });
+    const code = parse(response)?.error?.codigo;
+    check(response, {
+      '409 con código de negocio conocido': () =>
+        ['RESERVA_EN_PROCESO', 'RESERVA_NO_MODIFICABLE', 'RESERVA_NO_CANCELABLE'].includes(code),
+    });
+  }
+  unexpectedErrors.add(response.status !== 200 && response.status !== 409);
+  return response;
+};

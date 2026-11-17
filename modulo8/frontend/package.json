@@ -1,0 +1,6 @@
+{
+  "name": "@m8/frontend",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "node preview/server.mjs", "check": "node --check m8.js && node --check errors.js && node --check preview/preview.js && node --check api.js && node --check preview/server.mjs" }
+}
