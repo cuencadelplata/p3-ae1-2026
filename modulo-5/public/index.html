@@ -1633,6 +1633,8 @@
     }
 
     async function checkDriverOffers() {
+      const assignedEl = document.getElementById('driverPhoneAssignedState');
+      if (assignedEl && assignedEl.style.display === 'block') return;
       const driverId = document.getElementById('driverSelector').value;
       const hintBox = document.getElementById('otherDriverHint');
       if (hintBox) hintBox.style.display = 'none';
