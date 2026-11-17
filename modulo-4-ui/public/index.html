@@ -59,6 +59,77 @@
         <div class="section-title"><div><p class="eyebrow">Respuesta del servicio</p><h2>Ultima operacion</h2></div><span id="response-status" class="tag">Sin solicitudes</span></div>
         <pre id="output" aria-live="polite">Usá uno de los formularios para probar la API.</pre>
       </section>
+
+      <section class="card performance-card" aria-labelledby="performance-title">
+        <h2 id="performance-title">Rendimiento de M4</h2>
+        <div class="grid performance-runs">
+          <div class="performance-run">
+            <h3>Prueba rápida con k6 en la Mac</h3>
+            <p>Comprobó la salud de la API, la búsqueda de conductores y la estimación de distancia y tiempo.</p>
+            <ul>
+              <li>9 de 9 comprobaciones aprobadas</li>
+              <li>0 de 4 solicitudes HTTP fallidas</li>
+            </ul>
+            <figure class="latency-chart">
+              <figcaption>Latencia HTTP de la prueba rápida (ms)</figcaption>
+              <div class="latency-row"><span>Mínimo</span><meter min="0" max="6" value="1.4" aria-label="Latencia mínima en milisegundos"></meter><span>1,40</span></div>
+              <div class="latency-row"><span>Mediana</span><meter min="0" max="6" value="1.78" aria-label="Latencia mediana en milisegundos"></meter><span>1,78</span></div>
+              <div class="latency-row"><span>P90</span><meter min="0" max="6" value="4.43" aria-label="Latencia P90 en milisegundos"></meter><span>4,43</span></div>
+              <div class="latency-row"><span>P95</span><meter min="0" max="6" value="4.96" aria-label="Latencia P95 en milisegundos"></meter><span>4,96</span></div>
+              <div class="latency-row"><span>Máximo</span><meter min="0" max="6" value="5.5" aria-label="Latencia máxima en milisegundos"></meter><span>5,50</span></div>
+            </figure>
+            <details class="performance-evidence">
+              <summary>Ver salida de k6</summary>
+              <pre>Prueba rápida de M4 en macOS
+Extracto de la salida compartida desde Terminal
+
+docker compose --profile performance run --rm k6 run /scripts/smoke.js
+
+     execution: local
+        script: /scripts/smoke.js
+        output: -
+
+  █ THRESHOLDS
+
+    checks
+    ✓ &#x27;rate==1&#x27; rate=100.00%
+
+    http_req_duration
+    ✓ &#x27;p(95)&lt;1000&#x27; p(95)=4.96ms
+
+    http_req_failed
+    ✓ &#x27;rate&lt;0.01&#x27; rate=0.00%
+
+  █ TOTAL RESULTS
+
+    checks_succeeded...: 100.00% 9 out of 9
+    checks_failed......: 0.00%   0 out of 9
+
+    ✓ liveness responde 200
+    ✓ liveness informa UP
+    ✓ readiness responde 200
+    ✓ readiness informa UP
+    ✓ nearby responde 200
+    ✓ nearby devuelve drivers
+    ✓ estimate responde 200
+    ✓ estimate devuelve distancia
+    ✓ estimate devuelve ETA
+
+    HTTP
+    http_req_duration..............: avg=2.61ms  min=1.4ms   med=1.78ms  max=5.5ms   p(90)=4.43ms  p(95)=4.96ms
+    http_req_failed................: 0.00%  0 out of 4</pre>
+            </details>
+          </div>
+          <div class="performance-run">
+            <h3>Prueba de carga en Grafana Cloud</h3>
+            <p>Ejecución histórica desde Windows sobre la búsqueda de conductores cercanos.</p>
+            <ul>
+              <li>Hasta 10 usuarios virtuales</li>
+              <li>0 % de solicitudes fallidas, según el registro de la entrega</li>
+            </ul>
+          </div>
+        </div>
+      </section>
     </main>
   </body>
 </html>
