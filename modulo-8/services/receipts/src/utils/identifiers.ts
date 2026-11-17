@@ -18,4 +18,3 @@ export function buildReceiptNumber(issuedAt: Date, receiptId: string): string {
   const suffix = receiptId.replace(/-/g, '').slice(0, 10).toUpperCase();
   return `CMP-${year}-${suffix}`;
 }
-
