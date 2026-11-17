@@ -15,7 +15,6 @@ const {
 } = require("./middleware/requestMetrics");
 
 const conductorRoutes = require("./routes/conductorRoutes");
-const { seedRedisIfEmpty } = require("./repositories/redisRepository");
 const rabbitmq = require("./config/rabbitmqClient");
 
 const redis = require("./config/redisClient");
@@ -65,7 +64,8 @@ app.get("/health", (_req, res) => {
     status: messaging.circuit === "CLOSED" ? "ok" : "degraded",
     module: "M3-Conductor",
     timestamp: new Date().toISOString(),
-    redis: process.env.REDIS_HOST ? `conectado a ${process.env.REDIS_HOST}:${process.env.REDIS_PORT || 6379}` : "local/mock",
+    redis: process.env.REDIS_HOST ? `conectado a ${process.env.REDIS_HOST}:${process.env.REDIS_PORT || 6379}` : "local (fallback en memoria)",
+    m1: process.env.M1_URL || "no configurado",
     messaging,
     saturation: getSaturationSnapshot()
   });
@@ -98,11 +98,9 @@ app.listen(PORT, async () => {
   console.log(`   ➜ RabbitMQ:  http://localhost:${PORT}/rabbitmq`);
   console.log(`====================================================`);
 
-  // Poblar datos mock en Redis, recién cuando la conexión está lista
-  if (await esperarRedis()) {
-    await seedRedisIfEmpty();
-  } else {
-    console.warn("[Redis] No se conectó a tiempo: no se sembraron los mocks.");
+  // Sin datos mock: los conductores se crean vía POST /api/conductores con el userId de M1.
+  if (!(await esperarRedis())) {
+    console.warn("[Redis] No se conectó a tiempo: se opera con fallback a BD/memoria.");
   }
 
   rabbitmq.getChannel().catch((err) => {

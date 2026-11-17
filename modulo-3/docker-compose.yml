@@ -174,6 +174,9 @@ services:
       KAFKA_FALLBACK_TOPIC: m3.fallback
       OTEL_SERVICE_NAME: m3-conductor-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://grafana-alloy:4318
+      # M1 real (sin mocks): POST /api/conductores valida el JWT contra M1
+      M1_URL: ${M1_URL:-http://m1-identidad-acceso:3001}
+      M1_REQUIRE_AUTH: ${M1_REQUIRE_AUTH:-false}
     ports:
       - "5000:3000"
     volumes:
@@ -186,6 +189,8 @@ services:
         aliases:
           - m3-conductor-api
     depends_on:
+      m1-identidad-acceso:
+        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -215,7 +220,11 @@ services:
       rabbitmq:
         condition: service_healthy
 
-  # Frontend de pruebas (nginx). Hace proxy de /api/ hacia http://api:3000
+  # Frontends React de M3-Conductor/src/app (alta-conductor.tsx y valoraciones.tsx),
+  # compilados en Dockerfile.client y servidos por Nginx en :4000.
+  #   http://localhost:4000/alta-conductor.html
+  #   http://localhost:4000/valoraciones.html
+  # Nginx hace proxy de /api/ hacia http://api:3000
   m3-conductor-frontend:
     build:
       context: ./M3-Conductor
