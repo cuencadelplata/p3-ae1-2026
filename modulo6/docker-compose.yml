@@ -158,7 +158,7 @@ services:
       GRAFANA_CLOUD_OTLP_USER: ${GRAFANA_CLOUD_OTLP_USER:-}
       GRAFANA_CLOUD_TOKEN: ${GRAFANA_CLOUD_TOKEN:-}
     ports:
-      - "12345:12345"
+      - "${M6_ALLOY_PORT:-12345}:12345"
     depends_on:
       - prometheus
       - loki
@@ -173,14 +173,14 @@ services:
       # Conserva el historial de métricas aunque se recreen los contenedores.
       - prometheus-data:/prometheus
     ports:
-      - "9090:9090"
+      - "${M6_PROMETHEUS_PORT:-9090}:9090"
 
   loki:
     image: grafana/loki:3.3.2
     profiles: ["observability"]
     command: ["-config.file=/etc/loki/local-config.yaml"]
     ports:
-      - "3100:3100"
+      - "${M6_LOKI_PORT:-3100}:3100"
 
   tempo:
     image: grafana/tempo:2.6.1
@@ -191,7 +191,7 @@ services:
     volumes:
       - ./observabilidad/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
     ports:
-      - "3200:3200"
+      - "${M6_TEMPO_PORT:-3200}:3200"
 
   grafana:
     image: grafana/grafana:11.4.0
@@ -206,7 +206,7 @@ services:
       - ./observabilidad/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       # Grafana local: http://localhost:3003 (admin / GRAFANA_ADMIN_PASSWORD)
-      - "3003:3000"
+      - "${M6_GRAFANA_PORT:-3003}:3000"
     depends_on:
       - prometheus
       - loki

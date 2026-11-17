@@ -89,6 +89,18 @@ Para enviar además a **Grafana Cloud** (como hacen los demás módulos), copiar
 
 Sin el perfil `observability` todo funciona igual: los servicios descartan la telemetría OTLP y `/metrics` sigue disponible.
 
+Si otro módulo ya usa esos puertos en la misma máquina, se pueden cambiar sin editar el compose (por ejemplo en `modulo6/.env`):
+
+| Variable | Servicio | Por defecto |
+| --- | --- | ---: |
+| `M6_GRAFANA_PORT` | Grafana | 3003 |
+| `M6_PROMETHEUS_PORT` | Prometheus | 9090 |
+| `M6_LOKI_PORT` | Loki | 3100 |
+| `M6_TEMPO_PORT` | Tempo | 3200 |
+| `M6_ALLOY_PORT` | UI de Alloy | 12345 |
+
+Sólo cambia el puerto publicado en el host; dentro de la red de Docker los servicios se siguen comunicando por sus puertos internos.
+
 ## Mini front-end RF-6.5/6.6
 
 Con el stack levantado, abre `http://localhost:3001/cliente` para RF-6.5 o `http://localhost:3001/conductor` para RF-6.6. La pantalla muestra el viaje actual y solo solicita el motivo; al confirmar, llama a la API de cancelación correspondiente. El ID llega en `?viajeId=...` desde el contexto que abre la cancelación o se obtiene automáticamente del listado de la cuenta.
