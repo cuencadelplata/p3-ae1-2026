@@ -4,7 +4,8 @@ Exchange durable `mobility.events`, tipo `topic`, JSON UTF-8. Colas durables, me
 
 | Evento/routing key | Productor | Consumidor / cola | Efecto |
 |---|---|---|---|
-| `TripCompleted.v1` | M6 | M2 worker / `m2.trip-completed` | Registra origen y destino recientes; suma usos una vez por viaje |
+| `trip.completed` | M6 (real) | M2 worker / `m2.trip-completed` (también M8) | Sobre común de M6 sin direcciones: M2 pide el viaje a `GET /api/clientes/{recipientId}/viajes` de M6 y registra origen y destino. Si M6 no responde, 3 reintentos y luego DLQ |
+| `TripCompleted.v1` | Simulador de M6 / pruebas | M2 worker / `m2.trip-completed` | Registra origen y destino recientes; suma usos una vez por viaje |
 | `FavoriteAddressChanged.v1` | M2 outbox/worker | M8 demo / `m8.favorite-address-changed` | Un registro de bandeja por evento |
 
 Envelope: `eventId` UUID, `type`, `occurredAt` fecha UTC ISO-8601, `correlationId` identificador, `data`. IDs de cliente/viaje admiten letras, números, guion y guion bajo, máximo 100. El esquema ejecutable completo está en `src/direcciones/domain.ts`.

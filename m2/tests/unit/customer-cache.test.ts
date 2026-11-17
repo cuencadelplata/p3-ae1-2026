@@ -79,7 +79,7 @@ describe('Caché de perfiles de cliente', () => {
   it('descarta contenido corrupto o ajeno al esquema de perfil', async () => {
     // Given
     const store = new InMemoryCacheStore();
-    store.values.set('customer:profile:cust_823a7b9c', '{"customerId": 99}');
+    store.values.set('m2:customer:profile:cust_823a7b9c', '{"customerId": 99}');
     const cache = new CustomerCache(store);
 
     // When
