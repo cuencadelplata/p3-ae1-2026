@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 
 const RABBITMQ_API = "http://localhost:15672/api";
-const RABBITMQ_USER = "guest";
-const RABBITMQ_PASS = "guest";
+const RABBITMQ_USER = "m9";
+const RABBITMQ_PASS = "m9-local";
 const EXCHANGE = "viajes";
 const ROUTING_KEY = "cancelacion_cliente";
 

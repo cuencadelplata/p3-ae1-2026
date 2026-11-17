@@ -1,4 +1,8 @@
-import { TipoDocumento, type Documento } from "./documents-model.js";
+import {
+  TipoDocumento,
+  type CaraDocumento,
+  type Documento,
+} from "./documents-model.js";
 
 // Lo que manda el cliente (sin driverId: viene de la URL)
 export interface DocumentoRequestDTO {
@@ -7,6 +11,8 @@ export interface DocumentoRequestDTO {
   numeroDocumento: string;
   fechaVencimiento: string; // "2027-03-15"
   archivoUrl: string;
+  // Opcional, solo para LICENCIA_CONDUCIR y CEDULA_VEHICULO: "FRENTE" o "DORSO"
+  cara?: CaraDocumento | string;
 }
 
 // Payload interno ya validado, listo para insertar (sin id/createdAt/estado)
@@ -17,6 +23,7 @@ export interface DocumentoParaInsertar {
   numeroDocumento: string;
   fechaVencimiento: string;
   archivoUrl: string;
+  cara: CaraDocumento | null;
 }
 
 export interface DocumentoResponseDTO {
@@ -27,6 +34,7 @@ export interface DocumentoResponseDTO {
   numeroDocumento: string;
   fechaVencimiento: string;
   archivoUrl: string;
+  cara: CaraDocumento | null;
   estado: string;
   createdAt: string;
 }
@@ -42,6 +50,7 @@ export function toDocumentoResponseDTO(
     numeroDocumento: documento.numeroDocumento,
     fechaVencimiento: documento.fechaVencimiento.toISOString().split("T")[0]!,
     archivoUrl: documento.archivoUrl,
+    cara: documento.cara ?? null,
     estado: documento.estado,
     createdAt: documento.createdAt.toISOString(),
   };

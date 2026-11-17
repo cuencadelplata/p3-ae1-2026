@@ -99,6 +99,32 @@ pnpm run build
 
 El Dockerfile tambien ejecuta todos los tests durante la construccion y cancela el build si alguno falla.
 
+## Prueba de punta a punta con M1 y M5
+
+Desde `modulo-4`, ejecutá:
+
+```bash
+docker compose -p m4-e2e -f docker-compose.yml -f compose.e2e.yml \
+  up --build --exit-code-from m4-e2e m4-e2e
+```
+
+La prueba arranca M1, M4 y M5 en una red de Docker separada. Registra un conductor
+y un pasajero en M1. Comprueba que M4 exige autenticación para publicar ubicación
+y verifica que el conductor aparezca en la búsqueda y en su historial.
+El pasajero solicita un viaje en M5 con su token de M1 y se comprueba que M5
+encuentra a ese mismo conductor consultando M4. Al terminar, se borra la ubicación
+activa.
+
+M1 usa una base temporal y M4 usa Redis y PostgreSQL. M5 usa su almacenamiento
+en memoria para las solicitudes de este escenario y su estimador local de tarifas.
+El recorrido llega hasta la búsqueda de candidatos en M5.
+
+Para eliminar los contenedores y volúmenes de este escenario de prueba:
+
+```bash
+docker compose -p m4-e2e -f docker-compose.yml -f compose.e2e.yml down -v
+```
+
 ## Rendimiento con k6 y Grafana Cloud
 
 Las pruebas de rendimiento se encuentran en [`k6/`](k6/README.md) y se ejecutan en un contenedor opcional para no mezclar el generador de carga con la API.

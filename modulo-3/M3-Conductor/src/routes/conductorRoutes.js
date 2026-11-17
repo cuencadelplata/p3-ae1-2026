@@ -4,6 +4,7 @@ const {
   obtenerConductores,
   obtenerConductorPorId,
   crearConductor,
+  actualizarTipoVehiculo,
   obtenerHabilitado,
   obtenerDisponible,
   actualizarDisponible,
@@ -34,6 +35,8 @@ router.get("/conductores/:id/estado", obtenerEstadoConductor);
 router.put("/conductores/:id/habilitado", actualizarHabilitado);
 router.put("/conductores/:id/disponible", actualizarDisponible);
 router.get("/conductores/:id", obtenerConductorPorId);
+// Corrección del tipo de vehículo elegido en el alta (front alta-conductor)
+router.patch("/conductores/:id", actualizarTipoVehiculo);
 router.post("/conductores", crearConductor);
 router.post("/conductores/", crearConductor);
 router.post("/conductores/create", crearConductor);

@@ -90,6 +90,36 @@
             "description": "Conductor no encontrado"
           }
         }
+      },
+      "patch": {
+        "summary": "Cambiar el tipo de vehículo de un conductor (corrección desde el alta)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["tipovehiculo"],
+                "properties": {
+                  "tipovehiculo": { "type": "string", "enum": ["auto", "moto"], "description": "Se acepta en cualquier mayúscula/minúscula; se guarda en minúscula" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Conductor actualizado" },
+          "400": { "description": "tipovehiculo inválido" },
+          "404": { "description": "Conductor no encontrado" }
+        }
       }
     },
      "/conductores/{id}/habilitado": {

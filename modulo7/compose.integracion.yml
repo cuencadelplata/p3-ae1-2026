@@ -2,14 +2,14 @@ services:
   m7-api:
     build: .
     ports:
-      - "16000:3000"
+      - "17000:3000"
     env_file:
       - path: .env
         required: false
     environment:
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672
       REDIS_URL: redis://redis:6379
-      DATABASE_URL: postgres://m7user:m7pass@m7-postgres:5432/m7db
+      DATABASE_URL: postgres://m7user:m7pass@m7-postgres:5432/m7db?sslmode=disable
       CARGO_CANCELACION_URL: http://m7-cargo-cancelacion:3007
     depends_on:
       rabbitmq:

@@ -16,6 +16,7 @@ export async function insertarDocumento(
     numeroDocumento: datos.numeroDocumento,
     fechaVencimiento: new Date(datos.fechaVencimiento),
     archivoUrl: datos.archivoUrl,
+    cara: datos.cara ?? null,
     estado: EstadoDocumento.PENDIENTE,
     createdAt: new Date(),
   };
