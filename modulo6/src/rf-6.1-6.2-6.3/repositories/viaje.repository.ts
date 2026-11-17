@@ -441,6 +441,37 @@ export async function actualizarEstado(
     }
 }
 
+export async function iniciarSiArribado(id: string): Promise<Viaje | null> {
+    await ensureExtensionSchema();
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const { rows } = await client.query(
+            'UPDATE viajes SET estado = $1 WHERE id = $2 AND estado = $3 RETURNING *',
+            [EstadoViaje.EN_CURSO, id, EstadoViaje.ARRIBADO],
+        );
+        if (rows.length === 0) {
+            await client.query('COMMIT');
+            return null;
+        }
+
+        await insertarTransicion(
+            client,
+            id,
+            EstadoViaje.ARRIBADO,
+            EstadoViaje.EN_CURSO,
+            detalleTransicion(EstadoViaje.EN_CURSO),
+        );
+        await client.query('COMMIT');
+        return mapRow(rows[0]);
+    } catch (error) {
+        await rollback(client);
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+
 export async function finalizarSiEnCurso(
     id: string,
     ejecutarFinalizacion: (viaje: Viaje, inicio: Date) => Promise<FinalizacionPersistida>,

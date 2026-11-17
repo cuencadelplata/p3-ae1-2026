@@ -44,6 +44,10 @@ Cada iteración crea un viaje y lo deja persistido en PostgreSQL; el perfil de e
 
 `npm run test:e2e` requiere el stack en ejecución. También se puede seleccionar una familia con `test:e2e:rf-6.1-6.2-6.3`, `test:e2e:rf-6.4-6.7` o `test:e2e:rf-6.5-6.6`.
 
+## Interfaz web
+
+El frontend de RF-6.1/6.2/6.3 se sirve desde la misma API M6, en `http://localhost:3000`, por lo que no necesita un contenedor ni configuración CORS aparte. Levanta el stack con `npm run docker:up` y abre esa URL. La pantalla permite solicitar y consultar viajes, asignar un conductor manualmente para la demo, registrar el arribo, recuperar el QR vigente y solicitar el inicio validando el token con M8.
+
 ## Servicios
 
 | Servicio | Puerto local | Responsabilidad |
@@ -92,6 +96,10 @@ Con el stack levantado, abre `http://localhost:3001/cliente` para RF-6.5 o `http
 El módulo que conoce la sesión debe pasar `viajeId` directamente, o bien `clienteId`/`conductorId` para que la pantalla busque el viaje cancelable más reciente. Si falta todo contexto, la pantalla informa que no puede identificar el viaje. También usa `m6-client-id` o `m6-conductor-id` de `localStorage` como alternativa en el mismo origen.
 
 Las APIs RF-6.5/6.6 no autentican ni identifican por sí solas a la persona que abre la pantalla. Las rutas fijan el flujo, pero no sustituyen autenticación; el módulo que conoce la sesión debe pasar el `clienteId` o `conductorId` correspondiente.
+
+## Integración del QR con M8
+
+El cliente QR acepta `M8_URL` y `M8_QR_API_KEY` desde el entorno. En el Compose local se mantiene el simulador; al integrar M8, la clave se debe configurar fuera de Git y compartirse con M8 como `QR_INTERNAL_API_KEY`.
 
 ## Contratos
 

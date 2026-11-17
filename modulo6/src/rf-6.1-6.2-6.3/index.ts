@@ -1,4 +1,5 @@
 import express from 'express';
+import { resolve } from 'node:path';
 import viajesRoutes from './routes/viajes.routes.js';
 import clientesRoutes from './routes/clientes.routes.js';
 import conductoresRoutes from './routes/conductores.routes.js';
@@ -24,6 +25,9 @@ app.get('/health', (_req, res) => {
 registrarGaugesTripDb(estadisticasTripDb);
 inicializarSeriesDominio();
 app.get('/metrics', (_req, res) => void responderMetricas(res));
+
+// Panel de viajes (RF-6.1/6.2/6.3) servido por el servicio de Viajes.
+app.use(express.static(resolve(process.cwd(), 'frontend')));
 
 // Enlazamos las rutas del modulo
 app.use('/api/viajes', viajesRoutes);

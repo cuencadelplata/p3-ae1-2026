@@ -116,6 +116,21 @@ describe('E2E Tests - Docker Container', () => {
     }
   });
 
+  it('sirve el frontend y sus assets desde el contenedor M6', async () => {
+    const baseUrl = API_URL.replace(/\/api$/, '');
+    const [page, script, styles] = await Promise.all([
+      axios.get(baseUrl),
+      axios.get(`${baseUrl}/app.js`),
+      axios.get(`${baseUrl}/styles.css`),
+    ]);
+
+    expect(page.status).toBe(200);
+    expect(page.headers['content-type']).toContain('text/html');
+    expect(page.data).toContain('Panel de viajes');
+    expect(script.status).toBe(200);
+    expect(styles.status).toBe(200);
+  });
+
   afterAll(async () => {
     if (containerId) {
       console.log('Deteniendo contenedor de Docker...');

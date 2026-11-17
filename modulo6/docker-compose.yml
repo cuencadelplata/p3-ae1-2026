@@ -14,6 +14,7 @@ services:
       OTEL_SERVICE_NAME: m6-viajes
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://alloy:4318}
       M8_URL: http://simulador:3001
+      M8_QR_API_KEY: ${M8_QR_API_KEY:-}
       M3_URL: http://simulador:3001
       M4_URL: http://simulador:3001/api/v1
       M7_URL: http://simulador:3001
