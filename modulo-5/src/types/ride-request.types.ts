@@ -227,6 +227,7 @@ export interface OfferCreatedEvent {
 
 export interface DriverCancellationEvent {
   viajeId: string;
+  rideRequestId?: string;
   clienteId: string;
   conductorId: string;
   motivo?: string;

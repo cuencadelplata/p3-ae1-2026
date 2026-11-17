@@ -967,13 +967,17 @@ export class RideRequestService {
     explicitClientUserId?: number,
     explicitDriverUserId?: number
   ): Promise<string | null> {
-    const m6BaseUrl = process.env.M6_SERVICE_URL || 'http://localhost:3000';
+    const m6BaseUrl = process.env.M6_SERVICE_URL || 'http://m6-viajes:3000';
+    const m6ApiKey = process.env.M6_INTERNAL_API_KEY;
     const clientUserId = explicitClientUserId ?? this.rabbitmqService.parseCanonicalUserId(clientId);
     const driverUserId = explicitDriverUserId ?? this.rabbitmqService.parseCanonicalUserId(driverId);
 
     try {
-      // 1. Crear viaje en M6 con clientUserId e idempotencia
+      // 1. Crear viaje en M6 con clientUserId, x-api-key e idempotencia
       const createHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (m6ApiKey) {
+        createHeaders['x-api-key'] = m6ApiKey;
+      }
       if (rideRequestId) {
         createHeaders['Idempotency-Key'] = rideRequestId;
       }
@@ -1004,10 +1008,15 @@ export class RideRequestService {
         return null;
       }
 
-      // 2. Asignar conductor al viaje en M6 con driverUserId
+      // 2. Asignar conductor al viaje en M6 con driverUserId y x-api-key
+      const assignHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (m6ApiKey) {
+        assignHeaders['x-api-key'] = m6ApiKey;
+      }
+
       const assignRes = await fetch(`${m6BaseUrl}/api/viajes/${tripId}/asignar`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: assignHeaders,
         body: JSON.stringify({
           conductorId: driverId,
           driverUserId
@@ -1644,7 +1653,7 @@ export class RideRequestService {
    * Procesa la cancelación de un conductor y reabre automáticamente el despacho para nuevos candidatos.
    */
   public async handleDriverCancellation(event: DriverCancellationEvent): Promise<void> {
-    const requestId = event.viajeId;
+    const requestId = event.rideRequestId ?? event.viajeId;
     const clientId = event.clienteId;
     const cancelledDriverId = event.conductorId;
 

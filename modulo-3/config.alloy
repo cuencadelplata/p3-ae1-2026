@@ -1,0 +1,64 @@
+discovery.docker "contenedores" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "logs_docker" {
+  targets = discovery.docker.contenedores.targets
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "default" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.logs_docker.output
+  forward_to = [loki.process.filtro.receiver]
+}
+
+loki.process "filtro" {
+  forward_to = [loki.write.grafana_cloud.receiver]
+
+  stage.drop {
+    older_than          = "1h"
+    drop_counter_reason = "demasiado_viejo"
+  }
+}
+
+loki.write "grafana_cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_CLOUD_LOKI_URL")
+    basic_auth {
+      username = sys.env("GRAFANA_CLOUD_LOKI_USER")
+      password = sys.env("GRAFANA_CLOUD_TOKEN")
+    }
+  }
+}
+
+// --- Recepción y envío OTLP (Métricas y Trazas) ---
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    metrics = [otelcol.exporter.otlphttp.grafana_cloud.input]
+    traces  = [otelcol.exporter.otlphttp.grafana_cloud.input]
+  }
+}
+
+otelcol.auth.basic "grafana_cloud" {
+  username = sys.env("GRAFANA_CLOUD_OTLP_USER")
+  password = sys.env("GRAFANA_CLOUD_OTLP_TOKEN")
+}
+
+otelcol.exporter.otlphttp "grafana_cloud" {
+  client {
+    endpoint = sys.env("GRAFANA_CLOUD_OTLP_ENDPOINT")
+    auth     = otelcol.auth.basic.grafana_cloud.handler
+  }
+}

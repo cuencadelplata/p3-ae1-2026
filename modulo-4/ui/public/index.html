@@ -19,10 +19,10 @@
         <a class="secondary" href="/docs">Abrir Scalar</a>
         <a
           class="secondary"
-          href="https://patientoregano22.grafana.net/public-dashboards/7466b2418ef24de6afdbc4561ffb3eb1"
+          href="/evidence/grafana-k6-load-nearby.pdf"
           target="_blank"
           rel="noopener noreferrer"
-        >Ver métricas k6</a>
+        >Ver informe de k6 (PDF)</a>
       </nav>
     </header>
 
@@ -125,7 +125,9 @@ docker compose --profile performance run --rm k6 run /scripts/smoke.js
             <p>Ejecución histórica desde Windows sobre la búsqueda de conductores cercanos.</p>
             <ul>
               <li>Hasta 10 usuarios virtuales</li>
-              <li>0 % de solicitudes fallidas, según el registro de la entrega</li>
+              <li>0 de 215 solicitudes HTTP fallidas</li>
+              <li>645 de 645 comprobaciones aprobadas</li>
+              <li>Latencia P95 de 3,48 ms</li>
             </ul>
           </div>
         </div>

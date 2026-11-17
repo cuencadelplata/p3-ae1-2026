@@ -16,8 +16,8 @@ Desde `modulo-8/`, crear `.env` a partir de `.env.example` y reemplazar todos lo
 pnpm install --frozen-lockfile
 pnpm run ensure:stack
 docker compose --env-file .env ps
-Invoke-RestMethod http://localhost:3000/health/ready
-Invoke-WebRequest http://localhost:3000/metrics
+Invoke-RestMethod http://localhost:8000/health/ready
+Invoke-WebRequest http://localhost:8000/metrics
 ```
 
 Si se cambió código de M8, reconstruir la imagen con `docker compose --env-file .env up -d --build m8-app` antes de probar.

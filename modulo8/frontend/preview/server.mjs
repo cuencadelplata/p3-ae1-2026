@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const port = Number(process.env.M8_FRONTEND_PORT || 4173);
-const target = new URL(process.env.M8_API_TARGET || 'http://127.0.0.1:3000');
+const target = new URL(process.env.M8_API_TARGET || 'http://127.0.0.1:8000');
 const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
 const isApi = (path) => /^\/(?:api\/v1\/receipts(?:\/|$)|tickets(?:\/|$)|devices\/tokens(?:\/|$))/.test(path);
 
