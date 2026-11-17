@@ -84,8 +84,6 @@ input::placeholder, textarea::placeholder { color: #85877D; }
 .actor-summary { margin-bottom: 16px; }
 .summary-key { color: var(--lime); font-size: 9px; font-weight: 700; }
 .actor-summary p { margin: 4px 0 0; color: #D1D2CA; font-size: 10px; line-height: 1.6; }
-.context-footer { display: flex; align-items: center; gap: 9px; margin-top: auto; padding-top: 16px; color: var(--muted); font-size: 9px; }
-.context-footer .status-dot { width: 6px; height: 6px; }
 .result { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 15px; align-items: center; margin-top: 18px; padding: 16px 18px; background: #141711; border: 1px solid rgb(213 255 64 / 42%); }
 .result[hidden], .notice[hidden] { display: none; }
 .result-mark { width: 28px; height: 28px; display: grid; place-items: center; color: #000; background: var(--lime); font-size: 15px; font-weight: 700; }
@@ -126,7 +124,6 @@ input::placeholder, textarea::placeholder { color: #85877D; }
   .workflow-line { flex: 1; }
   .form-panel { padding: 24px 18px 26px; }
   .context-panel { min-height: 0; padding: 27px 20px; }
-  .context-footer { margin-top: 14px; }
   .dialog-actions { grid-template-columns: 1fr; }
   .dialog-actions .button { width: 100%; }
   .confirm-dialog { padding: 26px 20px 20px; }

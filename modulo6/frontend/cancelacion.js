@@ -20,7 +20,6 @@ const actorContent = actor === 'conductor'
       requirement: 'GESTIÓN DE VIAJES · RF-6.6',
       form: 'CANCELACIÓN COMO CONDUCTOR',
       title: 'Cancelar viaje como conductor',
-      description: 'El viaje se cancela y el despacho puede buscar otro conductor.',
       confirmation: 'Conductor · RF-6.6',
     }
   : {
@@ -28,7 +27,6 @@ const actorContent = actor === 'conductor'
       requirement: 'GESTIÓN DE VIAJES · RF-6.5',
       form: 'CANCELACIÓN COMO CLIENTE',
       title: 'Cancelar viaje como cliente',
-      description: 'Se registra el motivo y se notifica la cancelación.',
       confirmation: 'Cliente · RF-6.5',
     };
 
@@ -39,7 +37,6 @@ document.querySelector('#requirement-label').textContent = actorContent.requirem
 document.querySelector('#page-title').textContent = actorContent.title;
 document.querySelector('#form-context').textContent = actorContent.form;
 document.querySelector('#role-label').textContent = actorContent.label;
-document.querySelector('#role-description').textContent = actorContent.description;
 
 function showNotice(message) {
   notice.textContent = message;
@@ -157,9 +154,7 @@ confirmButton.addEventListener('click', async () => {
     const title = document.createElement('h2');
     title.textContent = 'Cancelación confirmada';
     const description = document.createElement('p');
-    description.textContent = actor === 'cliente'
-      ? 'La solicitud del cliente fue registrada y el evento de cancelación publicado.'
-      : 'La solicitud del conductor fue registrada y el despacho fue notificado.';
+    description.textContent = 'El viaje quedó cancelado.';
     summary.append(title, description);
     const state = document.createElement('code');
     state.textContent = viaje.estado;
