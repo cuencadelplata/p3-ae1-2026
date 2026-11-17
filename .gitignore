@@ -12,6 +12,7 @@ entrega-ae2/
 # Archivos generados de M9
 /M9-ReservasProgramadas/dist/
 /M9-ReservasProgramadas/coverage/
+/M9-ReservasProgramadas/performance/results/
 
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
