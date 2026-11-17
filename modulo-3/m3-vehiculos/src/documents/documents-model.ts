@@ -4,6 +4,12 @@ export enum TipoDocumento {
   CEDULA_VEHICULO = "CEDULA_VEHICULO",
 }
 
+// Cara del documento (frente / dorso). Aplica a LICENCIA_CONDUCIR y CEDULA_VEHICULO.
+export enum CaraDocumento {
+  FRENTE = "FRENTE",
+  DORSO = "DORSO",
+}
+
 export enum EstadoDocumento {
   PENDIENTE = "PENDIENTE",
   APROBADO = "APROBADO",
@@ -18,6 +24,7 @@ export interface Documento {
   numeroDocumento: string;
   fechaVencimiento: Date;
   archivoUrl: string;
+  cara: CaraDocumento | null;
   estado: EstadoDocumento;
   createdAt: Date;
 }

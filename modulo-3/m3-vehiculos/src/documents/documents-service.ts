@@ -1,4 +1,8 @@
-import { TipoDocumento, type Documento } from "./documents-model.js";
+import {
+  CaraDocumento,
+  TipoDocumento,
+  type Documento,
+} from "./documents-model.js";
 
 import type {
   DocumentoRequestDTO,
@@ -45,6 +49,24 @@ export async function registrarDocumento(
     throw new AppError("La licencia de conducir no va asociada a un vehículo");
   }
 
+  // Frente / dorso: opcional, solo para la licencia y la cédula del vehículo
+  const llevaCara =
+    tipo === TipoDocumento.LICENCIA_CONDUCIR ||
+    tipo === TipoDocumento.CEDULA_VEHICULO;
+  let cara: CaraDocumento | null = null;
+  if (datos.cara !== undefined && datos.cara !== null && datos.cara !== "") {
+    const valor = String(datos.cara).toUpperCase();
+    if (!llevaCara) {
+      throw new AppError(
+        "Solo la licencia y la cédula del vehículo llevan cara (FRENTE/DORSO)",
+      );
+    }
+    if (!(Object.values(CaraDocumento) as string[]).includes(valor)) {
+      throw new AppError("La cara tiene que ser FRENTE o DORSO");
+    }
+    cara = valor as CaraDocumento;
+  }
+
   if (datos.vehicleId) {
     const vehiculo = await buscarVehiculoDeConductor(driverId, datos.vehicleId);
     if (!vehiculo) {
@@ -59,6 +81,7 @@ export async function registrarDocumento(
     numeroDocumento: datos.numeroDocumento.trim(),
     fechaVencimiento: fecha.toISOString().split("T")[0]!,
     archivoUrl: datos.archivoUrl.trim(),
+    cara,
   };
 
   const documento = await insertarDocumento(payload);
