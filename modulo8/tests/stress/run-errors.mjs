@@ -10,7 +10,7 @@ const moduleDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const envPath = path.join(moduleDir, '.env');
 const localEnv = existsSync(envPath) ? parse(readFileSync(envPath)) : {};
 const get = (name) => process.env[name] || localEnv[name] || '';
-const base = `http://127.0.0.1:${Number(get('M8_HOST_PORT') || 3000)}`;
+const base = `http://127.0.0.1:${Number(get('M8_HOST_PORT') || 8000)}`;
 const fiscal = `http://127.0.0.1:${Number(get('FISCAL_HOST_PORT') || 4010)}`;
 const qrKey = get('QR_INTERNAL_API_KEY');
 if (!qrKey || qrKey.startsWith('replace-with-')) {

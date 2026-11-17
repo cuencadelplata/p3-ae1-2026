@@ -25,7 +25,7 @@ for (const name of ['RABBITMQ_URL', 'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PA
 }
 
 const driverId = 42;
-const base = `http://127.0.0.1:${Number(process.env.M8_HOST_PORT || 3000)}`;
+const base = `http://127.0.0.1:${Number(process.env.M8_HOST_PORT || 8000)}`;
 const deviceToken = `sandbox-load-m3-${randomUUID()}`;
 const messageIds = Array.from({ length: total }, () => randomUUID());
 const db = new pg.Pool({

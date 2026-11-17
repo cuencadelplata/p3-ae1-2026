@@ -1,2 +1,6 @@
 # Salidas generadas por la compilación TypeScript en la raíz y los servicios.
 dist/
+
+# Evidencias locales de carga y configuración privada de integración.
+tests/stress/results/
+.env.integracion

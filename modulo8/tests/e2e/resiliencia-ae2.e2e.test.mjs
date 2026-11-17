@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 const MODULE_DIR = fileURLToPath(new URL("../..", import.meta.url));
-const RECEIPTS = process.env.RECEIPTS_URL ?? process.env.M8_URL ?? "http://localhost:3000";
+const RECEIPTS = process.env.RECEIPTS_URL ?? process.env.M8_URL ?? "http://localhost:8000";
 const FISCAL = process.env.FISCAL_URL ?? "http://localhost:4010";
 const RABBIT_API = process.env.RABBITMQ_API_URL ?? "http://localhost:15672/api";
 const RABBIT_AUTH = `Basic ${Buffer.from(process.env.RABBITMQ_API_CREDENTIALS ?? "guest:guest").toString("base64")}`;

@@ -1,14 +1,30 @@
-name: Tests
+name: M9 - Tests
 
-on: [push, pull_request]
+on:
+  push:
+    paths:
+      - 'M9-ReservasProgramadas/**'
+      - '.github/workflows/test.yml'
+  pull_request:
+    paths:
+      - 'M9-ReservasProgramadas/**'
+      - '.github/workflows/test.yml'
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: M9-ReservasProgramadas
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - run: npm install
-      - run: npm run test:unit
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: M9-ReservasProgramadas/package-lock.json
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test

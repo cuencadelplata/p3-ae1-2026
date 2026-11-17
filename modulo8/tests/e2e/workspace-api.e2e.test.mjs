@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import "dotenv/config";
 
-const M8 = process.env.M8_URL ?? "http://localhost:3000";
+const M8 = process.env.M8_URL ?? "http://localhost:8000";
 const receiptsAuthorization = process.env.RECEIPTS_AUTHORIZATION ?? "Bearer e2e-operator";
 const qrInternalApiKey = process.env.QR_INTERNAL_API_KEY;
 

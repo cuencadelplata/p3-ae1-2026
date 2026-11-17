@@ -64,7 +64,6 @@ services:
       timeout: 5s
       retries: 10
     depends_on:
-      - m7-api
 
   cargo-cancelacion:
     image: node:22-alpine
@@ -80,7 +79,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     command: run /etc/alloy/config.alloy
     depends_on:
-      - m7-api
     restart: on-failure
     networks:
       - movilidad-network

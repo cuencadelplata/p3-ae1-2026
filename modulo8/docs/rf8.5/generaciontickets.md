@@ -1,7 +1,7 @@
 # RF8.5 — Demostración HTTP de tickets de soporte
 
 Este instructivo prueba RF8.5 contra la aplicación integrada `m8-app` en
-`http://localhost:3000`. Las llamadas son HTTP reales: los tickets y su
+`http://localhost:8000`. Las llamadas son HTTP reales: los tickets y su
 historial se persisten en PostgreSQL. No son mocks ni respuestas preparadas.
 
 La demostración manual complementa las pruebas automatizadas. Las suites de
@@ -17,7 +17,7 @@ Copy-Item .env.example .env -ErrorAction SilentlyContinue
 Remove-Item Env:M8_IMAGE -ErrorAction SilentlyContinue
 docker compose --env-file .env up -d --build
 docker compose --env-file .env ps
-Invoke-WebRequest http://localhost:3000/health/live -UseBasicParsing
+Invoke-WebRequest http://localhost:8000/health/live -UseBasicParsing
 ```
 
 El último comando debe devolver `200`. Si se consulta `/health/ready`, un
@@ -30,7 +30,7 @@ Copiar el bloque completo en la misma consola. Cada llamada imprime su código
 HTTP y el cuerpo recibido.
 
 ```powershell
-$M8 = "http://localhost:3000"
+$M8 = "http://localhost:8000"
 
 function Llamar {
   param($Metodo, $Url, $Body = $null, $Headers = @{})
