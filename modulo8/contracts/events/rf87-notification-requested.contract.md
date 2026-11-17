@@ -112,5 +112,5 @@ Para realizar un envío PUSH exitoso y auditable hacia un proveedor (sea sandbox
 
 ## 6. Compatibilidad y Trazabilidad
 
-- Este contrato mantiene **100% de compatibilidad binaria y contractual** con la interfaz `NotificationRequestedData` ya presente en el código de RF8.1 (`modulo-8/services/notifications/src/notifications/notification.types.ts`).
+- Este contrato mantiene **100% de compatibilidad binaria y contractual** con la interfaz `NotificationRequestedData` ya presente en el código de RF8.1 (`modulo8/services/notifications/src/notifications/notification.types.ts`).
 - Los campos agregados para soportar delivery real (`title`, `targetDestination`, `priority`) son estrictamente opcionales, garantizando que el Outbox actual de RF8.1 funcione sin requerir modificaciones forzadas.

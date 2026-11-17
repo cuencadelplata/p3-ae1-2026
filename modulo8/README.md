@@ -38,7 +38,7 @@ M3 no bloquea las notificaciones.
 
 ## Requisitos y configuración
 
-Para desarrollar: **Node.js 24**, **pnpm 10.33.0** y Docker Desktop con Docker Compose. Ejecutá los comandos desde `modulo-8/` en PowerShell.
+Para desarrollar: **Node.js 24**, **pnpm 10.33.0** y Docker Desktop con Docker Compose. Ejecutá los comandos desde `modulo8/` en PowerShell.
 
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }

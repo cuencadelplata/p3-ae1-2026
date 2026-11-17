@@ -10,7 +10,7 @@ El recorrido es: **k6 local → API de M8 → `/metrics` → Alloy → Grafana C
 
 ## Preparación local
 
-Desde `modulo-8/`, crear `.env` a partir de `.env.example` y reemplazar todos los valores `replace-with-*` con credenciales privadas. Usar las mismas credenciales de RabbitMQ en sus dos URL. Mantener `.env` fuera de Git. Levantar M8 y sus dependencias:
+Desde `modulo8/`, crear `.env` a partir de `.env.example` y reemplazar todos los valores `replace-with-*` con credenciales privadas. Usar las mismas credenciales de RabbitMQ en sus dos URL. Mantener `.env` fuera de Git. Levantar M8 y sus dependencias:
 
 ```powershell
 pnpm install --frozen-lockfile

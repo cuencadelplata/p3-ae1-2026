@@ -37,7 +37,7 @@ código queda guardado con el comprobante e impreso en el PDF.
 | Envío del comprobante por email con un SMTP de prueba | El envío pertenece a RF-8.4 (Receipts Delivery) y RF-8.1 (Notificaciones), de otros integrantes. |
 | **Autorizador fiscal simulado** | Queda dentro de RF-8.3: un comprobante electrónico se autoriza ante un organismo externo antes de emitirse. |
 
-Características del sandbox (`modulo-8/infra/fiscal-sandbox`):
+Características del sandbox (`modulo8/infra/fiscal-sandbox`):
 
 * **Contenedor propio, sin base compartida**, accesible solo por HTTP
   (`POST /v1/authorizations`). Es externo al servicio en el mismo sentido que un
@@ -154,4 +154,4 @@ Cambios que lo hacen posible:
 * `tests/integration/fiscal-authorizer.test.ts`: timeout, `5xx`, conexión rechazada, `422`, formato inválido, apertura y recuperación; contra el contenedor, idempotencia y autorización guardada.
 * `tests/integration/payment-confirmed.consumer.test.ts`: con una dependencia caída el mensaje supera `MAX_RETRIES` sin ir a la DLQ; un rechazo fiscal va a la DLQ sin reintentos.
 * `tests/unit/dependency-errors.test.ts`: detección de PostgreSQL caído y respuestas `503` / `422`.
-* `modulo-8/tests/e2e/resiliencia-ae2.e2e.test.mjs`: apaga de verdad Redis, RabbitMQ, el autorizador y PostgreSQL (también al arrancar) con `docker compose stop` y verifica la recuperación. Se ejecuta con `pnpm run test:resiliencia` desde `modulo-8`.
+* `modulo8/tests/e2e/resiliencia-ae2.e2e.test.mjs`: apaga de verdad Redis, RabbitMQ, el autorizador y PostgreSQL (también al arrancar) con `docker compose stop` y verifica la recuperación. Se ejecuta con `pnpm run test:resiliencia` desde `modulo8`.
