@@ -2,15 +2,17 @@ import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 /**
- * Alta de conductor (mismo look que valoraciones.tsx), en 4 pasos:
+ * Alta de conductor (mismo look que valoraciones.tsx), en 5 pasos:
  *   1. "Alta de conductor": identidad de M1 (solo lectura) + tipo de vehículo.
  *      -> GET/POST /api/conductores, PATCH /api/conductores/:id (cambiar tipo al volver)
  *   2. "Datos del vehículo" (con Volver): patente / marca / modelo / año.
  *      -> POST y GET /api/v1/drivers/:driverId/vehicles (m3-vehiculos)
- *   3. "Licencia de conducir": fotos de frente y dorso.
- *      -> POST y GET /api/v1/drivers/:driverId/documents (m3-vehiculos, LICENCIA_CONDUCIR + cara)
- *   4. Pantalla final: neutral ("Completá tu información" / "En revisión") hasta que la
- *      información esté completa Y validada; recién ahí se muestra la habilitación.
+ *   3. "Cédula del vehículo": fotos de frente y dorso, asociadas al vehículo cargado.
+ *      -> POST y GET /api/v1/drivers/:driverId/documents (CEDULA_VEHICULO + vehicleId + cara)
+ *   4. "Licencia de conducir": fotos de frente y dorso.
+ *      -> POST y GET /api/v1/drivers/:driverId/documents (LICENCIA_CONDUCIR + cara)
+ *   5. Pantalla final: neutral ("Completá tu información" / "En revisión") hasta que la
+ *      información esté completa Y las 4 fotos aprobadas; recién ahí se muestra la habilitación.
  *
  * El estado de habilitación (habilitado de M3, estado de M1, estado de documentos) NO se
  * muestra antes de eso.
@@ -771,10 +773,56 @@ function PasoVehiculo({ driverId }: { driverId: string }) {
   );
 }
 
-// ---------- Paso 3: licencia de conducir (frente y dorso) ----------
+// ---------- Pasos 3 y 4: documentos con foto de frente y dorso (cédula del vehículo, licencia) ----------
 
 type Foto = { nombre: string; dataUrl: string; peso: number };
 type Cara = "FRENTE" | "DORSO";
+
+type ConfigDocumento = {
+  tipoDocumento: TipoDocumento;
+  paso: Paso;
+  anterior: Paso;
+  siguiente: Paso;
+  titulo: string;
+  subtitulo: string;
+  consigna: string;
+  nombre: string; // "licencia" / "cédula" (para textos y etiquetas accesibles)
+  etiquetaNumero: string;
+  placeholderNumero: string;
+  vacio: string;
+  requiereVehiculo: boolean;
+};
+
+// CEDULA_VEHICULO ya existe en m3-vehiculos (documents-model.ts) y exige vehicleId
+const CEDULA: ConfigDocumento = {
+  tipoDocumento: "CEDULA_VEHICULO",
+  paso: "cedula",
+  anterior: "vehiculo",
+  siguiente: "licencia",
+  titulo: "Cédula del vehículo",
+  subtitulo: "Cédula verde del vehículo que cargaste",
+  consigna: "Frente y dorso de la cédula",
+  nombre: "cédula",
+  etiquetaNumero: "Número de cédula",
+  placeholderNumero: "ABC12345",
+  vacio: "Cuando subas la cédula, el frente y el dorso aparecen acá, leídos desde m3-vehiculos.",
+  requiereVehiculo: true
+};
+
+const LICENCIA: ConfigDocumento = {
+  tipoDocumento: "LICENCIA_CONDUCIR",
+  paso: "licencia",
+  anterior: "cedula",
+  siguiente: "final",
+  titulo: "Licencia de conducir",
+  subtitulo: "Fotos para validar tu identidad",
+  consigna: "Frente y dorso de tu licencia",
+  nombre: "licencia",
+  etiquetaNumero: "Número de licencia",
+  placeholderNumero: "12345678",
+  vacio: "Cuando subas tu licencia, el frente y el dorso aparecen acá, leídos desde m3-vehiculos.",
+  requiereVehiculo: false
+};
 
 function manianaISO() {
   const d = new Date();
@@ -784,6 +832,7 @@ function manianaISO() {
 
 function SelectorFoto({
   cara,
+  nombre,
   foto,
   procesando,
   deshabilitado,
@@ -791,6 +840,7 @@ function SelectorFoto({
   onQuitar
 }: {
   cara: Cara;
+  nombre: string;
   foto: Foto | null;
   procesando: boolean;
   deshabilitado: boolean;
@@ -805,7 +855,7 @@ function SelectorFoto({
           type="file"
           accept={TIPOS_IMAGEN.join(",")}
           capture="environment"
-          aria-label={`Foto del ${etiqueta.toLowerCase()} de la licencia`}
+          aria-label={`Foto del ${etiqueta.toLowerCase()} de la ${nombre}`}
           disabled={deshabilitado}
           onChange={(e) => {
             const archivo = e.target.files?.[0];
@@ -814,7 +864,7 @@ function SelectorFoto({
           }}
         />
         {foto ? (
-          <img src={foto.dataUrl} alt={`${etiqueta} de la licencia`} />
+          <img src={foto.dataUrl} alt={`${etiqueta} de la ${nombre}`} />
         ) : (
           <span className="val-foto-vacia">
             <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
@@ -841,7 +891,7 @@ function SelectorFoto({
   );
 }
 
-function PasoLicencia({ driverId }: { driverId: string }) {
+function PasoDocumento({ driverId, config }: { driverId: string; config: ConfigDocumento }) {
   const [numero, setNumero] = useState("");
   const [vencimiento, setVencimiento] = useState("");
   const [fotos, setFotos] = useState<Record<Cara, Foto | null>>({ FRENTE: null, DORSO: null });
@@ -852,8 +902,13 @@ function PasoLicencia({ driverId }: { driverId: string }) {
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [cargandoDocs, setCargandoDocs] = useState(true);
   const [avisoDocs, setAvisoDocs] = useState("");
+  // Solo para la cédula: vehículo al que se asocia
+  const [vehiculo, setVehiculo] = useState<Vehiculo | null>(null);
+  const [cargandoVehiculo, setCargandoVehiculo] = useState(config.requiereVehiculo);
+  const [avisoVehiculo, setAvisoVehiculo] = useState("");
 
-  const guardadas = licenciaPorCara(documentos);
+  const vehicleId = config.requiereVehiculo ? vehiculo?.id : undefined;
+  const guardadas = config.requiereVehiculo && !vehicleId ? {} : documentoPorCara(documentos, config.tipoDocumento, vehicleId);
   const completas = Boolean(guardadas.FRENTE && guardadas.DORSO);
 
   async function cargarDocumentos() {
@@ -871,7 +926,20 @@ function PasoLicencia({ driverId }: { driverId: string }) {
 
   useEffect(() => {
     cargarDocumentos();
-  }, [driverId]);
+    if (config.requiereVehiculo) {
+      Promise.all([
+        pedirJson<Conductor>(urlConductor(driverId), "No se encontró el conductor"),
+        pedirJson<Vehiculo[]>(urlVehiculos(driverId), "No se pudieron leer los vehículos")
+      ])
+        .then(([conductor, vehiculos]) => {
+          const actual = vehiculoActual(Array.isArray(vehiculos) ? vehiculos : [], aTipo(conductor.tipovehiculo));
+          setVehiculo(actual);
+          if (!actual) setAvisoVehiculo("Primero cargá los datos de tu vehículo.");
+        })
+        .catch((e) => setAvisoVehiculo(mensajeDe(e, "No se pudo leer tu vehículo")))
+        .finally(() => setCargandoVehiculo(false));
+    }
+  }, [driverId, config.paso]);
 
   async function elegir(cara: Cara, archivo: File) {
     setError("");
@@ -894,7 +962,8 @@ function PasoLicencia({ driverId }: { driverId: string }) {
 
   async function subir() {
     if (enviando) return;
-    if (!numero.trim()) return setError("Falta el número de licencia");
+    if (config.requiereVehiculo && !vehicleId) return setError("Primero cargá los datos de tu vehículo");
+    if (!numero.trim()) return setError(`Falta el ${config.etiquetaNumero.toLowerCase()}`);
     if (!vencimiento || vencimiento < manianaISO()) return setError("La fecha de vencimiento tiene que ser futura");
     if (!fotos.FRENTE || !fotos.DORSO) return setError("Faltan las fotos de frente y dorso");
 
@@ -907,7 +976,8 @@ function PasoLicencia({ driverId }: { driverId: string }) {
           method: "POST",
           headers: { "Content-Type": "application/json", "Idempotency-Key": nuevaClave() },
           body: JSON.stringify({
-            tipoDocumento: "LICENCIA_CONDUCIR",
+            tipoDocumento: config.tipoDocumento,
+            ...(vehicleId ? { vehicleId } : {}),
             cara,
             numeroDocumento: numero.trim(),
             fechaVencimiento: vencimiento,
@@ -915,7 +985,7 @@ function PasoLicencia({ driverId }: { driverId: string }) {
           })
         });
       }
-      setOk("Fotos de la licencia guardadas en m3-vehiculos");
+      setOk(`Fotos de la ${config.nombre} guardadas en m3-vehiculos`);
       setFotos({ FRENTE: null, DORSO: null });
       await cargarDocumentos();
     } catch (e) {
@@ -926,73 +996,92 @@ function PasoLicencia({ driverId }: { driverId: string }) {
     }
   }
 
-  const listo = Boolean(numero.trim() && vencimiento && fotos.FRENTE && fotos.DORSO);
+  const bloqueado = config.requiereVehiculo && !vehicleId;
+  const listo = Boolean(!bloqueado && numero.trim() && vencimiento && fotos.FRENTE && fotos.DORSO);
 
   return (
     <>
-      <Pasos actual="licencia" />
-      <h1>Licencia de conducir</h1>
-      <p className="val-subtitulo">Fotos para validar tu identidad</p>
+      <Pasos actual={config.paso} />
+      <h1>{config.titulo}</h1>
+      <p className="val-subtitulo">{config.subtitulo}</p>
 
-      <article className="val-card">
-        <p className="val-calificar">Frente y dorso de tu licencia</p>
-        <div className="val-fotos">
-          {(["FRENTE", "DORSO"] as const).map((cara) => (
-            <SelectorFoto
-              key={cara}
-              cara={cara}
-              foto={fotos[cara]}
-              procesando={procesando === cara}
-              deshabilitado={enviando || procesando !== ""}
-              onArchivo={(archivo) => elegir(cara, archivo)}
-              onQuitar={() => setFotos((actual) => ({ ...actual, [cara]: null }))}
-            />
-          ))}
-        </div>
+      {config.requiereVehiculo && cargandoVehiculo ? <Cargando texto="Buscando tu vehículo…" /> : null}
+      {config.requiereVehiculo && !cargandoVehiculo && avisoVehiculo ? <p className="val-error val-aviso">{avisoVehiculo}</p> : null}
+      {config.requiereVehiculo && vehiculo ? (
+        <article className="val-card">
+          <h2 className="val-card-titulo">Vehículo</h2>
+          <Par izq={["Patente", vehiculo.patente]} der={["Tipo", vehiculo.tipoServicio]} />
+          <Par
+            izq={["Marca y modelo", [vehiculo.marca, vehiculo.modelo].filter(Boolean).join(" ") || undefined]}
+            der={["Año", String(vehiculo.anio)]}
+          />
+        </article>
+      ) : null}
 
-        <div className="val-fila">
-          <label className="val-comentario">
-            <span>Número de licencia</span>
-            <input
-              value={numero}
-              maxLength={30}
-              placeholder="12345678"
-              autoComplete="off"
-              disabled={enviando}
-              onChange={(e) => {
-                setNumero(e.target.value);
-                setError("");
-              }}
-            />
-          </label>
-          <label className="val-comentario">
-            <span>Vencimiento</span>
-            <input
-              type="date"
-              min={manianaISO()}
-              value={vencimiento}
-              disabled={enviando}
-              onChange={(e) => {
-                setVencimiento(e.target.value);
-                setError("");
-              }}
-            />
-          </label>
-        </div>
+      {!bloqueado || !config.requiereVehiculo ? (
+        <article className="val-card">
+          <p className="val-calificar">{config.consigna}</p>
+          <div className="val-fotos">
+            {(["FRENTE", "DORSO"] as const).map((cara) => (
+              <SelectorFoto
+                key={cara}
+                cara={cara}
+                nombre={config.nombre}
+                foto={fotos[cara]}
+                procesando={procesando === cara}
+                deshabilitado={enviando || procesando !== "" || bloqueado}
+                onArchivo={(archivo) => elegir(cara, archivo)}
+                onQuitar={() => setFotos((actual) => ({ ...actual, [cara]: null }))}
+              />
+            ))}
+          </div>
 
-        <p className="val-juicio">JPG, PNG o WEBP de hasta 8 MB. Que se lea bien, sin reflejos y con los cuatro bordes a la vista.</p>
+          <div className="val-fila">
+            <label className="val-comentario">
+              <span>{config.etiquetaNumero}</span>
+              <input
+                value={numero}
+                maxLength={30}
+                placeholder={config.placeholderNumero}
+                autoComplete="off"
+                disabled={enviando || bloqueado}
+                onChange={(e) => {
+                  setNumero(e.target.value);
+                  setError("");
+                }}
+              />
+            </label>
+            <label className="val-comentario">
+              <span>Vencimiento</span>
+              <input
+                type="date"
+                min={manianaISO()}
+                value={vencimiento}
+                disabled={enviando || bloqueado}
+                onChange={(e) => {
+                  setVencimiento(e.target.value);
+                  setError("");
+                }}
+              />
+            </label>
+          </div>
 
-        {error ? <p className="val-error">{error}</p> : null}
-        {ok ? <p className="val-ok">{ok}</p> : null}
+          <p className="val-juicio">JPG, PNG o WEBP de hasta 8 MB. Que se lea bien, sin reflejos y con los cuatro bordes a la vista.</p>
 
-        <button type="button" className="val-enviar" disabled={!listo || enviando} onClick={subir}>
-          {enviando ? "Subiendo…" : "Subir licencia"}
-        </button>
-      </article>
+          {error ? <p className="val-error">{error}</p> : null}
+          {ok ? <p className="val-ok">{ok}</p> : null}
+
+          <button type="button" className="val-enviar" disabled={!listo || enviando} onClick={subir}>
+            {enviando ? "Subiendo…" : `Subir ${config.nombre}`}
+          </button>
+        </article>
+      ) : null}
 
       <section className="val-historial">
         <h2>Guardadas</h2>
-        <p className="val-etiqueta val-origen">Leído de m3-vehiculos · documentos</p>
+        <p className="val-etiqueta val-origen">
+          Leído de m3-vehiculos · documentos{config.requiereVehiculo && vehiculo ? ` · ${vehiculo.patente}` : ""}
+        </p>
 
         {cargandoDocs ? <Cargando texto="Buscando documentos…" /> : null}
         {!cargandoDocs && avisoDocs ? <p className="val-error val-aviso">{avisoDocs}</p> : null}
@@ -1000,7 +1089,7 @@ function PasoLicencia({ driverId }: { driverId: string }) {
         {!cargandoDocs && !avisoDocs && !guardadas.FRENTE && !guardadas.DORSO ? (
           <article className="val-card">
             <h2 className="val-card-titulo">Sin fotos</h2>
-            <p className="val-vacio">Cuando subas tu licencia, el frente y el dorso aparecen acá, leídos desde m3-vehiculos.</p>
+            <p className="val-vacio">{config.vacio}</p>
           </article>
         ) : null}
 
@@ -1015,7 +1104,9 @@ function PasoLicencia({ driverId }: { driverId: string }) {
                 ) : null}
                 <div>
                   <p className="val-lugar">{cara === "FRENTE" ? "Frente" : "Dorso"}</p>
-                  <p className="val-etiqueta">Licencia {doc.numeroDocumento}</p>
+                  <p className="val-etiqueta">
+                    {config.requiereVehiculo ? "Cédula" : "Licencia"} {doc.numeroDocumento}
+                  </p>
                   <p className="val-mini-nota">Vence {fechaCalendario(doc.fechaVencimiento)}</p>
                 </div>
               </div>
@@ -1026,10 +1117,10 @@ function PasoLicencia({ driverId }: { driverId: string }) {
       </section>
 
       <div className="val-acciones">
-        <button type="button" className="val-secundario" onClick={() => irA("vehiculo", driverId)}>
+        <button type="button" className="val-secundario" onClick={() => irA(config.anterior, driverId)}>
           Volver
         </button>
-        <button type="button" className="val-enviar" disabled={!completas} onClick={() => irA("final", driverId)}>
+        <button type="button" className="val-enviar" disabled={!completas} onClick={() => irA(config.siguiente, driverId)}>
           Continuar
         </button>
       </div>
@@ -1037,7 +1128,7 @@ function PasoLicencia({ driverId }: { driverId: string }) {
   );
 }
 
-// ---------- Paso 4: final (neutral hasta completar y validar) ----------
+// ---------- Paso 5: final (neutral hasta completar y validar) ----------
 
 type Resumen = {
   conductor: Conductor | null;
@@ -1072,18 +1163,29 @@ function PasoFinal({ driverId }: { driverId: string }) {
   }, [driverId]);
 
   const tipo = aTipo(resumen?.conductor?.tipovehiculo);
-  const licencia = licenciaPorCara(resumen?.documentos || []);
+  const vehiculo = vehiculoActual(resumen?.vehiculos || [], tipo);
+  const documentos = resumen?.documentos || [];
+  const cedula = vehiculo ? documentoPorCara(documentos, "CEDULA_VEHICULO", vehiculo.id) : {};
+  const licencia = documentoPorCara(documentos, "LICENCIA_CONDUCIR");
   const requisitos: { texto: string; ok: boolean; paso: Paso }[] = [
     { texto: "Conductor creado", ok: Boolean(resumen?.conductor), paso: "alta" },
-    { texto: "Vehículo cargado", ok: Boolean(tipo && resumen?.vehiculos.some((v) => v.tipoServicio === tipo)), paso: "vehiculo" },
+    { texto: "Vehículo cargado", ok: Boolean(vehiculo), paso: "vehiculo" },
+    { texto: "Cédula · frente", ok: Boolean(cedula.FRENTE), paso: "cedula" },
+    { texto: "Cédula · dorso", ok: Boolean(cedula.DORSO), paso: "cedula" },
     { texto: "Licencia · frente", ok: Boolean(licencia.FRENTE), paso: "licencia" },
     { texto: "Licencia · dorso", ok: Boolean(licencia.DORSO), paso: "licencia" }
   ];
   const completo = requisitos.every((r) => r.ok);
-  // Validado = las dos fotos vigentes de la licencia aprobadas por la validación de m3-vehiculos
-  const validado = completo && licencia.FRENTE?.estado === "APROBADO" && licencia.DORSO?.estado === "APROBADO";
+  // Validado = las cuatro fotos vigentes (cédula y licencia, frente y dorso) aprobadas por m3-vehiculos
+  const fotos = [
+    { doc: cedula.FRENTE, paso: "cedula" as Paso },
+    { doc: cedula.DORSO, paso: "cedula" as Paso },
+    { doc: licencia.FRENTE, paso: "licencia" as Paso },
+    { doc: licencia.DORSO, paso: "licencia" as Paso }
+  ];
+  const validado = completo && fotos.every((f) => f.doc?.estado === "APROBADO");
   // Pedido de nueva foto (sin mostrar el estado de habilitación)
-  const pedirFoto = completo && !validado && [licencia.FRENTE, licencia.DORSO].some((d) => d?.estado === "RECHAZADO");
+  const rechazada = completo && !validado ? fotos.find((f) => f.doc?.estado === "RECHAZADO") : undefined;
   const pendiente = requisitos.find((r) => !r.ok);
 
   return (
@@ -1116,16 +1218,18 @@ function PasoFinal({ driverId }: { driverId: string }) {
             </button>
           ) : null}
 
-          {pedirFoto ? (
+          {rechazada ? (
             <>
-              <p className="val-vacio val-nota">Necesitamos una nueva foto de tu licencia para seguir con la revisión.</p>
-              <button type="button" className="val-enviar" onClick={() => irA("licencia", driverId)}>
+              <p className="val-vacio val-nota">
+                Necesitamos una nueva foto de tu {rechazada.paso === "cedula" ? "cédula" : "licencia"} para seguir con la revisión.
+              </p>
+              <button type="button" className="val-enviar" onClick={() => irA(rechazada.paso, driverId)}>
                 Subir de nuevo
               </button>
             </>
           ) : null}
 
-          {completo && !validado && !pedirFoto ? (
+          {completo && !validado && !rechazada ? (
             <p className="val-vacio val-nota">
               Recibimos todo. La revisión puede demorar un rato; te avisamos cuando termine.
             </p>
@@ -1179,7 +1283,8 @@ export default function AltaConductor() {
           Panel
         </a>
         {ruta.paso === "vehiculo" ? <PasoVehiculo key={ruta.driverId} driverId={ruta.driverId} /> : null}
-        {ruta.paso === "licencia" ? <PasoLicencia key={ruta.driverId} driverId={ruta.driverId} /> : null}
+        {ruta.paso === "cedula" ? <PasoDocumento key={`cedula-${ruta.driverId}`} driverId={ruta.driverId} config={CEDULA} /> : null}
+        {ruta.paso === "licencia" ? <PasoDocumento key={`licencia-${ruta.driverId}`} driverId={ruta.driverId} config={LICENCIA} /> : null}
         {ruta.paso === "final" ? <PasoFinal key={ruta.driverId} driverId={ruta.driverId} /> : null}
         {ruta.paso === "alta" ? <PasoAlta /> : null}
       </div>
