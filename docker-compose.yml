@@ -187,6 +187,16 @@ services:
       - --server.http.listen-addr=0.0.0.0:12345
       - /etc/alloy/config.alloy
 
+  k6:
+    image: grafana/k6:latest
+    container_name: m3-k6
+    profiles: ["test"]
+    volumes:
+      - ./k6:/scripts
+    command: run /scripts/load-test.js
+    networks:
+      - default  
+
 networks:
   p3-shared:
     name: p3-shared
@@ -194,3 +204,4 @@ networks:
 volumes:
   redis_data:
   rabbitmq_data:
+

@@ -1,5 +1,4 @@
 //server.js
-require("./instrumentation");
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
@@ -37,6 +36,20 @@ app.use(express.json());
 // Servir frontend de pruebas desde /public
 const publicPath = path.join(__dirname, "../public");
 app.use(express.static(publicPath));
+
+// Log de cada request (para Grafana/Loki). Va después de express.static para
+// no anotar los archivos de la página (html, css, js), solo la API.
+// Se omite /health porque el healthcheck de Docker lo llama cada 15 s.
+app.use((req, res, next) => {
+  const inicio = Date.now();
+  res.on("finish", () => {
+    if (req.originalUrl === "/health") return;
+    console.log(
+      `${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - inicio}ms`,
+    );
+  });
+  next();
+});
 
 // Health check para Docker y monitoreo
 app.get("/health", (_req, res) => {

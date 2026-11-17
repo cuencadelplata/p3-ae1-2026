@@ -21,6 +21,19 @@ const PORT = process.env.PORT || 8083;
 app.use(cors());
 app.use(express.json());
 
+// Log de cada request (para Grafana/Loki). Se omite /health porque el
+// healthcheck de Docker lo llama cada 15 s y llenaría los logs de ruido.
+app.use((req, res, next) => {
+  const inicio = Date.now();
+  res.on("finish", () => {
+    if (req.originalUrl === "/health") return;
+    console.log(
+      `${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - inicio}ms`,
+    );
+  });
+  next();
+});
+
 app.get("/health", (_req: Request, res: Response) => {
   res.json({
     status: "ok",
