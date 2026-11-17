@@ -6,6 +6,7 @@ Pegan contra M1, Redis y RabbitMQ **reales**, sin mocks. Usan solo Node (`node -
 | --- | --- | --- | --- |
 | `rf-1.2-ae4.e2e.test.mjs` | `npm run test:e2e:ae4` | Login, `/auth/me`, rate limit con Redis real, eventos que llegan a RabbitMQ y métricas | ~1 s |
 | `rf-1.1-1.3-ae4.e2e.test.mjs` | `npm run test:e2e:rf11-rf13` | Registro con cada rol, 409 por email o DNI repetido, otro módulo valida el token y recibe `valid: true`, métrica de validaciones | ~2 s |
+| `rf-1.4-ae4.e2e.test.mjs` | `npm run test:e2e:rf14` | Recuperar, resetear y entrar con la contraseña nueva; revocar y comprobar que el token viejo da 401; eventos en RabbitMQ y métricas | ~5 s |
 | `resiliencia-ae4.e2e.test.mjs` | `npm run test:e2e:resiliencia` | Apaga y prende Redis y RabbitMQ: M1 no se cae y se reconecta solo | ~1 a 2 min |
 | `helpers-ae4.mjs` | — | Funciones compartidas | — |
 
@@ -39,6 +40,22 @@ Solo necesita M1 levantado (no usa la API de RabbitMQ).
 5. Otro módulo valida el token con `GET /auth/validar-identidad-y-rol` y recibe `valid: true` con el rol correcto; `m1_validaciones_identidad_total{resultado="valida"}` sube 1.
 6. Sin token o con token inválido: 401, y sube `token_rechazado`.
 7. Cada rol entra solo a su ruta: `CONDUCTOR` al portal de conductores; `CLIENTE` no (403).
+## `npm run test:e2e:rf14`: RF-1.4 de punta a punta
+
+Necesita M1, Redis y RabbitMQ (usa la API de administración de RabbitMQ, puerto 15672, para leer el token del evento).
+
+1. Pedir recuperación: 200, y el evento `auth.recuperacion_solicitada` llega a RabbitMQ con el token de 64 caracteres y vencimiento de 900 s.
+2. Resetear la contraseña con ese token: 200.
+3. Con la contraseña nueva el login da 200 y `/auth/me` funciona; con la vieja da 401.
+4. La sesión abierta antes del reseteo queda revocada: `/auth/me` da 401 `Credencial revocada`.
+5. El token de recuperación sirve una sola vez: usarlo de nuevo da 401.
+6. El reseteo publica `auth.credenciales_revocadas` con motivo `CAMBIO_DE_CONTRASENA`.
+7. `POST /auth/revocar-credenciales`: el token viejo da 401 en `/auth/me` y en `GET /auth/validar-identidad-y-rol` (lo que ve otro módulo).
+8. La revocación publica `auth.credenciales_revocadas` con motivo `SOLICITUD_DEL_USUARIO`.
+9. Después de revocar, un login nuevo vuelve a funcionar.
+10. `m1_credenciales_total` y `m1_eventos_credenciales_total` suben exactamente lo que pasó.
+
+Entre emitir un token y revocarlo el test espera un poco más de 1 s, porque el JWT guarda el segundo en que se emitió (`iat`) y un token del mismo segundo de la revocación sigue valiendo.
 
 ## `npm run test:e2e:resiliencia`: apagar y prender
 

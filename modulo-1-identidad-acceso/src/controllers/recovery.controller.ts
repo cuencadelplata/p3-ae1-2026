@@ -18,6 +18,8 @@ import {
     validateOAuth2Provider
 } from "../services/oauth2.service";
 
+import { credencialesTotal } from "../metrics/metrics";
+
 function handleError(
     error: unknown,
     res: Response
@@ -48,6 +50,7 @@ export async function requestRecovery(
         const { email } = req.body;
 
         if (typeof email !== "string") {
+            credencialesTotal.inc({ operacion: "recuperacion_solicitada", resultado: "error" });
             res.status(400).json({
                 error: "Email es obligatorio"
             });
@@ -56,8 +59,10 @@ export async function requestRecovery(
 
         const resultado = await requestPasswordRecovery(email);
 
+        credencialesTotal.inc({ operacion: "recuperacion_solicitada", resultado: "ok" });
         res.status(200).json(resultado);
     } catch (error) {
+        credencialesTotal.inc({ operacion: "recuperacion_solicitada", resultado: "error" });
         handleError(error, res);
     }
 }
@@ -75,8 +80,10 @@ export async function resetPasswordHandler(
             req.body
         );
 
+        credencialesTotal.inc({ operacion: "contrasena_reseteada", resultado: "ok" });
         res.status(200).json(resultado);
     } catch (error) {
+        credencialesTotal.inc({ operacion: "contrasena_reseteada", resultado: "error" });
         handleError(error, res);
     }
 }

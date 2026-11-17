@@ -2,6 +2,7 @@ import { Response } from "express";
 
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
 import { revocarCredenciales } from "../services/credential-revocation.service";
+import { credencialesTotal } from "../metrics/metrics";
 
 /**
  * RF-1.4: POST /auth/revocar-credenciales
@@ -26,6 +27,8 @@ export async function revokeCredentials(
             "SOLICITUD_DEL_USUARIO"
         );
 
+        credencialesTotal.inc({ operacion: "credenciales_revocadas", resultado: "ok" });
+
         res.status(200).json({
             message: "Credenciales revocadas. Iniciá sesión nuevamente",
             userId,
@@ -33,6 +36,8 @@ export async function revokeCredentials(
         });
     } catch (error) {
         console.error(error);
+
+        credencialesTotal.inc({ operacion: "credenciales_revocadas", resultado: "error" });
 
         res.status(503).json({
             error: "No se pudieron revocar las credenciales. Intentá de nuevo más tarde"
