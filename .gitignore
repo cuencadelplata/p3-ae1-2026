@@ -34,3 +34,6 @@ web_modules/
 # dotenv environment variable files
 .env
 .env.*
+
+# Resultados locales de trabajo
+/output/
