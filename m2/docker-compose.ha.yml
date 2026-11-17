@@ -1,0 +1,52 @@
+# Alta disponibilidad de M2 (RNF-15): dos réplicas de la API detrás de un gateway nginx.
+# Se usa encima del compose principal (y opcionalmente del de observabilidad), desde m2/:
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml -f docker-compose.ha.yml up -d
+#
+# Prueba de caída de una réplica:
+#   docker compose ... run --rm -e M2_URL=http://gateway k6 run /scripts/carga.js
+#   docker compose stop api-2     # el gateway manda todo a api; k6 casi sin errores
+#   docker compose start api-2    # vuelve a repartir
+#
+# Postgres, Redis y RabbitMQ son compartidos, por eso las réplicas son intercambiables.
+# Cada réplica tiene en memoria sus propios circuit breakers, métricas y estado de __chaos.
+services:
+  api:
+    ports: !reset []        # el puerto 3000 lo publica el gateway
+
+  api-2:
+    extends:
+      file: docker-compose.yml
+      service: api          # misma imagen, variables y healthcheck
+    container_name: p3-api-2
+    ports: !reset []
+    depends_on:
+      db-profiles:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  gateway:
+    image: nginx:1.27.5-alpine
+    container_name: p3-gateway
+    restart: always
+    ports:
+      - "3000:80"
+    volumes:
+      - ./ha/gateway.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      api-2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # El frontend pasa por el gateway en lugar de ir directo a api
+  client:
+    volumes:
+      - ./ha/client.conf:/etc/nginx/conf.d/app.conf:ro
+    depends_on: !override
+      - gateway

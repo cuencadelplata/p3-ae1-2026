@@ -1,0 +1,118 @@
+
+> modulo2-clientes-ae2@2.2.0 test:integration
+> node --test --test-concurrency=1 tests/integration.test.cjs
+
+{"event":"http_request","method":"GET","status":401,"correlationId":"54d910a4-bb5b-4c6c-89f8-be9bba89e4b8"}
+{"event":"http_request","method":"POST","status":400,"correlationId":"d68dca4f-2f68-4e6d-9c54-083a6076cc52"}
+{"event":"http_request","method":"POST","status":400,"correlationId":"14e9551d-e12f-4af6-95fb-4734042513d3"}
+✔ HTTP exige identidad y valida payload (802.792666ms)
+{"event":"http_request","method":"POST","status":201,"correlationId":"b5266595-ec12-44b6-85b9-700cb69cb50e"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"6f400095-3eba-4425-bf8b-2d26ee49be02"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"713c5b19-2492-4160-99d8-67c6cb1ce3e5"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"db2cb43a-6636-49e7-83a9-fd063275cc93"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"ec94082e-9d44-410e-aee8-84709f24b973"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"32fd4788-dd66-4da5-90ee-d2f7fb681d86"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"736608ff-df92-4285-a370-1611ec01b8ad"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"31d2e495-be59-485b-9e3d-c7088a6a34ad"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"1c0b968d-eced-48cc-9024-cdc6b7567c36"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"ffb474af-b03c-4394-899c-1fd869863b7a"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"692ea7ce-6655-4b2c-a4ca-dbb1e181d22c"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"9ddba7ec-655e-42a2-b135-3a6c41a2799c"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"e2a1a8a9-cb08-489c-bb21-d30a32aade95"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"1250e4f7-8ea5-471b-9551-ccdbaac9f192"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"c3305cd6-4e2e-4c3d-b8c0-0acb76b46904"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"d919c547-91bf-4292-92a1-d02630dfd62b"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"96acac9b-6a10-40af-a57f-8633727cb89f"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"a215feac-51d7-4b48-b0a0-98aa6391fbbb"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"7f32d9e3-a771-4257-9614-6531283bfef4"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"741723c8-9c4e-43a8-91f9-7232583b8f9a"}
+{"event":"http_request","method":"POST","status":409,"correlationId":"bd7e2bdb-2e18-4227-b2b0-9d5040382eef"}
+✔ 20 altas concurrentes con misma clave: un registro, un evento, misma respuesta (63.140541ms)
+{"event":"http_request","method":"POST","status":201,"correlationId":"bc87aa54-fda7-4813-90f0-c332fe410b26"}
+{"event":"http_request","method":"POST","status":409,"correlationId":"d37143f2-fdfe-449b-9487-02e9ec6cf3d4"}
+{"event":"http_request","method":"POST","status":409,"correlationId":"1a6ae0e6-1d6d-4a3c-9c20-47efb1a44dc9"}
+{"event":"http_request","method":"POST","status":409,"correlationId":"c6fed6c7-a46e-40bd-99ae-c62c8885bcd8"}
+{"event":"http_request","method":"POST","status":409,"correlationId":"548b7e24-833c-4924-9abe-8bbde0996684"}
+{"event":"http_request","method":"POST","status":409,"correlationId":"b10aea52-6b2c-4de8-9ef9-edc1e687983f"}
+{"event":"http_request","method":"POST","status":409,"correlationId":"0ad58702-ce84-4567-adda-3a4c6b8d270b"}
+{"event":"http_request","method":"POST","status":409,"correlationId":"0def49c2-9338-4880-9cbd-684af51e4564"}
+{"event":"http_request","method":"POST","status":409,"correlationId":"71ec2c55-ce82-436a-8094-5e0fd4adeead"}
+{"event":"http_request","method":"POST","status":409,"correlationId":"e32bbe54-404c-4f42-a44c-2fd2dbe00ae2"}
+✔ Claves distintas tampoco duplican un favorito concurrente (39.56025ms)
+{"event":"http_request","method":"POST","status":201,"correlationId":"002f64de-1c37-4ca0-82f0-b44abb268e76"}
+{"event":"http_request","method":"GET","status":404,"correlationId":"02307cf1-6551-4be1-8353-875a9bc57d1f"}
+{"event":"http_request","method":"GET","status":200,"correlationId":"7572858a-01a3-4464-84f4-a43c22268c71"}
+✔ Aislamiento de propietario y header falsificado (9.613458ms)
+{"event":"http_request","method":"POST","status":201,"correlationId":"254f9678-7c02-45a1-8a78-0162a57cfc4c"}
+{"event":"http_request","method":"PATCH","status":200,"correlationId":"71feb946-8ed4-4dba-b3ca-07a35c15ceae"}
+{"event":"http_request","method":"PATCH","status":412,"correlationId":"19ec78bf-4dff-4823-881c-d30d89aea40e"}
+{"event":"http_request","method":"PATCH","status":428,"correlationId":"0bb719d5-d722-4ef0-bb12-e4aa16317ab4"}
+✔ Ediciones concurrentes con If-Match: una gana y otra recibe 412 (24.411167ms)
+{"event":"http_request","method":"GET","status":200,"correlationId":"0b599d41-ae74-4071-8985-fe32508c91b1"}
+{"event":"http_request","method":"GET","status":200,"correlationId":"83784caa-54a3-4fe4-be36-46a4686c3c04"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"61a3f776-4b0a-46ca-8eb6-b25212996873"}
+{"event":"http_request","method":"GET","status":200,"correlationId":"fdf68993-62d4-42e9-8a81-7138dc6e47e7"}
+{"event":"http_request","method":"GET","status":200,"correlationId":"c3681590-ad82-49b7-9514-801d4390cfb9"}
+{"event":"http_request","method":"GET","status":200,"correlationId":"fed4e329-61d6-4646-bcb2-6c9ff964d0e9"}
+✔ Cache real: MISS/HIT, TTL y edición invalida versión (4254.403959ms)
+✔ Evento repetido incluso con ID nuevo no incrementa dos veces usos (69.05875ms)
+✔ Eventos fuera de orden conservan ultimoUso más reciente (35.047708ms)
+{"event":"http_request","method":"POST","status":201,"correlationId":"2250a815-3800-4395-a63b-453c95418f34"}
+✔ Promover reciente a favorita conserva su identidad y usos (12.618541ms)
+{"event":"http_request","method":"POST","status":201,"correlationId":"49851d77-fe08-4d2e-89ec-d1ae539e1458"}
+{"event":"http_request","method":"DELETE","status":200,"correlationId":"cb6c1f65-2678-4050-8f38-a84f7d1c313f"}
+{"event":"http_request","method":"DELETE","status":200,"correlationId":"7b9e78a2-de27-4383-a3cb-7e9b6feca0e3"}
+{"event":"http_request","method":"GET","status":404,"correlationId":"e1d422ff-333d-406a-a840-5eb83da2ca89"}
+✔ Eliminación repetida usa respuesta almacenada (21.134916ms)
+✔ Redis caído no rompe persistencia ni devuelve caché vieja al recuperarse (16.638875ms)
+{"event":"http_request","method":"GET","status":200,"correlationId":"d4d01d9f-db44-4e8b-8865-85543d58112a"}
+{"event":"http_request","method":"GET","status":503,"correlationId":"8e760a7c-521d-4cfd-b987-dbe8f27d03cf"}
+✔ Mapa simulado por HTTP devuelve resultados y timeout/error controlado (15.206333ms)
+{"event":"http_request","method":"POST","status":201,"correlationId":"d6f22b64-65f8-4aae-bf4f-b84b3091bddb"}
+{"event":"http_request","method":"POST","status":409,"correlationId":"e71bf610-3b24-4d87-a84d-0f97b363a660"}
+{"event":"http_request","method":"GET","status":200,"correlationId":"5e853218-ab56-4495-8d69-496476fbe6d6"}
+{"event":"http_request","method":"GET","status":404,"correlationId":"f01a14a2-81b5-4c25-9eff-e91c2b01c8b3"}
+{"event":"http_request","method":"POST","status":400,"correlationId":"6dd90f08-172c-4b2d-a757-ed08acd79ee5"}
+✔ Regresión RF-2.4: completado, duplicado, viaje activo, lectura ajena (11.839708ms)
+✔ Retención: 20 recientes no favoritas y favoritos preservados (88.9905ms)
+✔ Fallo antes del outbox revierte dirección e idempotencia en la misma transacción (2.8585ms)
+{"event":"http_request","method":"POST","status":200,"correlationId":"266af2d6-15e0-48df-acf9-ecbae4fed904"}
+{"event":"http_request","method":"POST","status":200,"correlationId":"0d520949-8a89-44f4-9c12-9193cf42f4bb"}
+✔ RF-2.2 consulta GET M6 y REST + evento comparten deduplicación (11.189333ms)
+{"event":"http_request","method":"POST","status":404,"correlationId":"832e8fab-478c-48f5-8be4-0ae6db17f4b2"}
+{"event":"http_request","method":"POST","status":409,"correlationId":"8c7adcee-b0df-4a13-9f64-ba6798b6f756"}
+{"event":"http_request","method":"POST","status":404,"correlationId":"f6d650e7-c718-4704-9253-64ebd5df9b72"}
+{"event":"http_request","method":"POST","status":502,"correlationId":"2958b6e1-e876-4f95-a6ad-0e7e4aa412bb"}
+✔ M6: exige viaje propio, completado y contrato con direcciones (5.27925ms)
+{"event":"http_request","method":"POST","status":200,"correlationId":"a459871e-81cd-4195-8df4-db5fc08451c1"}
+{"event":"http_request","method":"POST","status":200,"correlationId":"1c617cf4-a510-4c44-8509-0a5fc83a29d9"}
+{"event":"http_request","method":"GET","status":200,"correlationId":"6b1ca87b-6d8c-4504-a1c7-5ccf97302e4b"}
+{"event":"http_request","method":"GET","status":200,"correlationId":"8b35b829-18fc-47d7-ae62-9a67cb102e91"}
+✔ Contrato textual M6: origen B y destino A para regresar, sin calificar (24.881083ms)
+{"event":"http_request","method":"GET","status":200,"correlationId":"88c8c18b-b6bd-4316-9276-ba0c3dacd09b"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"8484cc63-b53b-499e-b8d2-ed9b7c147987"}
+{"event":"http_request","method":"GET","status":200,"correlationId":"ad42061f-78c9-44ec-80e9-98f257172297"}
+✔ Sugerencias: aislamiento, ambos usos y favoritos de texto (7.952584ms)
+{"event":"http_request","method":"GET","status":200,"correlationId":"673f07ad-157a-45f2-81dd-a4070316aee6"}
+✔ Último viaje: eventos atrasados no sustituyen la sugerencia más reciente (12.830459ms)
+{"event":"http_request","method":"DELETE","status":200,"correlationId":"2a8d3254-3646-4a44-aea0-655f332fb169"}
+{"event":"http_request","method":"GET","status":200,"correlationId":"a50ad168-059b-4a95-86e5-c0d217ac0c4b"}
+✔ Eliminar dirección evita que vuelva a aparecer en la sugerencia de regreso (12.925916ms)
+{"event":"http_request","method":"POST","status":503,"correlationId":"bac7befb-f1c8-41dd-bff6-a143e7992e72"}
+{"event":"http_request","method":"POST","status":201,"correlationId":"bad7fdbb-12f5-436d-adf5-30fc040e851e"}
+{"event":"http_request","method":"GET","status":200,"correlationId":"db4e8f7a-76e2-4a7a-8fd6-228eda5abc23"}
+{"event":"http_request","method":"GET","status":200,"correlationId":"04a2adee-ed27-420f-81dc-ad67379435bb"}
+✔ Caída M6: importación informa 503, favoritos continúan disponibles (9.149958ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5599.561291
+npm notice
+npm notice New major version of npm available! 11.19.0 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice
