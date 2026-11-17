@@ -9,14 +9,13 @@ services:
     environment:
       NODE_ENV: production
       PORT: ${PORT:-3000}
-      M5_BASE_URL: http://m5-stub:3001
-      M7_BASE_URL: http://m7-stub:3002
+      M5_BASE_URL: http://m5-dispatch-service:3005
+      M7_BASE_URL: http://m7-reintegro:3000
       M5_TIMEOUT_MS: ${M5_TIMEOUT_MS:-3000}
       M7_TIMEOUT_MS: ${M7_TIMEOUT_MS:-3000}
       DISPATCH_MODE: events
-      # Credencial no productiva aceptada únicamente por el stub local M5.
-      M5_SERVICE_TOKEN: ${M5_SERVICE_TOKEN:-m5-local-e2e-token}
-      ROUTE_RESOLVER_MODE: stub
+      M5_SERVICE_TOKEN: ${M5_SERVICE_TOKEN}
+      ROUTE_RESOLVER_MODE: blocked
       ROUTE_STUB_ORIGIN_LATITUDE: ${ROUTE_STUB_ORIGIN_LATITUDE:--27.4514}
       ROUTE_STUB_ORIGIN_LONGITUDE: ${ROUTE_STUB_ORIGIN_LONGITUDE:--58.9867}
       ROUTE_STUB_DESTINATION_LATITUDE: ${ROUTE_STUB_DESTINATION_LATITUDE:--27.4692}
@@ -47,10 +46,6 @@ services:
       timeout: 3s
       retries: 5
     depends_on:
-      m5-stub:
-        condition: service_healthy
-      m7-stub:
-        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -60,50 +55,6 @@ services:
     networks:
       - reservas-network
     restart: unless-stopped
-
-  m5-stub:
-    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v2.0.0}
-    command: ['node', 'dist/stubs/m5/server.js']
-    environment:
-      PORT: 3001
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672
-      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-m9.reservas.events}
-      RABBITMQ_RETRY_EXCHANGE: ${M5_RABBITMQ_RETRY_EXCHANGE:-m5.reservas.events.retry}
-      RABBITMQ_DLQ_EXCHANGE: ${M5_RABBITMQ_DLQ_EXCHANGE:-m5.reservas.events.dlx}
-      M5_RABBITMQ_QUEUE: ${M5_RABBITMQ_QUEUE:-m5.reservas-dispatch-demo}
-      M5_RABBITMQ_RETRY_QUEUE: ${M5_RABBITMQ_RETRY_QUEUE:-m5.reservas-dispatch-demo.retry}
-      M5_RABBITMQ_DLQ: ${M5_RABBITMQ_DLQ:-m5.reservas-dispatch-demo.dlq}
-      RABBITMQ_RETRY_LIMIT: ${RABBITMQ_RETRY_LIMIT:-3}
-      RABBITMQ_RETRY_DELAY_MS: ${RABBITMQ_RETRY_DELAY_MS:-1000}
-    expose:
-      - '3001'
-    ports:
-      - '127.0.0.1:${M5_STUB_PORT:-3001}:3001'
-    healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3001/health']
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - reservas-network
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-
-  m7-stub:
-    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v2.0.0}
-    command: ['node', 'dist/stubs/m7/server.js']
-    environment:
-      PORT: 3002
-    expose:
-      - '3002'
-    healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3002/health']
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - reservas-network
 
   redis:
     image: redis:7.4-alpine
