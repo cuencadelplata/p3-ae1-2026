@@ -1,4 +1,6 @@
-//server.js
+//server.js — OTel debe cargar antes que Express para instrumentar HTTP.
+require("./instrumentation");
+
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
@@ -7,6 +9,10 @@ const { connectRabbitMQ } = require("./infraestructure/rabbimq.client");
 const gateway = require("./infraestructure/messagingGateway");
 const { startViajeFinalizadoConsumer } = require("./modules/valoraciones/consumers/viajeFinalizado.consumer");
 const { startValoracionHabilitadaConsumer } = require("./modules/valoraciones/consumers/valoracionHabilitada.consumer");
+const {
+  requestMetrics,
+  getSaturationSnapshot
+} = require("./middleware/requestMetrics");
 
 const conductorRoutes = require("./routes/conductorRoutes");
 const { seedRedisIfEmpty } = require("./repositories/redisRepository");
@@ -37,13 +43,14 @@ app.use(express.json());
 const publicPath = path.join(__dirname, "../public");
 app.use(express.static(publicPath));
 
-// Log de cada request (para Grafana/Loki). Va después de express.static para
-// no anotar los archivos de la página (html, css, js), solo la API.
-// Se omite /health porque el healthcheck de Docker lo llama cada 15 s.
+// Latencia + saturación (OTel) y log para Grafana/Loki.
+app.use(requestMetrics);
 app.use((req, res, next) => {
   const inicio = Date.now();
   res.on("finish", () => {
-    if (req.originalUrl === "/health") return;
+    if (req.originalUrl === "/health" || req.originalUrl.startsWith("/metrics")) {
+      return;
+    }
     console.log(
       `${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - inicio}ms`,
     );
@@ -59,7 +66,17 @@ app.get("/health", (_req, res) => {
     module: "M3-Conductor",
     timestamp: new Date().toISOString(),
     redis: process.env.REDIS_HOST ? `conectado a ${process.env.REDIS_HOST}:${process.env.REDIS_PORT || 6379}` : "local/mock",
-    messaging
+    messaging,
+    saturation: getSaturationSnapshot()
+  });
+});
+
+// Snapshot local de saturación / latencia reciente (sin Grafana)
+app.get("/metrics/saturation", (_req, res) => {
+  res.status(200).json({
+    service: process.env.OTEL_SERVICE_NAME || "m3-conductor-service",
+    timestamp: new Date().toISOString(),
+    ...getSaturationSnapshot()
   });
 });
 

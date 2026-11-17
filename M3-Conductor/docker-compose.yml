@@ -95,6 +95,10 @@ services:
       KAFKA_BROKERS: kafka:9094
       KAFKA_CONTAINER: p3-m3-kafka
       KAFKA_FALLBACK_TOPIC: m3.fallback
+
+      # Observabilidad: latencia HTTP y saturación → Alloy (puertos 4317/4318)
+      OTEL_SERVICE_NAME: m3-conductor-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4318
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:

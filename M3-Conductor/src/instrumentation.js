@@ -27,18 +27,23 @@ const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter({
     url: `${collectorUrl}/v1/traces`,
   }),
-  metricReader: new PeriodicExportingMetricReader({
-    exporter: new OTLPMetricExporter({
-      url: `${collectorUrl}/v1/metrics`,
+  metricReaders: [
+    new PeriodicExportingMetricReader({
+      exporter: new OTLPMetricExporter({
+        url: `${collectorUrl}/v1/metrics`,
+      }),
+      exportIntervalMillis: 10000,
     }),
-    exportIntervalMillis: 15000,
-  }),
+  ],
   instrumentations: [
     getNodeAutoInstrumentations({
       "@opentelemetry/instrumentation-fs": { enabled: false },
       "@opentelemetry/instrumentation-http": {
-        ignoreIncomingRequestHook: (req) => req.url === "/health",
+        ignoreIncomingRequestHook: (req) =>
+          req.url === "/health" ||
+          (req.url || "").startsWith("/metrics"),
       },
+      "@opentelemetry/instrumentation-runtime-node": { enabled: true },
     }),
   ],
 });
