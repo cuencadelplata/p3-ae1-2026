@@ -153,3 +153,6 @@ test-results/
 
 # Integración AE2 (RF-2.2 / RF-2.4)
 .env.local
+
+# Configuración personal del editor (VS Code)
+.vscode/
