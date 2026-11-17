@@ -1,3 +1,4 @@
+import { logger } from '../observabilidad/logger.js';
 import { createViajeApi, HttpViajesApiClient } from './api.js';
 
 const server = createViajeApi({
@@ -6,5 +7,5 @@ const server = createViajeApi({
   ),
 });
 server.listen(Number(process.env.PORT ?? 3000), '0.0.0.0', () => {
-  console.log(`API M6 escuchando en ${process.env.PORT ?? 3000}`);
+  logger.info({ port: Number(process.env.PORT ?? 3000) }, 'Fachada RF-6.4/6.7 iniciada (API y front)');
 });

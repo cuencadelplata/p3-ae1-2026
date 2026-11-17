@@ -1,6 +1,16 @@
+import { context, propagation } from '@opentelemetry/api';
 import amqp, { type ChannelModel, type ConfirmChannel } from 'amqplib';
 import { randomUUID } from 'node:crypto';
 import pool from '../db/pool.js';
+import { conContexto, logger } from '../../observabilidad/logger.js';
+import { erroresPublicacion, eventosPublicados } from '../../observabilidad/metricas.js';
+
+/** traceparent W3C de la solicitud actual (null si no hay traza activa). */
+export function traceparentActual(): string | null {
+    const carrier: Record<string, string> = {};
+    propagation.inject(context.active(), carrier);
+    return carrier.traceparent ?? null;
+}
 
 // RF-6.4: eventos que M6 emite al finalizar un viaje.
 // Cada consumidor acordó un exchange y un formato propios, por eso el mismo hecho
@@ -155,7 +165,7 @@ export function despacharEventosPendientes(limite = 50): Promise<number> {
         let publicados = 0;
         try {
             const { rows } = await pool.query(
-                `SELECT message_id, exchange, routing_key, payload
+                `SELECT message_id, viaje_id, exchange, routing_key, payload, traceparent
                  FROM viaje_eventos_outbox
                  WHERE publicado_at IS NULL
                  ORDER BY creado_at, message_id
@@ -163,22 +173,37 @@ export function despacharEventosPendientes(limite = 50): Promise<number> {
                 [limite],
             );
             for (const row of rows) {
-                await publicar({
-                    messageId: row.message_id,
-                    exchange: row.exchange,
-                    routingKey: row.routing_key,
-                    payload: row.payload,
-                });
-                await pool.query(
-                    'UPDATE viaje_eventos_outbox SET publicado_at = now() WHERE message_id = $1',
-                    [row.message_id],
-                );
+                // Continúa la traza de la solicitud que finalizó el viaje: la instrumentación de
+                // amqplib crea el span de publicación como hijo e inyecta el traceparent en el mensaje.
+                const contextoOrigen = row.traceparent
+                    ? propagation.extract(context.active(), { traceparent: row.traceparent })
+                    : context.active();
+                await context.with(contextoOrigen, () => conContexto(undefined, async () => {
+                    await publicar({
+                        messageId: row.message_id,
+                        exchange: row.exchange,
+                        routingKey: row.routing_key,
+                        payload: row.payload,
+                    });
+                    await pool.query(
+                        'UPDATE viaje_eventos_outbox SET publicado_at = now() WHERE message_id = $1',
+                        [row.message_id],
+                    );
+                    eventosPublicados.inc({ exchange: row.exchange, routing_key: row.routing_key });
+                    logger.info({
+                        tripId: row.viaje_id,
+                        messageId: row.message_id,
+                        exchange: row.exchange,
+                        routingKey: row.routing_key,
+                    }, 'Evento de viaje publicado');
+                }));
                 publicados += 1;
             }
         } catch (error) {
             // 42P01: el outbox todavía no se creó (ningún viaje se finalizó desde el arranque)
             if ((error as { code?: string }).code !== '42P01') {
-                console.error('[Outbox] No se pudieron publicar eventos pendientes:', error instanceof Error ? error.message : error);
+                erroresPublicacion.inc();
+                logger.warn({ err: error }, 'No se pudieron publicar eventos pendientes; se reintentará');
             }
         } finally {
             despachando = undefined;

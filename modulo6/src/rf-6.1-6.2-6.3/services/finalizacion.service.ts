@@ -1,5 +1,6 @@
 import type { Viaje } from '../models/viaje.model.js';
 import type { FinalizacionPersistida } from '../repositories/viaje.repository.js';
+import { llamadasDependencia, medir } from '../../observabilidad/metricas.js';
 
 export interface CoordenadasFinalizacion {
     latitude: number;
@@ -52,12 +53,24 @@ function headersM7(): Record<string, string> {
     return apiKey ? { 'x-api-key': apiKey } : {};
 }
 
-async function requestJson(
+/** Llamada a otro módulo, medida en m6_dependencia_request_duration_seconds. */
+function requestJson(
+    destino: { dependencia: 'm4' | 'm7'; operacion: string },
     method: 'GET' | 'POST',
     url: string,
     input?: unknown,
     headers: Record<string, string> = {},
     statusAceptados: number[] = [],
+): Promise<RespuestaExterna> {
+    return medir(llamadasDependencia, destino, () => requestJsonSinMedir(method, url, input, headers, statusAceptados));
+}
+
+async function requestJsonSinMedir(
+    method: 'GET' | 'POST',
+    url: string,
+    input: unknown,
+    headers: Record<string, string>,
+    statusAceptados: number[],
 ): Promise<RespuestaExterna> {
     let response: Response;
     try {
@@ -128,9 +141,9 @@ async function procesarPago(
     const m7 = baseUrl('M7_URL', 'http://localhost:3001');
     const rutaPago = `${m7}/metodo-pago/${encodeURIComponent(viaje.id)}`;
 
-    const existente = await requestJson('GET', rutaPago, undefined, headersM7(), [404]);
+    const existente = await requestJson({ dependencia: 'm7', operacion: 'consultar_pago' }, 'GET', rutaPago, undefined, headersM7(), [404]);
     let pago = existente.status === 404
-        ? leerPago((await requestJson('POST', `${m7}/metodo-pago`, {
+        ? leerPago((await requestJson({ dependencia: 'm7', operacion: 'registrar_pago' }, 'POST', `${m7}/metodo-pago`, {
             clienteId: viaje.clienteId,
             viajeId: viaje.id,
             tipo: data.metodoPago,
@@ -145,7 +158,7 @@ async function procesarPago(
     // Efectivo y transferencia se cobran fuera de la pasarela: el pago queda pendiente en M7.
     if (data.metodoPago !== 'tarjeta') return { pagoId: pago.pagoId, estado: 'pendiente' };
 
-    const autorizacion = await requestJson('POST', `${rutaPago}/autorizar`, {
+    const autorizacion = await requestJson({ dependencia: 'm7', operacion: 'autorizar_pago' }, 'POST', `${rutaPago}/autorizar`, {
         idOrden: `ORD-${viaje.id}`,
         total,
         moneda,
@@ -173,7 +186,7 @@ export async function ejecutarServiciosFinalizacion(
     const tiempoMinutos = minutosTranscurridos(inicio, data.horaFin);
 
     // M6 no recibe el recorrido GPS: la distancia se estima con M4 a partir de origen y destino.
-    const estimacion = (await requestJson('POST', `${m4}/estimate`, {
+    const estimacion = (await requestJson({ dependencia: 'm4', operacion: 'estimar_distancia' }, 'POST', `${m4}/estimate`, {
         origin: { latitude: data.origen.latitude, longitude: data.origen.longitude },
         destination: { latitude: data.destino.latitude, longitude: data.destino.longitude },
     })).body;
@@ -181,7 +194,7 @@ export async function ejecutarServiciosFinalizacion(
         throw new ErrorServicioFinalizacion('M4 devolvió una estimación de distancia o ETA inválida', 502);
     }
 
-    const tarifa = (await requestJson('POST', `${m7}/tarifa/estimacion`, {
+    const tarifa = (await requestJson({ dependencia: 'm7', operacion: 'estimar_tarifa' }, 'POST', `${m7}/tarifa/estimacion`, {
         origen: {
             lat: data.origen.latitude,
             lng: data.origen.longitude,
