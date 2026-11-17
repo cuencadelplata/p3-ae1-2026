@@ -1,11 +1,13 @@
 import { describe, it, beforeAll, afterAll, expect } from 'vitest';
 import axios from 'axios';
-import { execSync, spawn, type ChildProcess } from 'child_process';
+import { execFileSync, execSync, spawn, type ChildProcess } from 'child_process';
 import { resolve } from 'path';
 
 let API_URL = '';
 const M8_URL = process.env.M8_URL ?? 'http://host.docker.internal:3103';
 const M8_TEST_URL = process.env.M8_TEST_URL ?? 'http://localhost:3103';
+const M8_QR_API_KEY = process.env.M8_QR_API_KEY ?? process.env.QR_INTERNAL_API_KEY;
+const M8_AUTH_CONFIG = M8_QR_API_KEY ? { headers: { 'x-api-key': M8_QR_API_KEY } } : {};
 const PROJECT_ROOT = resolve(__dirname, '../../');
 let containerId: string | null = null;
 let mockM8Process: ChildProcess | null = null;
@@ -52,7 +54,14 @@ describe('E2E Tests - Docker Container', () => {
 
     console.log('Iniciando contenedor de Docker...');
     try {
-      const result = execSync(`docker run -d --network m6_viajes_default --add-host host.docker.internal:host-gateway -e DB_HOST=tripdb -e DB_PORT=5432 -e DB_USER=m6 -e DB_PASSWORD=m6pass -e DB_NAME=tripdb -e REDIS_URL=redis://redis:6379 -e RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672 -e M8_URL=${M8_URL} -p 127.0.0.1::3000 m6-viajes:e2e`, {
+      const containerArgs = [
+        'run', '-d', '--network', 'm6_viajes_default', '--add-host', 'host.docker.internal:host-gateway',
+        '-e', 'DB_HOST=tripdb', '-e', 'DB_PORT=5432', '-e', 'DB_USER=m6', '-e', 'DB_PASSWORD=m6pass',
+        '-e', 'DB_NAME=tripdb', '-e', 'REDIS_URL=redis://redis:6379',
+        '-e', 'RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672', '-e', `M8_URL=${M8_URL}`,
+        '-e', `M8_QR_API_KEY=${M8_QR_API_KEY ?? ''}`, '-p', '127.0.0.1::3000', 'm6-viajes:e2e',
+      ];
+      const result = execFileSync('docker', containerArgs, {
         cwd: PROJECT_ROOT,
         encoding: 'utf-8',
       }).trim();
@@ -94,8 +103,8 @@ describe('E2E Tests - Docker Container', () => {
   it('M8 devuelve el mismo QR ante generación repetida y valida single-use', async () => {
     const tripId = `idempotency-${Date.now()}`;
     const [first, retry] = await Promise.all([
-      axios.post(`${M8_TEST_URL}/qr`, { tripId }),
-      axios.post(`${M8_TEST_URL}/qr`, { tripId }),
+      axios.post(`${M8_TEST_URL}/qr`, { tripId }, M8_AUTH_CONFIG),
+      axios.post(`${M8_TEST_URL}/qr`, { tripId }, M8_AUTH_CONFIG),
     ]);
 
     expect(first.data.token).toBe(retry.data.token);
@@ -104,12 +113,12 @@ describe('E2E Tests - Docker Container', () => {
     const validation = await axios.post(`${M8_TEST_URL}/qr/validate`, {
       tripId,
       token: first.data.token,
-    });
+    }, M8_AUTH_CONFIG);
     expect(validation.status).toBe(200);
     expect(validation.data).toEqual({ valid: true });
 
     try {
-      await axios.post(`${M8_TEST_URL}/qr/validate`, { tripId, token: first.data.token });
+      await axios.post(`${M8_TEST_URL}/qr/validate`, { tripId, token: first.data.token }, M8_AUTH_CONFIG);
       throw new Error('El segundo consumo debería ser rechazado');
     } catch (error: any) {
       expect(error.response?.status).toBe(409);

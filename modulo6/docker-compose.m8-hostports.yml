@@ -1,0 +1,17 @@
+# Se pasa como override al Compose de M8 durante la integración con M6.
+# M6 conserva sus puertos; M8 sigue accesible por m8-app:3000 en la red Docker.
+services:
+  m8-app:
+    environment:
+      PUBLIC_BASE_URL: "http://localhost:${M8_INTEGRATION_HOST_PORT:-3103}"
+    ports: !override
+      - "127.0.0.1:${M8_INTEGRATION_HOST_PORT:-3103}:3000"
+
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  rabbitmq:
+    ports: !reset []

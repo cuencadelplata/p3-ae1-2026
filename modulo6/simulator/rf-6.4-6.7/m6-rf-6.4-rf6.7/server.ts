@@ -1,30 +1,13 @@
 import { createServer, type Server } from 'node:http';
 
 export function createSimulator(): Server {
-  const codigosQr = new Map<string, { token: string; expiresAt: string }>();
-
   return createServer(async (request, response) => {
     let body = '';
     for await (const chunk of request) body += chunk;
     const input = body ? JSON.parse(body) as Record<string, unknown> : {};
     let result: Record<string, unknown> | undefined;
 
-    if (request.method === 'POST' && request.url === '/qr') {
-      if (typeof input.tripId !== 'string' || !input.tripId) {
-        response.writeHead(400, { 'content-type': 'application/json' });
-        response.end(JSON.stringify({ error: { code: 'TRIP_ID_REQUIRED' } }));
-        return;
-      }
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-      const token = `QR-${input.tripId}-${Date.now()}`;
-      codigosQr.set(input.tripId, { token, expiresAt });
-      result = { token, qrDataUrl: 'data:image/png;base64,c2ltdWxhdGVk', expiresAt };
-    } else if (request.method === 'POST' && request.url === '/qr/validate') {
-      const qr = typeof input.tripId === 'string' ? codigosQr.get(input.tripId) : undefined;
-      result = {
-        valid: Boolean(qr && input.token === qr.token && Date.parse(qr.expiresAt) > Date.now()),
-      };
-    } else if (request.method === 'GET' && request.url?.match(/^\/conductor\/[^/]+\/estado$/)) {
+    if (request.method === 'GET' && request.url?.match(/^\/conductor\/[^/]+\/estado$/)) {
       result = { habilitado: true };
     } else if (request.method === 'POST' && request.url === '/api/v1/estimate') {
       const origin = asCoordinates(input.origin);
@@ -42,8 +25,7 @@ export function createSimulator(): Server {
     }
 
     if (result) {
-      const isEstimate = request.url === '/api/v1/estimate' ||
-        request.url === '/qr/validate';
+      const isEstimate = request.url === '/api/v1/estimate';
       response.writeHead(isEstimate ? 200 : 201, { 'content-type': 'application/json' });
       response.end(JSON.stringify(result));
       return;

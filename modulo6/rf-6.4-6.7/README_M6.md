@@ -64,10 +64,21 @@ npm ci
 npm run test:rf-6.4-6.7
 ```
 
-Para ejecutar los tests end-to-end, que levantan un stack con Viajes, PostgreSQL, Redis, RabbitMQ, un simulador de M3/M4/M8 y la API real de M7, configura antes `M7_URL` y `M7_API_KEY` en el entorno de Compose:
+Para ejecutar los tests end-to-end, primero levanta M6 desde esta carpeta. El entorno requiere M7 real (`M7_URL`, `M7_API_KEY`), M8 real (`QR_INTERNAL_API_KEY`) y la red externa M1 configurada por el equipo de M1. Solo M3/M4 quedan simulados en M6.
 
 ```sh
 npm run docker:e2e:up
+```
+
+Luego, desde `modulo8/`, levanta M8 junto con su overlay de integración y el override de puertos alojado en M6:
+
+```sh
+docker compose --env-file .env -f compose.yaml -f compose.integracion-real.yaml -f ../modulo6/docker-compose.m8-hostports.yml up -d --build --wait
+```
+
+Configura `M8_URL=http://m8-app:3000`, `M8_TEST_URL=http://localhost:3103` y `M8_QR_API_KEY` con el mismo valor de `QR_INTERNAL_API_KEY` al ejecutar el harness E2E.
+
+```sh
 npm run test:e2e:rf-6.4-6.7
 npm run docker:e2e:down
 ```
@@ -110,8 +121,7 @@ El simulador dentro de este módulo proporciona, solo para pruebas E2E, contrato
 
  - M3: `GET /conductor/{conductorId}/estado`
  - M4: `POST /api/v1/estimate`
- - M8: generación y validación de QR
 
-M7 se consume como servicio real mediante `M7_URL` y `M7_API_KEY`, configurados en el entorno de Compose.
+M7 se consume como servicio real mediante `M7_URL` y `M7_API_KEY`; M8 se consume por `http://m8-app:3000` con `QR_INTERNAL_API_KEY`.
 
 En ejecución normal, estas responsabilidades y sus datos pertenecen al módulo central, no a esta fachada.

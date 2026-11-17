@@ -20,7 +20,26 @@ npm run test:e2e
 npm run docker:down
 ```
 
-Antes de levantar Compose, define `M7_URL` y `M7_API_KEY` en el entorno o en `modulo6/.env`. La URL debe ser alcanzable desde el contenedor M6; no puede ser `localhost` dentro del contenedor. Para un servicio publicado en el host, se puede usar `host.docker.internal` y el puerto publicado por M7. M6 mantiene simuladas las dependencias M3, M4 y M8, cuyas implementaciones aún no están disponibles en esta integración.
+Antes de levantar Compose:
+
+- En `modulo6/.env`, configura `M7_URL` y `M7_API_KEY` para la API real de M7.
+- En `modulo8/.env`, configura `QR_INTERNAL_API_KEY` con una clave de al menos 16 caracteres. M6 la lee desde ese archivo y la envía a M8 como `x-api-key`.
+- Ten disponible la red `m1-integracion_default`, requerida por el Compose de integración de M8.
+
+`npm run docker:up` crea la red `m6_viajes_default` y levanta M6. Después, desde `modulo8/`, conecta M8 a esa red. El override dentro de M6 evita conflictos entre los puertos publicados de ambos módulos:
+
+```sh
+docker compose --env-file .env -f compose.yaml -f compose.integracion-real.yaml -f ../modulo6/docker-compose.m8-hostports.yml up -d --build --wait
+```
+
+La URL interna configurada es `http://m8-app:3000`. M6 conserva sus puertos locales habituales; M8 queda publicado en `http://localhost:3103` para las comprobaciones desde el host. M3 y M4 continúan usando el simulador de M6.
+
+Para detener M8 desde `modulo8/` y luego M6 desde `modulo6/`:
+
+```sh
+docker compose --env-file .env -f compose.yaml -f compose.integracion-real.yaml -f ../modulo6/docker-compose.m8-hostports.yml down
+npm run docker:down
+```
 
 Las pruebas unitarias de RF-6.1/2/3 usan PostgreSQL y Redis reales, por eso se levantan con Compose. Para ejecutar una familia concreta:
 
@@ -45,10 +64,11 @@ Los perfiles comprueban `/health` y ejecutan el flujo de crear y consultar un vi
 Cada iteración crea un viaje y lo deja persistido en PostgreSQL; el perfil de estrés puede crear muchos registros. Usa un entorno de pruebas y limpia esos datos cuando ya no los necesites.
 
 `npm run test:e2e` requiere el stack en ejecución. También se puede seleccionar una familia con `test:e2e:rf-6.1-6.2-6.3`, `test:e2e:rf-6.4-6.7` o `test:e2e:rf-6.5-6.6`.
+Para el harness Docker que prueba generación y validación de QR en M8, exporta `M8_URL=http://m8-app:3000`, `M8_TEST_URL=http://localhost:3103` y `M8_QR_API_KEY` con el mismo secreto de `QR_INTERNAL_API_KEY`.
 
 ## Interfaz web
 
-El frontend de RF-6.1/6.2/6.3 se sirve desde la misma API M6, en `http://localhost:3000`, por lo que no necesita un contenedor ni configuración CORS aparte. Levanta el stack con `npm run docker:up` y abre esa URL. La pantalla permite solicitar y consultar viajes, asignar un conductor manualmente para la demo, registrar el arribo, recuperar el QR vigente y solicitar el inicio validando el token con M8.
+El frontend de RF-6.1/6.2/6.3 se sirve desde la misma API M6, en `http://localhost:3000`, por lo que no necesita un contenedor ni configuración CORS aparte. Levanta M6 y M8 con los comandos anteriores y abre esa URL. La pantalla permite solicitar y consultar viajes, asignar un conductor manualmente para la demo, registrar el arribo, recuperar el QR vigente y solicitar el inicio validando el token con M8.
 
 ## Servicios
 
@@ -61,7 +81,7 @@ El frontend de RF-6.1/6.2/6.3 se sirve desde la misma API M6, en `http://localho
 | Redis | 6379 | Caché compartida |
 | RabbitMQ | 5672, gestión 15672 | Eventos de viajes y cancelaciones |
 
-Compose inicia un simulador interno únicamente para las dependencias M3/M4/M8. Las llamadas de tarifa y pago de M7 se dirigen a la API real mediante `M7_URL` y `M7_API_KEY`. Los tres servicios M6 comparten la misma imagen Node y la misma base; `docker compose down` detiene el entorno y conserva el volumen de PostgreSQL.
+Compose inicia un simulador interno únicamente para M3/M4. El QR se solicita y valida contra M8 real (`m8-app:3000`); las llamadas de tarifa y pago de M7 se dirigen a la API real mediante `M7_URL` y `M7_API_KEY`. Los tres servicios M6 comparten la misma imagen Node y la misma base; `npm run docker:down` detiene M6 y conserva el volumen de PostgreSQL.
 
 ## Front de RF-6.4 / RF-6.7
 
@@ -113,7 +133,7 @@ Las APIs RF-6.5/6.6 no autentican ni identifican por sí solas a la persona que 
 
 ## Integración del QR con M8
 
-El cliente QR acepta `M8_URL` y `M8_QR_API_KEY` desde el entorno. Como M8 todavía no está disponible en esta integración, Compose conserva su simulador.
+M6 llama al M8 real en `http://m8-app:3000` por la red compartida `m6_viajes_default`. `QR_INTERNAL_API_KEY` se configura en `modulo8/.env` y M6 la recibe como `M8_QR_API_KEY`. El archivo `docker-compose.m8-hostports.yml`, ubicado en M6, se agrega al Compose de M8 para publicar su API en `localhost:3103` y despublicar su PostgreSQL, Redis y RabbitMQ del host; M6 mantiene sus puertos locales sin cambios.
 
 ## Contratos
 

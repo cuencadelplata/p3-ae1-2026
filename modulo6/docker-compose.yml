@@ -13,8 +13,8 @@ services:
       # Trazas y logs OTLP hacia Alloy (perfil observability). Sin Alloy se descartan sin afectar la API.
       OTEL_SERVICE_NAME: m6-viajes
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://alloy:4318}
-      M8_URL: http://simulador:3001
-      M8_QR_API_KEY: ${M8_QR_API_KEY:-}
+      M8_URL: ${M8_URL:-http://m8-app:3000}
+      M8_QR_API_KEY: ${QR_INTERNAL_API_KEY:?Configurar QR_INTERNAL_API_KEY con el secreto compartido de M8}
       M3_URL: http://simulador:3001
       M4_URL: http://simulador:3001/api/v1
       M7_URL: ${M7_URL:?Configurar M7_URL con la URL real de la API M7}
