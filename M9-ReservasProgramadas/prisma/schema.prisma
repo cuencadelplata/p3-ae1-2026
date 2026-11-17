@@ -47,6 +47,7 @@ model Reservation {
   updatedAt              DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@index([status, scheduledAt], map: "reservations_status_scheduled_at_idx")
+  @@index([scheduledAt, id], map: "reservations_scheduled_at_id_idx")
   @@index([clientId], map: "reservations_client_id_idx")
   @@map("reservations")
 }
