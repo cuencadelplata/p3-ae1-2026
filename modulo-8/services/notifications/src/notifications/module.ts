@@ -9,6 +9,7 @@ import {
   type RabbitMqConnection,
 } from '../messaging/m3-driver-document-registered.consumer';
 import { NotificationOutboxRelay } from '../messaging/notification-outbox-relay';
+import { M6TripEventsConsumer } from '../messaging/m6-trip-events.consumer';
 import { createRf81Application, type Rf81Application } from './rf81-application';
 
 export interface NotificationsModule {
@@ -41,6 +42,7 @@ export function createNotificationsModule(): NotificationsModule {
   let m3Starting = false;
   let m3Connection: RabbitMqConnection | undefined;
   let m3Consumer: M3DriverDocumentRegisteredConsumer | undefined;
+  let m6Consumer: M6TripEventsConsumer | undefined;
   let outboxChannel: Awaited<ReturnType<RabbitMqConnection['createConfirmChannel']>> | undefined;
   let outboxRelay: NotificationOutboxRelay | undefined;
 
@@ -53,7 +55,7 @@ export function createNotificationsModule(): NotificationsModule {
   };
 
   const startM3DocumentConsumer = async (): Promise<void> => {
-    if (closing || m3Starting || m3Consumer?.isReady()) return;
+    if (closing || m3Starting || (m3Consumer?.isReady() && m6Consumer?.isReady())) return;
     const rabbitUrl = process.env.RABBITMQ_URL;
     if (rabbitUrl === undefined || rabbitUrl.trim() === '') {
       console.warn('[RF8.6] RABBITMQ_URL no está configurada; el consumer M3 queda detenido.');
@@ -74,6 +76,7 @@ export function createNotificationsModule(): NotificationsModule {
         outboxRelay = undefined;
         outboxChannel = undefined;
         m3Consumer = undefined;
+        m6Consumer = undefined;
         m3Connection = undefined;
         void activeConnection.close().catch(() => undefined);
         scheduleM3Retry();
@@ -90,6 +93,14 @@ export function createNotificationsModule(): NotificationsModule {
       });
       await m3Consumer.start();
       if (closing || m3Connection !== activeConnection) return;
+      m6Consumer = new M6TripEventsConsumer({
+        connection: m3Connection,
+        inboxStore: new PostgresTechnicalInbox(messagingPool),
+        deliverToRf81: (value) => runtime.processTripEventEnvelope(value),
+        onDisconnected: disconnected,
+      });
+      await m6Consumer.start();
+      if (closing || m3Connection !== activeConnection) return;
       outboxChannel = await m3Connection.createConfirmChannel();
       outboxChannel.on?.('close', disconnected);
       outboxChannel.on?.('error', (error: unknown) => {
@@ -102,10 +113,12 @@ export function createNotificationsModule(): NotificationsModule {
       outboxRelay?.stop();
       await outboxChannel?.close().catch(() => undefined);
       await m3Consumer?.stop().catch(() => undefined);
+      await m6Consumer?.stop().catch(() => undefined);
       await m3Connection?.close().catch(() => undefined);
       outboxRelay = undefined;
       outboxChannel = undefined;
       m3Consumer = undefined;
+      m6Consumer = undefined;
       m3Connection = undefined;
       if (!closing) {
         console.warn('[RF8.6] No se pudo iniciar el consumer M3; se reintentará.', error);
@@ -135,7 +148,7 @@ export function createNotificationsModule(): NotificationsModule {
     name: 'notifications',
     router: createNotificationsRouter(undefined, false),
     async readiness() {
-      return { status: available && m3Consumer?.isReady() && outboxRelay?.isReady() && m3Connection ? 'ok' : 'unavailable' };
+      return { status: available && m3Consumer?.isReady() && m6Consumer?.isReady() && outboxRelay?.isReady() && m3Connection ? 'ok' : 'unavailable' };
     },
     processDriverDocumentRegisteredEvent(value) {
       return runtime.processDriverDocumentRegisteredEvent(value);
@@ -157,6 +170,7 @@ export function createNotificationsModule(): NotificationsModule {
       outboxRelay?.stop();
       await outboxChannel?.close().catch(() => undefined);
       await m3Consumer?.stop();
+      await m6Consumer?.stop();
       await m3Connection?.close().catch(() => undefined);
       await runtime.close();
       await messagingPool.end();
