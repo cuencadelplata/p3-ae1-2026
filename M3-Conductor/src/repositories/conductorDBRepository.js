@@ -83,7 +83,70 @@ async function actualizarHabilitado(id, habilitado) {
   return { usuarioID: id, habilitado, habilitadoAnterior: anterior.habilitado };
 }
 
+/**
+ * Lee la disponibilidad (RF 3.3) persistida en la columna `disponible`.
+ * @returns {Promise<{ usuarioID: string, disponible: boolean } | null>}
+ */
+async function obtenerDisponiblePorId(id) {
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("conductores")
+        .select("usuario_id, disponible")
+        .eq("usuario_id", id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) {
+        return { usuarioID: data.usuario_id, disponible: Boolean(data.disponible) };
+      }
+      return null;
+    } catch (err) {
+      console.warn(
+        `[DB] Fallo al consultar disponibilidad de '${id}' en Supabase, usando fallback en memoria: ${err.message}`
+      );
+    }
+  }
+
+  const conductor = inMemoryDB.get(id);
+  return conductor
+    ? { usuarioID: conductor.usuarioID, disponible: conductor.disponible === true }
+    : null;
+}
+
+/**
+ * Persiste la disponibilidad (RF 3.3). Solo se invoca cuando el valor cambia.
+ */
+async function actualizarDisponible(id, disponible) {
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from("conductores")
+        .update({ disponible, updated_at: new Date().toISOString() })
+        .eq("usuario_id", id);
+
+      if (error) throw error;
+    } catch (err) {
+      console.warn(
+        `[DB] Fallo al actualizar disponibilidad de '${id}' en Supabase, usando fallback en memoria: ${err.message}`
+      );
+    }
+  }
+
+  const conductor = inMemoryDB.get(id);
+  if (conductor) {
+    inMemoryDB.set(id, { ...conductor, disponible });
+  }
+  return { usuarioID: id, disponible };
+}
+
 module.exports = {
+  obtenerDisponiblePorId,
+  actualizarDisponible,
   obtenerHabilitadoPorId,
   actualizarHabilitado
 };

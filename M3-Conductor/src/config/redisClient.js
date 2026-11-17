@@ -9,10 +9,11 @@ const redis = new Redis({
   host: redisHost,
   port: redisPort,
   password: redisPassword,
-  retryStrategy(times) {
-    if (times > 1) return null;
-    return 50;
-  },
+  connectTimeout: parseInt(process.env.REDIS_CONNECT_TIMEOUT_MS || "1000", 10),
+  commandTimeout: parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS || "500", 10),
+  // Reconexión en segundo plano; con enableOfflineQueue=false los comandos fallan
+  // de inmediato mientras no hay conexión, sin colgar las peticiones.
+  retryStrategy: (times) => Math.min(times * 200, 2000),
   maxRetriesPerRequest: 1,
   enableOfflineQueue: false
 });
