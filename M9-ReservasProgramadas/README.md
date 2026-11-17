@@ -1,377 +1,440 @@
-# M9 — Reservas Programadas — AE2 2.0.0
+# M9 — Reservas Programadas
 
-Evolución individual de Ignacio Parra en la rama `ae2/parra-ingaramo-ignacio`. M9 crea, consulta,
-modifica, cancela y activa reservas futuras. PostgreSQL es la fuente de verdad; Redis
-provee caché/locks y RabbitMQ desacopla la activación del despacho.
+Microservicio del proyecto de movilidad urbana de Paradigmas y Lenguajes de Programación III. Permite crear, consultar, modificar y cancelar reservas futuras, y activar su despacho al llegar el horario programado.
 
-## Arquitectura y límites
+La implementación utiliza **Node.js, TypeScript, Express, Prisma, PostgreSQL, Redis y RabbitMQ**. Incluye una interfaz web, Swagger, pruebas automatizadas, instrumentación OpenTelemetry y escenarios de rendimiento con Grafana k6.
 
-- PostgreSQL + Prisma: Reserva, Idempotency-Key, Outbox e Inbox.
-- Redis: cache-aside, TTL, invalidación y lock distribuido con token.
-- RabbitMQ: publisher confirms, retry con TTL y DLQ.
-- M5: owner de candidatos/ofertas/asignación. Compose incluye un stub de eventos AE2.
-- M7: owner del cálculo de tarifa, consumido por REST.
-- M8: owner de QR/PDF; fuera de M9.
+## Inicio rápido
 
-La arquitectura, la propiedad de datos, el catálogo de eventos, la trazabilidad y las evidencias
-de pruebas están consolidadas en el
-[Portafolio individual de AE2](../entrega-ae2/Portafolio-Individual-AE2-M9-Ignacio-Parra.pdf).
+Requisitos: **Node.js 22.15.0 o posterior compatible**, npm y **Docker Desktop con Docker Compose 2.24 o superior**. En Windows, usar contenedores Linux y ejecutar los ejemplos en PowerShell.
 
-## Requisitos
-
-- Node.js 22 y npm.
-- Docker Desktop/Engine con Compose 2.20+.
-- Puertos libres: 3000, 3001, 5432, 6379, 5672 y 15672, o equivalentes configurados.
-
-No requiere cuentas cloud. Las credenciales predeterminadas son únicamente locales; no
-usar secretos reales en `.env.example` ni versionar `.env`.
-
-## Uso del módulo
-
-### 1. Preparar el entorno
-
-Docker Desktop debe estar iniciado. Desde la raíz del repositorio, en PowerShell:
+Desde la raíz del repositorio:
 
 ```powershell
+cd M9-ReservasProgramadas
 npm ci
-Copy-Item M9-ReservasProgramadas/.env.example M9-ReservasProgramadas/.env
+npm run db:generate
 npm run local:up
-docker compose ps
 ```
 
-También se puede trabajar directamente desde esta carpeta:
+**Para esta ejecución local no hace falta crear un `.env` ni configurar tokens de Grafana.** Compose incluye los valores del entorno de demostración. La primera ejecución descarga imágenes, instala dependencias de la imagen y compila el módulo; puede demorar varios minutos.
+
+Comprobar el arranque:
 
 ```powershell
-npm ci
-Copy-Item .env.example .env
-npm run local:up
 docker compose ps
-```
-
-`local:up` construye la imagen e inicia M9, PostgreSQL, Redis, RabbitMQ y los stubs locales
-de M5 y M7. La imagen ejecuta las migraciones Prisma antes de iniciar la API. La primera
-ejecución puede demorar mientras Docker descarga y construye las imágenes.
-
-No es obligatorio modificar `.env.example`: Compose posee valores locales seguros por defecto.
-El archivo `.env` permite personalizar puertos y credenciales locales y nunca debe subirse al
-repositorio.
-
-### 2. Comprobar que el módulo está disponible
-
-```powershell
 Invoke-RestMethod http://localhost:3000/health
 Invoke-RestMethod http://localhost:3000/readiness
-docker compose ps
 ```
 
-El resultado esperado es `status: ok` en `/health`, `status: ready` en `/readiness` y los
-contenedores en estado `Up`/`healthy`. Si Docker todavía está iniciando RabbitMQ, esperar unos
-segundos y repetir la comprobación.
+Resultado esperado: `ok` en health; `ready` y PostgreSQL, Redis y RabbitMQ en `up` en readiness. Si RabbitMQ todavía está iniciando, esperar y repetir.
 
-### 3. Probar la API con Swagger UI
+Abrir la aplicación y el contrato interactivo:
 
-Abrir `http://localhost:3000/docs/`, desplegar una operación y usar **Try it out**. El orden
-recomendado es:
+```powershell
+Start-Process 'http://localhost:3000'
+Start-Process 'http://localhost:3000/docs/'
+```
 
-1. `POST /reservas` para crear una reserva futura.
-2. `GET /reservas` o `GET /reservas/{id}` para consultarla.
-3. `PATCH /reservas/{id}` para modificarla mientras siga `PROGRAMADA`.
-4. `DELETE /reservas/{id}` para cancelarla lógicamente.
+Para comenzar las pruebas:
 
-Swagger usa el mismo contrato versionado en `openapi/openapi.yaml`; la representación JSON
-servida por la aplicación está disponible en `http://localhost:3000/openapi.json`.
+```powershell
+npm test
+npm run k6:smoke
+npm run k6:activation
+```
 
-### 4. Ejecutar un CRUD desde PowerShell
+Los comandos de este README se ejecutan **dentro de `M9-ReservasProgramadas`**, salvo indicación expresa. El `package.json` de la raíz también redirige los comandos principales hacia M9.
 
-La fecha debe estar en el futuro. Este ejemplo crea una reserva, la consulta, modifica y
-cancela:
+## Funcionalidades y reglas
+
+- Crear una reserva con cliente, origen, destino, vehículo y horario futuro.
+- Consultar una reserva individual o un listado paginado.
+- Modificar reservas en estado `PROGRAMADA`.
+- Cancelar lógicamente una reserva; el registro permanece en PostgreSQL.
+- Activar automáticamente las reservas vencidas y solicitar el despacho a M5.
+- Estimar la tarifa mediante M7. Una falla de ruta o tarifa puede degradar la operación y permitir guardar la reserva sin estimación.
+- Coordinar modificaciones y activaciones con locks Redis y transiciones condicionales en PostgreSQL.
+- Publicar eventos mediante Outbox y procesar resultados mediante Inbox, con detección de eventos duplicados.
+
+La cancelación se admite en `PROGRAMADA` o `ACTIVANDO`, según el progreso del despacho. Si la reserva está siendo enviada y todavía no tiene una solicitud M5 confirmada, puede responder `409 RESERVA_EN_PROCESO`. Cuando existe una solicitud, se intenta cancelarla en M5 antes de confirmar la cancelación local.
+
+### Estados
+
+| Estado       | Significado                                                                   |
+| ------------ | ----------------------------------------------------------------------------- |
+| `PROGRAMADA` | Reserva futura pendiente de activación                                        |
+| `ACTIVANDO`  | Despacho iniciado y resultado pendiente                                       |
+| `ACTIVADA`   | M5 confirmó la asignación de conductor                                        |
+| `CANCELADA`  | Cancelación lógica confirmada                                                 |
+| `FALLIDA`    | La activación no pudo completarse por un resultado de negocio o falta de ruta |
+
+La creación no asigna un chofer. La selección de candidatos, las ofertas y la asignación pertenecen a M5; M7 calcula la tarifa. Las funcionalidades QR/PDF de M8 quedan fuera de M9.
+
+## Arquitectura y procesamiento
+
+```text
+Cliente / interfaz / k6
+          |
+       Express
+          |
+   Servicios de M9 ----- REST -----> M7: tarifa
+      |       |
+      |       +---- Redis: caché y locks
+      |
+      +---- Prisma / PostgreSQL: reservas, Outbox e Inbox
+                         |
+                  Outbox worker
+                         |
+                      RabbitMQ
+                         |
+                    M5: despacho
+                         |
+                 Resultado por evento
+                         |
+                 Inbox / estado final
+```
+
+El scheduler busca reservas vencidas. La transición `PROGRAMADA → ACTIVANDO` y el evento `reservation.ready-for-dispatch.v1` se persisten en una misma transacción. El worker publica los pendientes con confirmación del broker. M5 responde con `ride-request.assigned.v1` o `ride-request.failed.v1`; M9 registra el Inbox y el estado final en una transacción.
+
+Las entregas repetidas pueden ocurrir: el Inbox evita repetir el efecto de un `eventId` procesado. Los fallos de publicación/consumo utilizan reintentos y DLQ. La idempotencia del despacho no implica que `POST /reservas` sea idempotente; no reintentar creaciones indiscriminadamente.
+
+Compose levanta **stubs locales de M5 y M7**, junto con M9, PostgreSQL, Redis y RabbitMQ. El stub M5 automatiza una demostración de rechazo del primer candidato y aceptación del siguiente. Es un doble de pruebas; el contrato de integración real debe acordarse con el módulo correspondiente.
+
+En Compose, el scheduler y el polling Outbox utilizan intervalos de 5 segundos por defecto. Fuera de Compose, el cron predeterminado del código es de 30 segundos.
+
+## Accesos y puertos
+
+| Recurso                          | Dirección predeterminada             |
+| -------------------------------- | ------------------------------------ |
+| Interfaz M9                      | <http://localhost:3000>              |
+| API de reservas                  | <http://localhost:3000/reservas>     |
+| Swagger UI                       | <http://localhost:3000/docs/>        |
+| OpenAPI JSON                     | <http://localhost:3000/openapi.json> |
+| Liveness                         | <http://localhost:3000/health>       |
+| Readiness                        | <http://localhost:3000/readiness>    |
+| Stub M5                          | <http://localhost:3001>              |
+| RabbitMQ Management              | <http://localhost:15672>             |
+| Alloy, con observabilidad activa | <http://localhost:12345>             |
+
+PostgreSQL utiliza el puerto 5432, Redis el 6379 y AMQP el 5672. El stub M7 está disponible internamente en `http://m7-stub:3002`, sin publicar ese puerto al host. Las credenciales predeterminadas de PostgreSQL y RabbitMQ son `m9` / `m9-local`, exclusivamente para la demostración local.
+
+## API
+
+| Método   | Ruta                           | Resultado principal            |
+| -------- | ------------------------------ | ------------------------------ |
+| `POST`   | `/reservas`                    | Crear; HTTP 201                |
+| `GET`    | `/reservas?page=1&pageSize=20` | Listado; HTTP 200              |
+| `GET`    | `/reservas/:id`                | Consultar; HTTP 200            |
+| `PATCH`  | `/reservas/:id`                | Modificar; HTTP 200            |
+| `DELETE` | `/reservas/:id`                | Cancelar lógicamente; HTTP 200 |
+
+El listado devuelve `{ reservas, page, pageSize }`. Por defecto utiliza página 1 y tamaño 20; el máximo permitido por página es 100.
+
+La creación requiere `clienteId` UUID, origen y destino diferentes, `vehiculo` con valor `AUTO` o `MOTO`, y `fechaHoraProgramada` ISO 8601 con zona horaria y fecha futura. No permite propiedades adicionales. PATCH admite los campos modificables de la reserva y requiere al menos uno.
+
+### Ejemplo CRUD en PowerShell
 
 ```powershell
 $body = @{
-  clienteId = "20000000-0000-4000-8000-000000000001"
-  origen = "Terminal de Omnibus"
-  destino = "Aeropuerto"
-  vehiculo = "AUTO"
-  fechaHoraProgramada = "2099-01-01T17:30:00.000Z"
+    clienteId = '20000000-0000-4000-8000-000000000001'
+    origen = 'Terminal de Omnibus'
+    destino = 'Aeropuerto'
+    vehiculo = 'AUTO'
+    fechaHoraProgramada = (Get-Date).AddDays(2).ToUniversalTime().ToString('o')
 } | ConvertTo-Json
 
-$reserva = Invoke-RestMethod `
-  -Method Post `
-  -Uri http://localhost:3000/reservas `
-  -ContentType "application/json" `
-  -Body $body
+$reserva = Invoke-RestMethod -Method Post `
+    -Uri 'http://localhost:3000/reservas' `
+    -ContentType 'application/json' -Body $body
 
-$reserva
 Invoke-RestMethod "http://localhost:3000/reservas/$($reserva.id)"
+Invoke-RestMethod 'http://localhost:3000/reservas?page=1&pageSize=20'
 
-$cambio = @{ destino = "Puerto"; vehiculo = "MOTO" } | ConvertTo-Json
-Invoke-RestMethod `
-  -Method Patch `
-  -Uri "http://localhost:3000/reservas/$($reserva.id)" `
-  -ContentType "application/json" `
-  -Body $cambio
+$cambios = @{ destino = 'Puerto'; vehiculo = 'MOTO' } | ConvertTo-Json
+Invoke-RestMethod -Method Patch `
+    -Uri "http://localhost:3000/reservas/$($reserva.id)" `
+    -ContentType 'application/json' -Body $cambios
 
-Invoke-RestMethod -Method Delete "http://localhost:3000/reservas/$($reserva.id)"
+Invoke-RestMethod -Method Delete `
+    -Uri "http://localhost:3000/reservas/$($reserva.id)"
 ```
 
-La creación devuelve `201` y estado `PROGRAMADA`. El chofer no se asigna durante el CRUD:
-al llegar `fechaHoraProgramada`, el scheduler inicia el despacho y M5 selecciona/asigna al
-conductor. Después de la cancelación, la reserva se conserva con estado `CANCELADA`.
+La cancelación devuelve la reserva con estado `CANCELADA`; no elimina físicamente el registro. Para comprobar la activación al horario, utilizar `npm run k6:activation`.
 
-### 5. Verificar persistencia
+### Errores y salud
 
-`local:down` detiene y elimina los contenedores, pero conserva los volúmenes. Al volver a
-iniciar, las reservas almacenadas en PostgreSQL continúan disponibles:
+Los errores de API utilizan `{ error: { codigo, mensaje } }`. Entre los estados habituales están 400 por datos inválidos, 404 por reserva inexistente, 409 por conflicto de estado/lock y 503 por coordinación o base de datos no disponible. Los errores inesperados se traducen a 500.
+
+`/health` informa que el proceso responde. `/readiness` comprueba PostgreSQL, Redis y RabbitMQ y devuelve 503 si una dependencia no está disponible. Una falla de M7 puede permitir un 201 sin tarifa; por eso deben revisarse también las métricas de degradación. Redis caído permite degradar lecturas de caché a PostgreSQL, mientras las operaciones que requieren lock pueden rechazarse.
+
+## Configuración y desarrollo
+
+El archivo `.env.example` contiene las variables disponibles. Para personalizar el entorno puede copiarse una vez a `.env`, pero **Compose funciona con sus valores predeterminados sin esa copia**.
+
+Variables principales:
+
+| Variable                                       | Función                                                              |
+| ---------------------------------------------- | -------------------------------------------------------------------- |
+| `PORT`                                         | Puerto de M9                                                         |
+| `DATABASE_URL`, `REDIS_URL`, `RABBITMQ_URL`    | Conexiones de la aplicación                                          |
+| `M5_BASE_URL`, `M7_BASE_URL`                   | Dependencias REST                                                    |
+| `M5_SERVICE_TOKEN`                             | Autenticación de servicio hacia M5                                   |
+| `DISPATCH_MODE`                                | `events` por defecto; `rest` como alternativa de compatibilidad      |
+| `ROUTE_RESOLVER_MODE`                          | `stub` para demostración; `blocked` hasta contar con resolución real |
+| `RESERVATION_JOB_INTERVAL`                     | Expresión cron del scheduler                                         |
+| `OUTBOX_POLL_INTERVAL_MS`                      | Intervalo del worker                                                 |
+| `REDIS_CACHE_TTL_SECONDS`, `REDIS_LOCK_TTL_MS` | Duración de caché y locks                                            |
+| `OTEL_ENABLED`                                 | Activación de exportadores OpenTelemetry                             |
+
+Las URLs de variables son las vistas **desde el proceso**: dentro de Docker se utilizan nombres de servicio; un proceso ejecutado en Windows utiliza los puertos publicados en localhost.
+
+Para ejecutar M9 con recarga en el host y mantener las dependencias en Docker:
 
 ```powershell
-npm run local:down
-npm run local:up
-Invoke-RestMethod http://localhost:3000/reservas
+docker compose up -d postgres redis rabbitmq m5-stub m7-stub
 ```
 
-Para desarrollo sin el contenedor de M9, con PostgreSQL, Redis y RabbitMQ disponibles:
+M7 no publica un puerto al host y sus URLs internas no son accesibles desde Windows. Por eso el camino recomendado para probar el flujo completo es `npm run local:up`; para desarrollo en el host se deben proporcionar endpoints M5/M7 accesibles y las conexiones correctas. Tras configurarlos:
 
 ```powershell
 npm run db:generate
 npm run db:migrate:deploy
-npm run db:seed
 npm run dev
 ```
 
-El seed usa UUID y ubicaciones ficticias; no contiene datos privados.
+`npm run build` compila TypeScript en `dist/`; `npm start` ejecuta esa compilación. La imagen Docker aplica las migraciones antes de iniciar M9. `npm run db:seed` carga datos ficticios y debe ejecutarse únicamente sobre la base de desarrollo deseada.
 
-### 6. Simular la caída y recuperación de PostgreSQL
-
-Esta prueba distingue la vida del proceso de su capacidad para atender tráfico:
+## Pruebas automatizadas
 
 ```powershell
-docker compose stop postgres
-docker compose ps
-
-# Liveness: M9 sigue ejecutándose y responde 200.
-Invoke-RestMethod http://localhost:3000/health
-
-# Readiness: responde 503 porque PostgreSQL aparece como down.
-try {
-  Invoke-WebRequest http://localhost:3000/readiness -UseBasicParsing
-} catch {
-  "readiness HTTP $([int]$_.Exception.Response.StatusCode)"
-}
-
-# La API devuelve un error controlado y el proceso no se detiene.
-try {
-  Invoke-WebRequest http://localhost:3000/reservas -UseBasicParsing
-} catch {
-  "reservas HTTP $([int]$_.Exception.Response.StatusCode)"
-}
-
-docker compose up -d --wait postgres
-Invoke-RestMethod http://localhost:3000/readiness
-docker compose ps
-```
-
-En la implementación actual, un fallo inesperado de Prisma en `/reservas` se traduce a
-`500 ERROR_INTERNO`; el contrato explícito de dependencia degradada es `/readiness`, que
-responde `503`. Al regresar PostgreSQL, Prisma vuelve a conectarse y `/readiness` recupera
-automáticamente el estado `200 ready`, sin reiniciar M9.
-
-## Accesos
-
-| Recurso             | URL                                  |
-| ------------------- | ------------------------------------ |
-| UI                  | `http://localhost:3000/`             |
-| Reservas            | `http://localhost:3000/reservas`     |
-| Swagger UI          | `http://localhost:3000/docs/`        |
-| OpenAPI JSON        | `http://localhost:3000/openapi.json` |
-| Liveness            | `http://localhost:3000/health`       |
-| Readiness           | `http://localhost:3000/readiness`    |
-| RabbitMQ Management | `http://localhost:15672/`            |
-| Stub contractual M5 | `http://localhost:3001/`             |
-
-`/readiness` informa por separado PostgreSQL, Redis y RabbitMQ. M5/M7 pueden degradar una
-operación, pero no determinan por sí solos la salud del proceso.
-
-## API
-
-| Método | Ruta            | Uso                         |
-| ------ | --------------- | --------------------------- |
-| POST   | `/reservas`     | crear `PROGRAMADA`          |
-| GET    | `/reservas`     | listar                      |
-| GET    | `/reservas/:id` | consultar con cache-aside   |
-| PATCH  | `/reservas/:id` | modificar solo `PROGRAMADA` |
-| DELETE | `/reservas/:id` | cancelar lógicamente        |
-
-Ejemplo:
-
-```json
-{
-  "clienteId": "20000000-0000-4000-8000-000000000001",
-  "origen": "Terminal",
-  "destino": "Aeropuerto",
-  "vehiculo": "AUTO",
-  "fechaHoraProgramada": "2099-01-01T14:30:00-03:00"
-}
-```
-
-## Activación y eventos
-
-Al llegar el horario, el scheduler toma un lock Redis y ejecuta la transición condicional
-`PROGRAMADA→ACTIVANDO`. Reserva y `reservation.ready-for-dispatch.v1` se guardan juntos.
-El Outbox worker publica y el stub M5 busca conductores disponibles con vehículo compatible,
-los ordena por valoración descendente y distancia ascendente, y crea una oferta con TTL para
-el mejor candidato. Un rechazo o vencimiento genera la oferta para el siguiente. La primera
-aceptación publica `ride-request.assigned.v1`; si no quedan candidatos publica
-`ride-request.failed.v1`. M9 registra Inbox y resultado en una transacción, guarda
-`criterioAsignacion=MEJOR_VALORACION` y no repite el efecto de un `eventId` duplicado.
-
-Para que el E2E sea automático y reproducible, `M5_STUB_AUTO_RESPOND=true` hace que el candidato
-con valoración 4,9 rechace y que el siguiente, con 4,7, acepte. Con `false`, las respuestas pueden
-ejecutarse manualmente mediante los endpoints `/api/v1/offers/{offerId}/accept`, `/reject` o
-`/respond`. Estos endpoints pertenecen al doble de M5, no a la API pública de M9.
-
-`DISPATCH_MODE=events` es el modo Compose. `rest` conserva compatibilidad con el OpenAPI
-oficial M5, pero no se ejecutan ambos modos simultáneamente. El contrato de eventos M5 es
-local de demostración y espera acuerdo externo.
-
-### Demostrar rechazo y aceptación en el stub M5
-
-Con Compose iniciado, este ejemplo usa el contrato M5 desde PowerShell. El primer candidato
-es el mejor valorado; al rechazar, queda una nueva oferta pendiente para el siguiente:
-
-```powershell
-$headers = @{
-  Authorization = "Bearer m5-local-e2e-token"
-  "Idempotency-Key" = [guid]::NewGuid().ToString()
-}
-$solicitud = @{
-  origin = @{ latitude = -27.4514; longitude = -58.9867; address = "Terminal" }
-  destination = @{ latitude = -27.4692; longitude = -58.8306; address = "Aeropuerto" }
-  vehicleType = "AUTO"
-} | ConvertTo-Json -Depth 3
-
-$ride = Invoke-RestMethod -Method Post -Uri http://localhost:3001/api/v1/ride-requests `
-  -Headers $headers -ContentType "application/json" -Body $solicitud
-$auth = @{ Authorization = "Bearer m5-local-e2e-token" }
-$candidatos = Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:3001/api/v1/ride-requests/$($ride.id)/candidates" `
-  -Headers $auth -ContentType "application/json" -Body "{}"
-$primera = Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:3001/api/v1/ride-requests/$($ride.id)/offers" `
-  -Headers $auth -ContentType "application/json" -Body "{}"
-Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:3001/api/v1/offers/$($primera.offers[0].id)/reject" `
-  -Headers $auth -ContentType "application/json" -Body "{}"
-
-$ofertas = Invoke-RestMethod `
-  -Uri "http://localhost:3001/api/v1/ride-requests/$($ride.id)/offers" -Headers $auth
-$siguiente = $ofertas.offers | Where-Object status -eq "PENDING" | Select-Object -First 1
-Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:3001/api/v1/offers/$($siguiente.id)/accept" `
-  -Headers $auth -ContentType "application/json" -Body "{}"
-Invoke-RestMethod -Uri "http://localhost:3001/api/v1/ride-requests/$($ride.id)" -Headers $auth
-```
-
-El resultado esperado es `ASSIGNED` con el segundo candidato. El contrato ejecutable del doble
-se encuentra en `openapi/m5-stub.yaml`.
-
-## Variables principales
-
-| Variable                      | Default local            | Propósito                        |
-| ----------------------------- | ------------------------ | -------------------------------- |
-| `DATABASE_URL`                | PostgreSQL local M9      | fuente de verdad                 |
-| `REDIS_URL`                   | `redis://localhost:6379` | caché y lock                     |
-| `REDIS_CACHE_TTL_SECONDS`     | `60`                     | expiración de caché              |
-| `REDIS_LOCK_TTL_MS`           | `10000`                  | coordinación temporal            |
-| `RABBITMQ_URL`                | guest local              | broker                           |
-| `RABBITMQ_RETRY_LIMIT`        | `3`                      | límite antes de DLQ              |
-| `RABBITMQ_RETRY_DELAY_MS`     | `1000`                   | TTL de retry                     |
-| `OUTBOX_POLL_INTERVAL_MS`     | `5000`                   | polling de Outbox                |
-| `DISPATCH_MODE`               | `events`                 | `events` o `rest`                |
-| `M5_BASE_URL` / `M7_BASE_URL` | stubs locales            | contratos REST                   |
-| `M5_SERVICE_TOKEN`            | vacío                    | secreto externo; nunca versionar |
-| `M5_STUB_AUTO_RESPOND`        | `true`                   | automatiza rechazo y aceptación  |
-
-La lista completa y segura está en `.env.example`.
-
-## Pruebas
-
-Los comandos se pueden ejecutar desde esta carpeta o desde la raíz, porque el `package.json`
-principal los redirige a M9:
-
-```powershell
-npm run verify
+npm run typecheck
+npm run lint
 npm run build
+npm test
 npm run test:coverage
-npm run test:infrastructure
-npm run test:e2e
 ```
 
-- `verify`: typecheck, lint, Prettier y tests normales.
-- `test:coverage`: genera el informe HTML en `coverage/index.html`.
-- `test:infrastructure`: levanta PostgreSQL/Redis/RabbitMQ aislados, migra, prueba
-  persistencia, TTL, lock, Outbox/Inbox, duplicados, retry, DLQ y concurrencia, y limpia.
-- `test:e2e`: levanta Compose completo y consume solo HTTP/RabbitMQ público.
+| Comando                       | Alcance                                                                                                    |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `npm test`                    | Suites unitarias e integración local; no requiere tokens Cloud                                             |
+| `npm run test:coverage`       | Cobertura en `coverage/`                                                                                   |
+| `npm run test:infrastructure` | PostgreSQL, Redis y RabbitMQ en proyecto de prueba aislado; persistencia, locks, Outbox/Inbox y mensajería |
+| `npm run test:e2e`            | Compose completo y pruebas HTTP/eventos                                                                    |
+| `npm run verify`              | Tipos → lint → formato → tests; se detiene en el primer fallo                                              |
+| `npm run format:check`        | Comprueba formato sin modificar archivos                                                                   |
 
-Para abrir la cobertura en Windows:
+Las suites de infraestructura y E2E necesitan Docker. **El runner E2E detiene la composición del proyecto antes de iniciarla y al terminar**; ejecutarlo cuando se pueda interrumpir la demostración. Después, levantar nuevamente con `local:up` u `obs:up` según corresponda.
+
+La última revisión guardada aprobó 85/85 pruebas normales. `verify` seguía fallando en formato en el checkout Windows; revisar finales de línea y archivos generados, sin interpretar ese resultado como una aprobación completa del comando general. Los resultados históricos no reemplazan ejecutar las verificaciones sobre nuevos cambios.
+
+## Pruebas de rendimiento con k6
+
+Con M9 y sus dependencias iniciados:
 
 ```powershell
-Start-Process ./coverage/index.html
+npm run k6:smoke
+npm run k6:activation
 ```
 
-`test:infrastructure` y `test:e2e` administran sus propios contenedores. El E2E detiene la
-composición al finalizar; ejecutar `npm run local:up` nuevamente si se desea seguir usando
-el módulo.
+El runner utiliza la imagen `grafana/k6:2.3.0` en la red Compose. **Las pruebas locales no requieren tokens ni instalar k6 en el host.**
 
-Resultados observados el 13 de octubre de 2026: las suites normales aprobaron 62 pruebas,
-`test:infrastructure` aprobó 10 pruebas y `test:e2e` aprobó 3 escenarios. La cobertura global
-fue 89,90 % de sentencias, 78,16 % de ramas, 93,54 % de funciones y 91,57 % de líneas.
+| Comando          | Escenario                                                              |
+| ---------------- | ---------------------------------------------------------------------- |
+| `k6:smoke`       | CRUD completo, 2 VUs durante 30 s por defecto                          |
+| `k6:load`        | Mezcla de lecturas/escrituras, 10 VUs durante 3 min                    |
+| `k6:stress`      | Incremento de VUs, sostenimiento y descenso                            |
+| `k6:spike`       | Pico de concurrencia y recuperación                                    |
+| `k6:cache`       | Comparación de lecturas en frío/caliente tras esperar el TTL           |
+| `k6:concurrency` | Modificación/cancelación de reservas compartidas; conflictos esperados |
+| `k6:activation`  | Reservas próximas y espera acotada hasta el resultado final            |
 
-## Detención y limpieza
+Todos se ejecutan como `npm run <comando>`. Los JSON de resultados y sus metadatos se guardan en `performance/results/`, incluidos los ensayos fallidos. Código 0 significa que los umbrales evaluados aprobaron; 99 significa incumplimiento de thresholds.
+
+Ejemplo de estrés corto y configurable:
+
+```powershell
+$env:PROFILE = 'short'
+$env:DURATION = '10s'
+$env:STRESS_STEPS = '2,5,10'
+try {
+    npm run k6:stress
+} finally {
+    Remove-Item Env:PROFILE, Env:DURATION, Env:STRESS_STEPS -ErrorAction SilentlyContinue
+}
+```
+
+Los umbrales son referencias iniciales, no SLA aprobados. El escenario stress actual ejecuta creación y lecturas; no acredita modificación/cancelación por mostrar umbrales sin muestras de esas operaciones. Una prueba corta tampoco determina la capacidad máxima.
+
+Si se personalizó la red o el puerto de M9, ajustar `K6_DOCKER_NETWORK` y `BASE_URL`. Desde el contenedor, `localhost` es el propio k6; normalmente se utiliza `http://m9-reservas:3000`. La alternativa `node scripts/run-k6.mjs smoke --host-k6` requiere un binario k6 instalado y utiliza localhost del host.
+
+Los datos ficticios se asocian con `RUN_ID`. DELETE es lógico y las pruebas incrementan el dataset. La limpieza administrativa se puede inspeccionar primero con `npm run k6:cleanup -- <RUN_ID>`; agregar `--confirm` elimina las reservas seleccionadas y sus eventos. Utilizarla solo en el entorno aislado de pruebas.
+
+## Observabilidad con Grafana Cloud
+
+La configuración implementada utiliza:
+
+```text
+M9 / m5-stub / m7-stub → OTLP/HTTP → Alloy → Grafana Cloud
+                                                   ├─ métricas
+                                                   ├─ logs
+                                                   └─ trazas
+k6 local → resultados de ejecución → Grafana Cloud k6 (opcional)
+```
+
+Se instrumentan HTTP, runtime Node, operaciones de reserva, degradaciones de tarifa, caché, locks, PostgreSQL, scheduler, Outbox, colas, Inbox y dependencias. Los logs conservan correlación y los eventos Outbox persisten contexto W3C para continuar las trazas tras una publicación diferida.
+
+**Esta opción requiere credenciales en cada entorno que envíe datos a Cloud.** La ejecución local básica funciona sin ellas. No están implementados Grafana local ni un workflow GitHub Actions que distribuya o sustituya esa configuración.
+
+### Configurar la cuenta una vez en esta PC
+
+Crear `observability/.env.grafana-cloud` con un editor. El archivo está ignorado por Git y no debe publicarse. Si ya existe, conservar sus valores:
+
+```powershell
+notepad .\observability\.env.grafana-cloud
+```
+
+Contenido requerido; reemplazar los ejemplos con valores de la cuenta:
+
+```dotenv
+GRAFANA_CLOUD_OTLP_ENDPOINT=https://ENDPOINT-DEL-STACK/otlp
+GRAFANA_CLOUD_OTLP_INSTANCE_ID=INSTANCE_ID
+GRAFANA_CLOUD_OTLP_TOKEN=TOKEN_OTLP
+K6_CLOUD_TOKEN=TOKEN_K6
+K6_CLOUD_STACK_ID=STACK_ID
+K6_CLOUD_PROJECT_ID=PROJECT_ID
+```
+
+El endpoint, Instance ID y token OTLP se obtienen en la configuración OpenTelemetry del stack. El token debe permitir `metrics:write`, `logs:write` y `traces:write`. Las variables `K6_CLOUD_*` corresponden a la integración de pruebas k6 y utilizan autenticación independiente.
+
+Validar y levantar la composición con Alloy:
+
+```powershell
+$compose = @('-f', 'docker-compose.yml', '-f', 'docker-compose.observability.yml')
+npm run obs:config
+docker compose @compose run --rm --no-deps alloy validate /etc/alloy/config.alloy
+npm run obs:up
+docker compose @compose ps
+docker compose @compose logs --tail 100 alloy
+```
+
+La interfaz de Alloy queda en <http://localhost:12345>. Grafana se abre en la dirección del stack Cloud; esta composición no instala un servidor Grafana en localhost.
+
+### Comprobar las señales
+
+Generar tráfico con `npm run k6:smoke`. En Grafana Cloud → Explore, seleccionar los últimos 15 minutos y la fuente correspondiente. Esperar la exportación, configurada cada 15 s por defecto.
+
+Métricas, fuente Prometheus/Mimir:
+
+```promql
+m9_dependency_up{service_name="m9-reservas"}
+```
+
+Logs, fuente Loki de la aplicación:
+
+```logql
+{service_name="m9-reservas"} |= "http_request"
+```
+
+Trazas, fuente Tempo:
+
+```traceql
+{ resource.service.name = "m9-reservas" }
+```
+
+El log permite abrir la traza cuando la fuente Loki tiene configurado el enlace por `trace_id` hacia Tempo. El scheduler inicia trazas nuevas para trabajo diferido; la creación y una activación futura no tienen por qué compartir una única traza.
+
+### Dashboards y alertas
+
+Importar los JSON de `observability/grafana/dashboards/` desde Grafana → Dashboards → Import. Elegir las fuentes del stack en las variables de métricas, logs y trazas. **Para logs utilizar la fuente de la aplicación, no `alert-state-history`.**
+
+Los paneles cubren API/runtime, reservas y procesamiento asíncrono. El archivo `observability/grafana/alerts/m9-alertas.rules.yaml` contiene ocho reglas en formato Prometheus/Mimir ruler. Se importan con el mecanismo correspondiente a reglas Mimir, o se recrean como reglas Grafana-managed; no se importan como dashboards.
+
+Las reglas cubren 5xx, p95, dependencia caída, telemetría ausente, scheduler sin progreso, Outbox envejecido, reservas estancadas y DLQ. Su presencia en el repositorio no significa que estén instaladas o probadas en una cuenta.
+
+```powershell
+npm run obs:dashboards:check
+```
+
+El checker valida estructura y nombres de métricas; la comprobación final de paneles y alertas requiere datos reales en Grafana.
+
+### Enviar resultados k6 a Cloud
+
+Con las variables de k6 configuradas y cuota disponible:
+
+```powershell
+npm run k6:smoke:cloud
+npm run k6:load:cloud
+```
+
+Para otros escenarios, invocar directamente el runner para asegurar que recibe `--cloud`:
+
+```powershell
+node scripts/run-k6.mjs stress --cloud
+```
+
+El runner utiliza ejecución local y envío de resultados; no necesita que Cloud acceda al localhost de la PC. El enlace de la corrida se muestra en la salida. Evitar agregar `--cloud` a comandos npm que no tengan un script dedicado si npm lo interpreta como configuración propia.
+
+## Evidencias, resultados y limitaciones actuales
+
+- `performance/results/`: resúmenes y metadatos k6.
+- `observability/resultados/`: logs de verificación, capturas y resultados de revisión/ensayos.
+- [Revisión final conservada](observability/resultados/revision-final-20261117/REVISION_FINAL_OBSERVABILIDAD.md): hallazgos y evidencias del estado revisado.
+- `coverage/`: informes generados de cobertura, cuando se ejecuta esa suite.
+
+La revisión conservada verificó ingesta real de métricas/logs/trazas y resultados k6 en Cloud. También registró pendientes que no deben darse por corregidos: la pantalla carga solo la primera página de reservas, el panel HTTP de k6 utiliza un filtro `message` incompatible con el Body OTLP actual y las reglas M9 no se encontraron importadas en la cuenta revisada. La consulta Loki indicada arriba evita ese filtro para comprobar la ingesta.
+
+## Detener y volver a iniciar
+
+Sin observabilidad:
 
 ```powershell
 npm run local:down
-npm run local:clean
+npm run local:up
 ```
 
-`local:down` conserva los datos. `local:clean` elimina contenedores y volúmenes PostgreSQL,
-Redis y RabbitMQ del proyecto; por lo tanto, borra los datos locales y debe utilizarse solo
-cuando se desea reiniciar el entorno desde cero.
+Con observabilidad:
 
-## Imagen y release
-
-Imagen publicada: `ignacioparra1902/m9-reservas-programadas:v2.0.0`.
-
-```bash
-docker build -t ignacioparra1902/m9-reservas-programadas:v2.0.0 .
-docker push ignacioparra1902/m9-reservas-programadas:v2.0.0
-docker pull ignacioparra1902/m9-reservas-programadas:v2.0.0
+```powershell
+npm run obs:down
+npm run obs:up
 ```
 
-La descarga posterior a la publicación verificó el digest
-`sha256:fa241de86c89d67607449b340db65a8a230291074c4e41025c1dbba09ae6e859`.
-La imagen histórica 1.x no demuestra esta implementación AE2.
+Estos comandos conservan los volúmenes. `npm run local:clean` elimina contenedores y volúmenes del proyecto y borra los datos locales; no es necesario para un reinicio normal.
 
-## Troubleshooting
+## Resolución de problemas
 
-- Docker no conecta: iniciar Docker Desktop y repetir `docker version`.
-- Readiness PostgreSQL down: revisar `DATABASE_URL` y `docker compose logs postgres`.
-- Rabbit down: las operaciones ya confirmadas dejan Outbox `PENDING`; revisar broker y
-  worker.
-- Mensaje en DLQ: inspeccionar headers/correlationId; corregir la causa y redrivar de forma
-  controlada, no borrar silenciosamente.
-- Puerto ocupado: cambiar `PORT`, `POSTGRES_PORT`, `REDIS_PORT` o `RABBITMQ_PORT` en `.env`.
+| Problema                                   | Comprobación                                                                            |
+| ------------------------------------------ | --------------------------------------------------------------------------------------- |
+| No se encuentra un archivo Compose         | Ejecutar desde M9; desde la raíz, prefijar las rutas con `M9-ReservasProgramadas/`      |
+| Docker no conecta                          | Abrir Docker Desktop, usar contenedores Linux y comprobar `docker version`              |
+| Puerto ocupado                             | Revisar los puertos publicados; pueden personalizarse mediante las variables de Compose |
+| Readiness 503                              | Revisar `docker compose ps` y logs de PostgreSQL/Redis/RabbitMQ                         |
+| Falta `.env.grafana-cloud`                 | Usar `local:up` para pruebas sin Cloud o configurar el archivo antes de `obs:up`        |
+| Alloy devuelve 401/403                     | Revisar token OTLP, Instance ID, permisos y stack                                       |
+| Panel de logs vacío                        | Elegir la fuente Loki de aplicación y probar el filtro `\|= "http_request"`             |
+| k6 no encuentra la red                     | Iniciar el Compose y revisar `K6_DOCKER_NETWORK`                                        |
+| k6 termina con 99                          | Revisar los thresholds concretos; los resultados se conservan aunque fallen             |
+| No aparecen reservas nuevas en la pantalla | Consultar la API con `page`/`pageSize`; la UI todavía no recorre páginas                |
 
-## Bloqueos de contrato
+Para revisar registros:
 
-- `BLOCKED_CONTRACT_M1`: identidad/token definitivo.
-- `BLOCKED_CONTRACT_M4`: geocodificación/distancia/ETA real.
-- `BLOCKED_CONTRACT_M5_SELECTION_POLICY`: RF-9.7 no está en OpenAPI M5.
-- `BLOCKED_EXTERNAL_CONTRACT`: eventos M5 definitivos.
-- QR/PDF: `PENDIENTE_CONFIRMACION_ACADEMICA`, owner M8.
+```powershell
+docker compose logs --tail 100 m9-reservas
+docker compose logs --tail 100 postgres redis rabbitmq
+```
 
-## Observabilidad y rendimiento (AE4)
+## Organización del módulo
 
-OpenTelemetry (trazas, métricas y logs) → Grafana Alloy → Grafana Cloud, y pruebas con
-Grafana k6. Apagada por defecto: el inicio normal y los tests no requieren cuenta cloud.
-Guía, arquitectura, catálogo de señales, dashboards, alertas y guion de demo en
-[`observability/README.md`](observability/README.md).
+```text
+src/             API, dominio, servicios, repositorios e integraciones
+src/stubs/       Dobles locales de M5 y M7
+src/observability/ Instrumentación OpenTelemetry
+prisma/          Esquema, migraciones y seed
+public/          Interfaz web
+openapi/         Contratos API
+tests/           Pruebas unitarias, integración, infraestructura y E2E
+scripts/         Runners, utilidades de observabilidad y limpieza de pruebas
+performance/     Escenarios k6 y resultados
+observability/   Alloy, dashboards, alertas y evidencias
+```
