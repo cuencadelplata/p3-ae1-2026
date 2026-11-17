@@ -1,0 +1,143 @@
+services:
+  m1-identidad-acceso:
+    image: matsir/m1-identidad-acceso:latest
+
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: m1-identidad-acceso
+
+    ports:
+      - "3001:3001"
+
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3001
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      LOGIN_MAX_INTENTOS: ${LOGIN_MAX_INTENTOS:-5}
+      LOGIN_VENTANA_SEGUNDOS: ${LOGIN_VENTANA_SEGUNDOS:-60}
+      RECUPERACION_TTL_SEGUNDOS: ${RECUPERACION_TTL_SEGUNDOS:-900}
+      JWT_SECRET: ${JWT_SECRET:-clave-desarrollo-m1}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+
+    volumes:
+      - identity_data:/app/data
+
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: [ "CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+
+    container_name: m1-redis
+
+    ports:
+      - "6379:6379"
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+
+    container_name: m1-rabbitmq
+
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  e2e-tests:
+    image: node:24-alpine
+
+    working_dir: /tests
+
+    environment:
+      BASE_URL: http://m1-identidad-acceso:3001
+
+    volumes:
+      - ./tests/e2e:/tests:ro
+
+    command: [ "node", "--test", "identidad-acceso.e2e.test.mjs" ]
+
+    depends_on:
+      m1-identidad-acceso:
+        condition: service_healthy
+
+    profiles:
+      - test
+
+  # AE4 - Agente que lee GET /metrics de M1 y lo envía a Grafana Cloud.
+  # Solo arranca con: docker compose --profile metricas up -d
+  alloy:
+    image: grafana/alloy:v1.21.3
+
+    container_name: m1-alloy
+
+    environment:
+      # M1 dentro de este compose. Si M1 corre con npm run dev, usar host.docker.internal:3001
+      M1_METRICS_TARGET: ${M1_METRICS_TARGET:-m1-identidad-acceso:3001}
+      GRAFANA_CLOUD_PROM_URL: ${GRAFANA_CLOUD_PROM_URL:-}
+      GRAFANA_CLOUD_PROM_USER: ${GRAFANA_CLOUD_PROM_USER:-}
+      GRAFANA_CLOUD_API_KEY: ${GRAFANA_CLOUD_API_KEY:-}
+
+    volumes:
+      - ./observabilidad/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy_data:/var/lib/alloy/data
+
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+
+    ports:
+      - "12345:12345"
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    restart: unless-stopped
+
+    profiles:
+      - metricas
+
+volumes:
+  identity_data:
+  rabbitmq_data:
+  alloy_data:

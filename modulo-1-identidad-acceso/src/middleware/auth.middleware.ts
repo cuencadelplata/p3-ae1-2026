@@ -1,0 +1,141 @@
+import {
+    NextFunction,
+    Request,
+    Response
+} from "express";
+import jwt from "jsonwebtoken";
+import { UserRole } from "../types/user.types";
+import { getJwtSecret } from "../config/env";
+
+export interface AuthenticatedRequest
+    extends Request {
+    usuarioAutenticado?: {
+        userId: number;
+        role: UserRole;
+        authMethod?: string;
+    };
+}
+
+const ROLES_CANONICOS: UserRole[] = ["CLIENTE", "CONDUCTOR", "OPERADOR"];
+
+export function authenticateToken(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+): void {
+    const authorization =
+        req.headers.authorization;
+
+    if (!authorization) {
+        res.status(401).json({
+            valid: false,
+            error: "Token requerido",
+            code: "missing_token"
+        });
+        return;
+    }
+
+    const partes = authorization.split(" ");
+
+    if (
+        partes.length !== 2 ||
+        partes[0] !== "Bearer" ||
+        !partes[1]
+    ) {
+        res.status(401).json({
+            valid: false,
+            error: "Formato de token incorrecto",
+            code: "invalid_token"
+        });
+        return;
+    }
+
+    let jwtSecret: string;
+    try {
+        jwtSecret = getJwtSecret();
+    } catch {
+        res.status(500).json({
+            valid: false,
+            error: "Error en configuración de seguridad del servidor",
+            code: "server_misconfiguration"
+        });
+        return;
+    }
+
+    try {
+        const decoded = jwt.verify(
+            partes[1],
+            jwtSecret,
+            { algorithms: ["HS256"] }
+        );
+
+        if (
+            typeof decoded === "string" ||
+            typeof decoded.userId !== "number" ||
+            decoded.userId <= 0 ||
+            typeof decoded.role !== "string" ||
+            !ROLES_CANONICOS.includes(decoded.role as UserRole)
+        ) {
+            res.status(401).json({
+                valid: false,
+                error: "Contenido del token inválido",
+                code: "invalid_token"
+            });
+            return;
+        }
+
+        const payload = decoded as jwt.JwtPayload;
+        req.usuarioAutenticado = {
+            userId: payload.userId,
+            role: payload.role as UserRole,
+            authMethod: typeof payload.authMethod === "string" ? payload.authMethod : "password"
+        };
+
+        next();
+    } catch (error) {
+        if (error instanceof jwt.TokenExpiredError) {
+            res.status(401).json({
+                valid: false,
+                error: "Token expirado",
+                code: "invalid_token"
+            });
+            return;
+        }
+
+        res.status(401).json({
+            valid: false,
+            error: "Token inválido",
+            code: "invalid_token"
+        });
+    }
+}
+
+/**
+ * Middleware para autorización basada en roles.
+ * Requiere que authenticateToken se haya ejecutado previamente.
+ */
+export function authorizeRoles(...allowedRoles: UserRole[]) {
+    return (
+        req: AuthenticatedRequest,
+        res: Response,
+        next: NextFunction
+    ): void => {
+        const user = req.usuarioAutenticado;
+
+        if (!user) {
+            res.status(401).json({
+                error: "Usuario no autenticado"
+            });
+            return;
+        }
+
+        if (!allowedRoles.includes(user.role)) {
+            res.status(403).json({
+                error: "Acceso denegado: No tienes los permisos suficientes"
+            });
+            return;
+        }
+
+        next();
+    };
+}

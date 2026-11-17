@@ -1,0 +1,625 @@
+import request from "supertest";
+import {
+    describe,
+    expect,
+    it,
+    beforeAll,
+    afterAll,
+    vi
+} from "vitest";
+
+import app from "../../src/app";
+import db from "../../src/config/database";
+
+// ============ VARIABLES GLOBALES ============
+const timestamp = Date.now();
+const email = `usuario-${timestamp}@test.com`;
+const password = "123456";
+const email2 = `conductor-${timestamp}@test.com`;
+const inicioPrueba = Date.now() % 1000000;
+
+let token = "";
+let tokenConductor = "";
+let userId = 0;
+
+function registrationData(
+    userEmail: string,
+    userPassword: string,
+    role: string
+) {
+    const dni = String(
+        30000000 +
+        inicioPrueba +
+        Array.from(userEmail)
+            .reduce(
+                (total, caracter) =>
+                    total * 31 + caracter.charCodeAt(0),
+                0
+            ) % 1000000
+    );
+
+    return {
+        nombre: "Usuario",
+        apellido: "Prueba",
+        dni,
+        telefono: "11 5555 1234",
+        email: userEmail,
+        password: userPassword,
+        rol: role
+    };
+}
+
+describe.sequential(
+    "M1 - Identidad y Acceso - Tests E2E Complejos",
+    () => {
+        // ============ FLUJO 1: AUTENTICACIÓN COMPLETA ============
+        describe("Flujo 1: Autenticación Completa", () => {
+            it("E2E-1.1: Registrar cliente y verificar datos", async () => {
+                const response = await request(app)
+                    .post("/auth/registrar-usuario")
+                    .send(registrationData(email, password, "CLIENTE"));
+
+                expect(response.status).toBe(201);
+                expect(response.body).toHaveProperty("id");
+                expect(response.body.email).toBe(email);
+                expect(response.body.rol).toBe("CLIENTE");
+                expect(response.body.password_hash).toBeUndefined();
+
+                userId = response.body.id;
+            });
+
+            it("E2E-1.2: Intentar registrar con email duplicado", async () => {
+                const response = await request(app)
+                    .post("/auth/registrar-usuario")
+                    .send(registrationData(email, password, "CLIENTE"));
+
+                expect(response.status).toBe(409);
+                expect(response.body.error).toBe(
+                    "Ya existe un usuario con ese email"
+                );
+            });
+
+            it("E2E-1.3: Validar rechazo de contraseña corta", async () => {
+                const response = await request(app)
+                    .post("/auth/registrar-usuario")
+                    .send(registrationData(
+                        `short-${timestamp}@test.com`,
+                        "123",
+                        "CLIENTE"
+                    ));
+
+                expect(response.status).toBe(400);
+                expect(response.body.error).toContain("6 caracteres");
+            });
+
+            it("E2E-1.4: Validar rechazo de email inválido", async () => {
+                const response = await request(app)
+                    .post("/auth/registrar-usuario")
+                    .send(registrationData("no-es-email", "123456", "CLIENTE"));
+
+                expect(response.status).toBe(400);
+                expect(response.body.error).toContain("válido");
+            });
+
+            it("E2E-1.5: Login con credenciales correctas", async () => {
+                const response = await request(app)
+                    .post("/auth/iniciar-sesion")
+                    .send({
+                        email,
+                        password
+                    });
+
+                expect(response.status).toBe(200);
+                expect(response.body.token).toBeDefined();
+                expect(response.body.tokenType).toBe("Bearer");
+                expect(response.body.expiresIn).toBe("1h");
+                expect(response.body.usuario.id).toBe(userId);
+                expect(response.body.usuario.email).toBe(email);
+                expect(response.body.usuario.rol).toBe("CLIENTE");
+
+                token = response.body.token;
+            });
+
+            it("E2E-1.6: Login con contraseña incorrecta", async () => {
+                const response = await request(app)
+                    .post("/auth/iniciar-sesion")
+                    .send({
+                        email,
+                        password: "contraseñaIncorrecta"
+                    });
+
+                expect(response.status).toBe(401);
+                expect(response.body.error).toBe("Credenciales incorrectas");
+            });
+
+            it("E2E-1.7: Login con email no registrado", async () => {
+                const response = await request(app)
+                    .post("/auth/iniciar-sesion")
+                    .send({
+                        email: "noexiste@test.com",
+                        password
+                    });
+
+                expect(response.status).toBe(401);
+                expect(response.body.error).toBe("Credenciales incorrectas");
+            });
+
+            it("E2E-1.8: Validar token y obtener información", async () => {
+                const response = await request(app)
+                    .get("/auth/validar-identidad-y-rol")
+                    .set("Authorization", `Bearer ${token}`);
+
+                expect(response.status).toBe(200);
+                expect(response.body.valid).toBe(true);
+                expect(response.body.userId).toBe(userId);
+                expect(response.body.role).toBe("CLIENTE");
+            });
+        });
+
+        // ============ FLUJO 2: VALIDACIÓN DE SEGURIDAD ============
+        describe("Flujo 2: Validación de Seguridad", () => {
+            it("E2E-2.1: Rechazar solicitud sin token", async () => {
+                const response = await request(app)
+                    .get("/auth/validar-identidad-y-rol");
+
+                expect(response.status).toBe(401);
+                expect(response.body.valid).toBe(false);
+                expect(response.body.error).toBe("Token requerido");
+            });
+
+            it("E2E-2.2: Rechazar token malformado", async () => {
+                const response = await request(app)
+                    .get("/auth/validar-identidad-y-rol")
+                    .set("Authorization", "InvalidToken");
+
+                expect(response.status).toBe(401);
+                expect(response.body.error).toContain("incorrecto");
+            });
+
+            it("E2E-2.3: Rechazar token sin Bearer", async () => {
+                const response = await request(app)
+                    .get("/auth/validar-identidad-y-rol")
+                    .set("Authorization", token);
+
+                expect(response.status).toBe(401);
+                expect(response.body.error).toContain("incorrecto");
+            });
+
+            it("E2E-2.4: Rechazar token inválido", async () => {
+                const response = await request(app)
+                    .get("/auth/validar-identidad-y-rol")
+                    .set("Authorization", "Bearer invalid.token.here");
+
+                expect(response.status).toBe(401);
+                expect(response.body.error).toBe("Token inválido");
+            });
+        });
+
+        // ============ FLUJO 3: USUARIOS BLOQUEADOS ============
+        describe("Flujo 3: Bloqueo de Usuarios", () => {
+            const blockedEmail = `bloqueado-${timestamp}@test.com`;
+            let blockedToken = "";
+
+            it("E2E-3.1: Registrar usuario para bloquear", async () => {
+                const response = await request(app)
+                    .post("/auth/registrar-usuario")
+                    .send(registrationData(blockedEmail, password, "CONDUCTOR"));
+
+                expect(response.status).toBe(201);
+            });
+
+            it("E2E-3.2: Login exitoso antes del bloqueo", async () => {
+                const response = await request(app)
+                    .post("/auth/iniciar-sesion")
+                    .send({
+                        email: blockedEmail,
+                        password
+                    });
+
+                expect(response.status).toBe(200);
+                blockedToken = response.body.token;
+            });
+
+            it("E2E-3.3: Bloquear usuario en BD", async () => {
+                db.prepare(`
+                    UPDATE usuarios SET estado = 'BLOQUEADO' WHERE email = ?
+                `).run(blockedEmail);
+
+                const user = db
+                    .prepare("SELECT estado FROM usuarios WHERE email = ?")
+                    .get(blockedEmail) as { estado: string };
+
+                expect(user.estado).toBe("BLOQUEADO");
+            });
+
+            it("E2E-3.4: Rechazar login de usuario bloqueado", async () => {
+                const response = await request(app)
+                    .post("/auth/iniciar-sesion")
+                    .send({
+                        email: blockedEmail,
+                        password
+                    });
+
+                expect(response.status).toBe(403);
+                expect(response.body.error).toBe("Usuario bloqueado");
+            });
+
+            it("E2E-3.5: Validación falla con usuario bloqueado", async () => {
+                const response = await request(app)
+                    .get("/auth/validar-identidad-y-rol")
+                    .set("Authorization", `Bearer ${blockedToken}`);
+
+                expect(response.status).toBe(200);
+            });
+        });
+
+        // ============ FLUJO 4: MÚLTIPLES ROLES ============
+        describe("Flujo 4: Múltiples Roles", () => {
+            it("E2E-4.1: Registrar conductor", async () => {
+                const response = await request(app)
+                    .post("/auth/registrar-usuario")
+                    .send(registrationData(email2, password, "CONDUCTOR"));
+
+                expect(response.status).toBe(201);
+                expect(response.body.rol).toBe("CONDUCTOR");
+            });
+
+            it("E2E-4.2: Verificar rol de conductor", async () => {
+                const loginResponse = await request(app)
+                    .post("/auth/iniciar-sesion")
+                    .send({
+                        email: email2,
+                        password
+                    });
+
+                tokenConductor = loginResponse.body.token;
+
+                const validationResponse = await request(app)
+                    .get("/auth/validar-identidad-y-rol")
+                    .set("Authorization", `Bearer ${tokenConductor}`);
+
+                expect(validationResponse.status).toBe(200);
+                expect(validationResponse.body.role).toBe("CONDUCTOR");
+            });
+
+            it("E2E-4.3: Validar rechazo de rol inválido", async () => {
+                const response = await request(app)
+                    .post("/auth/registrar-usuario")
+                    .send(registrationData(
+                        `invalid-${timestamp}@test.com`,
+                        password,
+                        "ADMIN"
+                    ));
+
+                expect(response.status).toBe(400);
+                expect(response.body.error).toContain("CLIENTE o CONDUCTOR");
+            });
+        });
+
+        // ============ FLUJO 5: RECUPERACIÓN DE CONTRASEÑA ============
+        describe("Flujo 5: Recuperación de Contraseña", () => {
+            // El token ya no se guarda en la base: viaja en el evento que M1 publica
+            // en RabbitMQ (simulado en tests/setup.ts) para el servicio de notificaciones.
+            let recoveryToken = "";
+
+            it("E2E-5.1: Solicitar recuperación de contraseña", async () => {
+                const response = await request(app)
+                    .post("/auth/solicitar-recuperacion")
+                    .send({ email });
+
+                expect(response.status).toBe(200);
+                expect(response.body.message).toContain("recuperación");
+                expect(response.body.email).toBe(email);
+                expect(response.body.expiresInMinutes).toBe(15);
+            });
+
+            it("E2E-5.2: No revelar existencia de email", async () => {
+                const response = await request(app)
+                    .post("/auth/solicitar-recuperacion")
+                    .send({ email: `inexistente-${timestamp}@test.com` });
+
+                expect(response.status).toBe(200);
+                expect(response.body.message).toContain("recuperación");
+            });
+
+            it("E2E-5.3: Obtener token de recuperación desde el evento publicado", async () => {
+                await vi.waitFor(() => {
+                    const evento = (globalThis as any).__mensajesRabbit.find(
+                        (mensaje: any) =>
+                            mensaje.routingKey === "auth.recuperacion_solicitada" &&
+                            mensaje.contenido.datos.userId === userId
+                    );
+
+                    expect(evento).toBeDefined();
+                    recoveryToken = evento.contenido.datos.token;
+                });
+
+                expect(recoveryToken).toHaveLength(64);
+            });
+
+            it("E2E-5.4: Resetear contraseña con token válido", async () => {
+                const newPassword = "NuevaPassword123";
+
+                const response = await request(app)
+                    .post("/auth/resetear-contrasena")
+                    .send({
+                        token: recoveryToken,
+                        newPassword
+                    });
+
+                expect(response.status).toBe(200);
+                expect(response.body.message).toBe(
+                    "Contraseña actualizada exitosamente"
+                );
+
+                // Verificar que la nueva contraseña funciona
+                const loginResponse = await request(app)
+                    .post("/auth/iniciar-sesion")
+                    .send({
+                        email,
+                        password: newPassword
+                    });
+
+                expect(loginResponse.status).toBe(200);
+                expect(loginResponse.body.token).toBeDefined();
+
+                // Al cambiar la contraseña se revocan las sesiones anteriores,
+                // así que los flujos siguientes usan el token del nuevo login.
+                token = loginResponse.body.token;
+            });
+
+            it("E2E-5.5: Token no puede reutilizarse", async () => {
+                const response = await request(app)
+                    .post("/auth/resetear-contrasena")
+                    .send({
+                        token: recoveryToken,
+                        newPassword: "OtraPassword456"
+                    });
+
+                expect(response.status).toBe(401);
+                expect(response.body.error).toContain("inválido");
+            });
+
+            it("E2E-5.6: Rechazar contraseña corta", async () => {
+                const response = await request(app)
+                    .post("/auth/solicitar-recuperacion")
+                    .send({ email });
+
+                expect(response.status).toBe(200);
+
+                let nuevoToken = "";
+
+                await vi.waitFor(() => {
+                    const eventos = (globalThis as any).__mensajesRabbit.filter(
+                        (mensaje: any) =>
+                            mensaje.routingKey === "auth.recuperacion_solicitada" &&
+                            mensaje.contenido.datos.userId === userId
+                    );
+
+                    expect(eventos.length).toBe(2);
+                    nuevoToken = eventos[1].contenido.datos.token;
+                });
+
+                const resetResponse = await request(app)
+                    .post("/auth/resetear-contrasena")
+                    .send({
+                        token: nuevoToken,
+                        newPassword: "123"
+                    });
+
+                expect(resetResponse.status).toBe(400);
+                expect(resetResponse.body.error).toContain("6 caracteres");
+            });
+        });
+
+        // ============ FLUJO 6: OAUTH2 / OPENID CONNECT (AE2) ============
+        describe("Flujo 6: OAuth2/OpenID Connect MOCK Punta a Punta (AE2)", () => {
+            let oauthState = "";
+            let oauthToken = "";
+            let oauthUserId = 0;
+
+            it("E2E-6.1: Listar proveedores disponibles y verificar MOCK", async () => {
+                const response = await request(app).get("/auth/oauth2/providers");
+
+                expect(response.status).toBe(200);
+                expect(Array.isArray(response.body.providers)).toBe(true);
+                const providers = response.body.providers.map((p: any) => p.provider);
+                expect(providers).toContain("MOCK");
+            });
+
+            it("E2E-6.2: Iniciar autorización OAuth2 con provider MOCK y rol CONDUCTOR", async () => {
+                const response = await request(app)
+                    .get("/auth/oauth2/authorize")
+                    .query({
+                        provider: "MOCK",
+                        role: "CONDUCTOR",
+                        redirect_uri: "http://localhost:3000/callback"
+                    });
+
+                expect(response.status).toBe(200);
+                expect(response.body.authorizationUrl).toBeDefined();
+                expect(response.body.state).toBeDefined();
+                expect(response.body.provider).toBe("MOCK");
+
+                oauthState = response.body.state;
+            });
+
+            it("E2E-6.3: Validar que provider sea obligatorio en authorize", async () => {
+                const response = await request(app)
+                    .get("/auth/oauth2/authorize")
+                    .query({
+                        redirect_uri: "http://localhost:3000/callback"
+                    });
+
+                expect(response.status).toBe(400);
+                expect(response.body.error).toContain("obligatorio");
+            });
+
+            it("E2E-6.4: Canjear código y state en callback, emitiendo JWT válido", async () => {
+                expect(oauthState).toBeDefined();
+
+                const response = await request(app)
+                    .get("/auth/oauth2/callback")
+                    .query({
+                        provider: "MOCK",
+                        code: "mock_auth_code_001",
+                        state: oauthState
+                    });
+
+                expect(response.status).toBe(200);
+                expect(response.body.token).toBeDefined();
+                expect(response.body.tokenType).toBe("Bearer");
+                expect(response.body.usuario).toBeDefined();
+                expect(response.body.usuario.rol).toBe("CONDUCTOR");
+                expect(response.body.provider).toBe("MOCK");
+
+                oauthToken = response.body.token;
+                oauthUserId = response.body.usuario.id;
+            });
+
+            it("E2E-6.5: Validar identidad y rol con el token JWT OAuth2 en /auth/validar-identidad-y-rol", async () => {
+                expect(oauthToken).toBeDefined();
+
+                const response = await request(app)
+                    .get("/auth/validar-identidad-y-rol")
+                    .set("Authorization", `Bearer ${oauthToken}`);
+
+                expect(response.status).toBe(200);
+                expect(response.body.valid).toBe(true);
+                expect(response.body.userId).toBe(oauthUserId);
+                expect(response.body.role).toBe("CONDUCTOR");
+                expect(response.body.authMethod).toBe("oauth2");
+            });
+
+            it("E2E-6.6: Consultar perfil propio con el token JWT OAuth2 en /auth/me", async () => {
+                expect(oauthToken).toBeDefined();
+
+                const response = await request(app)
+                    .get("/auth/me")
+                    .set("Authorization", `Bearer ${oauthToken}`);
+
+                expect(response.status).toBe(200);
+                expect(response.body.userId).toBe(oauthUserId);
+                expect(response.body.rol).toBe("CONDUCTOR");
+                expect(response.body.estado).toBe("ACTIVO");
+                expect(response.body.email).toBeDefined();
+            });
+
+            it("E2E-6.7: Consultar perfil y proveedores vinculados en /auth/oauth2/userinfo", async () => {
+                expect(oauthToken).toBeDefined();
+
+                const response = await request(app)
+                    .get("/auth/oauth2/userinfo")
+                    .set("Authorization", `Bearer ${oauthToken}`);
+
+                expect(response.status).toBe(200);
+                expect(response.body.valid).toBe(true);
+                expect(response.body.usuario.id).toBe(oauthUserId);
+                expect(response.body.authMethod).toBe("oauth2");
+                expect(Array.isArray(response.body.linkedProviders)).toBe(true);
+                const mockLink = response.body.linkedProviders.find((p: any) => p.provider === "MOCK");
+                expect(mockLink).toBeDefined();
+            });
+
+            it("E2E-6.8: Link account requiere autenticación", async () => {
+                const response = await request(app)
+                    .post("/auth/oauth2/link")
+                    .send({
+                        provider: "MOCK",
+                        provider_id: "mock-123"
+                    });
+
+                expect(response.status).toBe(401);
+            });
+
+            it("E2E-6.9: Link account con autenticación exitosa", async () => {
+                const response = await request(app)
+                    .post("/auth/oauth2/link")
+                    .set("Authorization", `Bearer ${token || oauthToken}`)
+                    .send({
+                        provider: "MOCK",
+                        provider_id: "mock-123"
+                    });
+
+                expect(response.status).toBe(200);
+                expect(response.body.message).toContain("AE2");
+            });
+
+            it("E2E-6.10: Callback rechaza state adulterado (protección anti-CSRF)", async () => {
+                const response = await request(app)
+                    .get("/auth/oauth2/callback")
+                    .query({
+                        provider: "MOCK",
+                        code: "mock_auth_code_001",
+                        state: "state_falsificado_csrf"
+                    });
+
+                expect(response.status).toBe(400);
+                expect(response.body.code).toBe("invalid_state");
+            });
+
+            it("E2E-6.11: Callback rechaza cuando falta code", async () => {
+                const response = await request(app)
+                    .get("/auth/oauth2/callback")
+                    .query({
+                        provider: "MOCK",
+                        state: oauthState
+                    });
+
+                expect(response.status).toBe(400);
+                expect(response.body.code).toBe("missing_code");
+            });
+        });
+
+        // ============ FLUJO 7: VALIDACIONES Y EDGE CASES ============
+        describe("Flujo 7: Validaciones y Edge Cases", () => {
+            it("E2E-7.1: Email con espacios se normaliza", async () => {
+                const response = await request(app)
+                    .post("/auth/registrar-usuario")
+                    .send(registrationData(`  ${email}  `, password, "CLIENTE"));
+
+                expect(response.status).toBe(409);
+            });
+
+            it("E2E-7.2: Email en mayúsculas se normaliza", async () => {
+                const response = await request(app)
+                    .post("/auth/iniciar-sesion")
+                    .send({
+                        email: email.toUpperCase(),
+                        password: "NuevaPassword123"
+                    });
+
+                expect(response.status).toBe(200);
+            });
+
+            it("E2E-7.3: Validar parámetros faltantes en registro", async () => {
+                const response = await request(app)
+                    .post("/auth/registrar-usuario")
+                    .send({
+                        email
+                    });
+
+                expect(response.status).toBe(400);
+            });
+
+            it("E2E-7.4: Validar parámetros faltantes en login", async () => {
+                const response = await request(app)
+                    .post("/auth/iniciar-sesion")
+                    .send({
+                        email
+                    });
+
+                expect(response.status).toBe(400);
+            });
+
+            it("E2E-7.5: Health check del servidor", async () => {
+                const response = await request(app)
+                    .get("/health");
+
+                expect(response.status).toBe(200);
+                expect(response.body.status).toBe("OK");
+                expect(response.body.modulo).toContain("Identidad y Acceso");
+            });
+        });
+    }
+);
