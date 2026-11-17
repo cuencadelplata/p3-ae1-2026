@@ -30,3 +30,25 @@ export async function importarViaje(viajeId:string,clienteId:string,correlationI
     fechaViaje:fecha?new Date(fecha):new Date(),fechaReferencia});
   return {viajeId,sincronizado:true,fechaReferencia,correlationId};
 }
+
+/**
+ * Procesa el TripCompleted de M6 (routing key trip.completed). El evento no trae direcciones,
+ * así que se buscan en el historial del cliente en M6. Si M6 no responde, el error hace que el
+ * worker reintente el mensaje (y lo mande a la DLQ tras 3 intentos).
+ * Idempotente por viajeId: un mismo viaje importado a mano o recibido dos veces cuenta una sola vez.
+ */
+export async function sincronizarViajeCompletado(
+  event:{viajeId:string;clienteId:string;occurredAt:string;eventId:string},
+  service:Pick<DireccionesService,'recordJourney'>,
+) {
+  const raw:any=await modulo6Client.obtenerViajeDeCliente(event.clienteId,event.viajeId);
+  if(raw?.id!==event.viajeId||String(raw?.clienteId)!==event.clienteId)
+    throw new ApiError(502,'M6_INVALID_CONTRACT','M6 devolvió un viaje que no corresponde al evento');
+  if(String(raw.estado).toLowerCase()!=='completado')
+    throw new ApiError(409,'TRIP_NOT_COMPLETED','M6 informó el viaje como completado pero su estado es '+raw.estado);
+  const parsed=tripWithAddresses.safeParse({...raw,clienteId:String(raw.clienteId)});
+  if(!parsed.success) throw new ApiError(502,'M6_ADDRESSES_REQUIRED','M6 debe devolver origen y destino como texto o puntos válidos');
+  await service.recordJourney({viajeId:parsed.data.id,clienteId:parsed.data.clienteId,
+    origen:parsed.data.origen,destino:parsed.data.destino,
+    fechaViaje:new Date(event.occurredAt),fechaReferencia:'FINALIZACION',eventId:event.eventId});
+}

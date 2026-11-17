@@ -9,9 +9,10 @@ export async function connect():Promise<{connection:ChannelModel; channel:Confir
   const channel=await connection.createConfirmChannel();
   channel.on('error',()=>console.warn(JSON.stringify({event:'rabbitmq_channel_error'})));
   await channel.assertExchange(EXCHANGE,'topic',{durable:true});
-  for(const [queue,type] of [[TRIPS,'TripCompleted.v1'],[FAVORITES,'FavoriteAddressChanged.v1']]) {
+  // trip.completed: routing key real de M6. TripCompleted.v1: formato propio de M2 (simulador y pruebas).
+  for(const [queue,keys] of [[TRIPS,['trip.completed','TripCompleted.v1']],[FAVORITES,['FavoriteAddressChanged.v1']]] as const) {
     await channel.assertQueue(queue,{durable:true});
-    await channel.bindQueue(queue,EXCHANGE,type);
+    for(const key of keys) await channel.bindQueue(queue,EXCHANGE,key);
     await channel.assertQueue(`${queue}.retry`,{durable:true,arguments:{'x-message-ttl':3000,'x-dead-letter-exchange':'','x-dead-letter-routing-key':queue}});
     await channel.assertQueue(`${queue}.dlq`,{durable:true});
   }

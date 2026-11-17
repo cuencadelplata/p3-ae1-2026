@@ -29,7 +29,7 @@ export class CustomerCache {
   ) {}
 
   private key(customerId: string): string {
-    return `customer:profile:${customerId}`;
+    return `m2:customer:profile:${customerId}`;
   }
 
   async get(customerId: string): Promise<CustomerProfile | null> {

@@ -2,7 +2,8 @@ import 'dotenv/config';
 import { prisma } from './config/prisma';
 import { redisClient } from './config/redis';
 import { DireccionesService } from './direcciones/service';
-import { tripSchema } from './direcciones/domain';
+import { tripEventSchema } from './direcciones/domain';
+import { sincronizarViajeCompletado } from './direcciones/importar-viaje';
 import { connect, consume, publish, EXCHANGE, TRIPS } from './messaging/broker';
 const service=new DireccionesService(prisma,redisClient);
 let stopping=false; let current:Awaited<ReturnType<typeof connect>>|undefined;
@@ -13,7 +14,12 @@ async function run() {
       const broker=await connect(); current=broker; let closed=false;
       broker.connection.once('close',()=>{closed=true;});
       broker.channel.once('close',()=>{closed=true;});
-      await consume(broker.channel,TRIPS,tripSchema,event=>service.recordTrip(event));
+      // TripCompleted.v1 trae las direcciones; el trip.completed de M6 no, y se piden a M6.
+      await consume(broker.channel,TRIPS,tripEventSchema,event=>{
+        if(event.source==='m6') return sincronizarViajeCompletado(event,service);
+        const {source:_source,...trip}=event;
+        return service.recordTrip(trip);
+      });
       while(!stopping&&!closed) {
         // Publicar después del commit; un crash antes de marcado causa redelivery seguro.
         const rows=await prisma.outbox.findMany({where:{publicadoAt:null},orderBy:{createdAt:'asc'},take:50});

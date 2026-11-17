@@ -78,7 +78,37 @@ const circuitBreakerOptions: CircuitBreaker.Options = {
   },
 };
 
+/**
+ * GET /api/viajes/{id} de M6 no incluye origen ni destino; GET /api/clientes/{clienteId}/viajes sí.
+ * Se usa para registrar las direcciones de un viaje completado.
+ */
+async function fetchClientTrip(clienteId: string, tripId: string): Promise<TripData> {
+  try {
+    const response = await httpClient.get<{ viajes?: TripData[] }>(`/api/clientes/${encodeURIComponent(clienteId)}/viajes`);
+    const trip = response.data?.viajes?.find(v => v?.id === tripId);
+    if (!trip) throw new TripNotFoundError(tripId);
+    return trip;
+  } catch (error: any) {
+    if (error instanceof TripNotFoundError) throw error;
+    if (error.response && error.response.status === 404) throw new TripNotFoundError(tripId);
+    throw error;
+  }
+}
+
 const breaker = new CircuitBreaker(fetchTripById, circuitBreakerOptions);
+const clientTripsBreaker = new CircuitBreaker(fetchClientTrip, circuitBreakerOptions);
+
+async function fireGuarded<T>(cb: CircuitBreaker<any[], T>, ...args: any[]): Promise<T> {
+  if (cb.opened) {
+    throw new Modulo6UnavailableError('El circuito para Módulo 6 está abierto debido a fallas continuas.');
+  }
+  try {
+    return await cb.fire(...args);
+  } catch (error: any) {
+    if (error instanceof TripNotFoundError) throw error;
+    throw new Modulo6UnavailableError();
+  }
+}
 
 // Listeners para monitoreo de eventos del Circuit Breaker
 breaker.on('open', () => {
@@ -115,6 +145,13 @@ export const modulo6Client = {
       if (error instanceof TripNotFoundError) throw error;
       throw new Modulo6UnavailableError();
     }
+  },
+
+  /**
+   * Busca el viaje en el historial del cliente en M6, que sí trae origen y destino.
+   */
+  async obtenerViajeDeCliente(clienteId: string, tripId: string): Promise<TripData> {
+    return fireGuarded(clientTripsBreaker, clienteId, tripId);
   },
 
   /**

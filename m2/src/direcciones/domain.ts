@@ -27,6 +27,23 @@ export const tripSchema = z.object({
   data: z.object({ viajeId: identifier, clienteId: identifier,
     origen: pointSchema, destino: pointSchema }).strict(),
 }).strict();
+// TripCompleted que M6 publica en mobility.events con routing key "trip.completed"
+// (sobre común acordado con M8). No trae origen ni destino: M2 los pide a M6.
+// recipientId es el clienteId numérico del viaje (M6 lo deriva de clienteId).
+export const m6TripCompletedSchema = z.object({
+  messageId: z.string().uuid(), eventType: z.literal('TripCompleted'),
+  occurredAt: z.string().datetime({offset:true}), correlationId: z.string().min(1).max(200).optional(),
+  data: z.object({ tripId: identifier, recipientId: z.number().int().positive() }).passthrough(),
+}).passthrough().transform(e => ({
+  source: 'm6' as const, eventId: e.messageId, type: 'TripCompleted' as const,
+  occurredAt: e.occurredAt, correlationId: e.correlationId ?? e.data.tripId,
+  viajeId: e.data.tripId, clienteId: String(e.data.recipientId),
+}));
+// La cola m2.trip-completed recibe los dos formatos.
+export const tripEventSchema = z.union([
+  tripSchema.transform(e => ({ source: 'm2' as const, ...e })),
+  m6TripCompletedSchema,
+]);
 export const favoriteEventSchema = z.object({
   eventId: z.string().uuid(), type: z.literal('FavoriteAddressChanged.v1'),
   occurredAt: z.string().datetime(), correlationId: identifier,
