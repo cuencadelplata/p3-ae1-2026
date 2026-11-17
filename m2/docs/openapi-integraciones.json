@@ -1,0 +1,358 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Contratos propuestos de integración M4, M6 y M8",
+    "version": "2.2.0",
+    "description": "M4/M8 y publicación de eventos son simuladores propuestos. GET M6 es la ruta heredada de RF-2.4: no está documentada en el OpenAPI recibido. Campos textuales de ViajeResponse adaptados según el archivo aportado; verificar acceso contra el servidor real."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4004",
+      "description": "M4"
+    },
+    {
+      "url": "http://localhost:4000",
+      "description": "M6"
+    },
+    {
+      "url": "http://localhost:4008",
+      "description": "M8"
+    }
+  ],
+  "security": [
+    {
+      "serviceKey": []
+    }
+  ],
+  "paths": {
+    "/api/v1/geocodificacion": {
+      "get": {
+        "summary": "M4: búsqueda de direcciones en catálogo simulado",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Coincidencias",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "direccion",
+                          "latitud",
+                          "longitud"
+                        ],
+                        "properties": {
+                          "direccion": {
+                            "type": "string",
+                            "minLength": 3,
+                            "maxLength": 250
+                          },
+                          "latitud": {
+                            "type": "number",
+                            "minimum": -90,
+                            "maximum": 90
+                          },
+                          "longitud": {
+                            "type": "number",
+                            "minimum": -180,
+                            "maximum": 180
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Clave inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/viajes/{viajeId}": {
+      "get": {
+        "summary": "M6: consulta RF-2.4 y recuperación REST de direcciones RF-2.2",
+        "parameters": [
+          {
+            "name": "viajeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Viaje",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "clienteId",
+                    "conductorId",
+                    "estado"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "clienteId": {
+                      "type": "string"
+                    },
+                    "conductorId": {
+                      "type": "string"
+                    },
+                    "estado": {
+                      "type": "string"
+                    },
+                    "origen": {
+                      "type": "string",
+                      "example": "Calle Principal 100"
+                    },
+                    "destino": {
+                      "type": "string",
+                      "example": "Centro Comercial"
+                    },
+                    "fechaCreacion": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "description": "Proyección de los datos que utiliza M2. Las coordenadas y completadoAt no son requisitos del contrato recibido."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Viaje inexistente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demo/viajes/completados": {
+      "post": {
+        "summary": "Sólo simulador M6: publica TripCompleted.v1 confirmado por broker",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "eventId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "occurredAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "data": {
+                    "type": "object",
+                    "required": [
+                      "viajeId",
+                      "clienteId",
+                      "origen",
+                      "destino"
+                    ],
+                    "properties": {
+                      "viajeId": {
+                        "type": "string"
+                      },
+                      "clienteId": {
+                        "type": "string"
+                      },
+                      "origen": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "direccion",
+                          "latitud",
+                          "longitud"
+                        ],
+                        "properties": {
+                          "direccion": {
+                            "type": "string",
+                            "minLength": 3,
+                            "maxLength": 250
+                          },
+                          "latitud": {
+                            "type": "number",
+                            "minimum": -90,
+                            "maximum": 90
+                          },
+                          "longitud": {
+                            "type": "number",
+                            "minimum": -180,
+                            "maximum": 180
+                          }
+                        }
+                      },
+                      "destino": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "direccion",
+                          "latitud",
+                          "longitud"
+                        ],
+                        "properties": {
+                          "direccion": {
+                            "type": "string",
+                            "minLength": 3,
+                            "maxLength": 250
+                          },
+                          "latitud": {
+                            "type": "number",
+                            "minimum": -90,
+                            "maximum": 90
+                          },
+                          "longitud": {
+                            "type": "number",
+                            "minimum": -180,
+                            "maximum": 180
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "eventId": "11111111-1111-4111-8111-111111111111",
+                "type": "TripCompleted.v1",
+                "occurredAt": "2026-10-05T14:00:00.000Z",
+                "correlationId": "demo-viaje-001",
+                "data": {
+                  "viajeId": "viaje-demo-001",
+                  "clienteId": "cliente-123",
+                  "origen": {
+                    "direccion": "Plaza 25 de Mayo, Resistencia",
+                    "latitud": -27.4513,
+                    "longitud": -58.9866
+                  },
+                  "destino": {
+                    "direccion": "Terminal de Ómnibus, Resistencia",
+                    "latitud": -27.4767,
+                    "longitud": -59.0112
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Evento publicado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Evento inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Broker caído; reintentar mismo eventId y viajeId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demo/notificaciones": {
+      "get": {
+        "summary": "M8 simulado: bandeja persistida por eventId; no envía mensajes reales",
+        "responses": {
+          "200": {
+            "description": "Notificaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Clave inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "serviceKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-service-key"
+      }
+    }
+  }
+}

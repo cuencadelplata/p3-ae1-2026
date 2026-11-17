@@ -1,0 +1,9 @@
+2026-10-05 · v2.2.0
+Prisma generate + tsc: exit 0.
+prisma migrate deploy en PostgreSQL 15: tres migraciones, última aplicada en esta revisión.
+Swagger Parser: openapi.json y openapi-integraciones.json válidos.
+Docker Compose: normal, offline y m6-real, config --quiet exit 0.
+Docker build API: exit 0.
+Unitarias 10/10; integración 22/22; stack RabbitMQ 1/1; offline 2/2.
+Docker network inspect ae2-rf22_default .Internal: true.
+M6 real de compañeros: sin prueba contra su servidor. Adaptador probado con HTTP local.

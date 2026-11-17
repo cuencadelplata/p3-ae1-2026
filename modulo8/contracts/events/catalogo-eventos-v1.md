@@ -371,10 +371,10 @@ Su finalidad es solicitar la entrega de una notificación lógica ya creada por 
 
 | Atributo | Valor |
 | --- | --- |
-| Routing keys | `trip.requested`, `driver.assigned`, `driver.arrived`, `trip.started`, `trip.cancelled`, `trip.completed` |
+| Routing keys activas | M5: `ride.requested`, `driver.offer.accepted`, `ride_request.cancelled`; M6: `driver.arrived`, `trip.started` |
 | Productor | M6 (Viajes) / M5 (Despacho) |
-| Consumidor | RF8.6 (Consumer de RF8.1: `m8.notifications.trip-events`) |
-| Estado | `driver.arrived` y `trip.started`: acuerdo de identificador numérico con M1/M5/M6 y adaptador local M8; prueba conjunta pendiente. Los otros eventos siguen pendientes de contrato. |
+| Consumidor | RF8.6: colas `m8.notifications.m5-events` y `m8.notifications.trip-events` |
+| Estado | Contratos M5 y M6 acordados; consumidores locales activos. La prueba conjunta con los productores reales se realiza en la rama común. |
 
 **Acuerdo informado por M6 el 2026-11-16:** M1 y M5 confirmaron que el
 destinatario canónico es el `userId` numérico de M1. M5 entrega `clientUserId`
@@ -382,10 +382,18 @@ y `driverUserId` numéricos a M6. M6 conservará esos valores y publicará
 `DriverArrived` y `TripStarted` en `mobility.events` con `producer: "m6"`,
 `data.tripId` y `data.recipientId = clientUserId`. M8 ya inicia una cola propia para ambas
 routing keys y sólo acepta `recipientId` como entero positivo seguro.
-El resto de los eventos de esta sección sigue propuesto. Falta comprobar
-los dos eventos contra M6 real en la rama común; el adaptador local no acredita
-por sí solo una integración entre módulos. M8 no convierte `clienteId` libre
-ni consulta bases ajenas.
+Falta comprobar los dos eventos contra M6 real en la rama común; el adaptador
+local no acredita por sí solo una integración entre módulos. M8 no convierte
+`clienteId` libre ni consulta bases ajenas. Los eventos de M6 adicionales de
+la tabla inferior se mantienen como propuestas de catálogo.
+
+**Acuerdo M5 del 2026-11-17:** `ride.requested` se correlaciona por
+`rideRequestId`; `driver.offer.accepted` se publica después de M6, se
+correlaciona por `tripId` y produce un aviso para `clientUserId` y otro para
+`driverUserId`; `ride_request.cancelled` se correlaciona por `rideRequestId`
+y avisa sólo al cliente. Los tres usan `userId` numérico de M1. El
+[contrato M5 → M8](m5-m8-notificaciones.md) explica los esquemas, bindings y el
+límite conocido de M5 cuando RabbitMQ cae antes de publicar.
 
 #### 1. Sobre del mensaje (`mobility.events`)
 
@@ -435,8 +443,9 @@ ni consulta bases ajenas.
   * Argumentos: `x-message-ttl: 5000` (5s), `x-dead-letter-exchange: mobility.events`.
 * **Cola DLQ**: `m8.notifications.trip-events.dlq` (durable).
   * Binding en `mobility.events.dlx` con routing key `m8.notifications.trip-events`.
-* **Bindings activos en `mobility.events`**: `driver.arrived` y `trip.started`.
-  Los demás bindings de la tabla son propuestas pendientes de sus productores.
+* **Bindings activos en `mobility.events`**: la cola M6 escucha
+  `driver.arrived` y `trip.started`; la cola M5 escucha `ride.requested`,
+  `driver.offer.accepted` y `ride_request.cancelled`.
 
 #### 4. Tratamiento de Resultados de Procesamiento en RF8.1
 

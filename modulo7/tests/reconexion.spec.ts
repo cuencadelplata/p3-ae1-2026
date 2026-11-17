@@ -2,14 +2,14 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 import { execSync } from "node:child_process";
 
 const RABBIT = process.env.RABBIT_API ?? "http://localhost:15672";
-const AUTH = "Basic " + Buffer.from("guest:guest").toString("base64");
+const AUTH = "Basic " + Buffer.from("m9:m9-local").toString("base64");
 const HEADERS = { Authorization: AUTH };
 
 const nuevoId = (p: string) => `${p}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function docker(cmd: string) {
-  execSync(`docker compose ${cmd}`, { stdio: "inherit" });
+  execSync(`docker compose ${cmd}`, { stdio: "inherit", cwd: "/workspaces/p3-ae1-2026" });
 }
 
 // Payload real que publica M6 (Lucas)

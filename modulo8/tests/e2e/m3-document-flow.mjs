@@ -18,7 +18,7 @@ const db = new pg.Pool({
   user: process.env.POSTGRES_USER,
   password: process.env.POSTGRES_PASSWORD,
 });
-const appUrl = `http://localhost:${process.env.M8_HOST_PORT ?? 3000}`;
+const appUrl = `http://localhost:${process.env.M8_HOST_PORT ?? 8000}`;
 const driverId = 42;
 const documentId = randomUUID();
 const messageId = randomUUID();

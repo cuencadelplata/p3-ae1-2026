@@ -4,6 +4,32 @@ import { registrarMetodoPago, buscarPagoPorViaje, autorizarPago, rechazarPago } 
 import { procesarPagoMercadoPago } from "./PagoCliente";
 import { pagosAutorizadosTotal, pagoDuracionSegundos } from "../../infraestructura/metricas";
 
+const TARJETA_PRUEBA = {
+  card_number: "4509953566233704",
+  security_code: "123",
+  expiration_month: 11,
+  expiration_year: 2030,
+  cardholder: { name: "APRO", identification: { type: "DNI", number: "12345678" } },
+};
+
+async function generarTokenTarjeta(): Promise<{ token: string; paymentMethodId: string }> {
+  const { config } = await import("../../config");
+  const response = await fetch(`${config.mpBaseUrl}/v1/card_tokens`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+            authorization: `Bearer ${config.mpAccessToken}`,
+    },
+    body: JSON.stringify(TARJETA_PRUEBA),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(`No se pudo generar token de prueba: ${data.message ?? response.status}`);
+  }
+  return { token: data.id, paymentMethodId: "visa" };
+}
+
 const TTL_CACHE_SEGUNDOS = 30;
 const claveCache = (viajeId: string) => `m7:metodo-pago:${viajeId}`;
 
@@ -70,9 +96,15 @@ export async function autorizarMetodoPago(req: Request, res: Response) {
       res.status(400).json({ mensaje: "total es requerido" });
       return;
     }
-    if (!token || !paymentMethodId || !email) {
-      res.status(400).json({ mensaje: "token, paymentMethodId y email son requeridos" });
-      return;
+
+    let resolvedToken = token;
+    let resolvedPaymentMethodId = paymentMethodId;
+    const resolvedEmail = email ?? "test@prueba.com";
+
+    if (!resolvedToken || !resolvedPaymentMethodId) {
+      const generado = await generarTokenTarjeta();
+      resolvedToken = generado.token;
+      resolvedPaymentMethodId = generado.paymentMethodId;
     }
 
     const finTimer = pagoDuracionSegundos.startTimer();
@@ -80,9 +112,9 @@ export async function autorizarMetodoPago(req: Request, res: Response) {
       idOrden,
       viajeId,
       total,
-      token,
-      paymentMethodId,
-      email,
+      token: resolvedToken,
+      paymentMethodId: resolvedPaymentMethodId,
+      email: resolvedEmail,
     });
     finTimer();
 

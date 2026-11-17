@@ -1,0 +1,165 @@
+{
+    "metrics": {
+        "data_sent": {
+            "count": 7277478,
+            "rate": 181582.59791555873
+        },
+        "conflict_handled_409_total": {
+            "count": 4864,
+            "rate": 121.36316403310015
+        },
+        "http_req_failed": {
+            "passes": 4864,
+            "fails": 14592,
+            "value": 0.25
+        },
+        "cancel_won_200_total": {
+            "count": 4075,
+            "rate": 101.67658170947432
+        },
+        "http_req_duration": {
+            "p(90)": 45.729,
+            "p(95)": 57.549350000000004,
+            "avg": 21.315132601768056,
+            "min": 0,
+            "med": 15.119,
+            "max": 232.1675,
+            "thresholds": {
+                "p(95)<300": false
+            }
+        },
+        "http_req_blocked": {
+            "p(95)": 0,
+            "avg": 0.009324311266447371,
+            "min": 0,
+            "med": 0,
+            "max": 8.0366,
+            "p(90)": 0
+        },
+        "checks": {
+            "passes": 4864,
+            "fails": 0,
+            "value": 1
+        },
+        "iteration_duration": {
+            "p(90)": 297.51558,
+            "p(95)": 326.1359899999999,
+            "avg": 214.62174958881596,
+            "min": 106.3657,
+            "med": 205.4881,
+            "max": 501.0321
+        },
+        "http_req_waiting": {
+            "avg": 21.15837244551805,
+            "min": 0,
+            "med": 14.97055,
+            "max": 232.1675,
+            "p(90)": 45.635000000000005,
+            "p(95)": 57.357225
+        },
+        "vus_max": {
+            "value": 50,
+            "min": 50,
+            "max": 50
+        },
+        "http_reqs": {
+            "count": 19456,
+            "rate": 485.4526561324006
+        },
+        "http_req_duration{expected_response:true}": {
+            "avg": 20.168186547423232,
+            "min": 0,
+            "med": 14.16965,
+            "max": 232.1675,
+            "p(90)": 43.37355,
+            "p(95)": 53.759759999999936
+        },
+        "cancel_vs_accept_latency_ms": {
+            "avg": 27.78063322368421,
+            "min": 0,
+            "med": 19,
+            "max": 233,
+            "p(90)": 55,
+            "p(95)": 90
+        },
+        "accept_won_200_total": {
+            "count": 789,
+            "rate": 19.686582323625828
+        },
+        "vus": {
+            "value": 2,
+            "min": 2,
+            "max": 49
+        },
+        "http_req_tls_handshaking": {
+            "med": 0,
+            "max": 0,
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0,
+            "min": 0
+        },
+        "data_received": {
+            "count": 21343107,
+            "rate": 532538.4448636941
+        },
+        "http_req_sending": {
+            "avg": 0.022471926398026323,
+            "min": 0,
+            "med": 0,
+            "max": 5.6417,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "iterations": {
+            "count": 4864,
+            "rate": 121.36316403310015
+        },
+        "race_consistency_rate": {
+            "passes": 4864,
+            "fails": 0,
+            "thresholds": {
+                "rate>0.99": false
+            },
+            "value": 1
+        },
+        "http_req_connecting": {
+            "avg": 0.0032378186677631585,
+            "min": 0,
+            "med": 0,
+            "max": 3.7863,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "unexpected_error_total": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+                "count<1": false
+            }
+        },
+        "http_req_receiving": {
+            "p(90)": 0.56935,
+            "p(95)": 0.991525,
+            "avg": 0.1342882298519735,
+            "min": 0,
+            "med": 0,
+            "max": 5.3766
+        }
+    },
+    "root_group": {
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+            "consistencia de exclusión (uno 200 y el otro 409)": {
+                "path": "::consistencia de exclusión (uno 200 y el otro 409)",
+                "id": "a49d54967a8e96f432bf49ef966b5ce0",
+                "passes": 4864,
+                "fails": 0,
+                "name": "consistencia de exclusión (uno 200 y el otro 409)"
+            }
+        },
+        "name": ""
+    }
+}

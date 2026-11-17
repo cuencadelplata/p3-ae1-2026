@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 
-const RECEIPTS = process.env.RECEIPTS_URL ?? process.env.M8_URL ?? "http://localhost:3000";
+const RECEIPTS = process.env.RECEIPTS_URL ?? process.env.M8_URL ?? "http://localhost:8000";
 const M7 = process.env.M7_URL ?? "http://localhost:4020";
 const RABBIT_API = process.env.RABBITMQ_API_URL ?? "http://localhost:15672/api";
 const RABBIT_AUTH = `Basic ${Buffer.from(process.env.RABBITMQ_API_CREDENTIALS ?? "guest:guest").toString("base64")}`;

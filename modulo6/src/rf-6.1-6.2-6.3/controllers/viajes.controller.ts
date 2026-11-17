@@ -82,12 +82,23 @@ function viajeParaIntegracion(viaje: Viaje) {
     };
 }
 
-function viajeRespuestaLegacy(viaje: Viaje) {
+/**
+ * Viaje para otros módulos (GET /api/viajes/:id y respuesta de cancelación).
+ * - M6 RF-6.5/6.6 usa id, clienteId, conductorId y estado.
+ * - M2 importa direcciones de viajes completados: necesita origen, destino y completadoAt.
+ * - El evento despacho.reabrir para M5 usa rideRequestId (el id de la solicitud en M5).
+ */
+function viajeRespuestaLegacy(viaje: Viaje, completadoAt?: Date | null) {
     return {
         id: viaje.id,
         clienteId: viaje.clienteId,
         conductorId: viaje.conductorId ?? null,
         estado: viaje.estado,
+        origen: viaje.origen,
+        destino: viaje.destino,
+        fechaCreacion: viaje.fechaCreacion,
+        rideRequestId: viaje.rideRequestId ?? null,
+        ...(completadoAt ? { completadoAt } : {}),
     };
 }
 
@@ -155,15 +166,19 @@ export const obtenerViaje = async (req: Request, res: Response): Promise<any> =>
     }
 
     let viaje: Viaje | null;
+    let completadoAt: Date | null = null;
     try {
         viaje = await viajeRepo.buscarPorId(id);
+        if (viaje?.estado === EstadoViaje.COMPLETADO) {
+            completadoAt = await viajeRepo.buscarHoraFin(id);
+        }
     } catch (error) {
         console.error('ERROR EN viajeRepo.buscarPorId:', error);
         return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
     }
 
     if (!viaje) return res.status(404).json({ error: 'Viaje no encontrado' });
-    return res.json(viajeRespuestaLegacy(viaje));
+    return res.json(viajeRespuestaLegacy(viaje, completadoAt));
 };
 
 export const cancelarViaje = async (req: Request, res: Response): Promise<any> => {
@@ -202,6 +217,8 @@ export const cancelarViaje = async (req: Request, res: Response): Promise<any> =
         });
     }
 
+    // viaje.cancelado (trip.events) quedó en el outbox; se publica ahora o lo reintenta el relay.
+    void despacharEventosPendientes();
     return res.json(viajeRespuestaLegacy(viaje));
 };
 
@@ -716,6 +733,8 @@ export const iniciarViaje = async (req: Request, res: Response): Promise<any> =>
             });
         }
         viaje = iniciado;
+        // viaje.iniciado (trip.events) quedó en el outbox; se publica ahora o lo reintenta el relay.
+        void despacharEventosPendientes();
     } catch (error) {
         return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
     }

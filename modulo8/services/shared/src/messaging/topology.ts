@@ -26,6 +26,7 @@ export const ROUTING_KEY_TO_EVENT_TYPE: Record<string, string> = {
     return acc;
   }, {} as Record<string, string>),
   'driver.offer.accepted': 'DriverAssigned',
+  'ride_request.cancelled': 'TripCancelled',
   'trip.requested': 'TripRequested',
   'trip.assigned': 'DriverAssigned',
   'trip.driver-arrived': 'DriverArrived',

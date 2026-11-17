@@ -1,0 +1,36 @@
+name: CI - Grupo 05 (Módulo 2 Clientes)
+
+on:
+  push:
+    branches: [ Grupo05, M2-PerfilHistorialEstado, integration/m2-ae2 ]
+  pull_request:
+    branches: [ Grupo05, M2-PerfilHistorialEstado, integration/m2-ae2, main ]
+    paths: [ 'm2/**', '.github/workflows/ci-grupo05.yml' ]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: m2
+
+    steps:
+      - name: 1. Checkout del código
+        uses: actions/checkout@v4
+
+      - name: 2. Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: m2/package-lock.json
+
+      - name: 3. Instalar dependencias limpias
+        run: npm ci
+
+      - name: 4. Validar tipos de TypeScript
+        run: npx tsc --noEmit
+
+      - name: 5. Ejecutar tests unitarios (Vitest)
+        run: npm test

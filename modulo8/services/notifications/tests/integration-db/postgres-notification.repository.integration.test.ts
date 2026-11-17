@@ -7,6 +7,7 @@ import { createNotificationsPool } from "../../src/db/pool";
 import { NotificationPersistenceError } from "../../src/notifications/notification-persistence.error";
 import { type LogicalNotification, type NormalizedTripNotificationEvent } from "../../src/notifications/notification.types";
 import { createRf81Application } from "../../src/notifications/rf81-application";
+import { parseM5TripEventEnvelope } from "../../src/messaging/m5-trip-events.consumer";
 import { createPostgresNotificationRepository } from "../../src/repositories/postgres-notification.repository";
 import { createPostgresNotificationWithOutboxRepository } from "../../src/repositories/postgres-notification-outbox.repository";
 
@@ -74,6 +75,7 @@ describe("PostgreSQL NotificationRepository", () => {
       { version: 4, name: "align_notification_outbox_delivery_contract" },
       { version: 5, name: "support_ride_requested_without_trip_id" },
       { version: 6, name: "support_driver_document_registered_notifications" },
+      { version: 7, name: "support_preassignment_cancellation_by_ride_request" },
     ]);
   });
 
@@ -663,5 +665,51 @@ describe("PostgreSQL NotificationRepository", () => {
     expect(pendingAfter.some((item) => item.outboxMessageId === intent.outboxMessageId)).toBe(false);
     expect(published.rows[0].published_at).toBeInstanceOf(Date);
     await application.close();
+  });
+
+  it("persiste dos destinatarios de la asignacion M5 y una cancelacion previa sin tripId", async () => {
+    const application = createRf81Application({ pool });
+    const rideRequestId = `req_${randomUUID()}`;
+    const tripId = `trip-${randomUUID()}`;
+    const acceptedId = randomUUID();
+    const cancelledId = randomUUID();
+    const base = { version: 1, occurredAt: "2026-11-17T12:30:00.000Z", producer: "m5" };
+    const accepted = parseM5TripEventEnvelope(Buffer.from(JSON.stringify({
+      ...base, messageId: acceptedId, eventType: "driver.offer.accepted", correlationId: tripId,
+      data: {
+        rideRequestId, tripId, offerId: "off_1", clientUserId: 105, driverUserId: 42,
+        vehicleType: "AUTO",
+        origin: { latitude: -34.6037, longitude: -58.3816, address: "Origen" },
+        destination: { latitude: -34.5885, longitude: -58.3974, address: "Destino" },
+        fare: { amount: 2850.50, currency: "ARS" },
+      },
+    })), "driver.offer.accepted");
+    const cancelled = parseM5TripEventEnvelope(Buffer.from(JSON.stringify({
+      ...base, messageId: cancelledId, eventType: "ride_request.cancelled", correlationId: rideRequestId,
+      data: { rideRequestId, clientUserId: 105 },
+    })), "ride_request.cancelled");
+
+    await application.processM5EventEnvelope(accepted);
+    await application.processM5EventEnvelope(accepted);
+    await application.processM5EventEnvelope(cancelled);
+    expect(await countRows(acceptedId, 105)).toBe(1);
+    expect(await countRows(acceptedId, 42)).toBe(1);
+    expect(await countOutboxRows(acceptedId, 105)).toBe(1);
+    expect(await countOutboxRows(acceptedId, 42)).toBe(1);
+    const assigned = await pool.query<{ trip_id: string; ride_request_id: string }>(
+      "SELECT trip_id, ride_request_id FROM notifications.notifications WHERE source_message_id = $1 ORDER BY recipient_id",
+      [acceptedId],
+    );
+    expect(assigned.rows).toEqual([
+      { trip_id: tripId, ride_request_id: rideRequestId },
+      { trip_id: tripId, ride_request_id: rideRequestId },
+    ]);
+    expect(await countRows(cancelledId, 105)).toBe(1);
+    expect(await countOutboxRows(cancelledId, 105)).toBe(1);
+    const saved = await pool.query<{ trip_id: string | null; ride_request_id: string | null }>(
+      "SELECT trip_id, ride_request_id FROM notifications.notifications WHERE source_message_id = $1",
+      [cancelledId],
+    );
+    expect(saved.rows[0]).toEqual({ trip_id: null, ride_request_id: rideRequestId });
   });
 });

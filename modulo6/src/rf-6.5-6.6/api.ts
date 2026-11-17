@@ -9,6 +9,8 @@ export interface Rf6Viaje {
   estado: string;
   origen?: string;
   destino?: string;
+  /** Id de la solicitud en M5; lo guarda M6 al crear el viaje desde el despacho. */
+  rideRequestId?: string | null;
 }
 
 export interface Rf6ApiClient {
@@ -142,6 +144,8 @@ export function createViajeApi(options: ViajeApiOptions): Server {
       const routingKey = actor === 'conductor' ? 'despacho.reabrir' : 'cancelacion_cliente';
       await options.events.publish(routingKey, {
         viajeId: String(viajeCancelado.id),
+        // M5 busca la solicitud por su propio id: viajeId es el id del viaje en M6.
+        rideRequestId: viajeCancelado.rideRequestId ?? viaje.rideRequestId ?? null,
         clienteId: viajeCancelado.clienteId,
         conductorId: viajeCancelado.conductorId,
         motivo,

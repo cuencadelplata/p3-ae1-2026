@@ -1,0 +1,6 @@
+# Prometheus local: respaldo de Grafana Cloud para cortes de internet.
+# No lee la API por su cuenta: recibe lo mismo que Grafana Cloud, enviado por Alloy
+# a /api/v1/write (flag --web.enable-remote-write-receiver en el compose).
+global:
+  evaluation_interval: 15s
+scrape_configs: []

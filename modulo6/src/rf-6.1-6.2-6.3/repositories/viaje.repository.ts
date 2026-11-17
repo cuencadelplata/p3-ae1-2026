@@ -2,7 +2,12 @@ import pool from '../db/pool.js';
 import type { PoolClient } from 'pg';
 import type { Viaje } from '../models/viaje.model.js';
 import { EstadoViaje } from '../models/viaje.model.js';
-import { eventosViajeFinalizado, traceparentActual } from '../services/eventos-viaje.service.js';
+import {
+    eventosViajeFinalizado,
+    eventoTripEvents,
+    traceparentActual,
+    type EventoSalida,
+} from '../services/eventos-viaje.service.js';
 //en este archivo definimos las funciones que interactúan con la base de datos para crear, buscar y actualizar viajes. Estas funciones son llamadas por los controladores del módulo de viajes.
 
 export interface FinalizacionPersistida {
@@ -114,6 +119,25 @@ async function ensureExtensionSchema(): Promise<void> {
         throw error;
     });
     await extensionSchemaPromise;
+}
+
+/**
+ * Guarda eventos en el outbox dentro de la transacción del cambio de estado.
+ * El relay (despacharEventosPendientes) los publica en RabbitMQ después del COMMIT.
+ */
+async function insertarEventosOutbox(
+    client: PoolClient,
+    viajeId: string,
+    eventos: Array<EventoSalida | null>,
+): Promise<void> {
+    for (const evento of eventos) {
+        if (!evento) continue;
+        await client.query(
+            `INSERT INTO viaje_eventos_outbox (message_id, viaje_id, exchange, routing_key, payload, traceparent)
+             VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+            [evento.messageId, viajeId, evento.exchange, evento.routingKey, JSON.stringify(evento.payload), traceparentActual()]
+        );
+    }
 }
 
 async function rollback(client: PoolClient): Promise<void> {
@@ -242,6 +266,17 @@ export async function buscarPorId(id: string): Promise<Viaje | null> {
     const { rows } = await pool.query('SELECT * FROM viajes WHERE id = $1', [id]);
     if (rows.length === 0) return null;
     return mapRow(rows[0]);
+}
+
+/** RF-6.4: hora de fin registrada al finalizar el viaje (null si no fue finalizado). */
+export async function buscarHoraFin(id: string): Promise<Date | null> {
+    await ensureExtensionSchema();
+    const { rows } = await pool.query(
+        `SELECT data->>'horaFin' AS hora_fin FROM viaje_finalizaciones WHERE viaje_id = $1`,
+        [id]
+    );
+    const valor = rows[0]?.hora_fin as string | undefined;
+    return valor ? new Date(valor) : null;
 }
 
 export async function buscarViajesPorCliente(clienteId: string): Promise<ViajeConHistorial[]> {
@@ -397,8 +432,16 @@ export async function cancelarSiCancelable(id: string, actor?: string, motivo?: 
             motivo ? `: ${motivo}` : '',
         ].filter(Boolean).join(' ');
         await insertarTransicion(client, id, estadoAnterior, EstadoViaje.CANCELADO, detalle);
+        const cancelado = mapRow(rows[0]);
+        // M4: si había conductor asignado, vuelve a quedar disponible.
+        await insertarEventosOutbox(client, id, [eventoTripEvents('viaje.cancelado', {
+            viajeId: id,
+            driverUserId: cancelado.driverUserId,
+            conductorId: cancelado.conductorId ?? null,
+            occurredAt: new Date(),
+        })]);
         await client.query('COMMIT');
-        return mapRow(rows[0]);
+        return cancelado;
     } catch (error) {
         await rollback(client);
         throw error;
@@ -462,8 +505,16 @@ export async function iniciarSiArribado(id: string): Promise<Viaje | null> {
             EstadoViaje.EN_CURSO,
             detalleTransicion(EstadoViaje.EN_CURSO),
         );
+        const iniciado = mapRow(rows[0]);
+        // M4: el conductor deja de estar disponible mientras el viaje está en curso.
+        await insertarEventosOutbox(client, id, [eventoTripEvents('viaje.iniciado', {
+            viajeId: id,
+            driverUserId: iniciado.driverUserId,
+            conductorId: iniciado.conductorId ?? null,
+            occurredAt: new Date(),
+        })]);
         await client.query('COMMIT');
-        return mapRow(rows[0]);
+        return iniciado;
     } catch (error) {
         await rollback(client);
         throw error;
@@ -536,20 +587,16 @@ export async function finalizarSiEnCurso(
         );
         await insertarTransicion(client, id, viaje.estado, EstadoViaje.COMPLETADO, 'Finalización del viaje');
         const completado = mapRow(rows[0]);
-        for (const evento of eventosViajeFinalizado({
+        await insertarEventosOutbox(client, id, eventosViajeFinalizado({
             viajeId: completado.id,
             clienteId: completado.clienteId,
             conductorId: completado.conductorId ?? null,
+            clientUserId: completado.clientUserId,
+            driverUserId: completado.driverUserId,
             finalizadoAt: finalizacion.horaFin,
             total: finalizacion.total,
             paymentId: finalizacion.paymentId,
-        })) {
-            await client.query(
-                `INSERT INTO viaje_eventos_outbox (message_id, viaje_id, exchange, routing_key, payload, traceparent)
-                 VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
-                [evento.messageId, id, evento.exchange, evento.routingKey, JSON.stringify(evento.payload), traceparentActual()]
-            );
-        }
+        }));
         await client.query('COMMIT');
         return { kind: 'completed', viaje: completado, finalizacion, repetida: false };
     } catch (error) {

@@ -9,7 +9,7 @@ export const options = {
   thresholds: { checks: ['rate==1'] },
 };
 
-const base = __ENV.TARGET_URL || 'http://host.docker.internal:3000';
+const base = __ENV.TARGET_URL || 'http://host.docker.internal:8000';
 const mode = __ENV.SMOKE_MODE || 'http';
 const json = { 'Content-Type': 'application/json' };
 
