@@ -30,29 +30,30 @@ const mockConductores = [
   }
 ];
 
+// Valoraciones hechas por el conductor (evaluador) sobre el pasajero (evaluado)
 const mockValoraciones = [
   {
     id: "val_001",
-    usuarioId: "pasajero_101",
-    conductorId: "cond_001",
+    evaluadorId: "cond_001",
+    evaluadoId: "pasajero_101",
     valoracion: 5,
-    comentario: "Excelente viaje, manejo muy prudente y auto limpio.",
+    comentario: "Pasajero muy educado y puntual.",
     fecha: "2026-09-01T10:30:00.000Z"
   },
   {
     id: "val_002",
-    usuarioId: "pasajero_102",
-    conductorId: "cond_001",
+    evaluadorId: "cond_001",
+    evaluadoId: "pasajero_102",
     valoracion: 4,
-    comentario: "Llegó a tiempo y el trato fue muy cordial.",
+    comentario: "Trato cordial; respetó las normas del viaje.",
     fecha: "2026-09-01T14:15:00.000Z"
   },
   {
     id: "val_003",
-    usuarioId: "pasajero_103",
-    conductorId: "cond_002",
-    valoracion: 5,
-    comentario: "Muy rápido y seguro.",
+    evaluadorId: "cond_002",
+    evaluadoId: "pasajero_103",
+    valoracion: 1,
+    comentario: "Pasajero grosero; no respetó las normas de convivencia.",
     fecha: "2026-09-02T09:00:00.000Z"
   }
 ];

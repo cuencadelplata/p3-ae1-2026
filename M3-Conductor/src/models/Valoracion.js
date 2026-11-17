@@ -1,22 +1,40 @@
-class valoracion {
-    constructor( usuarioId, conductorId, valoracion, comentario) {
-        this.usuarioId = usuarioId;
-        this.conductorId = conductorId;
-        this.valoracion = valoracion;
-        this.comentario = comentario;
-    }
+/**
+ * Valoración de un viaje: el conductor (evaluador) califica al pasajero (evaluado).
+ * Semántica alineada con valoracion.habilitada / valoracion.registrada.
+ */
+class Valoracion {
+  constructor(evaluadorId, evaluadoId, valoracion, comentario) {
+    this.evaluadorId = evaluadorId;
+    this.evaluadoId = evaluadoId;
+    this.valoracion = valoracion;
+    this.comentario = comentario;
+  }
 
-    //Setters
-    setUsuarioId(usuarioId) {this.usuarioId = usuarioId;}
-    setConductorId(conductorId) {this.conductorId = conductorId;}
-    setValoracion(valoracion) {this.valoracion = valoracion;}
-    setComentario(comentario) {this.comentario = comentario; }
-    //Getters
-    getUsuarioId() {return this.usuarioId; }
-    getConductorId() {return this.conductorId;}
-    getValoracion() {return this.valoracion;}
-    getComentario() {return this.comentario;}
+  setEvaluadorId(evaluadorId) {
+    this.evaluadorId = evaluadorId;
+  }
+  setEvaluadoId(evaluadoId) {
+    this.evaluadoId = evaluadoId;
+  }
+  setValoracion(valoracion) {
+    this.valoracion = valoracion;
+  }
+  setComentario(comentario) {
+    this.comentario = comentario;
+  }
 
+  getEvaluadorId() {
+    return this.evaluadorId;
+  }
+  getEvaluadoId() {
+    return this.evaluadoId;
+  }
+  getValoracion() {
+    return this.valoracion;
+  }
+  getComentario() {
+    return this.comentario;
+  }
 }
 
-module.exports = valoracion;
+module.exports = Valoracion;

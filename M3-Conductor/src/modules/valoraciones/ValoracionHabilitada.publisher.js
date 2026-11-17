@@ -1,16 +1,11 @@
 const crypto = require("crypto");
-const { getRabbitChannel } = require("../../infraestructure/rabbimq.client");
+const gateway = require("../../infraestructure/messagingGateway");
 const topology = require("../../infraestructure/rabbitmq.topology");
 
 async function publicarValoracionHabilitada(valoracion) {
-  const channel = getRabbitChannel();
   const exchange = topology.exchanges.VALORACIONES;
   const queue = topology.queues.VALORACION_HABILITADA_CLIENTE;
   const routingKey = topology.routingKeys.VALORACION_HABILITADA;
-
-  await channel.assertExchange(exchange, "topic", { durable: true });
-  await channel.assertQueue(queue, { durable: true });
-  await channel.bindQueue(queue, exchange, routingKey);
 
   const evento = {
     eventId: crypto.randomUUID(),
@@ -19,12 +14,19 @@ async function publicarValoracionHabilitada(valoracion) {
     data: valoracion
   };
 
-  channel.publish(
+  const broker = await gateway.publish({
     exchange,
     routingKey,
-    Buffer.from(JSON.stringify(evento)),
-    { persistent: true, contentType: "application/json" }
-  );
+    content: Buffer.from(JSON.stringify(evento)),
+    options: { persistent: true, contentType: "application/json" },
+    prepare: async (channel) => {
+      await channel.assertExchange(exchange, "topic", { durable: true });
+      await channel.assertQueue(queue, { durable: true });
+      await channel.bindQueue(queue, exchange, routingKey);
+    }
+  });
+
+  console.log(`[${broker}] valoracion.habilitada publicada (${evento.eventId})`);
 }
 
 module.exports = { publicarValoracionHabilitada };

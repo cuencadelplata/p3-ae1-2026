@@ -285,13 +285,23 @@
     },
     "/conductor/valoraciones": {
       "get": {
-        "summary": "Obtener las valoraciones de conductor",
+        "summary": "Listar valoraciones hechas por un conductor (evaluador) sobre pasajeros",
+        "description": "Misma semántica que AsyncAPI: evaluador = conductor, evaluado = pasajero.",
         "parameters": [
           {
+            "name": "evaluadorId",
+            "in": "query",
+            "required": false,
+            "description": "usuarioID del conductor que realizó las valoraciones. Alias aceptado: conductorId.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "conductorId",
-            "in": "path",
-            "required": true,
-            "description": "ID del conductor para obtener sus valoraciones",
+            "in": "query",
+            "required": false,
+            "description": "Alias de evaluadorId",
             "schema": {
               "type": "string"
             }
@@ -299,7 +309,7 @@
         ],
         "responses": {
           "200": {
-            "description": "valoraciones del conductor obtenidas correctamente",
+            "description": "Valoraciones del conductor (como evaluador) obtenidas correctamente",
             "content": {
               "application/json": {
                 "schema": {
@@ -308,19 +318,29 @@
               }
             }
           },
-          "404": {
-            "description": "Conductor no encontrado"
+          "400": {
+            "description": "Falta evaluadorId o conductorId"
           }
         }
       },
       "post": {
-        "summary": "Registrar una nueva valoracion de un conductor",
+        "summary": "Registrar valoración del pasajero hecha por el conductor",
+        "description": "El conductor (evaluador) califica al pasajero (evaluado). Tras persistir, publica el evento valoracion.registrada en RabbitMQ (exchange valoraciones.events).",
         "parameters": [
           {
+            "name": "evaluadorId",
+            "in": "query",
+            "required": false,
+            "description": "usuarioID del conductor evaluador. También puede ir en el body. Alias: conductorId.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "conductorId",
-            "in": "path",
-            "required": true,
-            "description": "ID del conductor para registrar su valoracion",
+            "in": "query",
+            "required": false,
+            "description": "Alias de evaluadorId",
             "schema": {
               "type": "string"
             }
@@ -338,10 +358,9 @@
         },
         "responses": {
           "201": {
-            "description": "valoracion registrada correctamente"
+            "description": "Valoración registrada correctamente"
           },
-          "400": {"description": "Solicitud inválida" },
-          "404": {"description": "Conductor no encontrado" }
+          "400": {"description": "Solicitud inválida" }
         }
       }
     }
@@ -351,8 +370,28 @@
     "schemas": {
     "nuevaValoracion": {
         "type": "object",
-        "required": ["usuarioId", "valoracion"],
+        "required": ["evaluadoId", "valoracion"],
         "properties": {
+          "evaluadorId": {
+            "type": "string",
+            "description": "usuarioID del conductor que valora (alias: conductorId)"
+          },
+          "conductorId": {
+            "type": "string",
+            "description": "Alias de evaluadorId"
+          },
+          "evaluadoId": {
+            "type": "string",
+            "description": "usuarioID del pasajero evaluado (alias: clienteId / usuarioId)"
+          },
+          "clienteId": {
+            "type": "string",
+            "description": "Alias de evaluadoId"
+          },
+          "usuarioId": {
+            "type": "string",
+            "description": "Alias de evaluadoId (solo pasajero; no usar para el conductor)"
+          },
           "valoracion": {
             "type": "number",
             "minimum": 1,
@@ -361,32 +400,48 @@
           "viajeId": {
             "type": "string",
             "description": "ID del viaje asociado a la valoración"
-            },
+          },
           "comentario": {
             "type": "string",
-            "description": "Comentario opcional sobre la valoración"
+            "description": "Comentario opcional sobre el pasajero evaluado"
           }
         }
       },
 
       "valoracion": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/nuevaValoracion"
+        "type": "object",
+        "required": ["id", "evaluadorId", "evaluadoId", "valoracion", "fecha"],
+        "properties": {
+          "id": { "type": "string" },
+          "evaluadorId": {
+            "type": "string",
+            "description": "Conductor que valoró"
           },
-          {
-            "type": "object",
-            "properties": {
-              "id": {"type": "string"},
-              "conductorId": {"type": "string"},
-              "fecha": {
-                "type": "string",
-                "format": "date-time"
-              }
-            },
-            "required": ["id", "conductorId", "fecha"]
+          "evaluadoId": {
+            "type": "string",
+            "description": "Pasajero valorado"
+          },
+          "valoracion": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "comentario": { "type": "string" },
+          "viajeId": {
+            "type": "string",
+            "nullable": true
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date-time"
           }
-        ]
+        }
+      },
+      "valoraciones": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/valoracion"
+        }
       },
       "Conductor": {
         "type": "object",

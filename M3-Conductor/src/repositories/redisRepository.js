@@ -45,7 +45,11 @@ async function seedRedisIfEmpty() {
       }
 
       for (const v of mockValoraciones) {
-        await redis.rpush(`conductor:${v.conductorId}:valoraciones`, JSON.stringify(v));
+        const evaluadorId = v.evaluadorId || v.conductorId;
+        await redis.rpush(
+          `conductor:${evaluadorId}:valoraciones`,
+          JSON.stringify(v)
+        );
       }
 
       console.log("[Redis] Mocks sembrados con éxito.");
@@ -249,11 +253,16 @@ async function actualizarHabilitado(id, habilitado) {
 }
 
 /**
- * Obtener valoraciones de un conductor
+ * Obtener valoraciones hechas por un conductor (evaluador) sobre pasajeros.
+ * @param {string} evaluadorId - usuarioID del conductor que valoró
  */
-async function obtenerValoraciones(conductorId) {
+async function obtenerValoraciones(evaluadorId) {
   try {
-    const lista = await redis.lrange(`conductor:${conductorId}:valoraciones`, 0, -1);
+    const lista = await redis.lrange(
+      `conductor:${evaluadorId}:valoraciones`,
+      0,
+      -1
+    );
     if (lista && lista.length > 0) {
       return lista.map((item) => JSON.parse(item));
     }
@@ -261,25 +270,31 @@ async function obtenerValoraciones(conductorId) {
     console.warn(`[Redis] Fallo al leer valoraciones de Redis: ${err.message}`);
   }
 
-  return inMemoryValoraciones.filter((v) => v.conductorId === conductorId);
+  return inMemoryValoraciones.filter(
+    (v) => (v.evaluadorId || v.conductorId) === evaluadorId
+  );
 }
 
 /**
- * Registrar una valoración para un conductor
+ * Registrar una valoración: conductor (evaluador) → pasajero (evaluado).
  */
 async function registrarValoracion(datos) {
+  const evaluadorId = datos.evaluadorId || datos.conductorId;
+  const evaluadoId = datos.evaluadoId || datos.clienteId || datos.usuarioId;
+
   const nuevaValoracion = {
     id: `val_${Date.now()}`,
-    usuarioId: datos.usuarioId,
-    conductorId: datos.conductorId,
+    evaluadorId,
+    evaluadoId,
     valoracion: Number(datos.valoracion),
     comentario: datos.comentario || "",
+    viajeId: datos.viajeId || null,
     fecha: new Date().toISOString()
   };
 
   try {
     await redis.rpush(
-      `conductor:${nuevaValoracion.conductorId}:valoraciones`,
+      `conductor:${nuevaValoracion.evaluadorId}:valoraciones`,
       JSON.stringify(nuevaValoracion)
     );
   } catch (err) {

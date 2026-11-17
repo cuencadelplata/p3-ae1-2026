@@ -5,6 +5,7 @@ const cors = require("cors");
 const path = require("path");
 require("dotenv").config();
 const { connectRabbitMQ } = require("./infraestructure/rabbimq.client");
+const gateway = require("./infraestructure/messagingGateway");
 const { startViajeFinalizadoConsumer } = require("./modules/valoraciones/consumers/viajeFinalizado.consumer");
 const { startValoracionHabilitadaConsumer } = require("./modules/valoraciones/consumers/valoracionHabilitada.consumer");
 
@@ -39,11 +40,13 @@ app.use(express.static(publicPath));
 
 // Health check para Docker y monitoreo
 app.get("/health", (_req, res) => {
+  const messaging = gateway.status();
   res.status(200).json({
-    status: "ok",
+    status: messaging.circuit === "CLOSED" ? "ok" : "degraded",
     module: "M3-Conductor",
     timestamp: new Date().toISOString(),
-    redis: process.env.REDIS_HOST ? `conectado a ${process.env.REDIS_HOST}:${process.env.REDIS_PORT || 6379}` : "local/mock"
+    redis: process.env.REDIS_HOST ? `conectado a ${process.env.REDIS_HOST}:${process.env.REDIS_PORT || 6379}` : "local/mock",
+    messaging
   });
 });
 
@@ -72,20 +75,17 @@ app.listen(PORT, async () => {
     console.warn("[Redis] No se conectó a tiempo: no se sembraron los mocks.");
   }
 
-  // Conexión anticipada del publisher de eventos de conductores (RNF-07). Si
-  // falla, el servidor sigue funcionando y el publisher reintenta en el próximo evento.
   rabbitmq.getChannel().catch((err) => {
     console.warn(`[RabbitMQ] No disponible al iniciar (${err.message}). Se reintentará al publicar.`);
   });
 
-  // Consumidores de valoraciones (viaje.finalizado -> valoracion.habilitada)
-  try {
-    await connectRabbitMQ();
-    await startViajeFinalizadoConsumer();
-    await startValoracionHabilitadaConsumer();
-  } catch (error) {
-    console.error("No se pudieron iniciar los consumidores de RabbitMQ:", error.message);
-  }
+  gateway.start({
+    onRabbitReady: async () => {
+      await connectRabbitMQ();
+      await startViajeFinalizadoConsumer();
+      await startValoracionHabilitadaConsumer();
+    }
+  });
 });
 
 module.exports = app;
