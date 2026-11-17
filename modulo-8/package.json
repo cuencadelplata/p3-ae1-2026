@@ -30,7 +30,19 @@
     "smoke:qr": "node tests/stress/run-k6.mjs qr",
     "smoke:receipts": "node tests/stress/run-k6.mjs receipts",
     "smoke:support": "node tests/stress/run-k6.mjs support",
-    "smoke:delivery": "node tests/stress/run-k6.mjs delivery"
+    "smoke:delivery": "node tests/stress/run-k6.mjs delivery",
+    "load:fullflow600": "node tests/stress/run-k6.mjs http 600 600",
+    "load:support": "node tests/stress/run-load.mjs support",
+    "load:qr": "node tests/stress/run-load.mjs qr",
+    "load:receipts": "node tests/stress/run-load.mjs receipts",
+    "load:resend": "node tests/stress/run-load.mjs resend",
+    "load:delivery": "node tests/stress/run-load.mjs delivery",
+    "load:mixed": "node tests/stress/run-load.mjs mixed",
+    "load:capacity": "node tests/stress/run-capacity.mjs",
+    "load:ramp45": "node tests/stress/run-load.mjs mixed step45 600",
+    "scenario:m3": "node tests/e2e/m3-document-flow.mjs",
+    "load:m3": "node tests/stress/run-m3-batch.mjs",
+    "scenario:errors": "node tests/stress/run-errors.mjs"
   },
   "dependencies": {
     "@m8/notification-delivery": "workspace:*",

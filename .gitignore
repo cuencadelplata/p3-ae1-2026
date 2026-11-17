@@ -145,3 +145,4 @@ vite.config.ts.timestamp-*
 # Playwright reports
 test-results/
 playwright-report/
+modulo-8/tests/stress/results/

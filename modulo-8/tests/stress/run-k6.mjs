@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'dotenv';
@@ -9,9 +9,12 @@ import { parse } from 'dotenv';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const moduleDir = path.resolve(scriptDir, '../..');
 const mode = (process.argv[2] || 'http').toLowerCase();
+const vus = Number(process.argv[3] || 1);
+const iterations = Number(process.argv[4] || vus);
 const modes = new Set(['http', 'qr', 'receipts', 'support', 'delivery']);
-if (!modes.has(mode)) {
-  console.error(`Modo desconocido: ${mode}. Usar http, qr, receipts, support o delivery.`);
+if (!modes.has(mode) || !Number.isInteger(vus) || vus < 1 || vus > 600
+    || !Number.isInteger(iterations) || iterations < 1 || iterations > 600) {
+  console.error('Uso: node tests/stress/run-k6.mjs <http|qr|receipts|support|delivery> [vus 1..600] [iteraciones 1..600].');
   process.exit(2);
 }
 
@@ -25,6 +28,24 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 }
 
 let targetUrl = get('TARGET_URL') || `http://host.docker.internal:${port}`;
+let dockerNetwork = '';
+if (vus > 1 && !get('TARGET_URL')) {
+  const app = spawnSync('docker', ['compose', '--env-file', '.env', 'ps', '-q', 'm8-app'],
+    { cwd: moduleDir, encoding: 'utf8' });
+  if (app.status !== 0 || !app.stdout.trim()) {
+    console.error('m8-app no esta iniciado en Compose. Ejecutar pnpm run ensure:stack.');
+    process.exit(2);
+  }
+  const network = spawnSync('docker', ['inspect', '--format',
+    '{{range $name, $network := .NetworkSettings.Networks}}{{println $name}}{{end}}', app.stdout.trim()],
+  { cwd: moduleDir, encoding: 'utf8' });
+  dockerNetwork = network.stdout.trim().split(/\r?\n/).find(Boolean) || '';
+  if (network.status !== 0 || !/^[A-Za-z0-9_.-]+$/.test(dockerNetwork)) {
+    console.error('No se pudo identificar la red Docker de m8-app.');
+    process.exit(2);
+  }
+  targetUrl = 'http://m8-app:3000';
+}
 const parsedTarget = new URL(targetUrl);
 if (['localhost', '127.0.0.1'].includes(parsedTarget.hostname)) {
   parsedTarget.hostname = 'host.docker.internal';
@@ -47,24 +68,24 @@ const childEnv = {
   TARGET_URL: targetUrl,
   QR_INTERNAL_API_KEY: qrKey,
   M1_JWT_SECRET: jwtSecret,
-  QR_OPERATION_ID: randomUUID(),
-  QR_SECOND_OPERATION_ID: randomUUID(),
   SMOKE_MODE: mode,
+  SMOKE_RUN_ID: randomUUID(),
+  SMOKE_VERBOSE: vus === 1 ? 'true' : 'false',
 };
 const args = [
   'run', '--rm',
-  '--add-host', 'host.docker.internal:host-gateway',
+  ...(dockerNetwork ? ['--network', dockerNetwork] : ['--add-host', 'host.docker.internal:host-gateway']),
   '--volume', `${scriptDir}:/scripts:ro`,
   '-e', 'TARGET_URL',
   '-e', 'QR_INTERNAL_API_KEY',
   '-e', 'M1_JWT_SECRET',
-  '-e', 'QR_OPERATION_ID',
-  '-e', 'QR_SECOND_OPERATION_ID',
   '-e', 'SMOKE_MODE',
-  'grafana/k6:2.4.0', 'run', '/scripts/smoke-m8.js',
+  '-e', 'SMOKE_RUN_ID',
+  '-e', 'SMOKE_VERBOSE',
+  'grafana/k6:2.4.0', 'run', '--vus', String(vus), '--iterations', String(iterations), '/scripts/smoke-m8.js',
 ];
 
-console.log(`Smoke HTTP de M8: ${mode} contra ${targetUrl}`);
+console.log(`Flujo HTTP de M8: ${mode}, ${vus} VU, ${iterations} iteraciones contra ${targetUrl}`);
 const child = spawn('docker', args, { stdio: 'inherit', env: childEnv });
 child.on('error', (error) => {
   console.error(`No se pudo iniciar Docker: ${error.message}`);
