@@ -56,7 +56,8 @@ describe('GET /internal/preferences/:userId (contrato M8 RF8.7)', () => {
   });
 
   describe('validación de userId', () => {
-    it.each(['0', '-1', 'abc', '1.5', '1e3'])('userId "%s" → 400', async (userId) => {
+    // 2147483648 supera el INTEGER de Postgres: antes llegaba a la base y respondía 500
+    it.each(['0', '-1', 'abc', '1.5', '1e3', '2147483648', '999999949192'])('userId "%s" → 400', async (userId) => {
       const res = await request(app).get(`/internal/preferences/${userId}`).set('x-api-key', KEY);
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('BadRequest');

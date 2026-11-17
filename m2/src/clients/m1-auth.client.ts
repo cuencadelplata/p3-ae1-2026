@@ -55,7 +55,8 @@ export class M1HttpError extends Error {
 
 function tokenCacheKey(token: string): string {
   const digest = createHash('sha256').update(token).digest('hex');
-  return `auth:token:${digest}`;
+  // Prefijo m2: el Redis es compartido con los demás módulos.
+  return `m2:auth:token:${digest}`;
 }
 
 function parseJson(value: string): unknown | null {

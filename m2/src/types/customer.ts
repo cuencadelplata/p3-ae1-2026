@@ -7,7 +7,9 @@ export type VehicleType = z.infer<typeof VehicleTypeSchema>;
 export const NotificationChannelSchema = z.enum(['email', 'push']);
 export type NotificationChannel = z.infer<typeof NotificationChannelSchema>;
 
-export const UserIdSchema = z.number().int().positive().brand<'UserId'>();
+// Tope = máximo de la columna INTEGER de Postgres: un id mayor responde 400 en vez de un 500 de la base.
+export const MAX_USER_ID = 2_147_483_647;
+export const UserIdSchema = z.number().int().positive().max(MAX_USER_ID).brand<'UserId'>();
 export type UserId = z.infer<typeof UserIdSchema>;
 
 // Estados de cuenta posibles (INACTIVO = baja del cliente; nunca se borra físicamente)
