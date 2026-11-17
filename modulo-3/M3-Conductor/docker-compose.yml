@@ -1,42 +1,14 @@
+# Microservicio M3-Conductor (API + Kafka fallback).
+# Redis y RabbitMQ son compartidos: se levantan desde ../docker-compose.yml
+# (contenedores m3-redis / m3-rabbitmq en la red p3-shared).
+#
+# Antes de levantar este compose:
+#   cd .. && docker compose up -d redis rabbitmq
+#
+# Luego:
+#   docker compose up -d --build
+
 services:
-  # Servidor Redis en memoria para mocks y caché
-  redis:
-    image: redis:7-alpine
-    container_name: p3-m3-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 3s
-      timeout: 3s
-      retries: 5
-
-  # Broker de mensajería asíncrona entre módulos (RNF-07). Panel de
-  # administración en http://localhost:15672 (admin / admin123)
-  rabbitmq:
-    image: rabbitmq:4-management
-    container_name: p3-m3-rabbitmq
-    restart: unless-stopped
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: admin123
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - p3-shared
-      - default
-
   # Cola temporal. Queda apagada mientras RabbitMQ responde.
   # El circuit breaker la enciende con docker start y la apaga con docker stop.
   kafka:
@@ -63,7 +35,7 @@ services:
     networks:
       - default
 
-  # Backend Node.js - Módulo 3 (Conductores & Valoraciones)
+  # Backend Node.js - Conductores & Valoraciones
   api:
     build:
       context: .
@@ -73,12 +45,11 @@ services:
     restart: unless-stopped
     ports:
       - "5000:3000"
-
     environment:
       PORT: 3000
 
-      # Redis - comunicación síncrona
-      REDIS_HOST: redis
+      # Infra compartida (m3-redis / m3-rabbitmq en p3-shared)
+      REDIS_HOST: m3-redis
       REDIS_PORT: 6379
       REDIS_TTL_HABILITADO: ${REDIS_TTL_HABILITADO:-300}
       REDIS_TTL_DISPONIBLE: ${REDIS_TTL_DISPONIBLE:-60}
@@ -88,32 +59,31 @@ services:
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
 
-      # RabbitMQ - comunicación asíncrona
-      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_HOST: m3-rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USER: admin
       RABBITMQ_PASSWORD: admin123
-      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
+      RABBITMQ_URL: amqp://admin:admin123@m3-rabbitmq:5672
       RABBITMQ_EXCHANGE: m3.conductores.events
       KAFKA_BROKERS: kafka:9094
       KAFKA_CONTAINER: p3-m3-kafka
       KAFKA_FALLBACK_TOPIC: m3.fallback
 
-      # Observabilidad: latencia HTTP y saturación → Alloy (puertos 4317/4318)
       OTEL_SERVICE_NAME: m3-conductor-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4318
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    depends_on:
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+    networks:
+      - default
+      - p3-shared
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
 
 networks:
   p3-shared:
+    external: true
     name: p3-shared
-
-volumes:
-  redis_data:
-  rabbitmq_data:
