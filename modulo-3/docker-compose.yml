@@ -143,6 +143,186 @@ services:
       start_period: 10s
       retries: 3
 
+  # ---------------- Dependencias de M6 para el ciclo real (QR / tarifa / estimación) ----------------
+  # No simulan viaje.finalizado: son los contratos HTTP que M6 llama al arribar/finalizar.
+  m6-sim:
+    image: p3-ae1-2026-modulo6:local
+    build:
+      context: ../modulo6
+      dockerfile: Dockerfile
+    container_name: m3-m6-sim
+    restart: unless-stopped
+    command: ["node", "dist/simulator/rf-6.4-6.7/m6-rf-6.4-rf6.7/server.js"]
+    environment:
+      PORT: "3001"
+    expose:
+      - "3001"
+    networks:
+      default:
+        aliases:
+          - m6-sim
+      p3-shared:
+        aliases:
+          - m6-sim
+
+  m7-e2e:
+    build:
+      context: ../modulo6/tests-e2e/support
+      dockerfile: Dockerfile
+    container_name: m3-m7-e2e
+    restart: unless-stopped
+    environment:
+      PROVIDER: m7
+      INTERNAL_API_KEY: m3-m6-m7-secret
+      PORT: "3000"
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      default:
+        aliases:
+          - m7-e2e
+      p3-shared:
+        aliases:
+          - m7-e2e
+
+  m8-e2e:
+    build:
+      context: ../modulo6/tests-e2e/support
+      dockerfile: Dockerfile
+    container_name: m3-m8-e2e
+    restart: unless-stopped
+    environment:
+      PROVIDER: m8
+      INTERNAL_API_KEY: m3-m6-qr-secret
+      PORT: "3000"
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      default:
+        aliases:
+          - m8-e2e
+      p3-shared:
+        aliases:
+          - m8-e2e
+
+  # ---------------- M6 — Viajes (evento viaje.finalizado → valoraciones) ----------------
+  m6-tripdb:
+    image: p3-ae1-2026-modulo6-db:local
+    build:
+      context: ../modulo6
+      dockerfile: Dockerfile.postgres
+    container_name: m3-m6-tripdb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: m6
+      POSTGRES_PASSWORD: ${M6_DB_PASSWORD:-m6pass}
+      POSTGRES_DB: tripdb
+    volumes:
+      - m6_tripdb_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U m6 -d tripdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - default
+      - p3-shared
+
+  viajes:
+    image: p3-ae1-2026-modulo6:local
+    build:
+      context: ../modulo6
+      dockerfile: Dockerfile
+    container_name: m3-viajes
+    restart: unless-stopped
+    command:
+      [
+        "node",
+        "--import",
+        "./dist/src/observabilidad/telemetria.js",
+        "dist/src/rf-6.1-6.2-6.3/index.js",
+      ]
+    ports:
+      - "${M6_VIAJES_HOST_PORT:-15000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DB_HOST: m6-tripdb
+      DB_PORT: "5432"
+      DB_USER: m6
+      DB_PASSWORD: ${M6_DB_PASSWORD:-m6pass}
+      DB_NAME: tripdb
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
+      M3_URL: ${M6_M3_URL:-http://m3-conductor-api:3000}
+      M4_URL: ${M6_M4_URL:-http://m6-sim:3001/api/v1}
+      M7_URL: ${M6_M7_URL:-http://m7-e2e:3000}
+      M7_API_KEY: ${M7_API_KEY:-m3-m6-m7-secret}
+      M8_URL: ${M6_M8_URL:-http://m8-e2e:3000}
+      M8_QR_API_KEY: ${QR_INTERNAL_API_KEY:-m3-m6-qr-secret}
+      OTEL_SERVICE_NAME: m6-viajes
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://grafana-alloy:4318
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      m6-tripdb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      m3-conductor-api:
+        condition: service_healthy
+      m6-sim:
+        condition: service_started
+      m7-e2e:
+        condition: service_healthy
+      m8-e2e:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      default:
+        aliases:
+          - viajes
+          - m6-viajes
+      p3-shared:
+        aliases:
+          - viajes
+          - m6-viajes
+
   # ---------------- RF-3.1 / RF-3.3 / Valoraciones: Conductores ----------------
   m3-conductor-api:
     build:
@@ -177,6 +357,8 @@ services:
       # M1 real (sin mocks): POST /api/conductores valida el JWT contra M1
       M1_URL: ${M1_URL:-http://m1-identidad-acceso:3001}
       M1_REQUIRE_AUTH: ${M1_REQUIRE_AUTH:-false}
+      # Ciclo real de viaje para habilitar valoraciones desde el frontend
+      M6_VIAJES_URL: ${M6_VIAJES_URL:-http://viajes:3000}
     ports:
       - "5000:3000"
     volumes:
@@ -233,8 +415,17 @@ services:
     restart: unless-stopped
     ports:
       - "4000:80"
+    networks:
+      default:
+        aliases:
+          - frontend
+      p3-shared:
+        aliases:
+          - m3-conductor-frontend
     depends_on:
       m3-conductor-api:
+        condition: service_healthy
+      viajes:
         condition: service_healthy
 
   # ---------------- Observabilidad: Collector OpenTelemetry + Docker -> Grafana Cloud ----------------
@@ -275,4 +466,5 @@ volumes:
   redis_data:
   rabbitmq_data:
   m1_identity_data:
+  m6_tripdb_data:
 

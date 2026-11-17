@@ -1,13 +1,15 @@
 import amqp, { ChannelModel, ConfirmChannel, ConsumeMessage } from 'amqplib';
 import { z } from 'zod';
+import { startMensajeTimer } from '../observability/metrics';
+import { logger } from '../observability/logging';
 export const EXCHANGE='mobility.events';
 export const TRIPS='m2.trip-completed';
 export const FAVORITES='m8.favorite-address-changed';
 export async function connect():Promise<{connection:ChannelModel; channel:ConfirmChannel}> {
   const connection=await amqp.connect(process.env.RABBITMQ_URL??'amqp://localhost',{timeout:3000});
-  connection.on('error',()=>console.warn(JSON.stringify({event:'rabbitmq_connection_error'})));
+  connection.on('error',()=>logger.warn({event:'rabbitmq_connection_error'},'rabbitmq_connection_error'));
   const channel=await connection.createConfirmChannel();
-  channel.on('error',()=>console.warn(JSON.stringify({event:'rabbitmq_channel_error'})));
+  channel.on('error',()=>logger.warn({event:'rabbitmq_channel_error'},'rabbitmq_channel_error'));
   await channel.assertExchange(EXCHANGE,'topic',{durable:true});
   // trip.completed: routing key real de M6. TripCompleted.v1: formato propio de M2 (simulador y pruebas).
   for(const [queue,keys] of [[TRIPS,['trip.completed','TripCompleted.v1']],[FAVORITES,['FavoriteAddressChanged.v1']]] as const) {
@@ -31,21 +33,25 @@ export async function consume(channel:ConfirmChannel,queue:string,schema:z.ZodTy
   },{noAck:false});
 }
 async function handle(channel:ConfirmChannel,queue:string,schema:z.ZodTypeAny,handler:(event:any)=>Promise<void>,msg:ConsumeMessage) {
+  const done=startMensajeTimer(queue);
   let event:any;
   try {event=schema.parse(JSON.parse(msg.content.toString()));}
   catch {
     await publish(channel,'',`${queue}.dlq`,msg.content,{headers:{'failure':'invalid_contract'}});
-    channel.ack(msg); return;
+    logger.warn({event:'message_invalid_contract',queue},'message_invalid_contract');
+    channel.ack(msg); done('contrato_invalido'); return;
   }
   try {
     await handler(event);
     channel.ack(msg);
-    console.log(JSON.stringify({event:'message_processed',type:event.type,eventId:event.eventId,correlationId:event.correlationId}));
+    done('procesado');
+    logger.info({event:'message_processed',queue,type:event.type,eventId:event.eventId,correlationId:event.correlationId},'message_processed');
   } catch {
     const raw=Number(msg.properties.headers?.['x-retry']??0);
     const retry=Number.isFinite(raw)&&raw>=0?raw:0;
     await publish(channel,'',retry>=3?`${queue}.dlq`:`${queue}.retry`,msg.content,{messageId:event.eventId,headers:{'x-retry':retry+1,'failure':'processing_error'}});
     channel.ack(msg);
-    console.warn(JSON.stringify({event:retry>=3?'message_dead_letter':'message_retry',eventId:event.eventId,attempt:retry+1}));
+    done(retry>=3?'dlq':'reintento');
+    logger.warn({event:retry>=3?'message_dead_letter':'message_retry',queue,eventId:event.eventId,correlationId:event.correlationId,attempt:retry+1},retry>=3?'message_dead_letter':'message_retry');
   }
 }

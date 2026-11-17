@@ -2,20 +2,31 @@
 // Flujo: scrape (API) y receive_http (k6) → relabel (filtra y etiqueta) → remote_write (Grafana Cloud).
 // Las credenciales salen de variables de entorno (GRAFANA_CLOUD_*), cargadas desde m2/.env.
 
-// 1. Lee las métricas de cada réplica de la API de M2 cada 15 s.
+// 1. Lee las métricas de cada réplica de la API de M2 y del worker cada 15 s.
 //    Sin alta disponibilidad solo existe "api"; con docker-compose.ha.yml también "api-2".
+//    En el stack integrado (docker-compose.app.yml) la API son dos réplicas, m2-api-1 y m2-api-2,
+//    detrás de m2-gateway (alias m2-api). Se lee cada réplica, no el gateway: por el gateway
+//    cada scrape caería en una réplica distinta y los contadores se mezclarían.
 //    Si un nombre no resuelve, simplemente no hay objetivo (no queda una réplica "caída" falsa).
 discovery.dns "m2_api" {
-  names            = ["api", "api-2"]
+  names            = ["api", "api-2", "m2-api-1", "m2-api-2"]
   type             = "A"
   port             = 3000
   refresh_interval = "15s"
 }
 
-//    Cada réplica se identifica por su nombre de servicio (instance="api" / "api-2"),
+//    El worker (RabbitMQ + outbox de RF-2.2) no tiene API: expone solo /metrics en el puerto 9464.
+discovery.dns "m2_worker" {
+  names            = ["worker", "m2-worker"]
+  type             = "A"
+  port             = 9464
+  refresh_interval = "15s"
+}
+
+//    Cada réplica se identifica por su nombre de servicio (instance="api" / "api-2" / "worker"),
 //    así sus contadores no se mezclan.
 discovery.relabel "m2_api" {
-  targets = discovery.dns.m2_api.targets
+  targets = array.concat(discovery.dns.m2_api.targets, discovery.dns.m2_worker.targets)
 
   rule {
     source_labels = ["__meta_dns_name"]

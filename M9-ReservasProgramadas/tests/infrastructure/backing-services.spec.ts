@@ -6,6 +6,7 @@ import type { CrearReserva } from '../../src/domain/reserva.js';
 import { PrismaConnection } from '../../src/infrastructure/prisma/prisma.connection.js';
 import { RabbitMqConnection } from '../../src/infrastructure/rabbitmq/rabbitmq.connection.js';
 import { RedisConnection } from '../../src/infrastructure/redis/redis.connection.js';
+import { runWithRequestContext } from '../../src/integration/request-context.js';
 import { RedisDistributedLock } from '../../src/locks/redis-distributed-lock.js';
 import { createEventEnvelope } from '../../src/messaging/event-envelope.js';
 import type { EventPublisher } from '../../src/messaging/event-publisher.js';
@@ -213,6 +214,30 @@ describe('backing services reales', () => {
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
     expect(effects).toBe(1);
+  });
+
+  it('revierte la reserva si PostgreSQL rechaza la escritura del Outbox', async () => {
+    const correlationId = 'm9-test-outbox-rollback';
+    const input = reservationInput();
+    // La restricción rechaza la segunda escritura en la base, no en un mock.
+    await postgres.client.$executeRaw`
+      ALTER TABLE outbox_events ADD CONSTRAINT m9_test_outbox_rollback
+      CHECK (correlation_id <> 'm9-test-outbox-rollback') NOT VALID
+    `;
+    try {
+      const repository = new PrismaReservaRepository(postgres.client);
+      await expect(
+        runWithRequestContext({ correlationId }, () => repository.crear(input)),
+      ).rejects.toThrow(/violates check constraint.*m9_test_outbox_rollback/);
+      expect(
+        await postgres.client.reservation.count({ where: { clientId: input.clienteId } }),
+      ).toBe(0);
+      expect(await postgres.client.outboxEvent.count({ where: { correlationId } })).toBe(0);
+    } finally {
+      await postgres.client.$executeRaw`
+        ALTER TABLE outbox_events DROP CONSTRAINT m9_test_outbox_rollback
+      `;
+    }
   });
 
   it('conserva reserva, Idempotency-Key y Outbox tras reconectar Prisma', async () => {

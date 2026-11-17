@@ -39,28 +39,37 @@ export async function importarViaje(viajeId:string,clienteId:string,correlationI
   const fecha=trip.completadoAt??trip.fechaCreacion??trip.createdAt;
   const fechaReferencia=trip.completadoAt?'FINALIZACION':fecha?'CREACION':'IMPORTACION';
   await service.recordJourney({viajeId:trip.id,clienteId:trip.clienteId,origen:trip.origen,destino:trip.destino,
-    fechaViaje:fecha?new Date(fecha):new Date(),fechaReferencia});
+    fechaViaje:fecha?new Date(fecha):new Date(),fechaReferencia,via:'rest'});
   return {viajeId,sincronizado:true,fechaReferencia,correlationId};
 }
 
 /**
- * Procesa el TripCompleted de M6 (routing key trip.completed). El evento no trae direcciones,
- * así que se buscan en el historial del cliente en M6. Si M6 no responde, el error hace que el
- * worker reintente el mensaje (y lo mande a la DLQ tras 3 intentos).
+ * Procesa el TripCompleted de M6 (routing key trip.completed). El evento no trae direcciones:
+ * 1. Se pide GET /api/viajes/{tripId}, que en M6 devuelve origen, destino y completadoAt.
+ *    El dueño es el recipientId del evento (id de usuario de M1): M6 guarda su propio clienteId,
+ *    que puede ser texto distinto del id de M1, así que no se compara contra él.
+ * 2. Si ese GET no trae direcciones (versión anterior de M6), se buscan en el historial del cliente.
+ * Si M6 no responde, el error hace que el worker reintente el mensaje (y lo mande a la DLQ tras 3 intentos).
  * Idempotente por viajeId: un mismo viaje importado a mano o recibido dos veces cuenta una sola vez.
  */
 export async function sincronizarViajeCompletado(
   event:{viajeId:string;clienteId:string;occurredAt:string;eventId:string},
   service:Pick<DireccionesService,'recordJourney'>,
 ) {
-  const raw:any=await modulo6Client.obtenerViajeDeCliente(event.clienteId,event.viajeId);
-  if(raw?.id!==event.viajeId||String(raw?.clienteId)!==event.clienteId)
-    throw new ApiError(502,'M6_INVALID_CONTRACT','M6 devolvió un viaje que no corresponde al evento');
+  let raw:any;
+  try { raw=await modulo6Client.obtenerViajePorId(event.viajeId); }
+  catch(e) { if(!(e instanceof TripNotFoundError)) throw e; }
+  if(raw?.id!==event.viajeId||raw?.origen==null||raw?.destino==null) {
+    raw=await modulo6Client.obtenerViajeDeCliente(event.clienteId,event.viajeId);
+    if(raw?.id!==event.viajeId||String(raw?.clienteId)!==event.clienteId)
+      throw new ApiError(502,'M6_INVALID_CONTRACT','M6 devolvió un viaje que no corresponde al evento');
+  }
   if(String(raw.estado).toLowerCase()!=='completado')
     throw new ApiError(409,'TRIP_NOT_COMPLETED','M6 informó el viaje como completado pero su estado es '+raw.estado);
-  const parsed=tripWithAddresses.safeParse({...raw,clienteId:String(raw.clienteId)});
+  // Las direcciones se guardan a nombre del dueño del evento (id de M1), igual que las consulta el cliente con su token.
+  const parsed=tripWithAddresses.safeParse({...raw,clienteId:event.clienteId});
   if(!parsed.success) throw new ApiError(502,'M6_ADDRESSES_REQUIRED','M6 debe devolver origen y destino como texto o puntos válidos');
-  await service.recordJourney({viajeId:parsed.data.id,clienteId:parsed.data.clienteId,
+  await service.recordJourney({viajeId:parsed.data.id,clienteId:event.clienteId,
     origen:parsed.data.origen,destino:parsed.data.destino,
-    fechaViaje:new Date(event.occurredAt),fechaReferencia:'FINALIZACION',eventId:event.eventId});
+    fechaViaje:new Date(event.occurredAt),fechaReferencia:'FINALIZACION',eventId:event.eventId,via:'evento_m6'});
 }

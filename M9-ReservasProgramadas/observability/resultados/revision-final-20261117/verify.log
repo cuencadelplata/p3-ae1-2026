@@ -1,0 +1,164 @@
+
+> p3-ae1-2026@2.0.0 verify
+> npm --prefix M9-ReservasProgramadas run verify
+
+
+> m9-reservas-programadas@2.0.0 verify
+> npm run typecheck && npm run lint && npm run format:check && npm test
+
+
+> m9-reservas-programadas@2.0.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+
+> m9-reservas-programadas@2.0.0 lint
+> eslint . --ext .ts,.js
+
+
+> m9-reservas-programadas@2.0.0 format:check
+> prettier --check .
+
+Checking formatting...
+[warn] CHANGELOG.md
+[warn] docker-compose.observability.yml
+[warn] docker-compose.yml
+[warn] eslint.config.js
+[warn] observability/documentacion/01-diagnostico-inicial.md
+[warn] observability/documentacion/02-arquitectura.md
+[warn] observability/documentacion/03-catalogo-senales.md
+[warn] observability/documentacion/04-guia-grafana-cloud.md
+[warn] observability/documentacion/05-alertas.md
+[warn] observability/documentacion/06-pruebas-rendimiento.md
+[warn] observability/documentacion/07-ensayo-fallas.md
+[warn] observability/documentacion/08-guion-demo.md
+[warn] observability/documentacion/09-matriz-requisitos.md
+[warn] observability/documentacion/10-merge-m9-parra.md
+[warn] observability/grafana/alerts/m9-alertas.rules.yaml
+[warn] observability/grafana/dashboards/m9-general.json
+[warn] observability/grafana/dashboards/m9-procesamiento.json
+[warn] observability/grafana/dashboards/m9-reservas.json
+[warn] observability/README.md
+[warn] openapi/m5-stub.yaml
+[warn] openapi/openapi.yaml
+[warn] package-lock.json
+[warn] package.json
+[warn] PASOS_COMPROBAR_GRAFANA.md
+[warn] performance/k6/activation.js
+[warn] performance/k6/cache.js
+[warn] performance/k6/concurrency.js
+[warn] performance/k6/lib/api.js
+[warn] performance/k6/lib/config.js
+[warn] performance/k6/lib/ids.js
+[warn] performance/k6/lib/summary.js
+[warn] performance/k6/load.js
+[warn] performance/k6/smoke.js
+[warn] performance/k6/spike.js
+[warn] performance/k6/stress.js
+[warn] performance/results/activation-activation-20261117T072000.json
+[warn] performance/results/activation-activation-20261117T072000.meta.json
+[warn] performance/results/activation-revision-activation-20261117.json
+[warn] performance/results/smoke-revision-smoke-20261117.json
+[warn] performance/results/smoke-smoke-20261117T071626.json
+[warn] performance/results/smoke-smoke-20261117T071626.meta.json
+[warn] performance/results/smoke-smoke-20261117T071747.json
+[warn] performance/results/smoke-smoke-20261117T071747.meta.json
+[warn] prisma/seed.ts
+[warn] public/app.js
+[warn] public/index.html
+[warn] README.md
+[warn] scripts/build-grafana-dashboards.mjs
+[warn] scripts/check-grafana-assets.mjs
+[warn] scripts/fault-drill.mjs
+[warn] scripts/k6-cleanup.mjs
+[warn] scripts/otlp-sink.mjs
+[warn] scripts/run-compose-e2e.mjs
+[warn] scripts/run-infrastructure-tests.mjs
+[warn] scripts/run-k6.mjs
+[warn] scripts/verify-otlp-export.mjs
+[warn] src/app.ts
+[warn] src/cache/redis-reservation-cache.ts
+[warn] src/cache/reservation-cache.ts
+[warn] src/clients/m5-dispatch.client.ts
+[warn] src/clients/m7-tariff.client.ts
+[warn] src/clients/tarifa.client.ts
+[warn] src/config/env.ts
+[warn] src/controllers/readiness.controller.ts
+[warn] src/controllers/reserva.controller.ts
+[warn] src/docs/openapi.ts
+[warn] src/domain/reserva.ts
+[warn] src/domain/route-snapshot.ts
+[warn] src/errors/external-service.error.ts
+[warn] src/http/fetch-with-timeout.ts
+[warn] src/infrastructure/prisma/prisma.connection.ts
+[warn] src/infrastructure/rabbitmq/rabbitmq.connection.ts
+[warn] src/infrastructure/redis/redis.connection.ts
+[warn] src/integration/dispatch-reassignment.port.ts
+[warn] src/integration/request-context.ts
+[warn] src/integration/route-estimate.port.ts
+[warn] src/jobs/reservas.scheduler.ts
+[warn] src/locks/distributed-lock.ts
+[warn] src/locks/redis-distributed-lock.ts
+[warn] src/logging/logger.ts
+[warn] src/messaging/dispatch-result.processor.ts
+[warn] src/messaging/event-envelope.ts
+[warn] src/messaging/event-publisher.ts
+[warn] src/messaging/outbox.processor.ts
+[warn] src/messaging/outbox.repository.ts
+[warn] src/messaging/outbox.worker.ts
+[warn] src/messaging/processed-event.repository.ts
+[warn] src/messaging/rabbitmq-consumer.ts
+[warn] src/messaging/rabbitmq-event-publisher.ts
+[warn] src/messaging/reservation-events.ts
+[warn] src/middleware/error.middleware.ts
+[warn] src/observability/config.ts
+[warn] src/observability/db.ts
+[warn] src/observability/http-telemetry.ts
+[warn] src/observability/metrics.ts
+[warn] src/observability/redaction.ts
+[warn] src/observability/register.ts
+[warn] src/observability/sdk.ts
+[warn] src/observability/state-collector.ts
+[warn] src/observability/tracing.ts
+[warn] src/readiness/readiness.service.ts
+[warn] src/repositories/in-memory-reserva.repository.ts
+[warn] src/repositories/prisma-dispatch-operation.store.ts
+[warn] src/repositories/prisma-dispatch-result.processor.ts
+[warn] src/repositories/prisma-observability.queries.ts
+[warn] src/repositories/prisma-outbox.repository.ts
+[warn] src/repositories/prisma-reserva.repository.ts
+[warn] src/repositories/reserva.repository.ts
+[warn] src/routes/readiness.routes.ts
+[warn] src/schemas/reserva.schema.ts
+[warn] src/server.ts
+[warn] src/services/activacion-reserva.service.ts
+[warn] src/services/reserva.service.ts
+[warn] src/stubs/configurable-route-resolver.ts
+[warn] src/stubs/m5/app.ts
+[warn] src/stubs/m5/dispatch.ts
+[warn] src/stubs/m5/rabbitmq.ts
+[warn] src/stubs/m5/server.ts
+[warn] src/stubs/m7/app.ts
+[warn] src/stubs/m7/server.ts
+[warn] tests/e2e/compose.e2e.test.ts
+[warn] tests/helpers/route.ts
+[warn] tests/helpers/telemetry.ts
+[warn] tests/infrastructure/backing-services.spec.ts
+[warn] tests/integration/concurrencia.test.ts
+[warn] tests/integration/dispatch-flow.test.ts
+[warn] tests/integration/docs.test.ts
+[warn] tests/integration/health.test.ts
+[warn] tests/integration/reservas.test.ts
+[warn] tests/integration/stubs.test.ts
+[warn] tests/unit/in-memory-reserva.repository.test.ts
+[warn] tests/unit/m5-dispatch.client.test.ts
+[warn] tests/unit/m7-tariff.client.test.ts
+[warn] tests/unit/messaging.test.ts
+[warn] tests/unit/middleware.test.ts
+[warn] tests/unit/observability-disabled.test.ts
+[warn] tests/unit/observability.test.ts
+[warn] tests/unit/redis-infrastructure.test.ts
+[warn] tests/unit/reserva.service.test.ts
+[warn] tests/unit/reservas.scheduler.test.ts
+[warn] vitest.config.ts
+[warn] vitest.infrastructure.config.ts
+[warn] Code style issues found in 142 files. Run Prettier with --write to fix.

@@ -33,7 +33,7 @@ export const options = {
 
 const BASE_URL      = __ENV.BASE_URL    || "http://localhost:3000";
 const RABBIT_API    = __ENV.RABBIT_API  || "http://localhost:15672";
-const RABBIT_AUTH   = "Basic " + encoding.b64encode("guest:guest");
+const RABBIT_AUTH   = "Basic " + encoding.b64encode("m9:m9-local");
 const MP_PUBLIC_KEY = "TEST-bc8db768-1690-493a-9cfb-408e8646c0d1";
 const API_KEY       = "m7-123";
 const HEADERS_JSON    = { "Content-Type": "application/json" };

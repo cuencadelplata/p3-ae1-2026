@@ -1,0 +1,13 @@
+
+> m9-reservas-programadas@2.0.0 test
+> vitest run
+
+
+ RUN  v4.1.11 C:/Users/ignac/OneDrive/Documentos/UCP/Paradigmas III/EC1-EC2-Integrador/p3-ae1-2026/M9-ReservasProgramadas
+
+
+ Test Files  17 passed (17)
+      Tests  85 passed (85)
+   Start at  04:27:09
+   Duration  85.22s (transform 4.33s, setup 0ms, import 56.24s, tests 6.92s, environment 9ms)
+
