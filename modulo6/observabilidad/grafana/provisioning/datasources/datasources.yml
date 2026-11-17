@@ -1,0 +1,45 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus M6
+    uid: m6-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+
+  - name: Loki M6
+    uid: m6-loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      # Desde un log, abrir la traza correspondiente en Tempo.
+      derivedFields:
+        - name: trace_id
+          matcherType: label
+          matcherRegex: trace_id
+          datasourceUid: m6-tempo
+          url: '$${__value.raw}'
+          urlDisplayLabel: Ver traza
+
+  - name: Tempo M6
+    uid: m6-tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      # Desde un span, saltar a los logs de la misma traza en Loki.
+      tracesToLogsV2:
+        datasourceUid: m6-loki
+        spanStartTimeShift: -5m
+        spanEndTimeShift: 5m
+        filterByTraceID: true
+        customQuery: true
+        query: '{service_name=~"m6-.*"} | trace_id="$${__trace.traceId}"'
+      tracesToMetrics:
+        datasourceUid: m6-prometheus
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false

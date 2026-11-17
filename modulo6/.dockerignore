@@ -6,3 +6,5 @@ dist
 coverage
 **/coverage
 *.log
+.env
+observabilidad
