@@ -2,20 +2,25 @@ name: m9-reservas-programadas
 
 services:
   m9-reservas:
-    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v2.0.0}
+    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v3.0}
     build:
       context: .
       dockerfile: Dockerfile
     environment:
       NODE_ENV: production
       PORT: ${PORT:-3000}
-      M5_BASE_URL: http://m5-dispatch-service:3005
-      M7_BASE_URL: http://m7-reintegro:3000
+      # Servicios reales del stack `movilidad-urbana` (red reservas-network):
+      #   M5 -> modulo-5/compose.integracion.yml (m5-dispatch-service:3005)
+      #   M7 -> modulo7/compose.integracion.yml  (m7-api:3000)
+      M5_BASE_URL: ${M5_BASE_URL:-http://m5-dispatch-service:3005}
+      M7_BASE_URL: ${M7_BASE_URL:-http://m7-api:3000}
       M5_TIMEOUT_MS: ${M5_TIMEOUT_MS:-3000}
       M7_TIMEOUT_MS: ${M7_TIMEOUT_MS:-3000}
-      DISPATCH_MODE: events
-      M5_SERVICE_TOKEN: ${M5_SERVICE_TOKEN}
-      ROUTE_RESOLVER_MODE: blocked
+      # M5 real no consume los eventos m9.reservas.* (solo lo hacía m5-stub):
+      # la activación debe invocar POST /api/v1/ride-requests por REST.
+      DISPATCH_MODE: ${DISPATCH_MODE:-rest}
+      M5_SERVICE_TOKEN: ${M5_SERVICE_TOKEN:-}
+      ROUTE_RESOLVER_MODE: ${ROUTE_RESOLVER_MODE:-blocked}
       ROUTE_STUB_ORIGIN_LATITUDE: ${ROUTE_STUB_ORIGIN_LATITUDE:--27.4514}
       ROUTE_STUB_ORIGIN_LONGITUDE: ${ROUTE_STUB_ORIGIN_LONGITUDE:--58.9867}
       ROUTE_STUB_DESTINATION_LATITUDE: ${ROUTE_STUB_DESTINATION_LATITUDE:--27.4692}
