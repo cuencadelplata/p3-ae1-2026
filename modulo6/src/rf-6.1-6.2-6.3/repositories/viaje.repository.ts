@@ -268,6 +268,17 @@ export async function buscarPorId(id: string): Promise<Viaje | null> {
     return mapRow(rows[0]);
 }
 
+/** RF-6.4: hora de fin registrada al finalizar el viaje (null si no fue finalizado). */
+export async function buscarHoraFin(id: string): Promise<Date | null> {
+    await ensureExtensionSchema();
+    const { rows } = await pool.query(
+        `SELECT data->>'horaFin' AS hora_fin FROM viaje_finalizaciones WHERE viaje_id = $1`,
+        [id]
+    );
+    const valor = rows[0]?.hora_fin as string | undefined;
+    return valor ? new Date(valor) : null;
+}
+
 export async function buscarViajesPorCliente(clienteId: string): Promise<ViajeConHistorial[]> {
     await ensureExtensionSchema();
     const { rows } = await pool.query(

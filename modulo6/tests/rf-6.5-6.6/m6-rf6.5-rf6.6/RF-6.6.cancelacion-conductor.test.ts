@@ -45,6 +45,24 @@ describe('RF-6.6 - Cancelación por conductor', () => {
     });
   });
 
+  it('incluye el rideRequestId de M5 para que el despacho encuentre su solicitud', async () => {
+    const viaje = { id: 'V-310', clienteId: 'C-310', conductorId: 'D-310', estado: 'CONDUCTOR_EN_CAMINO', rideRequestId: 'REQ-M5-9' };
+    const running = await startServices(new Map([[viaje.id, viaje]]));
+    services.api = running.api;
+
+    const response = await fetch(`${running.url}/api/viajes/V-310/cancelacion-conductor`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ motivo: 'Imprevisto' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(running.events.messages[0]).toMatchObject({
+      routingKey: 'despacho.reabrir',
+      payload: { viajeId: 'V-310', rideRequestId: 'REQ-M5-9', evento: 'cancelacion_conductor' },
+    });
+  });
+
   it('rechaza cancelar un viaje ya finalizado', async () => {
     const viaje = { id: 'V-301', clienteId: 'C-31', conductorId: 'D-31', estado: 'COMPLETADO' };
     const running = await startServices(new Map([[viaje.id, viaje]]));
