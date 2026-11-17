@@ -1,0 +1,103 @@
+name: Playwright E2E (M3)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - "m3-Conductores--Vehículos"
+  pull_request:
+    branches:
+      - main
+      - master
+      - "m3-Conductores--Vehículos"
+
+jobs:
+  unit-conductor:
+    name: Unit tests M3-Conductor
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: M3-Conductor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: M3-Conductor/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run unit tests
+        run: npm test
+      - name: Upload unit report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-unit-conductor
+          path: M3-Conductor/playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  e2e:
+    name: E2E Playwright (stack Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install root deps (Playwright)
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Start M3 stack
+        run: docker compose up -d --build redis rabbitmq m3-vehiculos m3-conductor-api m3-conductor-frontend
+
+      - name: Wait for health endpoints
+        run: |
+          set -e
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8083/health >/dev/null \
+              && curl -sf http://127.0.0.1:5000/health >/dev/null \
+              && curl -sf http://127.0.0.1:4000/ >/dev/null; then
+              echo "Stack listo"
+              exit 0
+            fi
+            echo "Esperando servicios... ($i/60)"
+            sleep 5
+          done
+          echo "Timeout esperando healthchecks"
+          docker compose ps
+          docker compose logs --tail=80
+          exit 1
+
+      - name: Run E2E
+        run: npx playwright test
+        env:
+          VEHICULOS_URL: http://127.0.0.1:8083
+          CONDUCTOR_URL: http://127.0.0.1:5000
+          FRONTEND_URL: http://127.0.0.1:4000
+
+      - name: Upload Playwright HTML report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-e2e
+          path: playwright-report/
+          retention-days: 30
+
+      - name: Dump compose logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

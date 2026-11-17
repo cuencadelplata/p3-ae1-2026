@@ -1,0 +1,89 @@
+# Microservicio M3-Conductor (API + Kafka fallback).
+# Redis y RabbitMQ son compartidos: se levantan desde ../docker-compose.yml
+# (contenedores m3-redis / m3-rabbitmq en la red p3-shared).
+#
+# Antes de levantar este compose:
+#   cd .. && docker compose up -d redis rabbitmq
+#
+# Luego:
+#   docker compose up -d --build
+
+services:
+  # Cola temporal. Queda apagada mientras RabbitMQ responde.
+  # El circuit breaker la enciende con docker start y la apaga con docker stop.
+  kafka:
+    image: apache/kafka:3.9.1
+    container_name: p3-m3-kafka
+    hostname: kafka
+    restart: "no"
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://kafka:9094,CONTROLLER://kafka:9093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9094,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    networks:
+      - default
+
+  # Backend Node.js - Conductores & Valoraciones
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: p3-m3-api
+    container_name: p3-m3-api
+    restart: unless-stopped
+    ports:
+      - "5000:3000"
+    environment:
+      PORT: 3000
+
+      # Infra compartida (m3-redis / m3-rabbitmq en p3-shared)
+      REDIS_HOST: m3-redis
+      REDIS_PORT: 6379
+      REDIS_TTL_HABILITADO: ${REDIS_TTL_HABILITADO:-300}
+      REDIS_TTL_DISPONIBLE: ${REDIS_TTL_DISPONIBLE:-60}
+      REDIS_CONNECT_TIMEOUT_MS: ${REDIS_CONNECT_TIMEOUT_MS:-1000}
+      REDIS_COMMAND_TIMEOUT_MS: ${REDIS_COMMAND_TIMEOUT_MS:-500}
+      REDIS_HEALTHCHECK_INTERVAL_MS: ${REDIS_HEALTHCHECK_INTERVAL_MS:-10000}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+
+      RABBITMQ_HOST: m3-rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: admin
+      RABBITMQ_PASSWORD: admin123
+      RABBITMQ_URL: amqp://admin:admin123@m3-rabbitmq:5672
+      RABBITMQ_EXCHANGE: m3.conductores.events
+      KAFKA_BROKERS: kafka:9094
+      KAFKA_CONTAINER: p3-m3-kafka
+      KAFKA_FALLBACK_TOPIC: m3.fallback
+
+      OTEL_SERVICE_NAME: m3-conductor-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4318
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - default
+      - p3-shared
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+networks:
+  p3-shared:
+    external: true
+    name: p3-shared
