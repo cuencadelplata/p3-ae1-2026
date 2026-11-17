@@ -72,6 +72,7 @@ services:
 
   grafana-alloy:
     image: grafana/alloy:latest
+    env_file: .env  
     volumes:
       - ./alloy-config.alloy:/etc/alloy/config.alloy
       - /var/run/docker.sock:/var/run/docker.sock
