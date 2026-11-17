@@ -67,6 +67,8 @@ services:
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
       - M4_SERVICE_URL=http://m4-api:3004/api/v1
+      - M6_SERVICE_URL=${M6_SERVICE_URL:-http://m6-viajes:3000}
+      - M6_INTERNAL_API_KEY=${M6_INTERNAL_API_KEY:-}
       # Autenticación RNF-10: JWT real por defecto. Definir JWT_SECRET en el entorno (el valor por defecto es SOLO para demo local).
       - AUTH_MODE=${AUTH_MODE:-jwt}
       - JWT_SECRET=${JWT_SECRET:-clave-solo-para-demo-local-cambiar}

@@ -1,7 +1,7 @@
 import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import { Counter, Meter } from '@opentelemetry/api';
+import { Counter, Histogram, Meter } from '@opentelemetry/api';
 
 /**
  * Servicio de Telemetría y Métricas con OpenTelemetry (OTel) para Grafana Cloud.
@@ -16,10 +16,11 @@ export class TelemetryService {
   private meterProvider: MeterProvider | null = null;
   private meter: Meter | null = null;
 
-  // Las 3 métricas de negocio
+  // Las 3 métricas de negocio + Latencia HTTP
   private rideRequestsCounter: Counter | null = null;
   private driverOffersCounter: Counter | null = null;
   private rideCancellationsCounter: Counter | null = null;
+  private httpRequestDurationHistogram: Histogram | null = null;
 
   private isEnabled = false;
 
@@ -98,6 +99,11 @@ export class TelemetryService {
         description: 'Total de solicitudes de viaje canceladas antes de iniciar (RF-5.6)'
       });
 
+      // Métrica 4: Latencia de Solicitudes HTTP en milisegundos (Performance & Stress k6)
+      this.httpRequestDurationHistogram = this.meter.createHistogram('m5_http_request_duration_ms', {
+        description: 'Tiempo de respuesta de las solicitudes HTTP en milisegundos'
+      });
+
       this.isEnabled = true;
       console.log(`[OTel] Telemetría OpenTelemetry activa hacia Grafana Cloud (${metricsUrl}) cada ${exportIntervalMillis / 1000}s`);
     } catch (err) {
@@ -139,6 +145,19 @@ export class TelemetryService {
     if (this.rideCancellationsCounter) {
       this.rideCancellationsCounter.add(1, {
         stage
+      });
+    }
+  }
+
+  /**
+   * Registra la latencia HTTP de cada petición (ms) para detectar degradación bajo estrés (k6)
+   */
+  public recordHttpRequestDuration(durationMs: number, method: string, route: string, statusCode: number): void {
+    if (this.httpRequestDurationHistogram) {
+      this.httpRequestDurationHistogram.record(durationMs, {
+        method: method.toUpperCase(),
+        route,
+        status_code: String(statusCode)
       });
     }
   }
