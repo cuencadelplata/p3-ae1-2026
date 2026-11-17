@@ -1,0 +1,286 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "🚖 MÓDULO 5: SOLICITUD Y DESPACHO — CONTROL DE OPERACIONES (OpenTelemetry)",
+      "type": "row"
+    },
+    {
+      "datasource": "grafanacloud-vibrantchowder1866-prom",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 1 },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": "grafanacloud-vibrantchowder1866-prom",
+          "editorMode": "code",
+          "expr": "sum by (vehicle_type) (m5_ride_requests_total)",
+          "legendFormat": "{{vehicle_type}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "RF-5.1: Solicitudes Creadas",
+      "description": "Volumen de pedidos clasificados por tipo de vehículo",
+      "type": "stat"
+    },
+    {
+      "datasource": "grafanacloud-vibrantchowder1866-prom",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null },
+              { "color": "green", "value": 10 }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 1 },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": "grafanacloud-vibrantchowder1866-prom",
+          "editorMode": "code",
+          "expr": "sum(m5_driver_offers_total{status=\"ACCEPTED\"})",
+          "legendFormat": "Aceptadas",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "RF-5.5: Asignaciones Ganadas",
+      "description": "Ofertas aceptadas efectivamente por conductores",
+      "type": "stat"
+    },
+    {
+      "datasource": "grafanacloud-vibrantchowder1866-prom",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "dark-blue", "value": null },
+              { "color": "dark-red", "value": 1 }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 1 },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": "grafanacloud-vibrantchowder1866-prom",
+          "editorMode": "code",
+          "expr": "sum(m5_ride_cancellations_total)",
+          "legendFormat": "Cancelaciones",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "RF-5.6: Cancelaciones Previas",
+      "description": "Viajes cancelados por el cliente antes del inicio",
+      "type": "stat"
+    },
+    {
+      "datasource": "grafanacloud-vibrantchowder1866-prom",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Eventos",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 14, "x": 0, "y": 5 },
+      "id": 4,
+      "options": {
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": "grafanacloud-vibrantchowder1866-prom",
+          "editorMode": "code",
+          "expr": "sum by (vehicle_type) (m5_ride_requests_total)",
+          "legendFormat": "Solicitudes ({{vehicle_type}})",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": "grafanacloud-vibrantchowder1866-prom",
+          "editorMode": "code",
+          "expr": "sum by (status) (m5_driver_offers_total)",
+          "legendFormat": "Ofertas ({{status}})",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "📈 Evolución Temporal del Tráfico de Despacho",
+      "description": "Historial de actividad en tiempo real de solicitudes y ofertas",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "grafanacloud-vibrantchowder1866-prom",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "ACCEPTED" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "REJECTED" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "SENT" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "EXPIRED" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 5 },
+      "id": 5,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": "grafanacloud-vibrantchowder1866-prom",
+          "editorMode": "code",
+          "expr": "sum by (status) (m5_driver_offers_total)",
+          "legendFormat": "{{status}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "📊 Estado del Embudo de Ofertas (RF-5.3 a RF-5.5)",
+      "description": "Distribución comparativa de ofertas despachadas",
+      "type": "bargauge"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["modulo-5", "despacho", "ae2"],
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["5s", "10s", "30s", "1m"] },
+  "timezone": "browser",
+  "title": "Módulo 5: Solicitud y Despacho — Control de Operaciones"
+}

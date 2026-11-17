@@ -1,0 +1,327 @@
+{
+    "root_group": {
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {
+            "01_Creacion_Solicitud_Viaje": {
+                "name": "01_Creacion_Solicitud_Viaje",
+                "path": "::01_Creacion_Solicitud_Viaje",
+                "id": "183398ae5f351f7a6bb645ff2638959c",
+                "groups": {},
+                "checks": {
+                    "status es 201 Created": {
+                        "fails": 0,
+                        "name": "status es 201 Created",
+                        "path": "::01_Creacion_Solicitud_Viaje::status es 201 Created",
+                        "id": "be6b809c61b61be9485bf7379c8a36ae",
+                        "passes": 5266
+                    },
+                    "tiene ID de solicitud": {
+                        "fails": 0,
+                        "name": "tiene ID de solicitud",
+                        "path": "::01_Creacion_Solicitud_Viaje::tiene ID de solicitud",
+                        "id": "62989215ccf955e498e9e3bc9480020c",
+                        "passes": 5266
+                    },
+                    "tarifa estimada > 0": {
+                        "passes": 5266,
+                        "fails": 0,
+                        "name": "tarifa estimada > 0",
+                        "path": "::01_Creacion_Solicitud_Viaje::tarifa estimada > 0",
+                        "id": "091eef40b57ef45af03c04590727fdba"
+                    }
+                }
+            },
+            "02_Consulta_Estado_Solicitud": {
+                "name": "02_Consulta_Estado_Solicitud",
+                "path": "::02_Consulta_Estado_Solicitud",
+                "id": "27df0a183ff72ec90cc6c9b0893cdbf1",
+                "groups": {},
+                "checks": {
+                    "status get es 200 OK": {
+                        "path": "::02_Consulta_Estado_Solicitud::status get es 200 OK",
+                        "id": "02d8d974ab67082801840cea7a9180ec",
+                        "passes": 5266,
+                        "fails": 0,
+                        "name": "status get es 200 OK"
+                    },
+                    "coincide el id de viaje": {
+                        "path": "::02_Consulta_Estado_Solicitud::coincide el id de viaje",
+                        "id": "5cf264ca0ec2ce96f9c2ffef11c9046a",
+                        "passes": 5266,
+                        "fails": 0,
+                        "name": "coincide el id de viaje"
+                    }
+                }
+            },
+            "03_Busqueda_Candidatos_Cercanos": {
+                "name": "03_Busqueda_Candidatos_Cercanos",
+                "path": "::03_Busqueda_Candidatos_Cercanos",
+                "id": "91eb344205360e4c2cdaa603ead41bda",
+                "groups": {},
+                "checks": {
+                    "status candidatos es 200 OK": {
+                        "name": "status candidatos es 200 OK",
+                        "path": "::03_Busqueda_Candidatos_Cercanos::status candidatos es 200 OK",
+                        "id": "c96aaa25581d41ffccfd27621d46d880",
+                        "passes": 5266,
+                        "fails": 0
+                    },
+                    "lista de candidatos presente": {
+                        "name": "lista de candidatos presente",
+                        "path": "::03_Busqueda_Candidatos_Cercanos::lista de candidatos presente",
+                        "id": "8d14092ed55b75c80c98432c102af960",
+                        "passes": 5266,
+                        "fails": 0
+                    }
+                }
+            },
+            "04_Despacho_Ofertas_Con_TTL": {
+                "groups": {},
+                "checks": {
+                    "status ofertas es 201 Created": {
+                        "name": "status ofertas es 201 Created",
+                        "path": "::04_Despacho_Ofertas_Con_TTL::status ofertas es 201 Created",
+                        "id": "cb1ebbc74993c5bf33a39cc1d03d8c50",
+                        "passes": 5266,
+                        "fails": 0
+                    },
+                    "ofertas despachadas con éxito": {
+                        "name": "ofertas despachadas con éxito",
+                        "path": "::04_Despacho_Ofertas_Con_TTL::ofertas despachadas con éxito",
+                        "id": "9f22a101ee3780aa84030b1a66eb342c",
+                        "passes": 5266,
+                        "fails": 0
+                    }
+                },
+                "name": "04_Despacho_Ofertas_Con_TTL",
+                "path": "::04_Despacho_Ofertas_Con_TTL",
+                "id": "cd82fd9d7af77d28270be4006b19711d"
+            },
+            "05_Consulta_Ofertas_Emitidas": {
+                "name": "05_Consulta_Ofertas_Emitidas",
+                "path": "::05_Consulta_Ofertas_Emitidas",
+                "id": "c4e37a5f0cf4e1f3fa036f3b89dc1ad6",
+                "groups": {},
+                "checks": {
+                    "status get ofertas es 200 OK": {
+                        "passes": 5266,
+                        "fails": 0,
+                        "name": "status get ofertas es 200 OK",
+                        "path": "::05_Consulta_Ofertas_Emitidas::status get ofertas es 200 OK",
+                        "id": "581320a58429afba66a903a809a9259b"
+                    },
+                    "recupera lista de ofertas": {
+                        "id": "c5c70142402ac0a97df515cc5fb28dba",
+                        "passes": 5266,
+                        "fails": 0,
+                        "name": "recupera lista de ofertas",
+                        "path": "::05_Consulta_Ofertas_Emitidas::recupera lista de ofertas"
+                    }
+                }
+            },
+            "06_Aceptacion_Oferta_Por_Conductor": {
+                "groups": {},
+                "checks": {
+                    "status aceptacion es 200 OK": {
+                        "fails": 0,
+                        "name": "status aceptacion es 200 OK",
+                        "path": "::06_Aceptacion_Oferta_Por_Conductor::status aceptacion es 200 OK",
+                        "id": "02ce3186df407ec63037989bb7c2d196",
+                        "passes": 5266
+                    },
+                    "oferta asignada con exito": {
+                        "passes": 5266,
+                        "fails": 0,
+                        "name": "oferta asignada con exito",
+                        "path": "::06_Aceptacion_Oferta_Por_Conductor::oferta asignada con exito",
+                        "id": "0b6364ca9cbcd0abf52cb02ad4d2781b"
+                    }
+                },
+                "name": "06_Aceptacion_Oferta_Por_Conductor",
+                "path": "::06_Aceptacion_Oferta_Por_Conductor",
+                "id": "f0870d53dfe47477853a7aba65b3cfc8"
+            },
+            "07_Auditoria_Inmutable_Eventos": {
+                "id": "711adb564c0bd7d6c80299bc2c34952a",
+                "groups": {},
+                "checks": {
+                    "status auditoria es 200 OK": {
+                        "path": "::07_Auditoria_Inmutable_Eventos::status auditoria es 200 OK",
+                        "id": "8bbff4fca78fca7f58996ec7c01cffe3",
+                        "passes": 5266,
+                        "fails": 0,
+                        "name": "status auditoria es 200 OK"
+                    },
+                    "trazas de auditoria registradas": {
+                        "id": "739f496102c07c13c5e625030747fc00",
+                        "passes": 5266,
+                        "fails": 0,
+                        "name": "trazas de auditoria registradas",
+                        "path": "::07_Auditoria_Inmutable_Eventos::trazas de auditoria registradas"
+                    }
+                },
+                "name": "07_Auditoria_Inmutable_Eventos",
+                "path": "::07_Auditoria_Inmutable_Eventos"
+            }
+        },
+        "checks": {},
+        "name": ""
+    },
+    "metrics": {
+        "rides_assigned_total": {
+            "rate": 80.727995683085,
+            "count": 5266
+        },
+        "iteration_duration": {
+            "p(90)": 1036.6977499999998,
+            "p(95)": 1223.2998,
+            "avg": 508.7967475123434,
+            "min": 207.0852,
+            "med": 423.4905,
+            "max": 1603.9436
+        },
+        "http_req_blocked": {
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0.007360436221583202,
+            "min": 0,
+            "med": 0,
+            "max": 18.9647
+        },
+        "data_sent": {
+            "count": 13067094,
+            "rate": 200319.08621771095
+        },
+        "data_received": {
+            "rate": 736039.5395359749,
+            "count": 48012888
+        },
+        "custom_error_rate": {
+            "passes": 0,
+            "fails": 31596,
+            "thresholds": {
+                "rate<0.02": false
+            },
+            "value": 0
+        },
+        "http_req_duration{expected_response:true}": {
+            "max": 530.655,
+            "p(90)": 72.37426000000002,
+            "p(95)": 116.04118999999953,
+            "avg": 22.331692344419658,
+            "min": 0,
+            "med": 3.60475
+        },
+        "rides_created_total": {
+            "rate": 80.727995683085,
+            "count": 5266
+        },
+        "http_req_duration": {
+            "min": 0,
+            "med": 3.60475,
+            "max": 530.655,
+            "p(90)": 72.37426000000002,
+            "p(95)": 116.04118999999953,
+            "avg": 22.331692344419658,
+            "thresholds": {
+                "p(95)<600": false,
+                "p(99)<1200": false
+            }
+        },
+        "vus": {
+            "max": 99,
+            "value": 2,
+            "min": 2
+        },
+        "http_req_connecting": {
+            "avg": 0.00316350713471868,
+            "min": 0,
+            "med": 0,
+            "max": 18.9647,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "checks": {
+            "passes": 78990,
+            "fails": 0,
+            "value": 1
+        },
+        "ride_creation_duration_ms": {
+            "max": 286,
+            "p(90)": 56,
+            "p(95)": 80,
+            "avg": 15.216103304215723,
+            "min": 0,
+            "med": 4,
+            "thresholds": {
+                "p(95)<500": false
+            }
+        },
+        "group_duration": {
+            "med": 3.8021000000000003,
+            "max": 530.655,
+            "p(90)": 72.85666000000002,
+            "p(95)": 116.26072499999994,
+            "avg": 22.549819722207125,
+            "min": 0
+        },
+        "http_req_tls_handshaking": {
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "max": 0
+        },
+        "http_req_sending": {
+            "max": 11.8776,
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0.016071490966306747,
+            "min": 0,
+            "med": 0
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 36862,
+            "thresholds": {
+                "rate<0.02": false
+            },
+            "value": 0
+        },
+        "http_req_waiting": {
+            "max": 530.655,
+            "p(90)": 72.1889,
+            "p(95)": 115.72764999999987,
+            "avg": 22.20288334328028,
+            "min": 0,
+            "med": 3.4302
+        },
+        "vus_max": {
+            "value": 100,
+            "min": 100,
+            "max": 100
+        },
+        "http_req_receiving": {
+            "avg": 0.11273751017307747,
+            "min": 0,
+            "med": 0,
+            "max": 8.4979,
+            "p(90)": 0.5235900000000001,
+            "p(95)": 0.6947849999999991
+        },
+        "offers_dispatched_total": {
+            "count": 5266,
+            "rate": 80.727995683085
+        },
+        "iterations": {
+            "count": 5266,
+            "rate": 80.727995683085
+        },
+        "http_reqs": {
+            "count": 36862,
+            "rate": 565.095969781595
+        }
+    }
+}
