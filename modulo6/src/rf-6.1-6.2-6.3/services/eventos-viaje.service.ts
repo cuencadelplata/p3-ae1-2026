@@ -12,10 +12,10 @@ export function traceparentActual(): string | null {
     return carrier.traceparent ?? null;
 }
 
-// RF-6.4: eventos que M6 emite al finalizar un viaje.
+// Eventos de ciclo de vida que M6 publica por outbox (inicio, finalización y cancelación).
 // Cada consumidor acordó un exchange y un formato propios, por eso el mismo hecho
 // se publica una vez por consumidor. Todos se escriben en el outbox dentro de la
-// misma transacción que completa el viaje, así un fallo de RabbitMQ no los pierde.
+// misma transacción que cambia el estado del viaje, así un fallo de RabbitMQ no los pierde.
 
 export interface EventoSalida {
     messageId: string;
@@ -28,6 +28,10 @@ export interface DatosViajeFinalizado {
     viajeId: string;
     clienteId: string;
     conductorId: string | null;
+    /** userId numérico de M1 del cliente, guardado al solicitar el viaje. */
+    clientUserId?: number | null;
+    /** userId numérico de M1 del conductor, guardado al asignar el viaje. */
+    driverUserId?: number | null;
     finalizadoAt: Date;
     total: number;
     paymentId: string;
@@ -43,6 +47,45 @@ export function idUsuarioNumerico(value: string | null | undefined): number | un
     if (!value || !/^\d+$/.test(value)) return undefined;
     const id = Number(value);
     return Number.isSafeInteger(id) && id > 0 ? id : undefined;
+}
+
+/**
+ * userId de M1 a usar en los eventos: el guardado por M6 (clientUserId / driverUserId)
+ * y, para viajes anteriores a esas columnas, el id textual si es numérico.
+ */
+export function idUsuarioM1(guardado: number | null | undefined, textual: string | null | undefined): number | undefined {
+    if (typeof guardado === 'number' && Number.isSafeInteger(guardado) && guardado > 0) return guardado;
+    return idUsuarioNumerico(textual);
+}
+
+export type EventoTrip = 'viaje.iniciado' | 'viaje.finalizado' | 'viaje.cancelado';
+
+/**
+ * Contrato con M4 (disponibilidad de conductores):
+ *   exchange `trip.events` (topic, durable), routing key = eventType,
+ *   cuerpo plano { eventId, eventType, tripId, driverId, occurredAt }.
+ * driverId es el userId numérico de M1 del conductor. Sin ese dato no se publica,
+ * porque M4 descarta a su DLQ los mensajes sin driverId entero.
+ */
+export function eventoTripEvents(
+    tipo: EventoTrip,
+    datos: { viajeId: string; driverUserId?: number | null; conductorId?: string | null; occurredAt: Date },
+): EventoSalida | null {
+    const driverId = idUsuarioM1(datos.driverUserId, datos.conductorId);
+    if (driverId === undefined) return null;
+    const messageId = randomUUID();
+    return {
+        messageId,
+        exchange: EXCHANGE_M4,
+        routingKey: tipo,
+        payload: {
+            eventId: messageId,
+            eventType: tipo,
+            tripId: datos.viajeId,
+            driverId,
+            occurredAt: datos.occurredAt.toISOString(),
+        },
+    };
 }
 
 export function eventosViajeFinalizado(datos: DatosViajeFinalizado): EventoSalida[] {
@@ -71,7 +114,7 @@ export function eventosViajeFinalizado(datos: DatosViajeFinalizado): EventoSalid
     }
 
     // M8 (notificaciones): TripCompleted con el sobre común de mobility.events
-    const recipientId = idUsuarioNumerico(datos.clienteId);
+    const recipientId = idUsuarioM1(datos.clientUserId, datos.clienteId);
     if (recipientId !== undefined) {
         const messageId = randomUUID();
         eventos.push({
@@ -96,22 +139,13 @@ export function eventosViajeFinalizado(datos: DatosViajeFinalizado): EventoSalid
     }
 
     // M4 (disponibilidad): libera al conductor
-    const driverId = idUsuarioNumerico(datos.conductorId);
-    if (driverId !== undefined) {
-        const messageId = randomUUID();
-        eventos.push({
-            messageId,
-            exchange: EXCHANGE_M4,
-            routingKey: 'viaje.finalizado',
-            payload: {
-                eventId: messageId,
-                eventType: 'viaje.finalizado',
-                tripId: datos.viajeId,
-                driverId,
-                occurredAt,
-            },
-        });
-    }
+    const paraM4 = eventoTripEvents('viaje.finalizado', {
+        viajeId: datos.viajeId,
+        driverUserId: datos.driverUserId,
+        conductorId: datos.conductorId,
+        occurredAt: datos.finalizadoAt,
+    });
+    if (paraM4) eventos.push(paraM4);
 
     return eventos;
 }

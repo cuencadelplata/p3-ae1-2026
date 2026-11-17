@@ -135,9 +135,50 @@ Las APIs RF-6.5/6.6 no autentican ni identifican por sí solas a la persona que 
 
 M6 llama al M8 real en `http://m8-app:3000` por la red compartida `m6_viajes_default`. `QR_INTERNAL_API_KEY` se configura en `modulo8/.env` y M6 la recibe como `M8_QR_API_KEY`. El archivo `docker-compose.m8-hostports.yml`, ubicado en M6, se agrega al Compose de M8 para publicar su API en `localhost:3103` y despublicar su PostgreSQL, Redis y RabbitMQ del host; M6 mantiene sus puertos locales sin cambios.
 
+## Eventos de viaje para M4 (`trip.events`)
+
+M6 publica el ciclo de vida del viaje para que M4 actualice la disponibilidad del conductor.
+
+- **Exchange:** `trip.events` (tipo `topic`, durable).
+- **Routing keys:** `viaje.iniciado` (el viaje pasa a EN_CURSO), `viaje.finalizado` (pasa a COMPLETADO) y `viaje.cancelado` (cancelado por el cliente o el conductor).
+- **Mensaje:** JSON plano, `content-type: application/json`, persistente, con la propiedad AMQP `messageId` igual a `eventId`.
+
+```json
+{
+  "eventId": "3f6c1a52-9b1e-4c1a-8f0e-2d7b5c9a1e44",
+  "eventType": "viaje.finalizado",
+  "tripId": "9e51e073-f403-48f8-95b8-1287b87b440a",
+  "driverId": 7,
+  "occurredAt": "2026-11-17T15:20:31.512Z"
+}
+```
+
+- `driverId` es el userId numérico de M1 del conductor (el `driverUserId` que M5 envía al asignar). Si el viaje no lo tiene, M6 no publica en `trip.events`.
+- `eventId` es un UUID único por evento y se conserva en los reintentos, por lo que sirve como clave de idempotencia.
+- `eventType` es igual a la routing key.
+
+Los eventos se guardan en un outbox dentro de la misma transacción que cambia el estado del viaje y se publican después del commit. Si RabbitMQ no está disponible, se reintentan cada 5 segundos sin perderse.
+
+## Puertos y broker configurables
+
+Los valores por defecto son los de la tabla de servicios. Para convivir con otros módulos se pueden cambiar sin editar el compose (por ejemplo en `modulo6/.env`):
+
+| Variable | Uso | Por defecto |
+| --- | --- | --- |
+| `M6_VIAJES_HOST_PORT` | Puerto del host de Viajes | 3000 |
+| `M6_CANCELACION_HOST_PORT` | Puerto del host de Cancelaciones | 3001 |
+| `M6_FACHADA_HOST_PORT` | Puerto del host de la fachada RF-6.4/6.7 y su front | 3002 |
+| `M6_TRIPDB_HOST_PORT` | Puerto del host de PostgreSQL | 5432 |
+| `M6_REDIS_HOST_PORT` | Puerto del host de Redis | 6379 |
+| `M6_RABBITMQ_HOST_PORT` / `M6_RABBITMQ_MGMT_HOST_PORT` | Puertos del host de RabbitMQ | 5672 / 15672 |
+| `M6_RABBITMQ_URL` | Broker que usan Viajes y Cancelaciones | `amqp://guest:guest@rabbitmq:5672` |
+
+Para que M4 reciba los eventos, `M6_RABBITMQ_URL` debe apuntar al RabbitMQ compartido de la integración.
+
 ## Contratos
 
 - Todos los requisitos: [OpenAPI consolidado](openapi.yaml)
+- Eventos para M4: [sección `trip.events`](#eventos-de-viaje-para-m4-tripevents)
 
 ## Estructura
 
