@@ -1,0 +1,69 @@
+services:
+  m1-identidad-acceso:
+    build: ../modulo-1-identidad-acceso
+    environment:
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      JWT_SECRET: &test-jwt-secret m4-e2e-local
+    tmpfs:
+      - /app/data:uid=1000,gid=1000,mode=0700
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  m4-api:
+    image: m4-e2e-api:local
+    ports: !reset []
+    environment:
+      M1_URL: http://m1-identidad-acceso:3001
+      SKIP_AUTH_VALIDATION: "false"
+
+  redis:
+    ports: !reset []
+
+  m4-postgres:
+    ports: !reset []
+
+  rabbitmq:
+    ports: !reset []
+
+  m5-despacho:
+    build: ../modulo-5
+    environment:
+      AUTH_MODE: jwt
+      JWT_SECRET: *test-jwt-secret
+      M4_SERVICE_URL: http://m4-api:3004/api/v1
+      M4_MOCK: "false"
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3005/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  m4-e2e:
+    image: node:22-alpine
+    working_dir: /tests
+    volumes:
+      - ./tests/e2e:/tests:ro
+    command: ["node", "--test", "driver-location.e2e.mjs"]
+    depends_on:
+      m1-identidad-acceso:
+        condition: service_healthy
+      m4-api:
+        condition: service_healthy
+      m5-despacho:
+        condition: service_healthy
