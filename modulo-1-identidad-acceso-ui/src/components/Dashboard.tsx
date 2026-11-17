@@ -12,6 +12,7 @@ import {
   IdCard,
   RefreshCw,
   KeyRound,
+  Link2,
 } from 'lucide-react'
 import { API_URL } from '../api'
 
@@ -41,6 +42,17 @@ interface Validacion {
   authMethod: string
 }
 
+// Respuesta de GET /auth/oauth2/userinfo (RF-1.5): cuentas externas vinculadas al usuario.
+interface ProveedorVinculado {
+  provider: string
+  email: string | null
+  linkedAt: string
+  lastLoginAt: string | null
+}
+
+const nombreProveedor = (p: string) =>
+  ({ GOOGLE: 'Google', AUTH0: 'Auth0', MOCK: 'Proveedor de prueba' } as Record<string, string>)[p] || p
+
 const roleLabel = (rol: string) =>
   ({ CLIENTE: 'Cliente', CONDUCTOR: 'Conductor', OPERADOR: 'Operador' } as Record<string, string>)[rol] || rol
 
@@ -57,6 +69,7 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [revocando, setRevocando] = useState(false)
+  const [vinculados, setVinculados] = useState<ProveedorVinculado[] | null>(null)
 
   const headers = { Authorization: `Bearer ${token}` }
 
@@ -95,6 +108,13 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
         const { data } = await axios.get<MiPerfil>(`${API_URL}/auth/me`, { headers })
         setPerfil(data)
         await validar()
+        // RF-1.5: si falla, el panel sigue funcionando sin esta sección.
+        try {
+          const info = await axios.get<{ linkedProviders: ProveedorVinculado[] }>(`${API_URL}/auth/oauth2/userinfo`, { headers })
+          setVinculados(info.data.linkedProviders)
+        } catch {
+          setVinculados(null)
+        }
       } catch (err) {
         manejarError(err)
       } finally {
@@ -175,7 +195,7 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
                     <Icono className="w-4 h-4 text-[var(--gold)]" />
                     <span className="field-label !mb-0">{titulo}</span>
                   </div>
-                  <p className="font-mono text-sm break-all text-[var(--text)]">{valor}</p>
+                  <p className="font-mono text-sm break-all text-[var(--text)]">{valor || '—'}</p>
                 </div>
               ))}
             </div>
@@ -211,6 +231,33 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
               <RefreshCw className="w-4 h-4" />
               Validar de nuevo
             </button>
+          </div>
+        )}
+
+        {/* Cuentas externas vinculadas (RF-1.5) */}
+        {perfil && vinculados && (
+          <div className="mt-6 rounded-2xl border border-[var(--line)] p-6">
+            <div className="flex items-center justify-between mb-4">
+              <p className="eyebrow">Cuentas externas</p>
+              <Fuente texto="GET /auth/oauth2/userinfo" />
+            </div>
+            {vinculados.length === 0 ? (
+              <p className="text-sm text-[var(--text-soft)]">
+                Ninguna: entraste con email y contraseña. Si entrás con Google, Auth0 o el proveedor de prueba, aparece acá.
+              </p>
+            ) : (
+              <ul className="space-y-3 text-sm text-[var(--text-soft)]">
+                {vinculados.map((v) => (
+                  <li key={v.provider} className="flex items-center gap-2.5">
+                    <Link2 className="w-4 h-4 text-[var(--gold)] shrink-0" />
+                    <span>
+                      {nombreProveedor(v.provider)}
+                      {v.email ? ` · ${v.email}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 
