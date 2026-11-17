@@ -19,7 +19,7 @@ loki.write "grafana_cloud" {
 }
 
 prometheus.scrape "m7" {
-  targets = [{ __address__ = "m7-reintegro:3000" }]
+  targets = [{ __address__ = "m7-api:3000" }]
   scrape_interval = "15s"
   metrics_path    = "/metrics"
   forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
