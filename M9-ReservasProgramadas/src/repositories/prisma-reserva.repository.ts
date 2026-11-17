@@ -85,9 +85,16 @@ export class PrismaReservaRepository implements ReservaRepository {
   public async crear(input: CrearReserva): Promise<Reserva> {
     const id = randomUUID();
     const correlationId = this.correlationId();
-    const created = await measureDb('reservation.create', () =>
-      this.prisma.$transaction(async (transaction) => {
-        const reservation = await transaction.reservation.create({
+    const event = createReservationReferenceEvent({
+      eventType: RESERVATION_EVENT_TYPES.created,
+      correlationId,
+      reservation: { id, estado: 'PROGRAMADA' },
+    });
+    // Los IDs ya se conocen: el motor puede ejecutar ambas escrituras sin esperar
+    // callbacks de Node mientras mantiene abierta la conexión de la transacción.
+    const [reservation] = await measureDb('reservation.create', () =>
+      this.prisma.$transaction([
+        this.prisma.reservation.create({
           data: {
             id,
             clientId: input.clienteId,
@@ -101,19 +108,13 @@ export class PrismaReservaRepository implements ReservaRepository {
             routeSnapshot:
               input.routeSnapshot === null || input.routeSnapshot === undefined
                 ? Prisma.DbNull
-                : toJson(input.routeSnapshot),
+                : toJson(routeSnapshotSchema.parse(input.routeSnapshot)),
           },
-        });
-        const domain = toDomain(reservation);
-        const event = createReservationReferenceEvent({
-          eventType: RESERVATION_EVENT_TYPES.created,
-          correlationId,
-          reservation: domain,
-        });
-        await transaction.outboxEvent.create({ data: outboxData(event.eventType, event) });
-        return domain;
-      }),
+        }),
+        this.prisma.outboxEvent.create({ data: outboxData(event.eventType, event) }),
+      ]),
     );
+    const created = toDomain(reservation);
     // La transacción ya confirmó: recién ahora se cuenta el efecto.
     recordTransition('NONE', created.estado);
     return created;
