@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: M6
+    folder: M6 Viajes
+    type: file
+    disableDeletion: true
+    options:
+      path: /var/lib/grafana/dashboards
