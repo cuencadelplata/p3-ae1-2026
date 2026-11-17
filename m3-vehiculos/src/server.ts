@@ -52,8 +52,11 @@ app.use("/api/v1/drivers/:driverId/documents", documentoRoutes);
 // Siempre al final, después de todas las rutas
 app.use(errorHandler);
 
-await connectRedis();
-console.log(" Conectado a Redis");
+// Si Redis no está disponible, el servicio arranca igual (la idempotencia tolera el fallo).
+// Sin await: con reconnectStrategy, connect() reintenta en segundo plano y no resuelve hasta conectar.
+connectRedis()
+  .then(() => console.log(" Conectado a Redis"))
+  .catch((err) => console.warn("[redis] No disponible al arrancar, se continúa sin Redis:", err));
 
 // Si RabbitMQ no está disponible, el servicio arranca igual: la publicación
 // de eventos nunca bloquea la operación principal.
