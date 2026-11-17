@@ -23,6 +23,7 @@ export interface M8MetricsTracker {
   httpRequestsTotal: Counter<'method' | 'route' | 'status_code' | 'rf'>;
   httpRequestDurationSeconds: Histogram<'method' | 'route' | 'status_code' | 'rf'>;
   businessOperationsTotal: Counter<'rf' | 'operation' | 'result'>;
+  asyncRecords: Gauge<'rf' | 'operation' | 'result'>;
   storageSizeBytes: Gauge<'component'>;
   classifyRoute(method: string, pathname: string): RouteClassification;
   middleware(request: Request, response: Response, next: NextFunction): void;
@@ -31,6 +32,33 @@ export interface M8MetricsTracker {
 }
 
 const IGNORED_PREFIXES = ['/health', '/metrics', '/openapi.yaml', '/docs'];
+
+// Una serie que aparece por primera vez con valor 1 no tiene muestra previa
+// para que Prometheus calcule increase(...[5m]). Publicamos cero desde el
+// arranque para que tambien se vea la primera operacion de cada tipo.
+const BUSINESS_OPERATION_OUTCOMES = [
+  { rf: 'RF8.2', operation: 'Generación de código QR', results: ['Emitido', 'Rechazada', 'Error'] },
+  { rf: 'RF8.2', operation: 'Validación de código QR', results: ['Válido', 'Conflicto', 'Rechazada', 'Error'] },
+  { rf: 'RF8.3', operation: 'Emisión de comprobante', results: ['Creado', 'Idempotente', 'Rechazada', 'Error'] },
+  { rf: 'RF8.3', operation: 'Descarga de comprobante PDF', results: ['Exitosa', 'Rechazada', 'Error'] },
+  { rf: 'RF8.4', operation: 'Reenvío de comprobante', results: ['Solicitado', 'Rechazada', 'Error'] },
+  { rf: 'RF8.4', operation: 'Enlace temporal de reenvío', results: ['Generado', 'Rechazada', 'Error'] },
+  { rf: 'RF8.5', operation: 'Creación de ticket de soporte', results: ['Abierto', 'Rechazada', 'Error'] },
+  { rf: 'RF8.5', operation: 'Actualización de ticket', results: ['Actualizado', 'Rechazada', 'Error'] },
+  { rf: 'RF8.7', operation: 'Registro de token Push', results: ['Activo', 'Rechazada', 'Error'] },
+  { rf: 'RF8.7', operation: 'Baja de token Push', results: ['Desactivado', 'Rechazada', 'Error'] },
+] as const;
+
+// Los errores esperados de las rutas usadas en la verificacion deben existir
+// antes del primer fallo. Asi increase(...[5m]) puede contar tambien ese fallo.
+const EXPECTED_HTTP_ERROR_SERIES = [
+  { method: 'POST', route: '/api/v1/receipts', status_code: '400', rf: 'RF8.3' },
+  { method: 'POST', route: '/api/v1/receipts', status_code: '422', rf: 'RF8.3' },
+  { method: 'POST', route: '/api/v1/receipts', status_code: '503', rf: 'RF8.3' },
+  { method: 'GET', route: '/api/v1/receipts/:tripId', status_code: '401', rf: 'RF8.3' },
+  { method: 'GET', route: '/api/v1/receipts/:tripId', status_code: '404', rf: 'RF8.3' },
+  { method: 'POST', route: '/qr/validate', status_code: '409', rf: 'RF8.2' },
+] as const;
 
 /**
  * Normaliza la ruta HTTP para evitar explosión de cardinalidad en Grafana Cloud
@@ -136,12 +164,30 @@ export function createM8MetricsTracker(serviceName: string = 'm8-app'): M8Metric
     });
   }
 
+  const makeReadPool = (connectionString: string | undefined): pg.Pool | null => {
+    if (!connectionString) return null;
+    const pool = new pg.Pool({
+      connectionString,
+      max: 1,
+      connectionTimeoutMillis: 1500,
+      query_timeout: 1500,
+      idleTimeoutMillis: 10000,
+    });
+    pool.on('error', () => undefined);
+    return pool;
+  };
+  let notificationsMetricsPool = makeReadPool(process.env.NOTIFICATIONS_DATABASE_URL);
+  let deliveryMetricsPool = makeReadPool(process.env.DELIVERY_DATABASE_URL);
+
   const httpRequestsTotal = new Counter({
     name: 'http_requests_total',
     help: 'Total de peticiones HTTP de negocio atendidas por M8',
     labelNames: ['method', 'route', 'status_code', 'rf'] as const,
     registers: [register],
   });
+  for (const labels of EXPECTED_HTTP_ERROR_SERIES) {
+    httpRequestsTotal.inc(labels, 0);
+  }
 
   const httpRequestDurationSeconds = new Histogram({
     name: 'http_request_duration_seconds',
@@ -156,6 +202,41 @@ export function createM8MetricsTracker(serviceName: string = 'm8-app'): M8Metric
     help: 'Total de operaciones de dominio ejecutadas por requerimiento funcional en M8',
     labelNames: ['rf', 'operation', 'result'] as const,
     registers: [register],
+  });
+  for (const { rf, operation, results } of BUSINESS_OPERATION_OUTCOMES) {
+    for (const result of results) {
+      businessOperationsTotal.inc({ rf, operation, result }, 0);
+    }
+  }
+
+  const asyncRecords = new Gauge({
+    name: 'm8_async_records',
+    help: 'Conteos persistidos de Inbox, notificaciones e intentos de entrega de M8; no consulta bases de otros modulos',
+    labelNames: ['rf', 'operation', 'result'] as const,
+    registers: [register],
+    async collect() {
+      const sources = [
+        { pool: notificationsMetricsPool, rf: 'RF8.1', operation: 'notification', result: 'CREATED',
+          sql: 'SELECT count(*)::int AS n FROM notifications.notifications WHERE source_message_id IS NOT NULL' },
+        { pool: notificationsMetricsPool, rf: 'RF8.6', operation: 'm3_document_inbox', result: 'PROCESSED',
+          sql: "SELECT count(*)::int AS n FROM messaging.inbox_events WHERE consumer_id = 'm8.notificaciones.documento-registrado' AND status = 'PROCESSED'" },
+        { pool: deliveryMetricsPool, rf: 'RF8.6', operation: 'delivery_inbox', result: 'PROCESSED',
+          sql: "SELECT count(*)::int AS n FROM messaging.inbox_events WHERE consumer_id = 'm8.delivery.notification-requested' AND status = 'PROCESSED'" },
+        { pool: deliveryMetricsPool, rf: 'RF8.7', operation: 'delivery_attempt', result: 'SUCCESS',
+          sql: "SELECT count(*)::int AS n FROM notification_delivery.delivery_attempts WHERE status = 'SUCCESS'" },
+        { pool: deliveryMetricsPool, rf: 'RF8.7', operation: 'delivery_attempt', result: 'FAILED',
+          sql: "SELECT count(*)::int AS n FROM notification_delivery.delivery_attempts WHERE status = 'FAILED'" },
+      ] as const;
+      await Promise.all(sources.map(async ({ pool, rf, operation, result, sql }) => {
+        if (!pool) return;
+        try {
+          const response = await pool.query<{ n: number }>(sql);
+          this.set({ rf, operation, result }, Number(response.rows[0]?.n ?? 0));
+        } catch {
+          this.remove(rf, operation, result);
+        }
+      }));
+    },
   });
 
   const storageSizeBytes = new Gauge({
@@ -254,6 +335,7 @@ export function createM8MetricsTracker(serviceName: string = 'm8-app'): M8Metric
     httpRequestsTotal,
     httpRequestDurationSeconds,
     businessOperationsTotal,
+    asyncRecords,
     storageSizeBytes,
     classifyRoute: classifyM8Route,
     middleware(request: Request, response: Response, next: NextFunction): void {
@@ -287,6 +369,14 @@ export function createM8MetricsTracker(serviceName: string = 'm8-app'): M8Metric
       if (metricsDbPool) {
         await metricsDbPool.end();
         metricsDbPool = null;
+      }
+      if (notificationsMetricsPool) {
+        await notificationsMetricsPool.end();
+        notificationsMetricsPool = null;
+      }
+      if (deliveryMetricsPool) {
+        await deliveryMetricsPool.end();
+        deliveryMetricsPool = null;
       }
     },
   };

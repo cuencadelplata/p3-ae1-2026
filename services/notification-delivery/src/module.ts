@@ -113,7 +113,8 @@ export function createDeliveryModule(options: DeliveryModuleOptions = {}) {
         postgres: postgres ? 'ok' : 'down',
         rabbitmq: rabbitmq ? 'ok' : 'down',
         pushProvider: 'ok',
-        m2_preferences: 'degraded',
+        // M2 no ofrece un health acordado; su disponibilidad se comprueba al pedir preferencias.
+        m2_preferences: 'not_checked',
       },
     };
   };

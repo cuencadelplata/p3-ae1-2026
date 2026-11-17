@@ -69,7 +69,7 @@ async function bootstrap() {
         postgres: pgOk ? 'ok' : 'down',
         rabbitmq: rmqOk ? 'ok' : 'down',
         pushProvider: 'ok',
-        m2_preferences: 'degraded',
+        m2_preferences: 'not_checked',
       },
     };
   };

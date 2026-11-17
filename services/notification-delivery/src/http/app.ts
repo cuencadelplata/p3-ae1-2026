@@ -88,7 +88,7 @@ export function createApp(deps: AppDependencies = {}): http.RequestListener {
             inbox: 'ok',
             tokens: 'ok',
             provider: 'ok',
-            m2_preferences: 'degraded',
+            m2_preferences: 'not_checked',
         },
       });
       return;
