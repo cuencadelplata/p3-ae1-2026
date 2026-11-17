@@ -374,34 +374,32 @@ Su finalidad es solicitar la entrega de una notificación lógica ya creada por 
 | Routing keys | `trip.requested`, `driver.assigned`, `driver.arrived`, `trip.started`, `trip.cancelled`, `trip.completed` |
 | Productor | M6 (Viajes) / M5 (Despacho) |
 | Consumidor | RF8.6 (Consumer de RF8.1: `m8.notifications.trip-events`) |
-| Estado | **PROPUESTA M8; PENDIENTE DE ACUERDO Y ADAPTADOR CON M5/M6/M1** |
+| Estado | `driver.arrived` y `trip.started`: acuerdo de identificador numérico con M1/M5/M6 y adaptador local M8; prueba conjunta pendiente. Los otros eventos siguen pendientes de contrato. |
 
-**Estado real al 2026-11-15:** M6 informó que hoy publica `viaje.arribado` y
-`viaje.iniciado` en `viajes_exchange` (direct), sin `messageId` ni destinatario.
-La aplicación única de M8 todavía no monta el consumidor de eventos de viaje
-descrito abajo; monta el consumidor del documento de M3. Por tanto, la tabla y
-el envelope siguientes son el contrato objetivo para acordar, no un flujo
-intermodular ya probado. El destinatario definitivo debe ser el `userId`
-numérico de M1. M2 confirmó que el `clienteId` libre de M6 no permite obtener
-ese `userId`: el productor deberá conservarlo desde la identidad M1 y enviarlo
-en el evento. Para destinatarios conductores, M3/M5/M6 deben confirmar la
-relación con M1. El campo de rol y la topología final siguen pendientes de
-acuerdo; M8 no convierte cadenas arbitrarias ni consulta bases ajenas.
+**Acuerdo informado por M6 el 2026-11-16:** M1 y M5 confirmaron que el
+destinatario canónico es el `userId` numérico de M1. M5 entrega `clientUserId`
+y `driverUserId` numéricos a M6. M6 conservará esos valores y publicará
+`DriverArrived` y `TripStarted` en `mobility.events` con `producer: "m6"`,
+`data.tripId` y `data.recipientId = clientUserId`. M8 ya inicia una cola propia para ambas
+routing keys y sólo acepta `recipientId` como entero positivo seguro.
+El resto de los eventos de esta sección sigue propuesto. Falta comprobar
+los dos eventos contra M6 real en la rama común; el adaptador local no acredita
+por sí solo una integración entre módulos. M8 no convierte `clienteId` libre
+ni consulta bases ajenas.
 
 #### 1. Sobre del mensaje (`mobility.events`)
 
 ```json
 {
-  "messageId": "9f1c7b2e-4d3a-4c8f-9b21-6e0a5c7d4812",
+  "messageId": "c0a80123-4567-489a-8abc-abcdef123456",
   "eventType": "TripStarted",
   "version": 1,
-  "occurredAt": "2026-10-05T18:42:11.000Z",
-  "correlationId": "trip-2026-000123",
-  "producer": "m6-viajes",
+  "occurredAt": "2026-11-16T20:35:00.000Z",
+  "correlationId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "producer": "m6",
   "data": {
-    "tripId": "trip-2026-000123",
-    "recipientId": 91,
-    "details": {}
+    "tripId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "recipientId": 42
   }
 }
 ```
@@ -412,6 +410,9 @@ acuerdo; M8 no convierte cadenas arbitrarias ni consulta bases ajenas.
 * `occurredAt`: ISO 8601 UTC.
 * `data.tripId`: ID único del viaje.
 * `data.recipientId`: `userId` numérico de M1 del destinatario (cliente o conductor).
+* Para `DriverArrived`, la misma estructura usa `eventType: "DriverArrived"` y
+  routing key `driver.arrived`. `TripStarted` usa `trip.started`. M6 indicó que
+  `recipientId` será el `clientUserId` numérico en ambos casos.
 
 #### 2. Mapeo de los 6 eventos de viaje
 
@@ -434,13 +435,8 @@ acuerdo; M8 no convierte cadenas arbitrarias ni consulta bases ajenas.
   * Argumentos: `x-message-ttl: 5000` (5s), `x-dead-letter-exchange: mobility.events`.
 * **Cola DLQ**: `m8.notifications.trip-events.dlq` (durable).
   * Binding en `mobility.events.dlx` con routing key `m8.notifications.trip-events`.
-* **Bindings en `mobility.events`**:
-  * `trip.requested`
-  * `driver.assigned` (y `trip.driver-assigned`)
-  * `driver.arrived` (y `trip.driver-arrived`)
-  * `trip.started`
-  * `trip.cancelled`
-  * `trip.completed`
+* **Bindings activos en `mobility.events`**: `driver.arrived` y `trip.started`.
+  Los demás bindings de la tabla son propuestas pendientes de sus productores.
 
 #### 4. Tratamiento de Resultados de Procesamiento en RF8.1
 

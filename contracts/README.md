@@ -11,7 +11,7 @@ con un productor real.
 
 | RF | Qué hace | Contratos que le corresponden |
 | --- | --- | --- |
-| **RF8.1 Notificaciones** | Crea la notificación lógica. | Eventos de viaje **propuestos**, [catálogo §5.4](events/catalogo-eventos-v1.md#54-contrato-de-entrada-rf86--rf81-eventos-de-viaje); salida interna [`NotificationRequested`](events/rf87-notification-requested.contract.md). |
+| **RF8.1 Notificaciones** | Crea la notificación lógica. | `DriverArrived` y `TripStarted` acordados con M6, con prueba conjunta pendiente; otros eventos de viaje propuestos en el [catálogo §5.4](events/catalogo-eventos-v1.md#54-contrato-de-entrada-rf86--rf81-eventos-de-viaje). Salida interna [`NotificationRequested`](events/rf87-notification-requested.contract.md). |
 | **RF8.2 QR** | Genera y valida QR de un uso. | [OpenAPI QR](../openapi/qr.openapi.yaml); [acuerdo técnico con M6](../docs/rf8.2/contrato-m6.md). No usa RabbitMQ para validar. |
 | **RF8.3 Comprobante** | Emite y guarda el PDF. | [OpenAPI de comprobantes](../openapi/receipts.openapi.yaml); pago de M7 por REST y eventos de emisión en el [catálogo](events/catalogo-eventos-v1.md). `payment.confirmed` conserva sólo un productor simulado. |
 | **RF8.4 Reenvío** | Reutiliza el comprobante y genera una referencia de entrega. | Rutas con etiqueta `ReceiptResend` en el [OpenAPI integrado](../openapi/m8-openapi.yaml) y detalle de reenvío en el [contrato de comprobantes](../openapi/receipts.openapi.yaml). |
@@ -23,8 +23,9 @@ con un productor real.
 
 - **M3:** el contrato `documento.registrado` está publicado; falta la prueba
   conjunta que acredite la relación entre `driverId` y el usuario de M1.
-- **M5/M6:** los eventos de viaje del catálogo son una propuesta. Falta acordar
-  destinatario numérico, rol, hechos y topología antes de montar el consumidor.
+- **M5/M6:** `DriverArrived` y `TripStarted` usan `recipientId` numérico de M1
+  en `mobility.events`. M8 monta el consumidor para esos dos eventos; falta la
+  prueba conjunta con M6 real. Los demás hechos siguen pendientes de contrato.
 - **M7:** M8 consulta `GET /metodo-pago/{viajeId}` con `x-api-key`; la prueba entre
   servicios reales se hará en la integración común.
 
