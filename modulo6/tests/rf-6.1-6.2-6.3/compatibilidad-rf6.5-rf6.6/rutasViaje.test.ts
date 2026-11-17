@@ -1,6 +1,7 @@
 import express from 'express';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import pool from '../../../src/rf-6.1-6.2-6.3/db/pool.js';
+import { EstadoViaje } from '../../../src/rf-6.1-6.2-6.3/models/viaje.model.js';
 import * as viajeRepo from '../../../src/rf-6.1-6.2-6.3/repositories/viaje.repository.js';
 import viajesRoutes from '../../../src/rf-6.1-6.2-6.3/routes/viajes.routes.js';
 
@@ -62,13 +63,50 @@ describe('Compatibilidad RF-6.5/RF-6.6 - rutas de viaje', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toEqual({
+    expect(body).toMatchObject({
       id: created.id,
       clienteId: created.clienteId,
       conductorId: null,
       estado: 'SOLICITADO',
+      // M2 importa direcciones con estos campos.
+      origen: 'Calle A',
+      destino: 'Calle B',
+      rideRequestId: null,
     });
+    expect(Number.isNaN(Date.parse(body.fechaCreacion))).toBe(false);
+    expect(body).not.toHaveProperty('completadoAt');
+    expect(body).not.toHaveProperty('codigoVerificacion');
     expect(body).not.toHaveProperty('viaje');
+  });
+
+  it('GET de un viaje completado incluye completadoAt (hora de fin de RF-6.4) para M2', async () => {
+    const created = await crearViaje();
+    await viajeRepo.actualizarEstado(created.id, EstadoViaje.CONDUCTOR_EN_CAMINO, 'conductor-test');
+    await viajeRepo.actualizarEstado(created.id, EstadoViaje.ARRIBADO);
+    await viajeRepo.actualizarEstado(created.id, EstadoViaje.EN_CURSO);
+    const horaFin = new Date();
+    await viajeRepo.finalizarSiEnCurso(created.id, async (_viaje, inicio) => ({
+      inicio, horaFin, tiempoMinutos: 1, tiempoEstimadoMinutos: 1, distanciaKm: 1, metodoPago: 'efectivo',
+      total: 500, moneda: 'ARS', origen: { latitude: 0, longitude: 0 }, destino: { latitude: 0, longitude: 0.01 },
+      tipoVehiculo: 'auto', fuenteMetrica: 'M4', metricasEstimadas: true, estadoPago: 'pendiente', paymentId: 'PAY-x',
+    }));
+
+    const body = await (await fetch(`${baseUrl}/api/viajes/${created.id}`)).json();
+
+    expect(body).toMatchObject({ estado: 'COMPLETADO', origen: 'Calle A', destino: 'Calle B' });
+    expect(new Date(body.completadoAt).getTime()).toBe(horaFin.getTime());
+  });
+
+  it('GET devuelve el rideRequestId de M5 cuando el viaje se creó desde el despacho', async () => {
+    const response = await fetch(`${baseUrl}/api/viajes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'Idempotency-Key': `idem-${Date.now()}` },
+      body: JSON.stringify({ clienteId: 'cliente-m5', origen: 'A', destino: 'B', rideRequestId: 'ride-req-123' }),
+    });
+    const created = await response.json() as { id: string };
+
+    const body = await (await fetch(`${baseUrl}/api/viajes/${created.id}`)).json();
+    expect(body.rideRequestId).toBe('ride-req-123');
   });
 
   it('GET responde 404 si el viaje no existe', async () => {
@@ -102,7 +140,7 @@ describe('Compatibilidad RF-6.5/RF-6.6 - rutas de viaje', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toEqual({
+    expect(body).toMatchObject({
       id: created.id,
       clienteId: created.clienteId,
       conductorId: estado === 'CONDUCTOR_EN_CAMINO' ? 'conductor-test' : null,
