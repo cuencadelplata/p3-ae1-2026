@@ -18,11 +18,23 @@ const NOMBRES: Record<string, string> = {
   MOCK: 'Proveedor de prueba',
 }
 
-// Parámetro con el que el proveedor real (Google o Auth0) vuelve a la interfaz.
-export const PARAMETRO_OAUTH = 'oauth'
+// Google y Auth0 vuelven a la raíz de la interfaz (http://localhost:5173/).
+// Esa dirección tiene que estar registrada en cada proveedor como URL de retorno permitida.
+// El proveedor elegido se guarda antes de salir, porque la URL de retorno no lo trae.
+const CLAVE_PROVEEDOR = 'm1_oauth_provider'
 
-export function redirectUriPara(provider: string): string {
-  return `${window.location.origin}/?${PARAMETRO_OAUTH}=${provider}`
+export function redirectUriOAuth2(): string {
+  return `${window.location.origin}/`
+}
+
+export function proveedorPendiente(): string | null {
+  try {
+    const provider = sessionStorage.getItem(CLAVE_PROVEEDOR)
+    sessionStorage.removeItem(CLAVE_PROVEEDOR)
+    return provider
+  } catch {
+    return null
+  }
 }
 
 // Paso final: M1 cambia el code por un token del proveedor y emite su propio JWT.
@@ -70,10 +82,15 @@ export default function OAuth2Login({ onLoginSuccess }: OAuth2LoginProps) {
         return
       }
       // Google y Auth0: M1 redirige al proveedor, que después vuelve a esta página con code y state.
+      try {
+        sessionStorage.setItem(CLAVE_PROVEEDOR, provider)
+      } catch {
+        /* sin sessionStorage no se puede completar la vuelta */
+      }
       const params = new URLSearchParams({
         provider,
         redirect: 'true',
-        redirect_uri: redirectUriPara(provider),
+        redirect_uri: redirectUriOAuth2(),
       })
       window.location.href = `${API_URL}/auth/oauth2/authorize?${params.toString()}`
     } catch (err: any) {
