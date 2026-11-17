@@ -216,6 +216,10 @@ npm run dev
 
 `npm run build` compila TypeScript en `dist/`; `npm start` ejecuta esa compilación. La imagen Docker aplica las migraciones antes de iniciar M9. `npm run db:seed` carga datos ficticios y debe ejecutarse únicamente sobre la base de desarrollo deseada.
 
+Para instalar las versiones verificadas, utilizar `npm ci`. Prisma CLI, Prisma Client y su instrumentación están alineados en **6.19.3**; actualizar los tres juntos después de comprobar la compatibilidad del esquema. Instalar `@prisma/client@latest` por separado puede introducir una versión mayor incompatible con este módulo.
+
+La dependencia de desarrollo `magicast@0.3.5` satisface el peer opcional de la configuración de Prisma y permite compartir el lock entre npm 10 (Docker) y npm 11. El override de `deepmerge-ts` se limita a `@prisma/config` para corregir su alerta de seguridad. Las autorizaciones `allowScripts` fijan las versiones revisadas de Prisma y esbuild; Scarf queda denegado en npm que admite esta configuración.
+
 ## Pruebas automatizadas
 
 ```powershell
