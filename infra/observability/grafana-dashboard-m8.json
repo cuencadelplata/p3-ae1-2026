@@ -600,7 +600,7 @@
         "spec": {
           "id": 2,
           "title": "M8 disponible para Alloy",
-          "description": "1 significa que Alloy pudo leer /metrics. Sin datos significa que no llego una muestra reciente.",
+          "description": "ONLINE: Alloy pudo leer /metrics. CAIDO: no hay una muestra positiva actual; puede ser M8 caido o Alloy apagado. Revisar Alloy y /health/ready para distinguirlos.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -617,7 +617,7 @@
                         "name": "${datasource}"
                       },
                       "spec": {
-                        "expr": "max(up{service=\"m8-app\"})",
+                        "expr": "max(up{service=\"m8-app\"}) or vector(0)",
                         "legendFormat": "Estado"
                       }
                     },
@@ -643,7 +643,7 @@
                 "percentChangeColorMode": "standard",
                 "reduceOptions": {
                   "calcs": [
-                    "lastNotNull"
+                    "last"
                   ],
                   "fields": "",
                   "values": false
