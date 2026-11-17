@@ -128,6 +128,26 @@ async function crearConductor(datos) {
 }
 
 /**
+ * Cambia el tipo de vehículo de un conductor ya creado (mismo destino que
+ * crearConductor: Redis con fallback en memoria). Devuelve null si no existe.
+ */
+async function actualizarTipoVehiculo(id, tipovehiculo) {
+  const actual = await obtenerConductorPorId(id);
+  if (!actual) {
+    return null;
+  }
+
+  const actualizado = { ...actual, tipovehiculo, updatedAt: new Date().toISOString() };
+  try {
+    await redis.set(`conductor:${id}`, JSON.stringify(actualizado));
+  } catch (err) {
+    console.warn(`[Redis] Fallo al actualizar tipo de vehículo de '${id}', guardando en memoria: ${err.message}`);
+  }
+  inMemoryConductores.set(id, actualizado);
+  return actualizado;
+}
+
+/**
  * RF 3.1 - Obtener el estado de habilitación de un conductor (patrón cache-aside).
  *
  * 1) Intenta leer `conductor:{id}:habilitado` en Redis.
@@ -372,6 +392,7 @@ module.exports = {
   obtenerConductores,
   obtenerConductorPorId,
   crearConductor,
+  actualizarTipoVehiculo,
   obtenerValoraciones,
   registrarValoracion,
   obtenerHabilitado,

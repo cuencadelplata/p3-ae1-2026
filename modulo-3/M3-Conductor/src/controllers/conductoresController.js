@@ -78,6 +78,36 @@ const crearConductor = async (req, res) => {
   }
 };
 
+// Tipos de vehículo aceptados (coinciden con TipoServicio de m3-vehiculos: AUTO / MOTO)
+const TIPOS_VEHICULO = ['auto', 'moto'];
+
+/**
+ * PATCH /conductores/:id
+ * Corrige el tipo de vehículo de un conductor ya creado (p. ej. si eligió mal en el alta).
+ * Body: { "tipovehiculo": "auto" | "moto" }  (se guarda en minúscula)
+ */
+const actualizarTipoVehiculo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tipo = String((req.body || {}).tipovehiculo || '').trim().toLowerCase();
+
+    if (!TIPOS_VEHICULO.includes(tipo)) {
+      return res.status(400).json({
+        error: `El campo 'tipovehiculo' debe ser uno de: ${TIPOS_VEHICULO.join(', ')}`
+      });
+    }
+
+    const conductor = await redisRepository.actualizarTipoVehiculo(id, tipo);
+    if (!conductor) {
+      return res.status(404).json({ error: `Conductor con ID '${id}' no encontrado` });
+    }
+
+    return res.status(200).json(conductor);
+  } catch (error) {
+    return res.status(500).json({ error: 'Error al actualizar el tipo de vehículo', detalle: error.message });
+  }
+};
+
 /**
  * GET /conductores/:id/habilitado
  * RF 3.1 - Estado de habilitación del conductor.
@@ -267,6 +297,7 @@ module.exports = {
   obtenerConductores,
   obtenerConductorPorId,
   crearConductor,
+  actualizarTipoVehiculo,
   obtenerHabilitado,
   obtenerDisponible,
   actualizarDisponible,

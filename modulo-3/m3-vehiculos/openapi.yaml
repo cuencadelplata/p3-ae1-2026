@@ -215,6 +215,11 @@ components:
         archivoUrl:
           type: string
           example: https://ejemplo.com/doc.pdf
+          description: URL del archivo (también se acepta una data URL de imagen)
+        cara:
+          type: string
+          enum: [FRENTE, DORSO]
+          description: Opcional. Solo para LICENCIA_CONDUCIR y CEDULA_VEHICULO (foto del frente o del dorso)
 
     DocumentoResponse:
       allOf:

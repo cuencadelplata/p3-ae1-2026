@@ -81,6 +81,23 @@ describe('Location API Endpoints (M4 - Requerimientos 1, 3, 4 y 5)', () => {
     expect(res.body.drivers[0].driverId).toBe(101);
   });
 
+  it('GET /api/v1/drivers/nearby debe usar el limite por defecto si maxCandidates es invalido', async () => {
+    for (const driverId of [201, 202]) {
+      await client
+        .put(`/api/v1/drivers/${driverId}/location`)
+        .send({ latitude: -27.4695, longitude: -58.831, vehicleType: 'AUTO', available: true });
+    }
+
+    for (const invalidLimit of ['abc', '0', '-1']) {
+      const res = await client.get(
+        `/api/v1/drivers/nearby?latitude=-27.4692&longitude=-58.8306&vehicleType=AUTO&radiusKm=5&maxCandidates=${invalidLimit}`
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body.count).toBe(2);
+    }
+  });
+
   it('POST /api/v1/geocode debe geocodificar una dirección', async () => {
     const res = await client.post('/api/v1/geocode').send({
       address: 'Plaza 25 de Mayo, Corrientes'

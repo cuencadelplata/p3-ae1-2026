@@ -2,10 +2,10 @@ services:
   m7-api:
     build: .
     ports:
-      - "16000:3000"
+      - "17000:3000"
     env_file: .env
     environment:
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-app}:${RABBITMQ_PASSWORD:-app-local}@rabbitmq:5672
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgres://m7user:m7pass@postgres:5432/m7db
       CARGO_CANCELACION_URL: http://cargo-cancelacion:3007
@@ -66,7 +66,7 @@ services:
   cargo-cancelacion:
     image: node:22-alpine
     ports:
-      - "3007:3007"
+      - "7000:3007"
     command: >
       node -e "require('http').createServer((q,s)=>{let b='';q.on('data',d=>b+=d);q.on('end',()=>{const r=JSON.parse(b||'{}');s.setHeader('Content-Type','application/json');s.end(JSON.stringify({tripId:r.tripId,requestedBy:r.requestedBy,charge:r.requestedBy==='cliente'?1000:0,currency:'ARS'}))})}).listen(3007)"
 

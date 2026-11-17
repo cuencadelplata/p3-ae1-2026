@@ -24,8 +24,7 @@ Para verificar de una vez todos los RF de M6, ejecuta `npm run test:all-rf`. El 
 
 Antes de levantar Compose:
 
-- En `modulo6/.env`, configura `M7_URL` y `M7_API_KEY` para la API real de M7.
-- En `modulo8/.env`, configura `QR_INTERNAL_API_KEY` con una clave de al menos 16 caracteres. M6 la lee desde ese archivo y la envía a M8 como `x-api-key`.
+- `modulo6/.env` es opcional: sin él, `npm run docker:up` levanta igual y alcanza para los tests unitarios. Para hablar con M7 y M8 reales, define ahí `M7_URL`, `M7_API_KEY` y `QR_INTERNAL_API_KEY` (la misma clave de al menos 16 caracteres que usa M8, que M6 envía como `x-api-key`).
 - Ten disponible la red `m1-integracion_default`, requerida por el Compose de integración de M8.
 
 `npm run docker:up` crea la red `m6_viajes_default` y levanta M6. Después, desde `modulo8/`, conecta M8 a esa red. El override dentro de M6 evita conflictos entre los puertos publicados de ambos módulos:
@@ -135,7 +134,7 @@ Las APIs RF-6.5/6.6 no autentican ni identifican por sí solas a la persona que 
 
 ## Integración del QR con M8
 
-M6 llama al M8 real en `http://m8-app:3000` por la red compartida `m6_viajes_default`. `QR_INTERNAL_API_KEY` se configura en `modulo8/.env` y M6 la recibe como `M8_QR_API_KEY`. El archivo `docker-compose.m8-hostports.yml`, ubicado en M6, se agrega al Compose de M8 para publicar su API en `localhost:3103` y despublicar su PostgreSQL, Redis y RabbitMQ del host; M6 mantiene sus puertos locales sin cambios.
+M6 llama al M8 real en `http://m8-app:3000` por la red compartida `m6_viajes_default`. `QR_INTERNAL_API_KEY` se configura en `modulo6/.env` y M6 la recibe como `M8_QR_API_KEY`. El archivo `docker-compose.m8-hostports.yml`, ubicado en M6, se agrega al Compose de M8 para publicar su API en `localhost:3103` y despublicar su PostgreSQL, Redis y RabbitMQ del host; M6 mantiene sus puertos locales sin cambios.
 
 ## Eventos de viaje para M4 (`trip.events`)
 

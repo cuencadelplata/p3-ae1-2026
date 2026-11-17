@@ -6,7 +6,8 @@ import { resolve } from 'path';
 let API_URL = '';
 const M8_URL = process.env.M8_URL ?? 'http://host.docker.internal:3103';
 const M8_TEST_URL = process.env.M8_TEST_URL ?? 'http://localhost:3103';
-const M8_QR_API_KEY = process.env.M8_QR_API_KEY ?? process.env.QR_INTERNAL_API_KEY;
+// Por defecto, la misma clave que usa el M8 de prueba de docker-compose.rf-e2e.yml (el mock local la ignora).
+const M8_QR_API_KEY = process.env.M8_QR_API_KEY ?? process.env.QR_INTERNAL_API_KEY ?? 'm6-rf-e2e-qr-secret';
 const M8_AUTH_CONFIG = M8_QR_API_KEY ? { headers: { 'x-api-key': M8_QR_API_KEY } } : {};
 const PROJECT_ROOT = resolve(__dirname, '../../');
 let containerId: string | null = null;
@@ -14,7 +15,9 @@ let mockM8Process: ChildProcess | null = null;
 
 describe('E2E Tests - Docker Container', () => {
   beforeAll(async () => {
-    if (!process.env.M8_URL) {
+    // Si `npm run docker:e2e:up` ya publicó el M8 de prueba en :3103, se usa ese y no se lanza el mock.
+    const m8YaDisponible = await axios.get('http://localhost:3103/health', { timeout: 1000 }).then(() => true, () => false);
+    if (!process.env.M8_URL && !m8YaDisponible) {
       mockM8Process = spawn(process.execPath, ['simulator/rf-6.1-6.2-6.3/mock-m8/server.js'], {
         cwd: PROJECT_ROOT,
         env: { ...process.env, PORT: '3103' },
