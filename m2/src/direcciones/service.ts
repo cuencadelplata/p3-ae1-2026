@@ -3,15 +3,27 @@ import Redis from 'ioredis';
 import { randomUUID } from 'node:crypto';
 import { ApiError, canonical, hash, locationKey, tripSchema, Point } from './domain';
 import { z } from 'zod';
+import {
+  recordCacheDirecciones, recordOperacionDireccion, recordReintentoTransaccion, recordSugerencia, recordViajeReciente,
+  type OperacionDireccion, type ResultadoOperacion, type ViaViajeReciente,
+} from '../observability/metrics';
 type Tx = Prisma.TransactionClient;
+const OPERACIONES: Record<string, OperacionDireccion> = { CREATE: 'alta', PATCH: 'edicion', DELETE: 'baja' };
+const RESULTADOS_POR_CODIGO: Record<string, ResultadoOperacion> = {
+  IDEMPOTENCY_CONFLICT: 'conflicto_idempotencia',
+  DUPLICATE_ADDRESS: 'duplicada',
+  VERSION_CONFLICT: 'conflicto_version',
+  CONCURRENT_WRITE: 'conflicto_concurrente',
+  NOT_FOUND: 'no_encontrada',
+};
 export class DireccionesService {
   constructor(private db: PrismaClient, private cache: Redis) {}
   private async transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
     for(let i=0;;i++) {
       try { return await this.db.$transaction(fn,{isolationLevel:Prisma.TransactionIsolationLevel.Serializable, maxWait:5000, timeout:10000}); }
       catch(e:any) {
-        if (['P2034','P2002'].includes(e.code) && i<7) { await new Promise(r=>setTimeout(r,10*(i+1)+Math.random()*20)); continue; }
-        if (['P2034','P2002'].includes(e.code)) throw new ApiError(409,'CONCURRENT_WRITE','Conflicto concurrente; reintente');
+        if (['P2034','P2002'].includes(e.code) && i<7) { recordReintentoTransaccion('reintento'); await new Promise(r=>setTimeout(r,10*(i+1)+Math.random()*20)); continue; }
+        if (['P2034','P2002'].includes(e.code)) { recordReintentoTransaccion('agotado'); throw new ApiError(409,'CONCURRENT_WRITE','Conflicto concurrente; reintente'); }
         throw e;
       }
     }
@@ -40,6 +52,7 @@ export class DireccionesService {
       rows=await this.db.direccion.findMany({where:{clienteId:c},orderBy:[{ultimoUso:'desc'},{createdAt:'desc'},{id:'asc'}]});
       try { await this.cache.set(key,JSON.stringify(rows),'EX',Number(process.env.CACHE_TTL_SECONDS??60)); } catch {source='BYPASS';}
     }
+    recordCacheDirecciones(source==='HIT'?'hit':source==='MISS'?'miss':'bypass');
     const data=rows.filter(d=>(!filter.tipo||d.tipo===filter.tipo) && (filter.favorita===undefined||d.favorita===filter.favorita) && (!filter.recientes||d.usos>0));
     return {data,cache:source};
   }
@@ -49,6 +62,17 @@ export class DireccionesService {
     return row;
   }
   async mutate(c:string, operation:string, key:string, payload:any, correlation:string) {
+    const operacion=OPERACIONES[operation]??'edicion';
+    try {
+      const result=await this.mutateTx(c,operation,key,payload,correlation);
+      recordOperacionDireccion(operacion,result.replayed?'replay':'ok');
+      return result;
+    } catch(e) {
+      recordOperacionDireccion(operacion,e instanceof ApiError?RESULTADOS_POR_CODIGO[e.code]??'error':'error');
+      throw e;
+    }
+  }
+  private async mutateTx(c:string, operation:string, key:string, payload:any, correlation:string) {
     const idem=hash(`${c}:${operation}:${key}`), fingerprint=hash(canonical(payload));
     const result=await this.transaction(async tx=>{
       const previous=await tx.idempotencia.findUnique({where:{id:idem}});
@@ -112,16 +136,21 @@ export class DireccionesService {
     };
     // Los tipos ORIGEN/DESTINO describen el uso histórico, no limitan el próximo viaje.
     const origen=last?.destino as Point|undefined, destino=last?.origen as Point|undefined;
+    recordSugerencia(Boolean(last),candidates.size);
     return {cache,data:{
       origenes:prioritize(origen),destinos:prioritize(destino),
       regreso:last?{viajeId:last.viajeId,origen,destino,fechaReferencia:last.fechaReferencia,fechaViaje:last.fechaViaje,requiereConfirmacion:true}:null,
     }};
   }
   async recordTrip(event:z.infer<typeof tripSchema>) {
-    return this.recordJourney({...event.data,eventId:event.eventId,fechaViaje:new Date(event.occurredAt),fechaReferencia:'FINALIZACION'});
+    return this.recordJourney({...event.data,eventId:event.eventId,fechaViaje:new Date(event.occurredAt),fechaReferencia:'FINALIZACION',via:'evento_m2'});
   }
-  async recordJourney(input:{viajeId:string;clienteId:string;origen:Point;destino:Point;fechaViaje:Date;fechaReferencia:string;eventId?:string}) {
+  async recordJourney(input:{viajeId:string;clienteId:string;origen:Point;destino:Point;fechaViaje:Date;fechaReferencia:string;eventId?:string;via?:ViaViajeReciente}) {
+    const via=input.via??'rest';
+    // Cada intento de la transacción vuelve a fijarlo; queda el del intento que se confirmó.
+    let nuevo=false;
     const result=await this.transaction(async tx=>{
+      nuevo=false;
       if(input.eventId) {
         if(await tx.inbox.findUnique({where:{id:input.eventId}})) return null;
         await tx.inbox.create({data:{id:input.eventId}});
@@ -141,6 +170,7 @@ export class DireccionesService {
         return null;
       }
       await tx.viajeProcesado.create({data:{viajeId:input.viajeId}});
+      nuevo=true;
       const clean=(p:Point)=>({direccion:p.direccion,latitud:p.latitud??null,longitud:p.longitud??null});
       await tx.viajeReciente.create({data:{viajeId:input.viajeId,clienteId:c,origen:clean(input.origen),destino:clean(input.destino),fechaViaje:input.fechaViaje,fechaReferencia:input.fechaReferencia}});
       const when=input.fechaViaje;
@@ -155,7 +185,8 @@ export class DireccionesService {
       const oldTrips=await tx.viajeReciente.findMany({where:{clienteId:c},orderBy:[{fechaViaje:'desc'},{viajeId:'asc'}],skip:20,select:{viajeId:true}});
       if(oldTrips.length)await tx.viajeReciente.deleteMany({where:{viajeId:{in:oldTrips.map(t=>t.viajeId)}}});
       return this.revision(tx,c);
-    });
+    }).catch((e:unknown)=>{ recordViajeReciente(via,'error'); throw e; });
+    recordViajeReciente(via,nuevo?'nuevo':'duplicado');
     if(result) await this.invalidate(input.clienteId,result.version);
   }
 }

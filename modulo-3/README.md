@@ -104,7 +104,7 @@ Cuando el módulo de viajes publica `viaje.finalizado`, M3 hace lo siguiente:
 3. Guarda la valoración en Redis con la clave `valoracion:pendiente:{viajeId}` y estado `PENDIENTE`.
 4. Publica `valoracion.habilitada` en el exchange `valoraciones.events`, routing key `valoracion.habilitada`. Llegan dos copias: la cola `cliente.valoracion-habilitada` (para el módulo cliente) y la cola `valoraciones.notificaciones-panel` (para el panel).
 
-El panel se conecta a `GET /api/valoraciones/notificaciones/stream` y muestra el aviso en cuanto llega. Las pendientes guardadas en Redis se listan con `GET /api/valoraciones/pendientes`. El contrato de los dos eventos está en `M3-Conductor/src/api/valoraciones/asyncapi.yml`.
+El panel se conecta a `GET /api/valoraciones/notificaciones/stream` y muestra el aviso en cuanto llega. Las pendientes guardadas en Redis se listan con `GET /api/valoraciones/pendientes`. El contrato de los dos eventos está en `M3-Conductor/src/api/valoraciones/m3-valoraciones-openapi.yml`.
 
 En el evento guardado, `evaluadorId` es el conductor y `evaluadoId` es el cliente.
 
