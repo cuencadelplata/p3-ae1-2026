@@ -24,7 +24,7 @@ const levels = (get('CAPACITY_LEVELS') || (mode === 'support' ? '25,50,100,200,4
   .split(',').map((value) => Number(value.trim()));
 const seconds = Number(process.argv[3] || get('CAPACITY_SECONDS') || 10);
 const maxFailureRate = Number(get('CAPACITY_MAX_FAILURE_RATE') || 0);
-const port = Number(get('M8_HOST_PORT') || 3000);
+const port = Number(get('M8_HOST_PORT') || 8000);
 if (!(mode in modeNames)
     || levels.length === 0 || levels.length > 10 || levels.some((n) => !Number.isInteger(n) || n < 1 || n > 1200)
     || !Number.isInteger(seconds) || seconds < 5 || seconds > 60

@@ -20,7 +20,7 @@ Levantá el backend M8 según el [README principal](../README.md). Después, des
 pnpm run dev
 ```
 
-Abrí la URL local que imprime el comando (normalmente `http://127.0.0.1:4173`; si el puerto está ocupado prueba el siguiente). El servidor de vista previa dirige las solicitudes a `http://127.0.0.1:3000`. Podés cambiar el destino con `M8_API_TARGET` y el puerto inicial con `M8_FRONTEND_PORT`.
+Abrí la URL local que imprime el comando (normalmente `http://127.0.0.1:4173`; si el puerto está ocupado prueba el siguiente). El servidor de vista previa dirige las solicitudes a `http://127.0.0.1:8000`. Podés cambiar el destino con `M8_API_TARGET` y el puerto inicial con `M8_FRONTEND_PORT`.
 
 El botón **Conexión M1** de la vista previa acepta un JWT de prueba sólo en la memoria de la pestaña. No se guarda en archivos, cookies ni `localStorage`. En la aplicación final, la autenticación y la navegación vendrán del frontend común; no se copiará este formulario ni ninguna clave interna de M6/M8 al navegador.
 
