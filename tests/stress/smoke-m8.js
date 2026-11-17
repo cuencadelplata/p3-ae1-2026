@@ -12,7 +12,6 @@ export const options = {
 const base = __ENV.TARGET_URL || 'http://host.docker.internal:3000';
 const mode = __ENV.SMOKE_MODE || 'http';
 const json = { 'Content-Type': 'application/json' };
-const runId = `smoke-${Date.now()}`;
 
 // La segunda operación sobre un QR consumido debe recibir 409.
 http.setResponseCallback(http.expectedStatuses({ min: 200, max: 399 }, 409));
@@ -21,7 +20,9 @@ function verify(response, label, expectedStatus, extra = () => true) {
   check(response, {
     [label]: (result) => result.status === expectedStatus && extra(result),
   });
-  console.log(`${label}: HTTP ${response.status} (${response.timings.duration.toFixed(0)} ms)`);
+  if (__ENV.SMOKE_VERBOSE !== 'false') {
+    console.log(`${label}: HTTP ${response.status} (${response.timings.duration.toFixed(0)} ms)`);
+  }
   return response;
 }
 
@@ -36,24 +37,29 @@ function createM1Token() {
   return `Bearer ${header}.${payload}.${signature}`;
 }
 
-function runQr() {
+function qrOperationId(runId, suffix) {
+  const hash = crypto.sha256(`${runId}-${suffix}`, 'hex');
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+}
+
+function runQr(runId) {
   const tripId = `${runId}-qr`;
   const headers = { ...json, 'x-api-key': __ENV.QR_INTERNAL_API_KEY };
   const generated = verify(http.post(`${base}/qr`, JSON.stringify({ tripId }), { headers }),
     'RF8.2 genera QR', 201, (r) => Boolean(r.json('token')));
   if (generated.status !== 201) return;
   const body = JSON.stringify({ tripId, token: generated.json('token') });
-  const operationHeaders = { ...headers, 'Idempotency-Key': __ENV.QR_OPERATION_ID };
+  const operationHeaders = { ...headers, 'Idempotency-Key': qrOperationId(runId, 'first') };
   verify(http.post(`${base}/qr/validate`, body, { headers: operationHeaders }),
     'RF8.2 valida QR', 200, (r) => r.json('valid') === true);
   verify(http.post(`${base}/qr/validate`, body, { headers: operationHeaders }),
     'RF8.2 repite la misma operacion', 200, (r) => r.json('valid') === true);
   verify(http.post(`${base}/qr/validate`, body, {
-    headers: { ...headers, 'Idempotency-Key': __ENV.QR_SECOND_OPERATION_ID },
+    headers: { ...headers, 'Idempotency-Key': qrOperationId(runId, 'second') },
   }), 'RF8.2 bloquea otra operacion sobre el QR', 409);
 }
 
-function runReceipts() {
+function runReceipts(runId) {
   const tripId = `${runId}-receipt`;
   const payload = {
     tripId,
@@ -75,13 +81,13 @@ function runReceipts() {
     { headers: { ...headers, ...json } }), 'RF8.4 solicita reenvio', 202);
 }
 
-function runSupport() {
+function runSupport(runId) {
   verify(http.post(`${base}/tickets`, JSON.stringify({
     viajeId: `${runId}-support`, motivo: 'Prueba de observabilidad M8',
   }), { headers: json }), 'RF8.5 abre ticket', 201);
 }
 
-function runDelivery() {
+function runDelivery(runId) {
   const token = `fcm-smoke-${runId}`;
   const headers = { ...json, Authorization: createM1Token() };
   verify(http.post(`${base}/devices/tokens`, JSON.stringify({ token, platform: 'ANDROID' }), { headers }),
@@ -91,11 +97,12 @@ function runDelivery() {
 }
 
 export default function () {
+  const runId = `smoke-${__ENV.SMOKE_RUN_ID || Date.now()}-${__VU}-${__ITER}`;
   verify(http.get(`${base}/health/live`), 'M8 esta vivo', 200);
-  if (mode === 'http' || mode === 'qr') runQr();
-  if (mode === 'http' || mode === 'receipts') runReceipts();
-  if (mode === 'http' || mode === 'support') runSupport();
-  if (mode === 'http' || mode === 'delivery') runDelivery();
+  if (mode === 'http' || mode === 'qr') runQr(runId);
+  if (mode === 'http' || mode === 'receipts') runReceipts(runId);
+  if (mode === 'http' || mode === 'support') runSupport(runId);
+  if (mode === 'http' || mode === 'delivery') runDelivery(runId);
   verify(http.get(`${base}/metrics`), 'M8 expone metricas', 200,
     (r) => r.body.includes('http_requests_total'));
 }
