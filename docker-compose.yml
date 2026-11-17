@@ -8,6 +8,7 @@ include:
   - path: ./modulo7/compose.integracion.yml
   - path: ./modulo8/compose.integracion.yaml
   - path: ./modulo-1-identidad-acceso/compose.integracion.yml
+  - path: ./modulo-5/compose.integracion.yml
 
 services:
   m4-api:
