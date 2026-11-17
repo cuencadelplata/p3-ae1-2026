@@ -1,0 +1,192 @@
+k6 stress · RUN_ID=revision-final-stress-cloud-20261117 · contenedor grafana/k6:2.3.0 en red m9-reservas-programadas_reservas-network
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+
+     execution: local
+        script: performance/k6/stress.js
+        output: cloud (https://proudgecko1373.grafana.net/a/k6-app/runs/9033169)
+
+     scenarios: (100.00%) 1 scenario, 10 max VUs, 1m0s max duration (incl. graceful stop):
+              * stress: Up to 10 looping VUs for 50s over 5 stages (gracefulRampDown: 10s, gracefulStop: 30s)
+
+
+running (0m00.9s), 00/10 VUs, 0 complete and 0 interrupted iterations
+stress   [   2% ] 00/10 VUs  00.9s/50.0s
+
+running (0m02.0s), 00/10 VUs, 0 complete and 0 interrupted iterations
+stress   [   4% ] 00/10 VUs  02.0s/50.0s
+
+running (0m02.9s), 00/10 VUs, 0 complete and 0 interrupted iterations
+stress   [   6% ] 00/10 VUs  02.9s/50.0s
+
+running (0m03.9s), 00/10 VUs, 0 complete and 0 interrupted iterations
+stress   [   8% ] 00/10 VUs  03.9s/50.0s
+
+running (0m04.9s), 00/10 VUs, 0 complete and 0 interrupted iterations
+stress   [  10% ] 00/10 VUs  04.9s/50.0s
+
+running (0m05.9s), 01/10 VUs, 2 complete and 0 interrupted iterations
+stress   [  12% ] 01/10 VUs  05.9s/50.0s
+
+running (0m06.9s), 01/10 VUs, 5 complete and 0 interrupted iterations
+stress   [  14% ] 01/10 VUs  06.9s/50.0s
+
+running (0m07.9s), 01/10 VUs, 8 complete and 0 interrupted iterations
+stress   [  16% ] 01/10 VUs  07.9s/50.0s
+
+running (0m08.9s), 01/10 VUs, 12 complete and 0 interrupted iterations
+stress   [  18% ] 01/10 VUs  08.9s/50.0s
+
+running (0m09.9s), 01/10 VUs, 15 complete and 0 interrupted iterations
+stress   [  20% ] 01/10 VUs  09.9s/50.0s
+
+running (0m10.9s), 02/10 VUs, 20 complete and 0 interrupted iterations
+stress   [  22% ] 02/10 VUs  10.9s/50.0s
+
+running (0m11.9s), 02/10 VUs, 27 complete and 0 interrupted iterations
+stress   [  24% ] 02/10 VUs  11.9s/50.0s
+
+running (0m12.9s), 02/10 VUs, 34 complete and 0 interrupted iterations
+stress   [  26% ] 02/10 VUs  12.9s/50.0s
+
+running (0m13.9s), 03/10 VUs, 41 complete and 0 interrupted iterations
+stress   [  28% ] 03/10 VUs  13.9s/50.0s
+
+running (0m14.9s), 03/10 VUs, 50 complete and 0 interrupted iterations
+stress   [  30% ] 03/10 VUs  14.9s/50.0s
+
+running (0m15.9s), 03/10 VUs, 59 complete and 0 interrupted iterations
+stress   [  32% ] 03/10 VUs  15.9s/50.0s
+
+running (0m16.9s), 04/10 VUs, 69 complete and 0 interrupted iterations
+stress   [  34% ] 04/10 VUs  16.9s/50.0s
+
+running (0m17.9s), 04/10 VUs, 83 complete and 0 interrupted iterations
+stress   [  36% ] 04/10 VUs  17.9s/50.0s
+
+running (0m18.9s), 04/10 VUs, 96 complete and 0 interrupted iterations
+stress   [  38% ] 04/10 VUs  18.9s/50.0s
+
+running (0m19.9s), 04/10 VUs, 108 complete and 0 interrupted iterations
+stress   [  40% ] 04/10 VUs  19.9s/50.0s
+
+running (0m20.9s), 05/10 VUs, 122 complete and 0 interrupted iterations
+stress   [  42% ] 05/10 VUs  20.9s/50.0s
+
+running (0m21.9s), 05/10 VUs, 139 complete and 0 interrupted iterations
+stress   [  44% ] 05/10 VUs  21.9s/50.0s
+
+running (0m22.9s), 06/10 VUs, 156 complete and 0 interrupted iterations
+stress   [  46% ] 06/10 VUs  22.9s/50.0s
+
+running (0m23.9s), 06/10 VUs, 174 complete and 0 interrupted iterations
+stress   [  48% ] 06/10 VUs  23.9s/50.0s
+
+running (0m24.9s), 07/10 VUs, 194 complete and 0 interrupted iterations
+stress   [  50% ] 07/10 VUs  24.9s/50.0s
+
+running (0m25.9s), 07/10 VUs, 210 complete and 0 interrupted iterations
+stress   [  52% ] 07/10 VUs  25.9s/50.0s
+
+running (0m26.9s), 08/10 VUs, 231 complete and 0 interrupted iterations
+stress   [  54% ] 08/10 VUs  26.9s/50.0s
+
+running (0m27.9s), 08/10 VUs, 255 complete and 0 interrupted iterations
+stress   [  56% ] 08/10 VUs  27.9s/50.0s
+
+running (0m28.9s), 09/10 VUs, 281 complete and 0 interrupted iterations
+stress   [  58% ] 09/10 VUs  28.9s/50.0s
+
+running (0m29.9s), 09/10 VUs, 309 complete and 0 interrupted iterations
+stress   [  60% ] 09/10 VUs  29.9s/50.0s
+
+running (0m30.9s), 10/10 VUs, 338 complete and 0 interrupted iterations
+stress   [  62% ] 10/10 VUs  30.9s/50.0s
+
+running (0m31.9s), 10/10 VUs, 366 complete and 0 interrupted iterations
+stress   [  64% ] 10/10 VUs  31.9s/50.0s
+
+running (0m32.9s), 10/10 VUs, 397 complete and 0 interrupted iterations
+stress   [  66% ] 10/10 VUs  32.9s/50.0s
+
+running (0m33.9s), 10/10 VUs, 429 complete and 0 interrupted iterations
+stress   [  68% ] 10/10 VUs  33.9s/50.0s
+
+running (0m34.9s), 10/10 VUs, 462 complete and 0 interrupted iterations
+stress   [  70% ] 10/10 VUs  34.9s/50.0s
+
+running (0m35.9s), 10/10 VUs, 492 complete and 0 interrupted iterations
+stress   [  72% ] 10/10 VUs  35.9s/50.0s
+
+running (0m36.9s), 10/10 VUs, 523 complete and 0 interrupted iterations
+stress   [  74% ] 10/10 VUs  36.9s/50.0s
+
+running (0m37.9s), 10/10 VUs, 556 complete and 0 interrupted iterations
+stress   [  76% ] 10/10 VUs  37.9s/50.0s
+
+running (0m38.9s), 10/10 VUs, 589 complete and 0 interrupted iterations
+stress   [  78% ] 10/10 VUs  38.9s/50.0s
+
+running (0m39.9s), 10/10 VUs, 622 complete and 0 interrupted iterations
+stress   [  80% ] 10/10 VUs  39.9s/50.0s
+
+running (0m40.9s), 10/10 VUs, 653 complete and 0 interrupted iterations
+stress   [  82% ] 10/10 VUs  41.0s/50.0s
+
+running (0m41.9s), 09/10 VUs, 682 complete and 0 interrupted iterations
+stress   [  84% ] 09/10 VUs  41.9s/50.0s
+
+running (0m42.9s), 08/10 VUs, 705 complete and 0 interrupted iterations
+stress   [  86% ] 08/10 VUs  42.9s/50.0s
+
+running (0m43.9s), 07/10 VUs, 730 complete and 0 interrupted iterations
+stress   [  88% ] 07/10 VUs  43.9s/50.0s
+
+running (0m44.9s), 06/10 VUs, 746 complete and 0 interrupted iterations
+stress   [  90% ] 06/10 VUs  44.9s/50.0s
+
+running (0m45.9s), 05/10 VUs, 764 complete and 0 interrupted iterations
+stress   [  92% ] 05/10 VUs  45.9s/50.0s
+
+running (0m46.9s), 04/10 VUs, 777 complete and 0 interrupted iterations
+stress   [  94% ] 04/10 VUs  46.9s/50.0s
+
+running (0m47.9s), 03/10 VUs, 789 complete and 0 interrupted iterations
+stress   [  96% ] 03/10 VUs  47.9s/50.0s
+
+running (0m48.9s), 02/10 VUs, 796 complete and 0 interrupted iterations
+stress   [  98% ] 02/10 VUs  48.9s/50.0s
+
+running (0m49.9s), 01/10 VUs, 800 complete and 0 interrupted iterations
+stress   [ 100% ] 01/10 VUs  49.9s/50.0s
+
+=== M9 k6 · stress · RUN_ID=revision-final-stress-cloud-20261117 · perfil=short ===
+checks: 100.00 %
+http_req_duration{op:cancel}: avg=0.00 p50=0.00 p95=0.00 p99=undefined max=0.00
+http_req_duration{op:create}: avg=52.70 p50=35.13 p95=123.08 p99=undefined max=477.76
+http_req_duration{op:get}: avg=9.31 p50=4.81 p95=36.67 p99=undefined max=191.17
+http_req_duration{op:list}: avg=24.01 p50=12.73 p95=60.49 p99=undefined max=233.51
+http_req_duration{op:update}: avg=0.00 p50=0.00 p95=0.00 p99=undefined max=0.00
+http_req_failed: 0.00 %
+http_reqs: 801 (16.00/s)
+iterations: 801 (16.00/s)
+m9_pricing_degraded: 0.00 %
+m9_unexpected_errors: 0.00 %
+vus_max: {"value":10,"min":10,"max":10}
+--- thresholds (iniciales, a calibrar) ---
+OK   http_req_duration{op:create} p(95)<500
+OK   http_req_duration{op:update} p(95)<500
+OK   m9_unexpected_errors rate<0.01
+OK   http_req_duration{op:cancel} p(95)<500
+OK   http_req_duration{op:list} p(95)<800
+OK   http_req_duration{op:get} p(95)<500
+OK   checks rate>0.99
+
+running (0m50.1s), 00/10 VUs, 801 complete and 0 interrupted iterations
+stress ✓ [ 100% ] 00/10 VUs  50s
+Resultado: thresholds OK · resumen en performance/results/stress-revision-final-stress-cloud-20261117.json

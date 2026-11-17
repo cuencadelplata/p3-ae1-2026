@@ -189,6 +189,7 @@ Variables principales:
 | ---------------------------------------------- | -------------------------------------------------------------------- |
 | `PORT`                                         | Puerto de M9                                                         |
 | `DATABASE_URL`, `REDIS_URL`, `RABBITMQ_URL`    | Conexiones de la aplicación                                          |
+| `DATABASE_CONNECTION_LIMIT`                    | Máximo de conexiones Prisma en Compose                               |
 | `M5_BASE_URL`, `M7_BASE_URL`                   | Dependencias REST                                                    |
 | `M5_SERVICE_TOKEN`                             | Autenticación de servicio hacia M5                                   |
 | `DISPATCH_MODE`                                | `events` por defecto; `rest` como alternativa de compatibilidad      |
@@ -215,6 +216,10 @@ npm run dev
 ```
 
 `npm run build` compila TypeScript en `dist/`; `npm start` ejecuta esa compilación. La imagen Docker aplica las migraciones antes de iniciar M9. `npm run db:seed` carga datos ficticios y debe ejecutarse únicamente sobre la base de desarrollo deseada.
+
+Para instalar las versiones verificadas, utilizar `npm ci`. Prisma CLI, Prisma Client y su instrumentación están alineados en **6.19.3**; actualizar los tres juntos después de comprobar la compatibilidad del esquema. Instalar `@prisma/client@latest` por separado puede introducir una versión mayor incompatible con este módulo.
+
+La dependencia de desarrollo `magicast@0.3.5` satisface el peer opcional de la configuración de Prisma y permite compartir el lock entre npm 10 (Docker) y npm 11. El override de `deepmerge-ts` se limita a `@prisma/config` para corregir su alerta de seguridad. Las autorizaciones `allowScripts` fijan las versiones revisadas de Prisma y esbuild; Scarf queda denegado en npm que admite esta configuración.
 
 ## Pruebas automatizadas
 
@@ -294,6 +299,8 @@ k6 local → resultados de ejecución → Grafana Cloud k6 (opcional)
 ```
 
 Se instrumentan HTTP, runtime Node, operaciones de reserva, degradaciones de tarifa, caché, locks, PostgreSQL, scheduler, Outbox, colas, Inbox y dependencias. Los logs conservan correlación y los eventos Outbox persisten contexto W3C para continuar las trazas tras una publicación diferida.
+
+La composición de observabilidad muestrea por defecto el 10 % de las trazas para limitar el costo de instrumentación durante k6 en el mismo equipo. Las métricas y los logs no se muestrean. Para una demostración con todas las trazas, configurar `OTEL_TRACES_SAMPLER_RATIO=1` antes de iniciar `obs:up`. Un log de una solicitud no muestreada puede contener un `trace_id` sin una traza almacenada en Tempo.
 
 **Esta opción requiere credenciales en cada entorno que envíe datos a Cloud.** La ejecución local básica funciona sin ellas. No están implementados Grafana local ni un workflow GitHub Actions que distribuya o sustituya esa configuración.
 
@@ -388,7 +395,18 @@ El runner utiliza ejecución local y envío de resultados; no necesita que Cloud
 
 ## Evidencias, resultados y limitaciones actuales
 
-- `performance/results/`: resúmenes y metadatos k6.
+La revisión de rendimiento del 17/11/2026 agregó un índice para el orden del listado y redujo las esperas de la transacción de creación, conservando la escritura atómica de reserva y Outbox. Compose limita el pool a cuatro conexiones por defecto y muestrea el 10 % de las trazas; las métricas y los logs se conservan completos.
+
+Resultados locales con el perfil `standard`, hasta 50 usuarios y sin modificar los umbrales:
+
+| Ejecución | Operaciones | p95 crear | p95 consultar | p95 listar | Resultado |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `revision-p95-stress-confirmacion-20261117` (6 minutos) | 24.052 | 292,48 ms | 152,14 ms | 183,72 ms | Cumple |
+| `revision-p95-spike-final-20261117` (2 min 50 s) | 8.221 | 109,76 ms | 48,05 ms | No ejercitado | Cumple |
+
+Ambas ejecuciones terminaron con 100 % de checks, sin errores HTTP y sin degradaciones de tarifa. Estos tiempos no garantizan el rendimiento en otro equipo: un estrés previo con los mismos cambios obtuvo 854,24 ms de p95 al crear y falló ese umbral. En esta PC de 6 GB, ejecutar k6 sin compilaciones ni otras pruebas simultáneas y cerrar aplicaciones que compitan por recursos. Los escenarios de estrés y spike no validan actualizar ni cancelar.
+
+- `performance/results/`: resúmenes y metadatos k6 generados localmente; Git ignora esta carpeta y el runner la crea cuando hace falta.
 - `observability/resultados/`: logs de verificación, capturas y resultados de revisión/ensayos.
 - [Revisión final conservada](observability/resultados/revision-final-20261117/REVISION_FINAL_OBSERVABILIDAD.md): hallazgos y evidencias del estado revisado.
 - `coverage/`: informes generados de cobertura, cuando se ejecuta esa suite.

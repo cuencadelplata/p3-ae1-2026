@@ -1,11 +1,59 @@
 const getSupabaseClient = require("../config/SupabaseClient");
-const { mockConductores } = require("../mocks/conductor/mockData");
 
 // Fallback en memoria: se usa cuando Supabase no está configurado (desarrollo/tests)
-// o cuando la consulta a la base de datos falla. Es la ÚNICA puerta de entrada a
-// la base de datos del módulo: ningún otro módulo debe tocar la tabla `conductores`
-// directamente, siempre deben pasar por la API REST de M3 (ver conductoresController).
-const inMemoryDB = new Map(mockConductores.map((c) => [c.usuarioID, c]));
+// o cuando la consulta a la base de datos falla. Arranca VACÍO (sin datos mock):
+// solo contiene conductores dados de alta por POST /api/conductores.
+// Es la ÚNICA puerta de entrada a la base de datos del módulo: ningún otro módulo
+// debe tocar la tabla `conductores` directamente, siempre deben pasar por la API
+// REST de M3 (ver conductoresController).
+const inMemoryDB = new Map();
+
+/**
+ * Alta (idempotente) de un conductor en la base de datos persistente. Sin esto,
+ * un conductor creado por la API no tenía habilitación consultable (RF 3.1)
+ * apenas faltaba en la caché de Redis.
+ *
+ * @param {{ usuarioID: string, ciudad: string, tipovehiculo: string, licenciaId?: string, vehiculoId?: string, habilitado?: string }} datos
+ */
+async function crearConductor(datos) {
+  const registro = {
+    usuarioID: datos.usuarioID,
+    ciudad: datos.ciudad,
+    tipovehiculo: datos.tipovehiculo,
+    licenciaId: datos.licenciaId || "",
+    vehiculoId: datos.vehiculoId || "",
+    habilitado: datos.habilitado || "pendiente",
+    disponible: datos.estado_conexion === "conectado"
+  };
+
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { error } = await supabase.from("conductores").upsert(
+        {
+          usuario_id: registro.usuarioID,
+          ciudad: registro.ciudad,
+          tipo_vehiculo: registro.tipovehiculo,
+          licencia_id: registro.licenciaId || null,
+          vehiculo_id: registro.vehiculoId || null,
+          habilitado: registro.habilitado,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: "usuario_id" }
+      );
+
+      if (error) throw error;
+    } catch (err) {
+      console.warn(
+        `[DB] Fallo al dar de alta a '${registro.usuarioID}' en Supabase, usando fallback en memoria: ${err.message}`
+      );
+    }
+  }
+
+  inMemoryDB.set(registro.usuarioID, { ...(inMemoryDB.get(registro.usuarioID) || {}), ...registro });
+  return registro;
+}
 
 /**
  * Obtiene el estado de habilitación (RF 3.1) de un conductor directamente desde
@@ -145,6 +193,7 @@ async function actualizarDisponible(id, disponible) {
 }
 
 module.exports = {
+  crearConductor,
   obtenerDisponiblePorId,
   actualizarDisponible,
   obtenerHabilitadoPorId,

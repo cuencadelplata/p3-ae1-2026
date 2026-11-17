@@ -7,6 +7,8 @@
     "dev": "nodemon src/server.js",
     "consumer": "node src/consumers/driverEventsConsumer.js",
     "build:app": "esbuild src/app/alta-conductor.tsx --bundle --minify --format=iife --jsx=automatic --define:process.env.NODE_ENV=\\\"production\\\" --outfile=public/alta-conductor.js",
+    "build:valoraciones": "esbuild src/app/valoraciones.tsx --bundle --minify --format=iife --jsx=automatic --define:process.env.NODE_ENV=\\\"production\\\" --outfile=public/valoraciones.js",
+    "build:front": "npm run build:app && npm run build:valoraciones",
     "test": "playwright test --project=unit",
     "test:unit": "playwright test --project=unit",
     "test:front": "npx serve public",

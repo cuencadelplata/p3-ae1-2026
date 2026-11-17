@@ -1,6 +1,7 @@
 const redisRepository = require('../repositories/redisRepository');
 const Conductor = require('../models/Conductor');
 const eventPublisher = require('../events/eventPublisher');
+const m1Client = require('../infraestructure/m1Client');
 
 // Valores válidos según el CHECK de la tabla `conductores` (src/schema/conductores.sql)
 const ESTADOS_HABILITACION = ['pendiente', 'activo', 'suspendido', 'rechazado'];
@@ -42,12 +43,53 @@ const obtenerConductorPorId = async (req, res) => {
 };
 
 /**
+ * Valida contra M1 real el JWT del header Authorization (si viene) y devuelve
+ * el userId canónico. Con M1_REQUIRE_AUTH=true el header es obligatorio.
+ * @returns {Promise<{ userId?: string, status?: number, error?: string }>}
+ */
+const resolverIdentidadM1 = async (req) => {
+  const header = (req.headers && req.headers.authorization) || '';
+  const token = header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
+
+  if (!token) {
+    if (process.env.M1_REQUIRE_AUTH === 'true') {
+      return { status: 401, error: 'Falta el token de M1 (Authorization: Bearer <jwt>)' };
+    }
+    return {};
+  }
+
+  try {
+    const identidad = await m1Client.validarIdentidad(token);
+    if (identidad.role !== 'CONDUCTOR') {
+      return { status: 403, error: `El usuario de M1 tiene rol '${identidad.role}', se requiere CONDUCTOR` };
+    }
+    return { userId: identidad.userId };
+  } catch (err) {
+    return { status: err.status || 503, error: err.message };
+  }
+};
+
+/**
  * POST /conductores
- * Crear un nuevo conductor en Redis
+ * Crear un nuevo conductor. Si llega un JWT de M1, el usuarioID se toma de M1.
  */
 const crearConductor = async (req, res) => {
   try {
-    const { usuarioID, ciudad, tipovehiculo, licenciaId, vehiculoId } = req.body || {};
+    let { usuarioID, ciudad, tipovehiculo, licenciaId, vehiculoId } = req.body || {};
+
+    const identidad = await resolverIdentidadM1(req);
+    if (identidad.error) {
+      return res.status(identidad.status).json({ error: identidad.error });
+    }
+    if (identidad.userId) {
+      if (usuarioID && String(usuarioID) !== identidad.userId) {
+        return res.status(403).json({
+          error: `El usuarioID '${usuarioID}' no coincide con el usuario autenticado en M1 (${identidad.userId})`
+        });
+      }
+      usuarioID = identidad.userId;
+      req.body = { ...(req.body || {}), usuarioID };
+    }
 
     if (!usuarioID && (!req.body || Object.keys(req.body).length === 0)) {
       return res.status(400).json({ error: 'Solicitud inválida: El cuerpo no puede estar vacío' });

@@ -3,6 +3,8 @@ const net = require('net');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 
+const { crearSesionM1 } = require('../../helpers/m1Client');
+
 const execFileAsync = promisify(execFile);
 const REDIS_CONTAINER = process.env.REDIS_CONTAINER || 'm3-redis';
 
@@ -51,7 +53,32 @@ async function unpauseRedisContainer() {
   }
 }
 
+/**
+ * Conductores reales (sin mocks): cada uno se registra en M1 y se da de alta en
+ * M3 con su JWT. Reemplazan a los antiguos cond_001/002/003 sembrados por mocks.
+ */
+const ids = {};
+
+async function altaConductorReal(request, { ciudad, tipovehiculo, habilitado }) {
+  const m1 = await crearSesionM1('CONDUCTOR');
+  const alta = await request.post('/api/conductores', {
+    headers: { Authorization: `Bearer ${m1.token}` },
+    data: { ciudad, tipovehiculo }
+  });
+  expect(alta.status()).toBe(201);
+  if (habilitado && habilitado !== 'pendiente') {
+    const put = await request.put(`/api/conductores/${m1.userId}/habilitado`, { data: { habilitado } });
+    expect(put.status()).toBe(200);
+  }
+  return m1.userId;
+}
+
 test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
+  test.beforeAll(async ({ request }) => {
+    ids.c1 = await altaConductorReal(request, { ciudad: 'Corrientes', tipovehiculo: 'auto', habilitado: 'activo' });
+    ids.c2 = await altaConductorReal(request, { ciudad: 'Resistencia', tipovehiculo: 'moto', habilitado: 'activo' });
+    ids.c3 = await altaConductorReal(request, { ciudad: 'Posadas', tipovehiculo: 'auto', habilitado: 'pendiente' });
+  });
 
   test('GET /health debe retornar estado ok del módulo', async ({ request, baseURL }) => {
     const backendUrl = process.env.BACKEND_URL || (baseURL && baseURL.includes(':4000') ? 'http://localhost:5000' : '');
@@ -79,11 +106,11 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
   });
 
   test('GET /api/conductores/:id debe devolver un conductor existente', async ({ request }) => {
-    const response = await request.get('/api/conductores/cond_001');
+    const response = await request.get(`/api/conductores/${ids.c1}`);
     expect(response.status()).toBe(200);
 
     const conductor = await response.json();
-    expect(conductor.usuarioID).toBe('cond_001');
+    expect(conductor.usuarioID).toBe(`${ids.c1}`);
     expect(conductor.ciudad).toBe('Corrientes');
     expect(conductor.tipovehiculo).toBe('auto');
   });
@@ -135,7 +162,7 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
   });
 
   test('GET /api/conductor/valoraciones debe retornar las valoraciones de un conductor', async ({ request }) => {
-    const response = await request.get('/api/conductor/valoraciones?conductorId=cond_001');
+    const response = await request.get(`/api/conductor/valoraciones?conductorId=${ids.c1}`);
     expect(response.status()).toBe(200);
 
     const valoraciones = await response.json();
@@ -153,12 +180,12 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
   test('POST /api/conductor/valoraciones debe registrar una calificación válida', async ({ request }) => {
     const payload = {
       evaluadoId: 'pasajero_tester_1',
-      conductorId: 'cond_001',
+      conductorId: `${ids.c1}`,
       valoracion: 4,
       comentario: 'Viaje seguro y a tiempo'
     };
 
-    const response = await request.post('/api/conductor/valoraciones?conductorId=cond_001', {
+    const response = await request.post(`/api/conductor/valoraciones?conductorId=${ids.c1}`, {
       data: payload
     });
 
@@ -166,19 +193,19 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
     const created = await response.json();
     expect(created.valoracion).toBe(4);
     expect(created.comentario).toBe('Viaje seguro y a tiempo');
-    expect(created.evaluadorId).toBe('cond_001');
+    expect(created.evaluadorId).toBe(`${ids.c1}`);
     expect(created.evaluadoId).toBe('pasajero_tester_1');
   });
 
   test('POST /api/conductor/valoraciones con calificación fuera de rango (1-5) debe retornar 400', async ({ request }) => {
     const payload = {
       evaluadoId: 'pasajero_tester_invalid',
-      conductorId: 'cond_001',
+      conductorId: `${ids.c1}`,
       valoracion: 10, // Inválido (> 5)
       comentario: 'Puntaje ilegal'
     };
 
-    const response = await request.post('/api/conductor/valoraciones?conductorId=cond_001', {
+    const response = await request.post(`/api/conductor/valoraciones?conductorId=${ids.c1}`, {
       data: payload
     });
 
@@ -189,27 +216,29 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
   });
 
   test('GET /api/conductor/:id/estado debe responder estado del conductor', async ({ request }) => {
-    const response = await request.get('/api/conductor/cond_001/estado');
+    const response = await request.get(`/api/conductor/${ids.c1}/estado`);
     expect(response.status()).toBe(200);
 
     const body = await response.json();
-    expect(body.usuarioID).toBe('cond_001');
+    expect(body.usuarioID).toBe(`${ids.c1}`);
     expect(body.habilitado).toBe(true);
-    expect(body.disponible).toBe(true);
+    expect(body.estado).toBe('activo');
+    // Recién dado de alta: estado_conexion = 'desconectado'
+    expect(body.disponible).toBe(false);
   });
 
   test('GET /api/conductor/:id/habilitado y /disponible deben responder con la misma estructura', async ({ request }) => {
-    const resHab = await request.get('/api/conductor/cond_001/habilitado');
+    const resHab = await request.get(`/api/conductor/${ids.c1}/habilitado`);
     expect(resHab.status()).toBe(200);
     const bodyHab = await resHab.json();
-    expect(bodyHab.usuarioID).toBe('cond_001');
+    expect(bodyHab.usuarioID).toBe(`${ids.c1}`);
     expect(typeof bodyHab.habilitado).toBe('boolean');
     expect(typeof bodyHab.disponible).toBe('boolean');
 
-    const resDisp = await request.get('/api/conductor/cond_001/disponible');
+    const resDisp = await request.get(`/api/conductor/${ids.c1}/disponible`);
     expect(resDisp.status()).toBe(200);
     const bodyDisp = await resDisp.json();
-    expect(bodyDisp.usuarioID).toBe('cond_001');
+    expect(bodyDisp.usuarioID).toBe(`${ids.c1}`);
     expect(typeof bodyDisp.disponible).toBe('boolean');
   });
 
@@ -224,23 +253,23 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
 
     test('GET /api/conductores/:id/habilitado devuelve usuarioID, habilitado y origen db en cache miss y cache en hit, y 404 para inexistente', async ({ request }) => {
       // Asegurar cache miss inicial eliminando la clave de caché en Redis
-      await sendRedisCommand('DEL', 'conductor:cond_002:habilitado');
+      await sendRedisCommand('DEL', `conductor:${ids.c2}:habilitado`);
 
-      const missRes = await request.get('/api/conductores/cond_002/habilitado');
+      const missRes = await request.get(`/api/conductores/${ids.c2}/habilitado`);
       expect(missRes.status()).toBe(200);
       const missBody = await missRes.json();
       expect(missBody).toEqual({
-        usuarioID: 'cond_002',
+        usuarioID: `${ids.c2}`,
         habilitado: 'activo',
         origen: 'db'
       });
 
       // La segunda lectura debe venir desde la caché de Redis
-      const hitRes = await request.get('/api/conductores/cond_002/habilitado');
+      const hitRes = await request.get(`/api/conductores/${ids.c2}/habilitado`);
       expect(hitRes.status()).toBe(200);
       const hitBody = await hitRes.json();
       expect(hitBody).toEqual({
-        usuarioID: 'cond_002',
+        usuarioID: `${ids.c2}`,
         habilitado: 'activo',
         origen: 'cache'
       });
@@ -255,47 +284,47 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
 
     test('PUT /api/conductores/:id/habilitado actualiza BD y caché, controla eventoEmitido y valida 400 / 404', async ({ request }) => {
       // Estado inicial conocido para cond_003
-      await request.put('/api/conductores/cond_003/habilitado', {
+      await request.put(`/api/conductores/${ids.c3}/habilitado`, {
         data: { habilitado: 'pendiente' }
       });
 
       // Cambio real de estado: pendiente -> suspendido (eventoEmitido: true)
-      const changeRes = await request.put('/api/conductores/cond_003/habilitado', {
+      const changeRes = await request.put(`/api/conductores/${ids.c3}/habilitado`, {
         data: { habilitado: 'suspendido', motivo: 'Documentación vencida E2E' }
       });
       expect(changeRes.status()).toBe(200);
       const changeBody = await changeRes.json();
       expect(changeBody).toEqual({
-        usuarioID: 'cond_003',
+        usuarioID: `${ids.c3}`,
         habilitado: 'suspendido',
         habilitadoAnterior: 'pendiente',
         eventoEmitido: true
       });
 
       // Verificar write-through en caché
-      const getCached = await request.get('/api/conductores/cond_003/habilitado');
+      const getCached = await request.get(`/api/conductores/${ids.c3}/habilitado`);
       expect(getCached.status()).toBe(200);
       expect(await getCached.json()).toEqual({
-        usuarioID: 'cond_003',
+        usuarioID: `${ids.c3}`,
         habilitado: 'suspendido',
         origen: 'cache'
       });
 
       // Repetir el mismo estado: suspendido -> suspendido (eventoEmitido: false)
-      const repeatRes = await request.put('/api/conductores/cond_003/habilitado', {
+      const repeatRes = await request.put(`/api/conductores/${ids.c3}/habilitado`, {
         data: { habilitado: 'suspendido' }
       });
       expect(repeatRes.status()).toBe(200);
       const repeatBody = await repeatRes.json();
       expect(repeatBody).toEqual({
-        usuarioID: 'cond_003',
+        usuarioID: `${ids.c3}`,
         habilitado: 'suspendido',
         habilitadoAnterior: 'suspendido',
         eventoEmitido: false
       });
 
       // Estado inválido -> 400
-      const invalidRes = await request.put('/api/conductores/cond_003/habilitado', {
+      const invalidRes = await request.put(`/api/conductores/${ids.c3}/habilitado`, {
         data: { habilitado: 'invalido_xyz' }
       });
       expect(invalidRes.status()).toBe(400);
@@ -312,82 +341,82 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
       expect(notFoundBody.error).toContain('no encontrado');
 
       // Restaurar estado original de cond_003
-      await request.put('/api/conductores/cond_003/habilitado', {
+      await request.put(`/api/conductores/${ids.c3}/habilitado`, {
         data: { habilitado: 'pendiente' }
       });
     });
 
     test('GET y PUT /api/conductores/:id/disponible actualizan disponibilidad, detectan cambios vs heartbeats y validan 400', async ({ request }) => {
       // Asegurar que cond_002 parte en disponible: false
-      await request.put('/api/conductores/cond_002/disponible', {
+      await request.put(`/api/conductores/${ids.c2}/disponible`, {
         data: { disponible: false }
       });
 
-      const initialGet = await request.get('/api/conductores/cond_002/disponible');
+      const initialGet = await request.get(`/api/conductores/${ids.c2}/disponible`);
       expect(initialGet.status()).toBe(200);
       expect(await initialGet.json()).toEqual({
-        usuarioID: 'cond_002',
+        usuarioID: `${ids.c2}`,
         disponible: false
       });
 
       // Cambio de false a true -> eventoEmitido: true
-      const toTrueRes = await request.put('/api/conductores/cond_002/disponible', {
+      const toTrueRes = await request.put(`/api/conductores/${ids.c2}/disponible`, {
         data: { disponible: true }
       });
       expect(toTrueRes.status()).toBe(200);
       expect(await toTrueRes.json()).toEqual({
-        usuarioID: 'cond_002',
+        usuarioID: `${ids.c2}`,
         disponible: true,
         disponibleAnterior: false,
         eventoEmitido: true
       });
 
       // Verificar con GET
-      const afterTrueGet = await request.get('/api/conductores/cond_002/disponible');
+      const afterTrueGet = await request.get(`/api/conductores/${ids.c2}/disponible`);
       expect(afterTrueGet.status()).toBe(200);
       expect(await afterTrueGet.json()).toEqual({
-        usuarioID: 'cond_002',
+        usuarioID: `${ids.c2}`,
         disponible: true
       });
 
       // Heartbeat repitiendo true -> eventoEmitido: false
-      const heartbeatTrueRes = await request.put('/api/conductores/cond_002/disponible', {
+      const heartbeatTrueRes = await request.put(`/api/conductores/${ids.c2}/disponible`, {
         data: { disponible: true }
       });
       expect(heartbeatTrueRes.status()).toBe(200);
       expect(await heartbeatTrueRes.json()).toEqual({
-        usuarioID: 'cond_002',
+        usuarioID: `${ids.c2}`,
         disponible: true,
         disponibleAnterior: true,
         eventoEmitido: false
       });
 
       // Cambio de true a false -> eventoEmitido: true
-      const toFalseRes = await request.put('/api/conductores/cond_002/disponible', {
+      const toFalseRes = await request.put(`/api/conductores/${ids.c2}/disponible`, {
         data: { disponible: false }
       });
       expect(toFalseRes.status()).toBe(200);
       expect(await toFalseRes.json()).toEqual({
-        usuarioID: 'cond_002',
+        usuarioID: `${ids.c2}`,
         disponible: false,
         disponibleAnterior: true,
         eventoEmitido: true
       });
 
       // Heartbeat repitiendo false -> eventoEmitido: false
-      const heartbeatFalseRes = await request.put('/api/conductores/cond_002/disponible', {
+      const heartbeatFalseRes = await request.put(`/api/conductores/${ids.c2}/disponible`, {
         data: { disponible: false }
       });
       expect(heartbeatFalseRes.status()).toBe(200);
       expect(await heartbeatFalseRes.json()).toEqual({
-        usuarioID: 'cond_002',
+        usuarioID: `${ids.c2}`,
         disponible: false,
         disponibleAnterior: false,
         eventoEmitido: false
       });
 
       // Valor no booleano -> 400
-      const invalidRes = await request.put('/api/conductores/cond_002/disponible', {
+      const invalidRes = await request.put(`/api/conductores/${ids.c2}/disponible`, {
         data: { disponible: 'si' }
       });
       expect(invalidRes.status()).toBe(400);
@@ -399,19 +428,19 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
     test('opera con resiliencia cuando Redis cae (fallback a BD en memoria) e invalida/recarga caché al recuperarse', async ({ request }) => {
       test.setTimeout(60_000);
       // 1. Con Redis UP, dejar cond_003 en habilitado='activo' y disponible=true en caché y BD
-      const setupHab = await request.put('/api/conductores/cond_003/habilitado', {
+      const setupHab = await request.put(`/api/conductores/${ids.c3}/habilitado`, {
         data: { habilitado: 'activo' }
       });
       expect(setupHab.status()).toBe(200);
 
-      const setupDisp = await request.put('/api/conductores/cond_003/disponible', {
+      const setupDisp = await request.put(`/api/conductores/${ids.c3}/disponible`, {
         data: { disponible: true }
       });
       expect(setupDisp.status()).toBe(200);
 
-      const preCheckHab = await request.get('/api/conductores/cond_003/habilitado');
+      const preCheckHab = await request.get(`/api/conductores/${ids.c3}/habilitado`);
       expect(await preCheckHab.json()).toEqual({
-        usuarioID: 'cond_003',
+        usuarioID: `${ids.c3}`,
         habilitado: 'activo',
         origen: 'cache'
       });
@@ -421,51 +450,51 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
         await pauseRedisContainer();
 
         // Primera lectura detecta el fallo de Redis, activa markDown y responde desde BD
-        const fallbackGetHab = await request.get('/api/conductores/cond_003/habilitado');
+        const fallbackGetHab = await request.get(`/api/conductores/${ids.c3}/habilitado`);
         expect(fallbackGetHab.status()).toBe(200);
         expect(await fallbackGetHab.json()).toEqual({
-          usuarioID: 'cond_003',
+          usuarioID: `${ids.c3}`,
           habilitado: 'activo',
           origen: 'db'
         });
 
         // Actualizar habilitado mientras Redis está caído (se escribe en BD en memoria, Redis queda con 'activo' viejo)
-        const putHabDown = await request.put('/api/conductores/cond_003/habilitado', {
+        const putHabDown = await request.put(`/api/conductores/${ids.c3}/habilitado`, {
           data: { habilitado: 'suspendido' }
         });
         expect(putHabDown.status()).toBe(200);
         expect(await putHabDown.json()).toEqual({
-          usuarioID: 'cond_003',
+          usuarioID: `${ids.c3}`,
           habilitado: 'suspendido',
           habilitadoAnterior: 'activo',
           eventoEmitido: true
         });
 
         // Lectura de habilitado con Redis caído devuelve el nuevo valor desde BD
-        const getHabWhileDown = await request.get('/api/conductores/cond_003/habilitado');
+        const getHabWhileDown = await request.get(`/api/conductores/${ids.c3}/habilitado`);
         expect(getHabWhileDown.status()).toBe(200);
         expect(await getHabWhileDown.json()).toEqual({
-          usuarioID: 'cond_003',
+          usuarioID: `${ids.c3}`,
           habilitado: 'suspendido',
           origen: 'db'
         });
 
         // Actualizar disponibilidad mientras Redis está caído (se persiste en BD en memoria)
-        const putDispDown = await request.put('/api/conductores/cond_003/disponible', {
+        const putDispDown = await request.put(`/api/conductores/${ids.c3}/disponible`, {
           data: { disponible: false }
         });
         expect(putDispDown.status()).toBe(200);
         expect(await putDispDown.json()).toEqual({
-          usuarioID: 'cond_003',
+          usuarioID: `${ids.c3}`,
           disponible: false,
           disponibleAnterior: true,
           eventoEmitido: true
         });
 
-        const getDispWhileDown = await request.get('/api/conductores/cond_003/disponible');
+        const getDispWhileDown = await request.get(`/api/conductores/${ids.c3}/disponible`);
         expect(getDispWhileDown.status()).toBe(200);
         expect(await getDispWhileDown.json()).toEqual({
-          usuarioID: 'cond_003',
+          usuarioID: `${ids.c3}`,
           disponible: false
         });
       } finally {
@@ -477,30 +506,30 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
       await expect
         .poll(
           async () => {
-            const res = await request.get('/api/conductores/cond_003/habilitado');
+            const res = await request.get(`/api/conductores/${ids.c3}/habilitado`);
             return await res.json();
           },
           { timeout: 15000, intervals: [200, 300, 500] }
         )
         .toEqual({
-          usuarioID: 'cond_003',
+          usuarioID: `${ids.c3}`,
           habilitado: 'suspendido',
           origen: 'cache'
         });
 
       // La disponibilidad también fue invalidada en Redis y refleja false
-      const dispAfterRecovery = await request.get('/api/conductores/cond_003/disponible');
+      const dispAfterRecovery = await request.get(`/api/conductores/${ids.c3}/disponible`);
       expect(dispAfterRecovery.status()).toBe(200);
       expect(await dispAfterRecovery.json()).toEqual({
-        usuarioID: 'cond_003',
+        usuarioID: `${ids.c3}`,
         disponible: false
       });
 
       // Restaurar estado base
-      await request.put('/api/conductores/cond_003/habilitado', {
+      await request.put(`/api/conductores/${ids.c3}/habilitado`, {
         data: { habilitado: 'pendiente' }
       });
-      await request.put('/api/conductores/cond_001/disponible', {
+      await request.put(`/api/conductores/${ids.c1}/disponible`, {
         data: { disponible: true }
       });
     });

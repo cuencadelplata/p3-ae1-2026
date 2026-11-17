@@ -11,9 +11,10 @@ x-otel-common: &otel-common
   OTEL_ENABLED: 'true'
   OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
   DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:-local-docker}
-  # 1 = 100 % de trazas: adecuado para una demo con poco tráfico. En carga sostenida
-  # bajar a 0.1–0.25 para reducir volumen y consumo de la cuota de Tempo.
-  OTEL_TRACES_SAMPLER_RATIO: ${OTEL_TRACES_SAMPLER_RATIO:-1}
+  # Muestreo de trazas para ejecutar carga en el mismo equipo que la aplicación.
+  # Métricas y logs se conservan completos. Usar 1 para capturar todas las trazas
+  # en una demostración de poco tráfico; el contexto W3C conserva la decisión.
+  OTEL_TRACES_SAMPLER_RATIO: ${OTEL_TRACES_SAMPLER_RATIO:-0.1}
   # 15 s: resolución suficiente para paneles y alertas de 1–5 min sin multiplicar muestras.
   OTEL_METRIC_EXPORT_INTERVAL_MS: ${OTEL_METRIC_EXPORT_INTERVAL_MS:-15000}
 

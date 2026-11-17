@@ -3,14 +3,14 @@ FROM node:22-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 
 COPY tsconfig.json ./
 COPY prisma ./prisma
 COPY src ./src
 RUN npm run db:generate
 RUN npm run build
-RUN npm prune --omit=dev && npm cache clean --force
+RUN npm prune --omit=dev --no-audit --no-fund && npm cache clean --force
 
 FROM node:22-alpine AS production
 
@@ -26,4 +26,4 @@ COPY public ./public
 EXPOSE 3000
 USER node
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node dist/server.js"]
