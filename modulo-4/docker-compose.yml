@@ -29,7 +29,7 @@ services:
         condition: service_healthy
 
   m4-ui:
-    build: ../modulo-4-ui
+    build: ./ui
     ports:
       - "8084:80"
     depends_on:

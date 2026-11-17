@@ -1,6 +1,6 @@
 # M4 - Ubicacion y Disponibilidad
 
-API REST del Modulo 4 de la plataforma de movilidad urbana. Esta aplicacion administra ubicaciones temporales y disponibilidad de conductores. La interfaz grafica se encuentra separada en `../modulo-4-ui` y se ejecuta en otro contenedor.
+API REST del Modulo 4 de la plataforma de movilidad urbana. Esta aplicacion administra ubicaciones temporales y disponibilidad de conductores. La interfaz grafica se encuentra en `./ui` y se ejecuta en otro contenedor.
 
 Version actual de la API: `2.0.0`.
 
