@@ -17,7 +17,7 @@ services:
       postgres:
         condition: service_healthy
       cargo-cancelacion:
-        condition: service_healthy
+        condition: service_started
     restart: on-failure
 
   postgres:
@@ -63,8 +63,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    depends_on:
-
   cargo-cancelacion:
     image: node:22-alpine
     ports:
@@ -78,7 +76,6 @@ services:
       - ./alloy-config.alloy:/etc/alloy/config.alloy
       - /var/run/docker.sock:/var/run/docker.sock
     command: run /etc/alloy/config.alloy
-    depends_on:
     restart: on-failure
     networks:
       - movilidad-network
