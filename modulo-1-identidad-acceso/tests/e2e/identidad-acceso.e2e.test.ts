@@ -413,12 +413,26 @@ describe.sequential(
         });
 
         // ============ FLUJO 6: OAUTH2 / OPENID CONNECT (AE2) ============
-        describe("Flujo 6: OAuth2/OpenID Connect (AE2 - Funcional)", () => {
-            it("E2E-6.1: OAuth2 authorize con provider válido", async () => {
+        describe("Flujo 6: OAuth2/OpenID Connect MOCK Punta a Punta (AE2)", () => {
+            let oauthState = "";
+            let oauthToken = "";
+            let oauthUserId = 0;
+
+            it("E2E-6.1: Listar proveedores disponibles y verificar MOCK", async () => {
+                const response = await request(app).get("/auth/oauth2/providers");
+
+                expect(response.status).toBe(200);
+                expect(Array.isArray(response.body.providers)).toBe(true);
+                const providers = response.body.providers.map((p: any) => p.provider);
+                expect(providers).toContain("MOCK");
+            });
+
+            it("E2E-6.2: Iniciar autorización OAuth2 con provider MOCK y rol CONDUCTOR", async () => {
                 const response = await request(app)
                     .get("/auth/oauth2/authorize")
                     .query({
                         provider: "MOCK",
+                        role: "CONDUCTOR",
                         redirect_uri: "http://localhost:3000/callback"
                     });
 
@@ -426,9 +440,11 @@ describe.sequential(
                 expect(response.body.authorizationUrl).toBeDefined();
                 expect(response.body.state).toBeDefined();
                 expect(response.body.provider).toBe("MOCK");
+
+                oauthState = response.body.state;
             });
 
-            it("E2E-6.2: Validar que provider sea obligatorio", async () => {
+            it("E2E-6.3: Validar que provider sea obligatorio en authorize", async () => {
                 const response = await request(app)
                     .get("/auth/oauth2/authorize")
                     .query({
@@ -439,26 +455,73 @@ describe.sequential(
                 expect(response.body.error).toContain("obligatorio");
             });
 
-            it("E2E-6.3: OAuth2 callback endpoint", async () => {
-                const authRes = await request(app)
-                    .get("/auth/oauth2/authorize")
-                    .query({ provider: "MOCK" });
+            it("E2E-6.4: Canjear código y state en callback, emitiendo JWT válido", async () => {
+                expect(oauthState).toBeDefined();
 
                 const response = await request(app)
                     .get("/auth/oauth2/callback")
                     .query({
                         provider: "MOCK",
                         code: "mock_auth_code_001",
-                        state: authRes.body.state
+                        state: oauthState
                     });
 
                 expect(response.status).toBe(200);
                 expect(response.body.token).toBeDefined();
+                expect(response.body.tokenType).toBe("Bearer");
                 expect(response.body.usuario).toBeDefined();
+                expect(response.body.usuario.rol).toBe("CONDUCTOR");
                 expect(response.body.provider).toBe("MOCK");
+
+                oauthToken = response.body.token;
+                oauthUserId = response.body.usuario.id;
             });
 
-            it("E2E-6.4: Link account requiere autenticación", async () => {
+            it("E2E-6.5: Validar identidad y rol con el token JWT OAuth2 en /auth/validar-identidad-y-rol", async () => {
+                expect(oauthToken).toBeDefined();
+
+                const response = await request(app)
+                    .get("/auth/validar-identidad-y-rol")
+                    .set("Authorization", `Bearer ${oauthToken}`);
+
+                expect(response.status).toBe(200);
+                expect(response.body.valid).toBe(true);
+                expect(response.body.userId).toBe(oauthUserId);
+                expect(response.body.role).toBe("CONDUCTOR");
+                expect(response.body.authMethod).toBe("oauth2");
+            });
+
+            it("E2E-6.6: Consultar perfil propio con el token JWT OAuth2 en /auth/me", async () => {
+                expect(oauthToken).toBeDefined();
+
+                const response = await request(app)
+                    .get("/auth/me")
+                    .set("Authorization", `Bearer ${oauthToken}`);
+
+                expect(response.status).toBe(200);
+                expect(response.body.userId).toBe(oauthUserId);
+                expect(response.body.rol).toBe("CONDUCTOR");
+                expect(response.body.estado).toBe("ACTIVO");
+                expect(response.body.email).toBeDefined();
+            });
+
+            it("E2E-6.7: Consultar perfil y proveedores vinculados en /auth/oauth2/userinfo", async () => {
+                expect(oauthToken).toBeDefined();
+
+                const response = await request(app)
+                    .get("/auth/oauth2/userinfo")
+                    .set("Authorization", `Bearer ${oauthToken}`);
+
+                expect(response.status).toBe(200);
+                expect(response.body.valid).toBe(true);
+                expect(response.body.usuario.id).toBe(oauthUserId);
+                expect(response.body.authMethod).toBe("oauth2");
+                expect(Array.isArray(response.body.linkedProviders)).toBe(true);
+                const mockLink = response.body.linkedProviders.find((p: any) => p.provider === "MOCK");
+                expect(mockLink).toBeDefined();
+            });
+
+            it("E2E-6.8: Link account requiere autenticación", async () => {
                 const response = await request(app)
                     .post("/auth/oauth2/link")
                     .send({
@@ -469,10 +532,10 @@ describe.sequential(
                 expect(response.status).toBe(401);
             });
 
-            it("E2E-6.5: Link account con autenticación", async () => {
+            it("E2E-6.9: Link account con autenticación exitosa", async () => {
                 const response = await request(app)
                     .post("/auth/oauth2/link")
-                    .set("Authorization", `Bearer ${token}`)
+                    .set("Authorization", `Bearer ${token || oauthToken}`)
                     .send({
                         provider: "MOCK",
                         provider_id: "mock-123"
@@ -480,6 +543,31 @@ describe.sequential(
 
                 expect(response.status).toBe(200);
                 expect(response.body.message).toContain("AE2");
+            });
+
+            it("E2E-6.10: Callback rechaza state adulterado (protección anti-CSRF)", async () => {
+                const response = await request(app)
+                    .get("/auth/oauth2/callback")
+                    .query({
+                        provider: "MOCK",
+                        code: "mock_auth_code_001",
+                        state: "state_falsificado_csrf"
+                    });
+
+                expect(response.status).toBe(400);
+                expect(response.body.code).toBe("invalid_state");
+            });
+
+            it("E2E-6.11: Callback rechaza cuando falta code", async () => {
+                const response = await request(app)
+                    .get("/auth/oauth2/callback")
+                    .query({
+                        provider: "MOCK",
+                        state: oauthState
+                    });
+
+                expect(response.status).toBe(400);
+                expect(response.body.code).toBe("missing_code");
             });
         });
 

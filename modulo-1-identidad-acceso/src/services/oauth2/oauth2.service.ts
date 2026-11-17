@@ -21,7 +21,7 @@ import {
 
 export class OAuth2Service {
     /**
-     * Genera un state firmado criptogrÃ¡ficamente para prevenir CSRF (RFC 6749)
+     * Genera un state firmado criptograficamente para prevenir CSRF (RFC 6749)
      */
     static generateState(
         provider: OAuth2Provider,
