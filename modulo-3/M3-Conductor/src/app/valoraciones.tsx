@@ -193,6 +193,9 @@ export default function ValoracionesConductor() {
   const [borradores, setBorradores] = useState<Record<string, Borrador>>({});
   const [cargando, setCargando] = useState(true);
   const [aviso, setAviso] = useState("");
+  const [demoEstado, setDemoEstado] = useState("");
+  const [demoError, setDemoError] = useState("");
+  const [demoCorriendo, setDemoCorriendo] = useState(false);
 
   async function cargar() {
     try {
@@ -266,6 +269,36 @@ export default function ValoracionesConductor() {
     }
   }
 
+  async function finalizarViajePrueba() {
+    if (demoCorriendo) return;
+    setDemoCorriendo(true);
+    setDemoError("");
+    setDemoEstado("Creando y finalizando viaje en M6…");
+    try {
+      const respuesta = await fetch(urlApi("/api/valoraciones/demo-viaje-finalizado"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          clienteId: "cliente-001",
+          conductorId: "conductor-001"
+        })
+      });
+      const cuerpo = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) {
+        const paso = cuerpo.paso ? ` (paso: ${cuerpo.paso})` : "";
+        throw new Error((cuerpo.error || "No se pudo finalizar el viaje de prueba") + paso);
+      }
+      setDemoEstado(`Viaje ${cuerpo.viajeId} finalizado. Esperando valoración pendiente…`);
+      await cargar();
+      window.setTimeout(() => cargar(), 1500);
+    } catch (error) {
+      setDemoEstado("");
+      setDemoError(error instanceof Error ? error.message : "Error al finalizar el viaje");
+    } finally {
+      setDemoCorriendo(false);
+    }
+  }
+
   return (
     <main className="val-page">
       <style>{estilos}</style>
@@ -275,6 +308,24 @@ export default function ValoracionesConductor() {
         </a>
         <h1>Valoraciones</h1>
         <p className="val-subtitulo">Conductor al cliente</p>
+
+        <article className="val-card">
+          <h2 className="val-card-titulo">Probar comunicación con Viajes</h2>
+          <p className="val-vacio">
+            Dispara el ciclo real de M6 (crear, asignar, arribo, iniciar y finalizar). Al completar,
+            M6 publica viaje.finalizado y aparece la tarjeta para valorar.
+          </p>
+          <button
+            type="button"
+            className="val-enviar"
+            disabled={demoCorriendo}
+            onClick={finalizarViajePrueba}
+          >
+            {demoCorriendo ? "Finalizando viaje…" : "Finalizar viaje de prueba"}
+          </button>
+          {demoEstado ? <p className="val-etiqueta" style={{ marginTop: "0.75rem" }}>{demoEstado}</p> : null}
+          {demoError ? <p className="val-error val-aviso">{demoError}</p> : null}
+        </article>
 
         {cargando ? (
           <article className="val-card">
