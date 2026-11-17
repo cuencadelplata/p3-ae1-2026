@@ -84,7 +84,7 @@ describe('E7 - Cliente de autenticación M1', () => {
     expect(fetchCall?.[1]?.headers).toEqual({ Authorization: `Bearer ${token}` });
     expect(fetchCall?.[1]?.signal).toBeInstanceOf(AbortSignal);
 
-    const expectedKey = `auth:token:${createHash('sha256').update(token).digest('hex')}`;
+    const expectedKey = `m2:auth:token:${createHash('sha256').update(token).digest('hex')}`;
     expect(cache.get).toHaveBeenCalledWith(expectedKey);
     expect(cache.set).toHaveBeenCalledWith(expectedKey, JSON.stringify(identity), 300);
     expect(expectedKey).not.toContain(token);
