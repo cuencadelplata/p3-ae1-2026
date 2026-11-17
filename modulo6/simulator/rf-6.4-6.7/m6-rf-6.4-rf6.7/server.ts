@@ -1,10 +1,6 @@
 import { createServer, type Server } from 'node:http';
 
 export function createSimulator(): Server {
-  const metodosPago = new Map<string, Record<string, unknown>>();
-  const ordenesProcesadas = new Set<string>();
-  const apiKeyValida = (recibida: string | string[] | undefined) =>
-    !process.env.M7_API_KEY || recibida === process.env.M7_API_KEY;
   const codigosQr = new Map<string, { token: string; expiresAt: string }>();
 
   return createServer(async (request, response) => {
@@ -43,117 +39,10 @@ export function createSimulator(): Server {
         distanceKm: Math.round(distanceKm * 100) / 100,
         estimatedEtaMinutes: Math.max(1, Math.ceil((distanceKm / 25) * 60)),
       };
-    } else if (
-      request.method === 'POST' &&
-      (request.url === '/tarifa/estimacion' || request.url === '/tarifas/estimacion')
-    ) {
-      const vehicleType = input.vehicleType;
-      const multiplier = vehicleType === 'moto' ? 0.7 : vehicleType === 'auto' ? 1 : undefined;
-      if (!input.origen || !input.destino || !multiplier || Number(input.distanciaKm) <= 0 || Number(input.tiempoEstimadoMin) <= 0) {
-        response.writeHead(400, { 'content-type': 'application/json' });
-        response.end(JSON.stringify({ error: 'Solicitud de estimación inválida' }));
-        return;
-      }
-
-      const distanceCost = Number(input.distanciaKm) * 250;
-      const timeCost = Number(input.tiempoEstimadoMin) * 50;
-      result = {
-        estimacionId: `est-${Date.now()}`,
-        distanciaKm: Number(input.distanciaKm),
-        tiempoEstimadoMin: Number(input.tiempoEstimadoMin),
-        vehicleType,
-        estimatedFare: Math.round((500 + distanceCost + timeCost) * multiplier * 100) / 100,
-        currency: 'ARS',
-        desglose: {
-          tarifaBase: 500,
-          costoDistancia: distanceCost,
-          costoTiempo: timeCost,
-          multiplicadorVehiculo: multiplier,
-        },
-        calculadoEn: new Date().toISOString(),
-      };
-    } else if (request.url?.startsWith('/metodo-pago') && !apiKeyValida(request.headers['x-api-key'])) {
-      // Igual que M7 real (exigirApiKey): /metodo-pago/* requiere x-api-key.
-      response.writeHead(401, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ mensaje: 'API key inválida o ausente' }));
-      return;
-    } else if (request.method === 'POST' && request.url === '/metodo-pago') {
-      const { clienteId, viajeId, tipo } = input;
-      if (typeof clienteId !== 'string' || typeof viajeId !== 'string' || typeof tipo !== 'string' || !['efectivo', 'tarjeta', 'transferencia'].includes(tipo)) {
-        response.writeHead(400, { 'content-type': 'application/json' });
-        response.end(JSON.stringify({ mensaje: 'No se pudo registrar el método de pago' }));
-        return;
-      }
-      if (metodosPago.has(viajeId)) {
-        response.writeHead(400, { 'content-type': 'application/json' });
-        response.end(JSON.stringify({ mensaje: 'No se pudo registrar el método de pago', error: 'El viaje ya tiene un pago registrado' }));
-        return;
-      }
-      const metodoPago = {
-        pagoId: `PAY-${viajeId}`,
-        clienteId,
-        viajeId,
-        tipo,
-        fecha: new Date().toISOString(),
-        detalle: '',
-        estado: 'pendiente',
-      };
-      metodosPago.set(String(viajeId), metodoPago);
-      result = metodoPago;
-    } else {
-      const paymentMatch = request.url?.match(/^\/metodo-pago\/([^/]+)(?:\/(autorizar|rechazar))?$/);
-      if (paymentMatch) {
-        const viajeId = decodeURIComponent(paymentMatch[1]);
-        const metodoPago = metodosPago.get(viajeId);
-        if (!metodoPago) {
-          response.writeHead(404, { 'content-type': 'application/json' });
-          response.end(JSON.stringify({ mensaje: 'No se encontró un pago para ese viaje' }));
-          return;
-        }
-        if (request.method === 'GET' && !paymentMatch[2]) {
-          result = metodoPago;
-        } else if (request.method === 'POST' && paymentMatch[2] === 'autorizar') {
-          // Mismo contrato que M7 real: idOrden, total y los datos de Mercado Pago.
-          const { idOrden, total, moneda, token, paymentMethodId, email } = input;
-          const error =
-            !idOrden ? 'idOrden es requerido'
-            : typeof total !== 'number' ? 'total es requerido'
-            : !token || !paymentMethodId || !email ? 'token, paymentMethodId y email son requeridos'
-            : ordenesProcesadas.has(String(idOrden)) ? 'Esta orden de pago ya fue procesada anteriormente'
-            : metodoPago.estado !== 'pendiente' ? 'El pago no fue procesado aún'
-            : undefined;
-          if (error) {
-            response.writeHead(400, { 'content-type': 'application/json' });
-            response.end(JSON.stringify({ mensaje: 'No se pudo autorizar el pago', error }));
-            return;
-          }
-          // Token de prueba para simular un rechazo de la pasarela.
-          if (token === 'rechazado') {
-            response.writeHead(402, { 'content-type': 'application/json' });
-            response.end(JSON.stringify({ mensaje: 'El pago no fue aprobado por Mercado Pago', estadoMP: 'rejected' }));
-            return;
-          }
-          ordenesProcesadas.add(String(idOrden));
-          Object.assign(metodoPago, { estado: 'autorizado', paymentId: `MP-${viajeId}`, total, moneda: moneda ?? 'ARS' });
-          result = metodoPago;
-        } else if (request.method === 'POST' && paymentMatch[2] === 'rechazar') {
-          metodoPago.estado = 'rechazado';
-          result = metodoPago;
-        } else {
-          response.writeHead(400, { 'content-type': 'application/json' });
-          response.end(JSON.stringify({ mensaje: 'Solicitud de pago inválida' }));
-          return;
-        }
-        response.writeHead(200, { 'content-type': 'application/json' });
-        response.end(JSON.stringify(result));
-        return;
-      }
     }
 
     if (result) {
       const isEstimate = request.url === '/api/v1/estimate' ||
-        request.url === '/tarifa/estimacion' ||
-        request.url === '/tarifas/estimacion' ||
         request.url === '/qr/validate';
       response.writeHead(isEstimate ? 200 : 201, { 'content-type': 'application/json' });
       response.end(JSON.stringify(result));

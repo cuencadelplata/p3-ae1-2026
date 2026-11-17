@@ -64,7 +64,7 @@ npm ci
 npm run test:rf-6.4-6.7
 ```
 
-Para ejecutar los tests end-to-end, que levantan un stack aislado con Viajes, PostgreSQL, Redis, RabbitMQ y un simulador de M3/M4/M7/M8:
+Para ejecutar los tests end-to-end, que levantan un stack con Viajes, PostgreSQL, Redis, RabbitMQ, un simulador de M3/M4/M8 y la API real de M7, configura antes `M7_URL` y `M7_API_KEY` en el entorno de Compose:
 
 ```sh
 npm run docker:e2e:up
@@ -106,11 +106,12 @@ Respuesta exitosa: `200 OK`, con la propiedad `historial`.
 
 ## Entorno de integración
 
-El simulador dentro de este módulo proporciona, solo para pruebas E2E, contratos compatibles con las dependencias HTTP que consume el backend central:
+El simulador dentro de este módulo proporciona, solo para pruebas E2E, contratos compatibles con las dependencias HTTP que aún no están disponibles en esta integración:
 
  - M3: `GET /conductor/{conductorId}/estado`
  - M4: `POST /api/v1/estimate`
- - M7: estimación y autorización de pago
  - M8: generación y validación de QR
+
+M7 se consume como servicio real mediante `M7_URL` y `M7_API_KEY`, configurados en el entorno de Compose.
 
 En ejecución normal, estas responsabilidades y sus datos pertenecen al módulo central, no a esta fachada.

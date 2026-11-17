@@ -17,9 +17,8 @@ services:
       M8_QR_API_KEY: ${M8_QR_API_KEY:-}
       M3_URL: http://simulador:3001
       M4_URL: http://simulador:3001/api/v1
-      M7_URL: http://simulador:3001
-      # Clave interna acordada con M7; en entornos publicados se inyecta desde un secreto.
-      M7_API_KEY: ${M7_API_KEY:-m7-clave-local}
+      M7_URL: ${M7_URL:?Configurar M7_URL con la URL real de la API M7}
+      M7_API_KEY: ${M7_API_KEY:?Configurar M7_API_KEY con la clave compartida con M7}
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
       DB_HOST: tripdb
@@ -27,6 +26,8 @@ services:
       DB_USER: m6
       DB_PASSWORD: m6pass
       DB_NAME: tripdb
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       tripdb:
         condition: service_healthy
@@ -94,8 +95,6 @@ services:
       context: .
       dockerfile: Dockerfile
     command: ["node", "dist/simulator/rf-6.4-6.7/m6-rf-6.4-rf6.7/server.js"]
-    environment:
-      M7_API_KEY: ${M7_API_KEY:-m7-clave-local}
     expose:
       - "3001"
 

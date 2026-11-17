@@ -20,6 +20,8 @@ npm run test:e2e
 npm run docker:down
 ```
 
+Antes de levantar Compose, define `M7_URL` y `M7_API_KEY` en el entorno o en `modulo6/.env`. La URL debe ser alcanzable desde el contenedor M6; no puede ser `localhost` dentro del contenedor. Para un servicio publicado en el host, se puede usar `host.docker.internal` y el puerto publicado por M7. M6 mantiene simuladas las dependencias M3, M4 y M8, cuyas implementaciones aún no están disponibles en esta integración.
+
 Las pruebas unitarias de RF-6.1/2/3 usan PostgreSQL y Redis reales, por eso se levantan con Compose. Para ejecutar una familia concreta:
 
 ```sh
@@ -59,7 +61,7 @@ El frontend de RF-6.1/6.2/6.3 se sirve desde la misma API M6, en `http://localho
 | Redis | 6379 | Caché compartida |
 | RabbitMQ | 5672, gestión 15672 | Eventos de viajes y cancelaciones |
 
-Compose inicia un simulador interno para las dependencias M3/M4/M7/M8. Los tres servicios M6 comparten la misma imagen Node y la misma base; `docker compose down` detiene el entorno y conserva el volumen de PostgreSQL.
+Compose inicia un simulador interno únicamente para las dependencias M3/M4/M8. Las llamadas de tarifa y pago de M7 se dirigen a la API real mediante `M7_URL` y `M7_API_KEY`. Los tres servicios M6 comparten la misma imagen Node y la misma base; `docker compose down` detiene el entorno y conserva el volumen de PostgreSQL.
 
 ## Front de RF-6.4 / RF-6.7
 
@@ -111,7 +113,7 @@ Las APIs RF-6.5/6.6 no autentican ni identifican por sí solas a la persona que 
 
 ## Integración del QR con M8
 
-El cliente QR acepta `M8_URL` y `M8_QR_API_KEY` desde el entorno. En el Compose local se mantiene el simulador; al integrar M8, la clave se debe configurar fuera de Git y compartirse con M8 como `QR_INTERNAL_API_KEY`.
+El cliente QR acepta `M8_URL` y `M8_QR_API_KEY` desde el entorno. Como M8 todavía no está disponible en esta integración, Compose conserva su simulador.
 
 ## Contratos
 
