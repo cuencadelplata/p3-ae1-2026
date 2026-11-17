@@ -85,6 +85,14 @@ Para enviar además a **Grafana Cloud** (como hacen los demás módulos), copiar
 
 Sin el perfil `observability` todo funciona igual: los servicios descartan la telemetría OTLP y `/metrics` sigue disponible.
 
+## Mini front-end RF-6.5/6.6
+
+Con el stack levantado, abre `http://localhost:3001/cliente` para RF-6.5 o `http://localhost:3001/conductor` para RF-6.6. La pantalla muestra el viaje actual y solo solicita el motivo; al confirmar, llama a la API de cancelación correspondiente. El ID llega en `?viajeId=...` desde el contexto que abre la cancelación o se obtiene automáticamente del listado de la cuenta.
+
+El módulo que conoce la sesión debe pasar `viajeId` directamente, o bien `clienteId`/`conductorId` para que la pantalla busque el viaje cancelable más reciente. Si falta todo contexto, la pantalla informa que no puede identificar el viaje. También usa `m6-client-id` o `m6-conductor-id` de `localStorage` como alternativa en el mismo origen.
+
+Las APIs RF-6.5/6.6 no autentican ni identifican por sí solas a la persona que abre la pantalla. Las rutas fijan el flujo, pero no sustituyen autenticación; el módulo que conoce la sesión debe pasar el `clienteId` o `conductorId` correspondiente.
+
 ## Contratos
 
 - Todos los requisitos: [OpenAPI consolidado](openapi.yaml)

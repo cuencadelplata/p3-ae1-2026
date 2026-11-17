@@ -436,6 +436,42 @@ paths:
         '503':
           $ref: '#/components/responses/DbNoDisponible'
 
+  /api/conductores/{conductorId}/viajes:
+    get:
+      tags: [Viajes]
+      summary: Consultar viajes asignados a un conductor
+      description: Devuelve los viajes asignados al conductor, ordenados del más reciente al más antiguo.
+      operationId: obtenerViajesDeConductor
+      parameters:
+        - name: conductorId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Viajes del conductor; la lista puede estar vacía
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [conductorId, viajes]
+                properties:
+                  conductorId:
+                    type: string
+                  viajes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ViajeResponse'
+        '400':
+          description: Identificador de conductor inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/DbNoDisponible'
+
   /api/viajes/{id}/finalizacion:
     post:
       tags: [Finalización]

@@ -9,6 +9,17 @@ describe('RF-6.6 - Cancelación por conductor', () => {
     if (services.api) stopServices(services.api);
   });
 
+  it('lista viajes asignados al conductor para que la interfaz obtenga el ID desde la API', async () => {
+    const viaje = { id: 'V-LIST-CONDUCTOR', clienteId: 'C-LIST', conductorId: 'D-LIST', estado: 'CONDUCTOR_EN_CAMINO' };
+    const running = await startServices(new Map([[viaje.id, viaje]]));
+    services.api = running.api;
+
+    const response = await fetch(`${running.url}/api/conductores/D-LIST/viajes`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ conductorId: 'D-LIST', viajes: [viaje] });
+  });
+
   it('retorna al cliente al proceso de despacho y registra el motivo del conductor', async () => {
     const viaje = { id: 'V-300', clienteId: 'C-30', conductorId: 'D-30', estado: 'CONDUCTOR_EN_CAMINO' };
     const running = await startServices(new Map([[viaje.id, viaje]]));

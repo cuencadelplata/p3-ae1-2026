@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#080908">
+    <title>M6 Viajes | Cancelación</title>
+    <link rel="stylesheet" href="/cancelacion.css">
+    <script type="module" src="/cancelacion.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="M6 Viajes, cancelaciones">
+        <span class="brand-mark">M6</span>
+        <span class="brand-name">VIAJES<span> / CANCELACIONES</span></span>
+      </a>
+      <div class="api-status"><span class="status-dot" id="api-dot"></span><span id="api-label">Comprobando API</span></div>
+    </header>
+
+    <main class="shell">
+      <section class="page-heading">
+        <div>
+          <p class="eyebrow" id="requirement-label">GESTIÓN DE VIAJES</p>
+          <h1 id="page-title">Cancelar un viaje</h1>
+          <p class="intro">Revisa la solicitud antes de confirmar. La cancelación no se puede deshacer desde esta pantalla.</p>
+        </div>
+        <div class="workflow" aria-label="Pasos de cancelación">
+          <span class="workflow-step is-current"><b>01</b> Solicitud</span>
+          <span class="workflow-line"></span>
+          <span class="workflow-step"><b>02</b> Confirmación</span>
+        </div>
+      </section>
+
+      <div class="workspace">
+        <section class="form-panel" aria-labelledby="form-title">
+          <div class="section-heading">
+            <span class="step-number">01</span>
+            <div><p class="eyebrow" id="form-context">CANCELACIÓN</p><h2 id="form-title">Motivo</h2></div>
+          </div>
+
+          <div class="trip-context" id="trip-context" aria-live="polite">
+            <span class="context-mark" aria-hidden="true">↗</span>
+            <div><p class="eyebrow" id="trip-context-label">VIAJE ACTUAL</p><strong id="trip-context-value">Buscando viaje…</strong></div>
+          </div>
+          <p id="lookup-status" class="lookup-status" aria-live="polite" hidden></p>
+
+          <form id="cancel-form" class="form-stack">
+            <label for="reason">Motivo</label>
+            <textarea id="reason" name="motivo" rows="4" maxlength="240" placeholder="Cuéntanos por qué se cancela el viaje" required></textarea>
+            <div class="field-foot"><span>Visible en el registro del evento</span><span id="reason-count">0 / 240</span></div>
+
+            <button class="button button-primary" id="review-button" type="submit" disabled>Cancelar viaje <span aria-hidden="true">↗</span></button>
+          </form>
+        </section>
+
+        <aside class="context-panel" aria-label="Información de cancelación">
+          <div class="context-topline"><span class="context-mark" aria-hidden="true">!</span><span>ANTES DE CONTINUAR</span></div>
+          <p>La cancelación se procesará después de tu confirmación. El sistema verificará que el viaje aún pueda cancelarse.</p>
+          <div class="context-rule"></div>
+          <div class="actor-summary">
+            <span class="summary-key" id="role-label">CLIENTE · RF-6.5</span>
+            <p id="role-description">Se registra el motivo y se notifica la cancelación.</p>
+          </div>
+          <div class="context-footer"><span class="status-dot"></span> Las acciones quedan registradas</div>
+        </aside>
+      </div>
+
+      <section id="result" class="result" aria-live="polite" hidden></section>
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+    </main>
+
+    <dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-title">
+      <form method="dialog" class="dialog-dismiss"><button class="icon-button" aria-label="Cerrar confirmación" value="cancel">×</button></form>
+      <p class="eyebrow">PASO 02 · CONFIRMACIÓN</p>
+      <h2 id="confirm-title">¿Confirmas la cancelación?</h2>
+      <p class="dialog-copy">Se enviará la solicitud de cancelación para este viaje.</p>
+      <dl class="review-data">
+        <div><dt>Viaje</dt><dd id="review-trip"></dd></div>
+        <div><dt>Solicita</dt><dd id="review-actor"></dd></div>
+        <div><dt>Motivo</dt><dd id="review-reason"></dd></div>
+      </dl>
+      <div class="dialog-actions">
+        <button class="button button-secondary" id="back-button" type="button">Volver a editar</button>
+        <button class="button button-danger" id="confirm-button" type="button">Confirmar cancelación</button>
+      </div>
+    </dialog>
+
+    <footer class="footer"><span>M6 · Cancelaciones</span><span>RF-6.5 Cliente / RF-6.6 Conductor</span></footer>
+  </body>
+</html>

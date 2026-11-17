@@ -105,4 +105,33 @@ describe('RF-6.1: Solicitar Viaje - Estados del viaje', () => {
     const esFechaValida = res.data.fechaCreacion instanceof Date || !isNaN(Date.parse(res.data.fechaCreacion));
     expect(esFechaValida).toBe(true);
   });
+
+  it('debe aceptar clientUserId y evitar viajes duplicados con rideRequestId e Idempotency-Key', async () => {
+    const req1 = mockRequest({
+      clienteId: 'cliente-1',
+      clientUserId: 42,
+      rideRequestId: 'ride-42',
+      origen: 'Calle 1',
+      destino: 'Calle 2',
+    });
+    req1.headers = { 'idempotency-key': 'idem-42' };
+    const res1 = mockResponse();
+    await solicitarViaje(req1 as any, res1 as any);
+
+    const req2 = mockRequest({
+      clienteId: 'cliente-1',
+      clientUserId: 42,
+      rideRequestId: 'ride-42',
+      origen: 'Calle 1',
+      destino: 'Calle 2',
+    });
+    req2.headers = { 'idempotency-key': 'idem-42' };
+    const res2 = mockResponse();
+    await solicitarViaje(req2 as any, res2 as any);
+
+    expect(res1.statusCode).toBe(201);
+    expect(res2.statusCode).toBe(200);
+    expect(res2.data.id).toBe(res1.data.id);
+    expect(res2.data.clientUserId).toBe(42);
+  });
 });

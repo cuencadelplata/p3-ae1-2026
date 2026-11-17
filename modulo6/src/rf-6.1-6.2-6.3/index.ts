@@ -1,6 +1,7 @@
 import express from 'express';
 import viajesRoutes from './routes/viajes.routes.js';
 import clientesRoutes from './routes/clientes.routes.js';
+import conductoresRoutes from './routes/conductores.routes.js';
 import { cerrarPublicador, despacharEventosPendientes } from './services/eventos-viaje.service.js';
 import { middlewareObservabilidad, responderMetricas } from '../observabilidad/http.js';
 import { logger } from '../observabilidad/logger.js';
@@ -27,6 +28,7 @@ app.get('/metrics', (_req, res) => void responderMetricas(res));
 // Enlazamos las rutas del modulo
 app.use('/api/viajes', viajesRoutes);
 app.use('/api/clientes', clientesRoutes);
+app.use('/api/conductores', conductoresRoutes);
 
 app.listen(PORT, () => {
     logger.info({ port: Number(PORT) }, 'Servidor del módulo Viajes iniciado');

@@ -50,7 +50,39 @@ function respuestaQR(qr: GenerarQRResponse) {
     return { token: qr.token, qrDataUrl: qr.qrDataUrl, expiresAt: qr.expiresAt };
 }
 
+function parsePositiveInteger(value: unknown, nombre: string): number | null {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+        throw new Error(`${nombre} debe ser un entero positivo`);
+    }
+    return parsed;
+}
+
+function obtenerHeaderIdempotency(req: Request): string | undefined {
+    const raw = req.headers?.['idempotency-key'] ?? req.headers?.['Idempotency-Key'];
+    if (Array.isArray(raw)) return raw[0]?.trim() || undefined;
+    return typeof raw === 'string' ? raw.trim() || undefined : undefined;
+}
+
 function viajeParaIntegracion(viaje: Viaje) {
+    return {
+        id: viaje.id,
+        clienteId: viaje.clienteId,
+        clientUserId: viaje.clientUserId ?? null,
+        conductorId: viaje.conductorId ?? null,
+        driverUserId: viaje.driverUserId ?? null,
+        rideRequestId: viaje.rideRequestId ?? null,
+        idempotencyKey: viaje.idempotencyKey ?? null,
+        origen: viaje.origen,
+        destino: viaje.destino,
+        codigoVerificacion: viaje.codigoVerificacion,
+        fechaCreacion: viaje.fechaCreacion,
+        estado: viaje.estado,
+    };
+}
+
+function viajeRespuestaLegacy(viaje: Viaje) {
     return {
         id: viaje.id,
         clienteId: viaje.clienteId,
@@ -61,12 +93,42 @@ function viajeParaIntegracion(viaje: Viaje) {
 
 //en este archivo definimos los controladores del modulo de viajes, que implementan la lógica de negocio para cada endpoint definido en las rutas. Cada controlador recibe la solicitud HTTP, valida los datos, interactúa con los servicios y repositorios necesarios, y devuelve la respuesta HTTP correspondiente.
 export const solicitarViaje = async (req: Request, res: Response): Promise<any> => {
-    const { clienteId, origen, destino } = req.body;
-    const id = randomUUID();
+    const { clienteId, clientUserId, rideRequestId, origen, destino } = req.body;
+    const idempotencyKey = obtenerHeaderIdempotency(req) ?? req.body?.idempotencyKey ?? req.body?.idempotency_key;
 
+    if (typeof clienteId !== 'string' || !clienteId.trim()) {
+        return res.status(400).json({ error: 'clienteId es obligatorio' });
+    }
+
+    if (origen === undefined || destino === undefined) {
+        return res.status(400).json({ error: 'origen y destino son obligatorios' });
+    }
+
+    let parsedClientUserId: number | null = null;
+    try {
+        parsedClientUserId = parsePositiveInteger(clientUserId ?? req.body?.userId, 'clientUserId');
+    } catch (error) {
+        return res.status(400).json({ error: (error as Error).message });
+    }
+
+    const normalizedRideRequestId = typeof rideRequestId === 'string' && rideRequestId.trim() ? rideRequestId.trim() : undefined;
+    const normalizedIdempotencyKey = typeof idempotencyKey === 'string' && idempotencyKey.trim() ? idempotencyKey.trim() : undefined;
+
+    if (normalizedRideRequestId || normalizedIdempotencyKey) {
+        const viajeDuplicado = await viajeRepo.buscarPorRideRequestId(normalizedRideRequestId, normalizedIdempotencyKey);
+        if (viajeDuplicado) {
+            return res.status(200).json(viajeParaIntegracion(viajeDuplicado));
+        }
+    }
+
+    const id = randomUUID();
     const nuevoViaje: Viaje = {
         id,
-        clienteId,
+        clienteId: clienteId.trim(),
+        clientUserId: parsedClientUserId,
+        driverUserId: null,
+        rideRequestId: normalizedRideRequestId ?? null,
+        idempotencyKey: normalizedIdempotencyKey ?? null,
         estado: EstadoViaje.SOLICITADO,
         origen,
         destino,
@@ -83,7 +145,7 @@ export const solicitarViaje = async (req: Request, res: Response): Promise<any> 
         return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
     }
 
-    return res.status(201).json(nuevoViaje);
+    return res.status(201).json(viajeParaIntegracion(nuevoViaje));
 };
 
 export const obtenerViaje = async (req: Request, res: Response): Promise<any> => {
@@ -101,7 +163,7 @@ export const obtenerViaje = async (req: Request, res: Response): Promise<any> =>
     }
 
     if (!viaje) return res.status(404).json({ error: 'Viaje no encontrado' });
-    return res.json(viajeParaIntegracion(viaje));
+    return res.json(viajeRespuestaLegacy(viaje));
 };
 
 export const cancelarViaje = async (req: Request, res: Response): Promise<any> => {
@@ -140,7 +202,7 @@ export const cancelarViaje = async (req: Request, res: Response): Promise<any> =
         });
     }
 
-    return res.json(viajeParaIntegracion(viaje));
+    return res.json(viajeRespuestaLegacy(viaje));
 };
 
 function validarCoordenadasFinalizacion(value: unknown, nombre: string): CoordenadasFinalizacion {
@@ -399,12 +461,27 @@ export const obtenerViajesDeCliente = async (req: Request, res: Response): Promi
     }
 };
 
+export const obtenerViajesDeConductor = async (req: Request, res: Response): Promise<any> => {
+    const { conductorId } = req.params;
+    if (typeof conductorId !== 'string' || !conductorId.trim()) {
+        return res.status(400).json({ error: 'Falta el id del conductor en la URL' });
+    }
+
+    try {
+        const viajes = await viajeRepo.buscarViajesPorConductor(conductorId);
+        return res.json({ conductorId, viajes });
+    } catch (error) {
+        console.error('ERROR EN viajeRepo.buscarViajesPorConductor:', error);
+        return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
+    }
+};
+
 export const asignarConductor = async (req: Request, res: Response): Promise<any> => {
     const { id } = req.params;
     if (typeof id !== 'string') {
         return res.status(400).json({ error: 'Falta el id del viaje en la URL' });
     }
-    const { conductorId } = req.body;
+    const { conductorId, driverUserId } = req.body;
 
     let viaje;
     try {
@@ -418,15 +495,23 @@ export const asignarConductor = async (req: Request, res: Response): Promise<any
         return res.status(400).json({ error: `No puedes asignar un conductor en este momento. Estado actual: ${viaje.estado}` });
     }
 
+    let parsedDriverUserId: number | null = null;
     try {
-        await viajeRepo.actualizarEstado(id, EstadoViaje.CONDUCTOR_EN_CAMINO, conductorId);
+        parsedDriverUserId = parsePositiveInteger(driverUserId ?? req.body?.userId, 'driverUserId');
+    } catch (error) {
+        return res.status(400).json({ error: (error as Error).message });
+    }
+
+    try {
+        await viajeRepo.actualizarEstado(id, EstadoViaje.CONDUCTOR_EN_CAMINO, conductorId, parsedDriverUserId);
     } catch (error) {
         return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
     }
 
     viaje.conductorId = conductorId;
+    viaje.driverUserId = parsedDriverUserId;
     viaje.estado = EstadoViaje.CONDUCTOR_EN_CAMINO;
-    return res.json({ mensaje: 'Conductor asignado. Su conductor está en camino a su dirección', viaje });
+    return res.json({ mensaje: 'Conductor asignado. Su conductor está en camino a su dirección', viaje: viajeParaIntegracion(viaje) });
 };
 
 export const registrarArribo = async (req: Request, res: Response): Promise<any> => {
@@ -504,11 +589,23 @@ export const registrarArribo = async (req: Request, res: Response): Promise<any>
             viaje.estado = EstadoViaje.ARRIBADO;
 
             try {
+                const occurredAt = new Date().toISOString();
                 await publicarEvento('viajes_exchange', 'viaje.arribado', {
                     viajeId: id,
                     conductorId: viaje.conductorId,
-                    fecha: new Date().toISOString()
+                    fecha: occurredAt,
                 });
+                if (viaje.clientUserId) {
+                    await publicarEvento('mobility.events', 'driver.arrived', {
+                        messageId: randomUUID(),
+                        eventType: 'DriverArrived',
+                        version: 1,
+                        occurredAt,
+                        correlationId: id,
+                        producer: 'm6',
+                        data: { tripId: id, recipientId: viaje.clientUserId },
+                    }, 'topic');
+                }
             } catch (err) {
                 console.error('Advertencia: No se pudo publicar evento de arribo', err);
             }
@@ -615,10 +712,22 @@ export const iniciarViaje = async (req: Request, res: Response): Promise<any> =>
     viaje.estado = EstadoViaje.EN_CURSO;
 
     try {
+        const occurredAt = new Date().toISOString();
         await publicarEvento('viajes_exchange', 'viaje.iniciado', {
             viajeId: id,
-            fecha: new Date().toISOString()
+            fecha: occurredAt,
         });
+        if (viaje.clientUserId) {
+            await publicarEvento('mobility.events', 'trip.started', {
+                messageId: randomUUID(),
+                eventType: 'TripStarted',
+                version: 1,
+                occurredAt,
+                correlationId: id,
+                producer: 'm6',
+                data: { tripId: id, recipientId: viaje.clientUserId },
+            }, 'topic');
+        }
     } catch (err) {
         console.error('Advertencia: No se pudo publicar evento de inicio', err);
     }
