@@ -55,11 +55,11 @@ if (['localhost', '127.0.0.1'].includes(parsedTarget.hostname)) {
 const qrKey = get('QR_INTERNAL_API_KEY');
 const jwtSecret = get('M1_JWT_SECRET');
 if ((mode === 'http' || mode === 'qr') && (!qrKey || qrKey.startsWith('replace-with-'))) {
-  console.error('Configurar QR_INTERNAL_API_KEY en modulo-8/.env antes del smoke QR.');
+  console.error('Configurar QR_INTERNAL_API_KEY en modulo8/.env antes del smoke QR.');
   process.exit(2);
 }
 if ((mode === 'http' || mode === 'delivery') && (!jwtSecret || jwtSecret.startsWith('replace-with-'))) {
-  console.error('Configurar M1_JWT_SECRET en modulo-8/.env antes del smoke de dispositivos.');
+  console.error('Configurar M1_JWT_SECRET en modulo8/.env antes del smoke de dispositivos.');
   process.exit(2);
 }
 

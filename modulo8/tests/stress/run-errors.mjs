@@ -14,7 +14,7 @@ const base = `http://127.0.0.1:${Number(get('M8_HOST_PORT') || 8000)}`;
 const fiscal = `http://127.0.0.1:${Number(get('FISCAL_HOST_PORT') || 4010)}`;
 const qrKey = get('QR_INTERNAL_API_KEY');
 if (!qrKey || qrKey.startsWith('replace-with-')) {
-  console.error('Configurar QR_INTERNAL_API_KEY en modulo-8/.env.');
+  console.error('Configurar QR_INTERNAL_API_KEY en modulo8/.env.');
   process.exit(2);
 }
 const results = [];

@@ -75,7 +75,7 @@ export const env = {
   /** Vigencia de un enlace temporal de descarga del PDF, en segundos. */
   receiptLinkTtlSeconds: readPositiveInt('RECEIPT_LINK_TTL_SECONDS', 900),
 
-  /** Mensajeria segun el catalogo de eventos v1 (modulo-8/contracts/events). */
+  /** Mensajeria segun el catalogo de eventos v1 (modulo8/contracts/events). */
   rabbitmqUrl: readText('RABBITMQ_URL', ''),
   eventsExchange: readText('EVENTS_EXCHANGE', 'mobility.events'),
   deadLetterExchange: readText('EVENTS_DEAD_LETTER_EXCHANGE', 'mobility.events.dlx'),
@@ -99,7 +99,7 @@ export const env = {
   /** Espera entre intentos de preparar el esquema si PostgreSQL no esta disponible al arrancar. */
   databaseStartupRetryMs: readPositiveInt('DATABASE_STARTUP_RETRY_MS', 3000),
 
-  /** Autorizador fiscal externo (simulado en modulo-8/infra/fiscal-sandbox). */
+  /** Autorizador fiscal externo (simulado en modulo8/infra/fiscal-sandbox). */
   fiscalApiUrl: readText('FISCAL_API_URL', 'http://localhost:4010').replace(/\/+$/, ''),
 
   /** Tiempo maximo de espera de una autorizacion, en milisegundos. */
@@ -113,7 +113,7 @@ export const env = {
 
   /**
    * API de pagos de M7 (GET /metodo-pago/{viajeId}), fuente de verdad del estado
-   * del pago. Simulada en modulo-8/infra/m7-payments-sandbox.
+   * del pago. Simulada en modulo8/infra/m7-payments-sandbox.
    */
   m7PaymentsUrl: readText('M7_PAYMENTS_URL', 'http://localhost:4020').replace(/\/+$/, ''),
 

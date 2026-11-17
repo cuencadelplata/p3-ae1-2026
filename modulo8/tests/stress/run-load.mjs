@@ -71,11 +71,11 @@ targetUrl = parsedTarget.toString().replace(/\/$/, '');
 const qrKey = get('QR_INTERNAL_API_KEY');
 const jwtSecret = get('M1_JWT_SECRET');
 if (['qr', 'mixed'].includes(mode) && (!qrKey || qrKey.startsWith('replace-with-'))) {
-  console.error('Configurar QR_INTERNAL_API_KEY en modulo-8/.env.');
+  console.error('Configurar QR_INTERNAL_API_KEY en modulo8/.env.');
   process.exit(2);
 }
 if (['delivery', 'mixed'].includes(mode) && (!jwtSecret || jwtSecret.startsWith('replace-with-'))) {
-  console.error('Configurar M1_JWT_SECRET en modulo-8/.env.');
+  console.error('Configurar M1_JWT_SECRET en modulo8/.env.');
   process.exit(2);
 }
 

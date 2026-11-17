@@ -33,4 +33,4 @@ const values = {
 const content = Object.entries(values).map(([name, value]) => `${name}=${value}\n`).join('');
 writeFileSync('.env', content, { mode: 0o600, flag: 'wx' });
 appendFileSync(process.env.GITHUB_ENV, content);
-console.log('Configuración temporal de CI generada en modulo-8/.env.');
+console.log('Configuración temporal de CI generada en modulo8/.env.');

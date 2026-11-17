@@ -24,7 +24,7 @@ export async function connectTestRedisClient(): Promise<QrRedisClient> {
         reject(
           new Error(
             `Redis no está disponible en ${TEST_REDIS_URL}. Estas pruebas necesitan un Redis real: ` +
-              "levantalo desde modulo-8/ con `docker compose up -d redis` o indicá otra URL en REDIS_URL.",
+              "levantalo desde modulo8/ con `docker compose up -d redis` o indicá otra URL en REDIS_URL.",
           ),
         ),
       CONNECT_DEADLINE_MS,
