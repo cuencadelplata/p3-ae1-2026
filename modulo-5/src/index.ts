@@ -13,6 +13,26 @@ const PORT = process.env.PORT || 3005;
 
 app.use(express.json());
 
+// Middleware de Telemetría para medir latencia HTTP (ms) en tiempo real
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/v1/')) {
+    next();
+    return;
+  }
+  const startNs = process.hrtime.bigint();
+  res.on('finish', () => {
+    const durationMs = Number(process.hrtime.bigint() - startNs) / 1_000_000;
+    const normalizedRoute = req.route?.path || req.path.replace(/[0-9a-f-]{8,}/gi, ':id');
+    TelemetryService.getInstance().recordHttpRequestDuration(
+      Math.round(durationMs * 100) / 100,
+      req.method,
+      normalizedRoute,
+      res.statusCode
+    );
+  });
+  next();
+});
+
 // Middleware CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
