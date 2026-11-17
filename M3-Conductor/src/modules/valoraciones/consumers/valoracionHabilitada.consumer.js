@@ -2,8 +2,15 @@ const { getRabbitChannel } = require("../../../infraestructure/rabbimq.client");
 const topology = require("../../../infraestructure/rabbitmq.topology");
 const { publicarNotificacion } = require("../notificaciones.hub");
 
+let escuchando = false;
+
 async function startValoracionHabilitadaConsumer() {
+  if (escuchando) return;
   const channel = getRabbitChannel();
+  escuchando = true;
+  channel.on("close", () => {
+    escuchando = false;
+  });
 
   const exchange = topology.exchanges.VALORACIONES;
   const queue = topology.queues.VALORACION_HABILITADA_PANEL;

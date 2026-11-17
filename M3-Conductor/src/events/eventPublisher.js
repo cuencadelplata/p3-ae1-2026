@@ -1,3 +1,4 @@
+const gateway = require("../infraestructure/messagingGateway");
 const rabbitmq = require("../config/rabbitmqClient");
 const { EVENTOS, driverAvailabilityUpdated, driverStatusChanged } = require("./driverEvents");
 
@@ -6,31 +7,35 @@ const { EVENTOS, driverAvailabilityUpdated, driverStatusChanged } = require("./d
  *
  * - Mensajes persistentes (deliveryMode 2) sobre un exchange durable.
  * - ConfirmChannel: se espera el ack del broker antes de dar por publicado.
- * - Nunca lanza: si RabbitMQ no está disponible se loguea y devuelve false, de
- *   modo que la operación HTTP que originó el evento no falla por la mensajería
- *   (el estado ya quedó guardado en Redis/DB, el evento es una notificación).
+ * - Nunca lanza: si ni RabbitMQ ni la cola temporal aceptan el evento, se
+ *   loguea y devuelve false. La operación HTTP no falla por la mensajería.
  *
  * @returns {Promise<boolean>} true si el broker confirmó el mensaje
  */
 async function publicar(routingKey, evento) {
   try {
-    const channel = await rabbitmq.getChannel();
     const payload = Buffer.from(JSON.stringify(evento));
-
-    channel.publish(rabbitmq.EXCHANGE, routingKey, payload, {
-      persistent: true,
-      contentType: "application/json",
-      messageId: evento.eventId,
-      type: evento.eventType,
-      timestamp: Math.floor(Date.parse(evento.occurredAt) / 1000),
-      appId: evento.source
+    const broker = await gateway.publish({
+      exchange: rabbitmq.EXCHANGE,
+      routingKey,
+      content: payload,
+      options: {
+        persistent: true,
+        contentType: "application/json",
+        messageId: evento.eventId,
+        type: evento.eventType,
+        timestamp: Math.floor(Date.parse(evento.occurredAt) / 1000),
+        appId: evento.source
+      },
+      prepare: async (channel) => {
+        await channel.assertExchange(rabbitmq.EXCHANGE, "topic", { durable: true });
+      }
     });
-    await channel.waitForConfirms();
 
-    console.log(`[RabbitMQ] Evento publicado ${evento.eventType} (${routingKey}) id=${evento.eventId}`);
+    console.log(`[${broker}] Evento publicado ${evento.eventType} (${routingKey}) id=${evento.eventId}`);
     return true;
   } catch (err) {
-    console.error(`[RabbitMQ] No se pudo publicar ${evento.eventType} (${routingKey}): ${err.message}`);
+    console.error(`[Circuit] No se pudo publicar ${evento.eventType} (${routingKey}): ${err.message}`);
     return false;
   }
 }
