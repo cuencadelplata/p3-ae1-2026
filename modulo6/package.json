@@ -23,8 +23,8 @@
     "simulator:m5": "tsx simulator/rf-6.5-6.6/m6-rf6.5-rf6.6/m5-dispatch-simulator.ts",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
-    "docker:e2e:up": "docker compose up -d --build",
-    "docker:e2e:down": "docker compose down"
+    "docker:e2e:up": "docker compose -f docker-compose.yml -f docker-compose.rf-e2e.yml up -d --build --wait",
+    "docker:e2e:down": "docker compose -f docker-compose.yml -f docker-compose.rf-e2e.yml down"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
