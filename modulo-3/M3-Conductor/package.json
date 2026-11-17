@@ -1,0 +1,43 @@
+{
+  "name": "m3-conductor",
+  "version": "1.0.0",
+  "description": "Modulo 3: Conductor y Valoraciones",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "consumer": "node src/consumers/driverEventsConsumer.js",
+    "build:app": "esbuild src/app/alta-conductor.tsx --bundle --minify --format=iife --jsx=automatic --define:process.env.NODE_ENV=\\\"production\\\" --outfile=public/alta-conductor.js",
+    "build:valoraciones": "esbuild src/app/valoraciones.tsx --bundle --minify --format=iife --jsx=automatic --define:process.env.NODE_ENV=\\\"production\\\" --outfile=public/valoraciones.js",
+    "build:front": "npm run build:app && npm run build:valoraciones",
+    "test": "playwright test --project=unit",
+    "test:unit": "playwright test --project=unit",
+    "test:front": "npx serve public",
+    "test:e2e": "playwright test --project=e2e",
+    "test:e2e:ui": "playwright test --project=e2e --ui",
+    "test:e2e:headed": "playwright test --project=e2e --headed",
+    "test:e2e:report": "playwright show-report",
+    "mock:viaje-finalizado": "node src/mocks/viajes/viajeFinalizado.publisher.mock.js"
+  },
+  "dependencies": {
+    "@opentelemetry/auto-instrumentations-node": "^0.83.1",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.301.2",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.301.2",
+    "@opentelemetry/resources": "^3.1.1",
+    "@opentelemetry/sdk-node": "^0.301.2",
+    "@opentelemetry/semantic-conventions": "^1.45.0",
+    "@supabase/supabase-js": "^2.45.4",
+    "amqplib": "^2.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "ioredis": "^5.4.1",
+    "kafkajs": "^2.2.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.4",
+    "esbuild": "^0.24.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

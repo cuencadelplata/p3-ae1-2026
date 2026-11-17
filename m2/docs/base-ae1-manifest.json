@@ -1,0 +1,26 @@
+{
+  "archivo": "ae2-paradigmas3-20261005T141611Z-1-001.zip",
+  "sha256": "a4c62c989f8927b1801cfb574b44f63d0fa2097eb06a0935847f4d3e17599754",
+  "nota": "Identifica el insumo aportado; no acredita aceptaci\u00f3n docente ni tag oficial AE1. .env excluido por privacidad.",
+  "archivos": {
+    ".dockerignore": "e97ede6017a9983f35d40e8a7b9f2063dd7fb51f26233e2ec1ea18f10923cbfc",
+    ".env.example": "cbddba846791806dee115e29fb9bae4dc1fc6fb890764f4e2d9b771793cd7004",
+    "Dockerfile": "ce86c33b7cde5501c79ca8dd1caac5ed518c5c4288a270a140a0e40ef3b37141",
+    "README.md": "bcb17e09f247eb9dfbe49880eb2cb19398156be393f5aa556cb9958326229310",
+    "docker-compose.yml": "5b75634bb9965b6196fa3e02747c5d49bcd8b79b0f97e62059f344db7fcbba99",
+    "package-lock.json": "619cb38a7acfca1cc86f6bd7b7b75e4d92673ae4e0b892f482b5fc1a636c4db5",
+    "package.json": "970a087ca881346a4baaac85d3b4238def7b040cd240e4be27d2c6b5fc0892ef",
+    "prisma/schema.prisma": "7ae850fdabc49e91f32c46fc73ca5eea7f7970cfee217c14a8d49c5041527173",
+    "src/clients/modulo6.client.ts": "1ca1b830a2cf036b3642d1c6fb888375720c387fefa689407e53e5502a63d3e1",
+    "src/config/prisma.ts": "071153bdec49d731bf59980d887e7a612dcc705ea7290a28ec0120f45c30de30",
+    "src/config/redis.ts": "1a9995ae2faa0f2f07dba9fc00ed43ba30e44153b1910a4cf7b69af1978278b9",
+    "src/controllers/calificacion.controller.ts": "fe7e391b9228d395b2f014e46196fe84c2c3d8b15f0328aa979091c70d1955cd",
+    "src/errors/custom.errors.ts": "6b16928b1b5293ea5b3a0e17dde6e182fb23e9e24ffa2f3fe5198cf08b5e2451",
+    "src/index.ts": "dd4acffd0e89f5fcba2610bdae019fd5cbbaaff426d410ce9de856d43a7d2fd7",
+    "src/mocks/modulo6.mock.ts": "6192d4e40754d4258a601c0298a25d4a57f13150a57c29c8f127560c33c88ccb",
+    "src/routes/calificacion.routes.ts": "80b17637b11c5cd8aef320967357fcc9b4265294bfb874305a683266503a9fb6",
+    "src/schemas/calificacion.schema.ts": "09fcc1cb720e5dd980cf6923c9b4a62b67f775c3f5f3879b5ad821dfb5073e56",
+    "src/services/calificacion.service.ts": "8d84e6166080ddc8e161281e74df2f1a3079f4e7593481487d7e9fe910afb9aa",
+    "tsconfig.json": "b7cdcb5ad147462de5c6a7714c4b6c040a916b7a60baffc41473cb656d93063e"
+  }
+}

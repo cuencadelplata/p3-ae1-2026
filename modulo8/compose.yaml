@@ -5,12 +5,14 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "127.0.0.1:${M8_HOST_PORT:-3000}:3000"
+      - "127.0.0.1:${M8_HOST_PORT:-8000}:3000"
     environment:
       NODE_ENV: production
       PORT: "3000"
-      PUBLIC_BASE_URL: "http://localhost:${M8_HOST_PORT:-3000}"
+      PUBLIC_BASE_URL: "http://localhost:${M8_HOST_PORT:-8000}"
       NOTIFICATIONS_DATABASE_URL: "postgres://m8_notifications:${NOTIFICATIONS_DB_PASSWORD:?NOTIFICATIONS_DB_PASSWORD must be configured}@postgres:5432/${POSTGRES_DB:-m8}"
+      M3_CONDUCTOR_BASE_URL: "${M3_CONDUCTOR_BASE_URL:-}"
+      M3_VEHICLES_BASE_URL: "${M3_VEHICLES_BASE_URL:-}"
       DELIVERY_DATABASE_URL: "postgres://m8_notification_delivery:${DELIVERY_DB_PASSWORD:?DELIVERY_DB_PASSWORD must be configured}@postgres:5432/${POSTGRES_DB:-m8}"
       RECEIPTS_DATABASE_URL: "postgres://m8_receipts:${RECEIPTS_DB_PASSWORD:?RECEIPTS_DB_PASSWORD must be configured}@postgres:5432/${POSTGRES_DB:-m8}"
       SUPPORT_DATABASE_URL: "postgres://m8_support:${SUPPORT_DB_PASSWORD:?SUPPORT_DB_PASSWORD must be configured}@postgres:5432/${POSTGRES_DB:-m8}"

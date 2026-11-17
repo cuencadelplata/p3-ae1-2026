@@ -19,7 +19,7 @@ const localEnv = existsSync(envPath) ? parse(readFileSync(envPath)) : {};
 const get = (name) => process.env[name] || localEnv[name] || '';
 const vus = Number(process.argv[4] || get('LOAD_VUS') || 5);
 const durationSeconds = Number(get('LOAD_DURATION_SECONDS') || 10);
-const port = Number(get('M8_HOST_PORT') || 3000);
+const port = Number(get('M8_HOST_PORT') || 8000);
 const pattern = process.argv[3] || get('LOAD_PATTERN') || 'ramp';
 if (!Number.isInteger(vus) || vus < 1 || vus > 1200
     || !Number.isInteger(durationSeconds) || durationSeconds < 5 || durationSeconds > 300

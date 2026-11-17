@@ -1,0 +1,369 @@
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import request from 'supertest';
+import { app } from '../../src/app.js';
+import { customerService } from '../../src/services/customer.service.js';
+import { accountStatusRepository } from '../../src/repositories/account-status.repository.js';
+import { customerRepository } from '../../src/repositories/customer.repository.js';
+import { soporteClient } from '../../src/clients/soporte.client.js';
+import { m6Client } from '../../src/clients/m6.client.js';
+import { m1AuthClient } from '../../src/clients/m1-auth.client.js';
+import { ServiceUnavailableError } from '../../src/errors/service-unavailable.error.js';
+import { UserIdSchema, type AccountStatusResponse, type CustomerProfile } from '../../src/types/customer.js';
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+const TOKEN = 'Bearer tok-test';
+
+/** Mockea requireAuth: cualquier Bearer válido resuelve al userId 12 con rol CLIENTE. */
+function mockAuthOk() {
+  vi.spyOn(m1AuthClient, 'validateToken').mockResolvedValue({
+    userId: UserIdSchema.parse(12),
+    role: 'CLIENTE'
+  });
+}
+
+/** Mockea requireAuth para un userId concreto (por defecto el dueño del perfil, userId 12). */
+function mockAuthAs(userId: number) {
+  vi.spyOn(m1AuthClient, 'validateToken').mockResolvedValue({
+    userId: UserIdSchema.parse(userId),
+    role: 'CLIENTE'
+  });
+}
+
+/** El perfil cust_823a7b9c existe y pertenece al userId 12 (lo que consulta findOwnedCustomer). */
+function mockOwnedProfile() {
+  vi.spyOn(customerService, 'getCustomerById').mockResolvedValue(activeCustomer());
+}
+
+function savedStatus(overrides: Partial<AccountStatusResponse> = {}): AccountStatusResponse {
+  return {
+    customerId: 'cust_823a7b9c',
+    status: 'ACTIVO',
+    reason: 'Perfil verificado y sin infracciones operativas',
+    updatedAt: '2026-09-01T00:00:00Z',
+    ...overrides
+  };
+}
+
+function activeCustomer(): CustomerProfile {
+  return {
+    customerId: 'cust_823a7b9c',
+    userId: UserIdSchema.parse(12),
+    preferences: { preferredVehicleType: 'auto', notificationChannel: 'email' },
+    status: 'ACTIVO',
+    createdAt: '2026-08-30T23:00:00Z'
+  };
+}
+
+// ─── GET /v1/customers/:id/status ─────────────────────────────────────────────
+// GET /status pasa por requireAuthOrServiceKey: con token solo el dueño; con X-Secret-Key, cualquiera.
+
+describe('GET /v1/customers/:id/status (RF-2.5)', () => {
+  beforeEach(() => {
+    delete process.env.STATUS_SECRET_KEY;
+    mockAuthOk();
+    mockOwnedProfile();
+    // El service lee el userId del perfil para consultar Soporte
+    vi.spyOn(customerRepository, 'findById').mockResolvedValue(activeCustomer());
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.STATUS_SECRET_KEY;
+  });
+
+  it('sin token → 401', async () => {
+    const res = await request(app).get('/v1/customers/cust_823a7b9c/status');
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('Unauthorized');
+  });
+
+  it('Bearer inválido (M1 lo rechaza) → 401', async () => {
+    vi.spyOn(m1AuthClient, 'validateToken').mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', 'Bearer basura');
+    expect(res.status).toBe(401);
+  });
+
+  it('otro usuario sobre un perfil ajeno → 403 y no consulta el estado', async () => {
+    mockAuthAs(99);
+    const find = vi.spyOn(accountStatusRepository, 'findAccountStatus');
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', TOKEN);
+    expect(res.status).toBe(403);
+    expect(find).not.toHaveBeenCalled();
+  });
+
+  it('X-Secret-Key inválida → 401', async () => {
+    process.env.STATUS_SECRET_KEY = 'secret-status';
+    mockAuthOk();
+    vi.spyOn(m1AuthClient, 'validateToken').mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/status')
+      .set('X-Secret-Key', 'otra-clave');
+    expect(res.status).toBe(401);
+  });
+
+  it('con X-Secret-Key válida → 200 (acceso de módulo interno)', async () => {
+    process.env.STATUS_SECRET_KEY = 'secret-status';
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockResolvedValueOnce(savedStatus());
+    vi.spyOn(soporteClient, 'getPenalizaciones').mockResolvedValueOnce({ userId: 12, total: 0, penalizaciones: [] });
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/status')
+      .set('X-Secret-Key', 'secret-status');
+    expect(res.status).toBe(200);
+  });
+
+  it('cliente inexistente → 404', async () => {
+    vi.spyOn(customerService, 'getCustomerById').mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/v1/customers/cust_inexistente/status')
+      .set('Authorization', TOKEN);
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('CustomerNotFound');
+  });
+
+  it('0 penalizaciones → devuelve estado ACTIVO sin cambios', async () => {
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockResolvedValueOnce(savedStatus());
+    vi.spyOn(soporteClient, 'getPenalizaciones').mockResolvedValueOnce({ userId: 12, total: 0, penalizaciones: [] });
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', TOKEN);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('ACTIVO');
+  });
+
+  it('2 penalizaciones → estado recalculado a BLOQUEADO_TEMPORAL', async () => {
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockResolvedValueOnce(savedStatus({ status: 'ACTIVO' }));
+    vi.spyOn(soporteClient, 'getPenalizaciones').mockResolvedValueOnce({ userId: 12, total: 2, penalizaciones: [] });
+    vi.spyOn(accountStatusRepository, 'updateAccountStatus').mockResolvedValueOnce(
+      savedStatus({ status: 'BLOQUEADO_TEMPORAL', blockOrigin: 'AUTOMATICO', reason: 'Bloqueado automáticamente por 2 penalización(es) vigente(s)' })
+    );
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', TOKEN);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('BLOQUEADO_TEMPORAL');
+    expect(res.body.blockOrigin).toBe('AUTOMATICO');
+  });
+
+  it('3+ penalizaciones → estado recalculado a BLOQUEADO_PERMANENTE', async () => {
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockResolvedValueOnce(savedStatus({ status: 'ACTIVO' }));
+    vi.spyOn(soporteClient, 'getPenalizaciones').mockResolvedValueOnce({ userId: 12, total: 3, penalizaciones: [] });
+    vi.spyOn(accountStatusRepository, 'updateAccountStatus').mockResolvedValueOnce(
+      savedStatus({ status: 'BLOQUEADO_PERMANENTE', blockOrigin: 'AUTOMATICO' })
+    );
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', TOKEN);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('BLOQUEADO_PERMANENTE');
+  });
+
+  it('Soporte caído → devuelve último estado guardado (no 503)', async () => {
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockResolvedValueOnce(
+      savedStatus({ status: 'BLOQUEADO_TEMPORAL', blockOrigin: 'AUTOMATICO' })
+    );
+    vi.spyOn(soporteClient, 'getPenalizaciones').mockRejectedValueOnce(
+      new ServiceUnavailableError('Soporte no disponible')
+    );
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', TOKEN);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('BLOQUEADO_TEMPORAL');
+  });
+
+  it('DB caída → 503 con Retry-After', async () => {
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockRejectedValueOnce(
+      Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
+    );
+    vi.spyOn(soporteClient, 'getPenalizaciones').mockResolvedValueOnce({ userId: 12, total: 0, penalizaciones: [] });
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', TOKEN)
+      .timeout(2000);
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe('ServiceUnavailable');
+    expect(res.headers['retry-after']).toBeDefined();
+  });
+});
+
+// ─── PUT /v1/customers/:id/status ─────────────────────────────────────────────
+// PUT /status pasa por requireAuth y solo lo permite el dueño del perfil.
+
+describe('PUT /v1/customers/:id/status (RF-2.5)', () => {
+  beforeEach(() => {
+    mockAuthOk();
+    mockOwnedProfile();
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('sin token → 401', async () => {
+    const res = await request(app)
+      .put('/v1/customers/cust_823a7b9c/status')
+      .send({ status: 'INACTIVO', reason: 'Baja solicitada' });
+    expect(res.status).toBe(401);
+  });
+
+  it('estado inválido → 400 ValidationError', async () => {
+    const res = await request(app)
+      .put('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', TOKEN)
+      .send({ status: 'ELIMINADO', reason: 'Borrado' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('ValidationError');
+  });
+
+  it('otro usuario sobre un perfil ajeno → 403 y no cambia el estado', async () => {
+    mockAuthAs(99);
+    const update = vi.spyOn(accountStatusRepository, 'updateAccountStatus');
+
+    const res = await request(app)
+      .put('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', TOKEN)
+      .send({ status: 'INACTIVO', reason: 'Baja solicitada' });
+    expect(res.status).toBe(403);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('dar de baja → 200, status INACTIVO, sin blockOrigin', async () => {
+    vi.spyOn(accountStatusRepository, 'updateAccountStatus').mockResolvedValueOnce(
+      savedStatus({ status: 'INACTIVO', reason: 'Baja solicitada por el cliente' })
+    );
+
+    const res = await request(app)
+      .put('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', TOKEN)
+      .send({ status: 'INACTIVO', reason: 'Baja solicitada por el cliente' });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('INACTIVO');
+    expect(res.body.reason).toBe('Baja solicitada por el cliente');
+  });
+
+  it('bloqueo manual → 200, blockOrigin MANUAL', async () => {
+    vi.spyOn(accountStatusRepository, 'updateAccountStatus').mockResolvedValueOnce(
+      savedStatus({ status: 'BLOQUEADO_TEMPORAL', blockOrigin: 'MANUAL', reason: 'Solicitud del admin' })
+    );
+
+    const res = await request(app)
+      .put('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', TOKEN)
+      .send({ status: 'BLOQUEADO_TEMPORAL', reason: 'Solicitud del admin' });
+    expect(res.status).toBe(200);
+    expect(res.body.blockOrigin).toBe('MANUAL');
+  });
+
+  it('cliente inexistente → 404 CustomerNotFound', async () => {
+    vi.spyOn(customerService, 'getCustomerById').mockResolvedValue(null);
+
+    const res = await request(app)
+      .put('/v1/customers/cust_inexistente/status')
+      .set('Authorization', TOKEN)
+      .send({ status: 'INACTIVO', reason: 'Baja solicitada' });
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('CustomerNotFound');
+  });
+
+  it('DB caída → 503', async () => {
+    vi.spyOn(accountStatusRepository, 'updateAccountStatus').mockRejectedValueOnce(
+      Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
+    );
+
+    const res = await request(app)
+      .put('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', TOKEN)
+      .send({ status: 'INACTIVO', reason: 'Baja solicitada' })
+      .timeout(2000);
+    expect(res.status).toBe(503);
+  });
+});
+
+// ─── GET /v1/customers/:id/trips ──────────────────────────────────────────────
+// GET /trips pasa por requireAuth y solo lo ve el dueño del perfil.
+
+describe('GET /v1/customers/:id/trips (RF-2.3)', () => {
+  beforeEach(() => {
+    mockAuthOk();
+    mockOwnedProfile();
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('sin token → 401', async () => {
+    const res = await request(app).get('/v1/customers/cust_823a7b9c/trips');
+    expect(res.status).toBe(401);
+  });
+
+  it('cliente inexistente → 404', async () => {
+    vi.spyOn(customerService, 'getCustomerById').mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/v1/customers/cust_inexistente/trips')
+      .set('Authorization', TOKEN);
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('CustomerNotFound');
+  });
+
+  it('otro usuario sobre un perfil ajeno → 403 y no consulta M6', async () => {
+    mockAuthAs(99);
+    const getTrips = vi.spyOn(m6Client, 'getTrips');
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/trips')
+      .set('Authorization', TOKEN);
+    expect(res.status).toBe(403);
+    expect(getTrips).not.toHaveBeenCalled();
+  });
+
+  it('M6 disponible → 200 y consulta M6 con el userId del perfil', async () => {
+    const getTrips = vi.spyOn(m6Client, 'getTrips').mockResolvedValueOnce({
+      customerId: '12',
+      tripsCount: 1,
+      trips: [{ tripId: 'trip_1', origin: 'A', destination: 'B', fare: 1500, status: 'COMPLETADO', createdAt: '2026-09-01T00:00:00Z' }],
+      degraded: false
+    });
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/trips')
+      .set('Authorization', TOKEN);
+    expect(res.status).toBe(200);
+    expect(res.body.customerId).toBe('cust_823a7b9c');
+    expect(res.body.trips).toHaveLength(1);
+    expect(getTrips).toHaveBeenCalledWith(12);
+  });
+
+  it('M6 caído → 200 con lista vacía (respuesta degradada, no 503)', async () => {
+    vi.spyOn(m6Client, 'getTrips').mockRejectedValueOnce(new ServiceUnavailableError('M6 caído'));
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/trips')
+      .set('Authorization', TOKEN);
+    expect(res.status).toBe(200);
+    expect(res.body.tripsCount).toBe(0);
+    expect(res.body.trips).toHaveLength(0);
+    expect(res.body.degraded).toBe(true);
+  });
+
+  it('DB caída → 503', async () => {
+    vi.spyOn(customerService, 'getCustomerById').mockRejectedValue(
+      Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
+    );
+
+    const res = await request(app)
+      .get('/v1/customers/cust_823a7b9c/trips')
+      .set('Authorization', TOKEN)
+      .timeout(2000);
+    expect(res.status).toBe(503);
+  });
+});

@@ -9,7 +9,7 @@ cd .\modulo-8
 pnpm run ensure:stack
 docker compose --env-file .env --profile observability up -d alloy
 docker compose --env-file .env ps
-Invoke-RestMethod http://localhost:3000/health/ready
+Invoke-RestMethod http://localhost:8000/health/ready
 ```
 
 Si cambiaste código, reconstruí antes de medir: `docker compose --env-file .env up -d --build m8-app`. Usá una base local de pruebas: varios escenarios crean datos. No subas `.env` ni muestres credenciales en capturas. Los informes JSON locales quedan en `tests/stress/results/`, ignorados por Git.
@@ -148,7 +148,7 @@ node tests/stress/run-m3-batch.mjs 600
 El informe AMQP debe mostrar 600 Inbox, 600 notificaciones y 600 intentos sandbox, sin efectos extra al repetir diez `messageId`. Compará los RF, peticiones, errores y p95 de k6 con el tráfico y las latencias del mismo período en Grafana. Después comprobá:
 
 ```powershell
-Invoke-RestMethod http://localhost:3000/health/ready
+Invoke-RestMethod http://localhost:8000/health/ready
 docker compose --env-file .env ps
 ```
 
@@ -178,7 +178,7 @@ La tarjeta **Errores HTTP 5xx (últimos 5 min)** debe mostrar el `503` mientras 
 
 ```powershell
 pnpm run test:resiliencia
-Invoke-RestMethod http://localhost:3000/health/ready
+Invoke-RestMethod http://localhost:8000/health/ready
 ```
 
 La batería detiene o degrada Redis, RabbitMQ, fiscal y PostgreSQL **en el Compose local**, comprueba recuperación y vuelve a revisar salud. No la corras en la rama o infraestructura compartida.
@@ -189,7 +189,7 @@ Para mostrar caída y recuperación de la app, mantené Alloy levantado y deten�
 docker compose --env-file .env stop m8-app
 Start-Sleep -Seconds 25
 docker compose --env-file .env start m8-app
-Invoke-RestMethod http://localhost:3000/health/ready
+Invoke-RestMethod http://localhost:8000/health/ready
 ```
 
 En Grafana mirá **Historial de disponibilidad de M8** con un rango que incluya la interrupción: `up=0` significa que Alloy no pudo leer `/metrics`; `up=1`, que pudo otra vez. `up` no equivale a `/health/ready`. M8 es una única app: al detenerla, ningún RF atiende HTTP. La batería anterior demuestra qué ocurre cuando cae una dependencia y la app sigue viva.

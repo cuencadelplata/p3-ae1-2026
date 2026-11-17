@@ -1,0 +1,74 @@
+# M5 (Solicitud y Despacho) dentro del stack común `movilidad-urbana`.
+#
+# Lo incluye el docker-compose.yml de la raíz. Usa la red `reservas-network`
+# y el RabbitMQ y Redis compartidos que define M9. Para desarrollo y tests
+# aislados se sigue usando modulo-5/docker-compose.yml.
+#
+# Variables (en el .env de la raíz, nunca en Git):
+#   RABBITMQ_USER, RABBITMQ_PASSWORD  los mismos que usa el RabbitMQ compartido
+#   M6_SERVICE_URL                     URL de M6 si cambia su nombre de servicio
+#   M6_INTERNAL_API_KEY                API key compartida con M6
+#   JWT_SECRET                         secreto JWT (el mismo para M1 y M8)
+#   M5_HOST_PORT                       puerto del host (default 3005)
+#   M5_DB_PASSWORD                     contraseña de Postgres de M5
+
+services:
+  m5-dispatch-service:
+    image: p3-ae1-2026-m5-dispatch-service:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:${M5_HOST_PORT:-3005}:3005"
+    environment:
+      NODE_ENV: production
+      PORT: "3005"
+      DATABASE_URL: "postgresql://postgres:${M5_DB_PASSWORD:-postgres}@m5-postgres-db:5432/dispatch_db?schema=public"
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: "amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672"
+      M4_SERVICE_URL: "${M4_SERVICE_URL:-http://m4-api:3004/api/v1}"
+      M6_SERVICE_URL: "${M6_SERVICE_URL:-http://m6-viajes:3000}"
+      M6_INTERNAL_API_KEY: "${M6_INTERNAL_API_KEY:-}"
+      AUTH_MODE: "${AUTH_MODE:-jwt}"
+      JWT_SECRET: "${JWT_SECRET:-clave-solo-para-demo-local-cambiar}"
+    depends_on:
+      m5-postgres-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3005/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - reservas-network
+    restart: unless-stopped
+
+  # Base de datos propia de M5. No se publica en el host.
+  m5-postgres-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${M5_DB_PASSWORD:-postgres}"
+      POSTGRES_DB: dispatch_db
+    volumes:
+      - m5-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dispatch_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - reservas-network
+    restart: unless-stopped
+
+networks:
+  reservas-network:
+    driver: bridge
+
+volumes:
+  m5-postgres-data:

@@ -1,0 +1,230 @@
+﻿asyncapi: 2.6.0
+info:
+  title: Valoraciones M3
+  version: 1.0.0
+  description: >
+    Eventos de valoración del módulo M3-Conductor.
+    Semántica: el conductor (evaluador) valora al pasajero (evaluado).
+    M3 consume viaje.finalizado (publicado por M6) y publica valoracion.habilitada.
+    Tras POST /conductor/valoraciones publica valoracion.registrada.
+    El panel de M3 se suscribe a valoracion.habilitada para mostrar la notificación.
+    Fuente canónica del contrato AsyncAPI: asyncapi.yml (este archivo es copia con el mismo contenido).
+    Catálogo unificado: docs/EVENTOS.md
+
+servers:
+  rabbitmq:
+    url: localhost:5672
+    protocol: amqp
+    description: Broker local (Docker Compose usa admin / admin123)
+
+channels:
+  viaje/finalizado:
+    description: >
+      M6 avisa que un viaje terminó. M3 lo consume para abrir una valoración
+      pendiente: evaluador = conductorId, evaluado = clienteId.
+    subscribe:
+      operationId: consumirViajeFinalizado
+      summary: M3 habilita una valoración pendiente (conductor → pasajero)
+      message:
+        $ref: '#/components/messages/ViajeFinalizado'
+      bindings:
+        amqp:
+          cc: [viaje.finalizado]
+          ack: true
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: viajes.events
+          type: topic
+          durable: true
+        queue:
+          name: valoraciones.viaje-finalizado
+          durable: true
+
+  valoracion/habilitada:
+    description: >
+      M3 avisa que el conductor (evaluador) ya puede valorar al pasajero (evaluado)
+      de ese viaje. Se publica tras procesar viaje.finalizado.
+      Colas típicas: cliente.valoracion-habilitada y valoraciones.notificaciones-panel.
+    publish:
+      operationId: publicarValoracionHabilitada
+      summary: Publicar valoración habilitada (conductor puede valorar al pasajero)
+      message:
+        $ref: '#/components/messages/ValoracionHabilitada'
+    subscribe:
+      operationId: mostrarNotificacionValoracion
+      summary: El panel de M3 muestra la notificación en vivo
+      message:
+        $ref: '#/components/messages/ValoracionHabilitada'
+      bindings:
+        amqp:
+          cc: [valoracion.habilitada]
+          ack: true
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: valoraciones.events
+          type: topic
+          durable: true
+        queue:
+          name: valoraciones.notificaciones-panel
+          durable: true
+
+  valoracion/registrada:
+    description: >
+      M3 avisa que el conductor (evaluador) registró la valoración del pasajero
+      (evaluado). Se publica tras un POST /conductor/valoraciones exitoso.
+      Otros módulos declaran su propia cola y la bindean a valoracion.registrada.
+    publish:
+      operationId: publicarValoracionRegistrada
+      summary: Publicar valoración registrada (conductor → pasajero)
+      message:
+        $ref: '#/components/messages/ValoracionRegistrada'
+      bindings:
+        amqp:
+          cc: [valoracion.registrada]
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: valoraciones.events
+          type: topic
+          durable: true
+
+components:
+  messages:
+    ViajeFinalizado:
+      name: viaje.finalizado
+      title: Viaje finalizado
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/EventoViajeFinalizado'
+    ValoracionHabilitada:
+      name: valoracion.habilitada
+      title: Valoración habilitada
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/EventoValoracionHabilitada'
+    ValoracionRegistrada:
+      name: valoracion.registrada
+      title: Valoración registrada
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/EventoValoracionRegistrada'
+
+  schemas:
+    EventoViajeFinalizado:
+      type: object
+      required: [eventId, eventType, occurredAt, data]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          enum: [viaje.finalizado]
+        occurredAt:
+          type: string
+          format: date-time
+        data:
+          type: object
+          required: [viajeId, conductorId, clienteId]
+          properties:
+            viajeId:
+              type: string
+            conductorId:
+              type: string
+              description: Conductor del viaje (será evaluadorId en valoracion.habilitada)
+            clienteId:
+              type: string
+              description: Pasajero del viaje (será evaluadoId en valoracion.habilitada)
+            finalizadoAt:
+              type: string
+              format: date-time
+
+    EventoValoracionHabilitada:
+      type: object
+      required: [eventId, eventType, occurredAt, data]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          enum: [valoracion.habilitada]
+        occurredAt:
+          type: string
+          format: date-time
+        data:
+          type: object
+          required: [viajeId, evaluadorId, evaluadoId, estado]
+          properties:
+            viajeId:
+              type: string
+            evaluadorId:
+              type: string
+              description: Conductor que puede valorar (viene de conductorId)
+            evaluadoId:
+              type: string
+              description: Pasajero evaluado (viene de clienteId)
+            estado:
+              type: string
+              enum: [PENDIENTE]
+            habilitadaDesde:
+              type: string
+              format: date-time
+
+    EventoValoracionRegistrada:
+      type: object
+      required: [eventId, eventType, occurredAt, data]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          enum: [valoracion.registrada]
+        eventVersion:
+          type: integer
+          const: 1
+        source:
+          type: string
+          const: M3-Conductor
+        occurredAt:
+          type: string
+          format: date-time
+        data:
+          type: object
+          required:
+            - id
+            - evaluadorId
+            - evaluadoId
+            - valoracion
+            - fecha
+            - estado
+          properties:
+            id:
+              type: string
+            evaluadorId:
+              type: string
+              description: Conductor que valoró
+            evaluadoId:
+              type: string
+              description: Pasajero evaluado
+            valoracion:
+              type: number
+              minimum: 1
+              maximum: 5
+            comentario:
+              type: string
+            viajeId:
+              type: string
+              nullable: true
+            fecha:
+              type: string
+              format: date-time
+            estado:
+              type: string
+              enum: [REGISTRADA]

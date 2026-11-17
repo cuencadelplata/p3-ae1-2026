@@ -1,0 +1,25 @@
+// AE4 - Envío de las métricas de M1 a Grafana Cloud.
+// Alloy lee GET /metrics de M1 cada 15 segundos y manda los valores a Grafana Cloud.
+// Los datos de la cuenta llegan por variables de entorno (archivo .env, nunca al repo).
+
+prometheus.scrape "m1" {
+  targets = [{
+    "__address__" = sys.env("M1_METRICS_TARGET"),
+    "modulo"      = "M1",
+  }]
+  job_name        = "m1-identidad-acceso"
+  metrics_path    = "/metrics"
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_CLOUD_PROM_URL")
+
+    basic_auth {
+      username = sys.env("GRAFANA_CLOUD_PROM_USER")
+      password = sys.env("GRAFANA_CLOUD_API_KEY")
+    }
+  }
+}

@@ -1,0 +1,53 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(15, 15, 15, 0.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 0 32px;
+  height: 64px;
+}
+
+.topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+}
+.topbar-brand::before {
+  content: 'M2';
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--lime);
+  color: var(--ink-on-lime);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.content {
+  flex: 1;
+  padding: 36px 32px 56px;
+  max-width: 980px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (max-width: 720px) {
+  .topbar { padding: 0 16px; }
+  .content { padding: 24px 16px 40px; }
+}

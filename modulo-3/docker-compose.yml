@@ -1,0 +1,278 @@
+# Stack M3: infra compartida (Redis/Rabbit) + microservicios independientes.
+# Redis/Rabbit se publican una sola vez (6379 / 5672 / 15672) en p3-shared
+# para que Conductor, Vehículos y otros módulos los reutilicen sin solaparse.
+
+services:
+  # ---------------- M1 — Identidad y Acceso (servicio real, sin mocks) ----------------
+  # Puerto host 13001: evita choque con previews locales en :3001
+  m1-identidad-acceso:
+    image: matsir/m1-identidad-acceso:latest
+    container_name: m1-identidad-acceso
+    restart: unless-stopped
+    ports:
+      - "13001:3001"
+    environment:
+      PORT: 3001
+      JWT_SECRET: ${JWT_SECRET:-clave-desarrollo-m1}
+    volumes:
+      - m1_identity_data:/app/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      default:
+        aliases:
+          - m1-identidad-acceso
+      p3-shared:
+        aliases:
+          - m1-identidad-acceso
+          - m1
+
+  # ---------------- Infraestructura compartida (única) ----------------
+  redis:
+    image: redis:7-alpine
+    container_name: m3-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      default:
+        aliases:
+          - redis
+      p3-shared:
+        aliases:
+          - redis
+          - m3-redis
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: m3-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks:
+      default:
+        aliases:
+          - rabbitmq
+      p3-shared:
+        aliases:
+          - rabbitmq
+          - m3-rabbitmq
+
+  # Cola temporal de M3. El proceso de conductores la apaga cuando RabbitMQ responde.
+  kafka:
+    image: apache/kafka:3.9.1
+    container_name: m3-kafka
+    hostname: kafka
+    restart: "no"
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://kafka:9094,CONTROLLER://kafka:9093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9094,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+
+  # ---------------- RF-3.2 / RF-3.4: Vehículos y Documentos ----------------
+  m3-vehiculos:
+    build:
+      context: ./m3-vehiculos
+      dockerfile: Dockerfile
+    image: m3-vehiculos
+    container_name: m3-vehiculos
+    restart: unless-stopped
+    env_file:
+      - path: ./m3-vehiculos/.env.docker
+        required: false
+    environment:
+      PORT: 8083
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
+      OTEL_SERVICE_NAME: m3-vehiculos-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://grafana-alloy:4318
+    ports:
+      - "8083:8083"
+    networks:
+      - default
+      - p3-shared
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  # ---------------- RF-3.1 / RF-3.3 / Valoraciones: Conductores ----------------
+  m3-conductor-api:
+    build:
+      context: ./M3-Conductor
+      dockerfile: Dockerfile
+    image: m3-conductor-api
+    container_name: m3-conductor-api
+    restart: unless-stopped
+    env_file:
+      - path: ./M3-Conductor/.env
+        required: false
+    environment:
+      PORT: 3000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_TTL_HABILITADO: ${REDIS_TTL_HABILITADO:-300}
+      REDIS_TTL_DISPONIBLE: ${REDIS_TTL_DISPONIBLE:-60}
+      REDIS_CONNECT_TIMEOUT_MS: ${REDIS_CONNECT_TIMEOUT_MS:-1000}
+      REDIS_COMMAND_TIMEOUT_MS: ${REDIS_COMMAND_TIMEOUT_MS:-500}
+      REDIS_HEALTHCHECK_INTERVAL_MS: ${REDIS_HEALTHCHECK_INTERVAL_MS:-10000}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: admin
+      RABBITMQ_PASSWORD: admin123
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
+      RABBITMQ_EXCHANGE: m3.conductores.events
+      KAFKA_BROKERS: kafka:9094
+      KAFKA_CONTAINER: m3-kafka
+      KAFKA_FALLBACK_TOPIC: m3.fallback
+      OTEL_SERVICE_NAME: m3-conductor-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://grafana-alloy:4318
+      # M1 real (sin mocks): POST /api/conductores valida el JWT contra M1
+      M1_URL: ${M1_URL:-http://m1-identidad-acceso:3001}
+      M1_REQUIRE_AUTH: ${M1_REQUIRE_AUTH:-false}
+    ports:
+      - "5000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      default:
+        aliases:
+          - api   # nginx.conf del frontend hace proxy_pass a http://api:3000
+      p3-shared:
+        aliases:
+          - m3-conductor-api
+    depends_on:
+      m1-identidad-acceso:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  # Consumidor de ejemplo de los eventos de conductores
+  m3-conductor-consumer:
+    build:
+      context: ./M3-Conductor
+      dockerfile: Dockerfile
+    container_name: m3-conductor-consumer
+    restart: unless-stopped
+    command: ["npm", "run", "consumer"]
+    environment:
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
+      RABBITMQ_EXCHANGE: m3.conductores.events
+      RABBITMQ_EXAMPLE_QUEUE: m3.ejemplo.driver-events
+    depends_on:
+      m3-conductor-api:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
+  # Frontends React de M3-Conductor/src/app (alta-conductor.tsx y valoraciones.tsx),
+  # compilados en Dockerfile.client y servidos por Nginx en :4000.
+  #   http://localhost:4000/alta-conductor.html
+  #   http://localhost:4000/valoraciones.html
+  # Nginx hace proxy de /api/ hacia http://api:3000
+  m3-conductor-frontend:
+    build:
+      context: ./M3-Conductor
+      dockerfile: Dockerfile.client
+    container_name: m3-conductor-frontend
+    restart: unless-stopped
+    ports:
+      - "4000:80"
+    depends_on:
+      m3-conductor-api:
+        condition: service_healthy
+
+  # ---------------- Observabilidad: Collector OpenTelemetry + Docker -> Grafana Cloud ----------------
+  grafana-alloy:
+    image: grafana/alloy:latest
+    container_name: m3-grafana-alloy
+    restart: unless-stopped
+    env_file:
+      - path: ./.env
+        required: false
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy/config.alloy
+
+  k6:
+    image: grafana/k6:latest
+    container_name: m3-k6
+    profiles: ["test"]
+    volumes:
+      - ./k6:/scripts
+    command: run /scripts/load-test.js
+    networks:
+      - default  
+
+networks:
+  p3-shared:
+    external: true
+    name: p3-shared
+
+volumes:
+  redis_data:
+  rabbitmq_data:
+  m1_identity_data:
+

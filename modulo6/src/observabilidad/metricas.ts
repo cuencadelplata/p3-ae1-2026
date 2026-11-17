@@ -99,7 +99,9 @@ export function inicializarSeriesDominio(): void {
     for (const [exchange, routing_key] of [
         ['viajes.events', 'viaje.finalizado'],
         ['mobility.events', 'trip.completed'],
+        ['trip.events', 'viaje.iniciado'],
         ['trip.events', 'viaje.finalizado'],
+        ['trip.events', 'viaje.cancelado'],
     ]) {
         eventosPublicados.inc({ exchange, routing_key }, 0);
     }

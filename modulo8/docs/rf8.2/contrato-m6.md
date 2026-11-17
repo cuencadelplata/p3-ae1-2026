@@ -7,7 +7,7 @@ estado del viaje. La especificación completa de cuerpos y errores es el
 
 En el Compose común, M6 llamará a `http://m8-app:3000`. El nombre del servicio
 debe confirmarse al armar ese Compose. En el Compose local de M8, la API se
-consulta en `http://localhost:3000`.
+consulta en `http://localhost:8000`.
 
 | Operación | Pedido de M6 | Respuesta exitosa de M8 |
 | --- | --- | --- |

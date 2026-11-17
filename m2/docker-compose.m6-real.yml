@@ -1,0 +1,10 @@
+# M6_REAL_BASE_URL debe ser la URL accesible desde el contenedor de M2.
+# No inicia el simulador de M6. No crea ni modifica viajes en el M6 ajeno.
+services:
+  api:
+    environment:
+      M6_BASE_URL: ${M6_REAL_BASE_URL:?Indicar la URL real de M6}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+  m6:
+    profiles: ["demo-m6"]

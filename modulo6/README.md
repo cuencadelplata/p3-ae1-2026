@@ -20,6 +20,28 @@ npm run test:e2e
 npm run docker:down
 ```
 
+Para verificar de una vez todos los RF de M6, ejecuta `npm run test:all-rf`. El runner crea un proyecto Docker aislado con todos los servicios de M6 y proveedores de prueba para M7/M8, ejecuta build, unitarios, E2E y K6 (smoke, carga y estrés), y baja los contenedores al terminar. Esta suite valida los contratos desde M6; no reemplaza la integración contra las APIs reales de M7/M8. El volumen de PostgreSQL del proyecto de prueba se conserva.
+
+Antes de levantar Compose:
+
+- `modulo6/.env` es opcional: sin él, `npm run docker:up` levanta igual y alcanza para los tests unitarios. Para hablar con M7 y M8 reales, define ahí `M7_URL`, `M7_API_KEY` y `QR_INTERNAL_API_KEY` (la misma clave de al menos 16 caracteres que usa M8, que M6 envía como `x-api-key`).
+- Ten disponible la red `m1-integracion_default`, requerida por el Compose de integración de M8.
+
+`npm run docker:up` crea la red `m6_viajes_default` y levanta M6. Después, desde `modulo8/`, conecta M8 a esa red. El override dentro de M6 evita conflictos entre los puertos publicados de ambos módulos:
+
+```sh
+docker compose --env-file .env -f compose.yaml -f compose.integracion-real.yaml -f ../modulo6/docker-compose.m8-hostports.yml up -d --build --wait
+```
+
+La URL interna configurada es `http://m8-app:3000`. M6 conserva sus puertos locales habituales; M8 queda publicado en `http://localhost:3103` para las comprobaciones desde el host. M3 y M4 continúan usando el simulador de M6.
+
+Para detener M8 desde `modulo8/` y luego M6 desde `modulo6/`:
+
+```sh
+docker compose --env-file .env -f compose.yaml -f compose.integracion-real.yaml -f ../modulo6/docker-compose.m8-hostports.yml down
+npm run docker:down
+```
+
 Las pruebas unitarias de RF-6.1/2/3 usan PostgreSQL y Redis reales, por eso se levantan con Compose. Para ejecutar una familia concreta:
 
 ```sh
@@ -43,10 +65,11 @@ Los perfiles comprueban `/health` y ejecutan el flujo de crear y consultar un vi
 Cada iteración crea un viaje y lo deja persistido en PostgreSQL; el perfil de estrés puede crear muchos registros. Usa un entorno de pruebas y limpia esos datos cuando ya no los necesites.
 
 `npm run test:e2e` requiere el stack en ejecución. También se puede seleccionar una familia con `test:e2e:rf-6.1-6.2-6.3`, `test:e2e:rf-6.4-6.7` o `test:e2e:rf-6.5-6.6`.
+Para el harness Docker que prueba generación y validación de QR en M8, exporta `M8_URL=http://m8-app:3000`, `M8_TEST_URL=http://localhost:3103` y `M8_QR_API_KEY` con el mismo secreto de `QR_INTERNAL_API_KEY`.
 
 ## Interfaz web
 
-El frontend de RF-6.1/6.2/6.3 se sirve desde la misma API M6, en `http://localhost:3000`, por lo que no necesita un contenedor ni configuración CORS aparte. Levanta el stack con `npm run docker:up` y abre esa URL. La pantalla permite solicitar y consultar viajes, asignar un conductor manualmente para la demo, registrar el arribo, recuperar el QR vigente y solicitar el inicio validando el token con M8.
+El frontend de RF-6.1/6.2/6.3 se sirve desde la misma API M6, en `http://localhost:3000`, por lo que no necesita un contenedor ni configuración CORS aparte. Levanta M6 y M8 con los comandos anteriores y abre esa URL. La pantalla permite solicitar y consultar viajes, asignar un conductor manualmente para la demo, registrar el arribo, recuperar el QR vigente y solicitar el inicio validando el token con M8.
 
 ## Servicios
 
@@ -59,7 +82,7 @@ El frontend de RF-6.1/6.2/6.3 se sirve desde la misma API M6, en `http://localho
 | Redis | 6379 | Caché compartida |
 | RabbitMQ | 5672, gestión 15672 | Eventos de viajes y cancelaciones |
 
-Compose inicia un simulador interno para las dependencias M3/M4/M7/M8. Los tres servicios M6 comparten la misma imagen Node y la misma base; `docker compose down` detiene el entorno y conserva el volumen de PostgreSQL.
+Compose inicia un simulador interno únicamente para M3/M4. El QR se solicita y valida contra M8 real (`m8-app:3000`); las llamadas de tarifa y pago de M7 se dirigen a la API real mediante `M7_URL` y `M7_API_KEY`. Los tres servicios M6 comparten la misma imagen Node y la misma base; `npm run docker:down` detiene M6 y conserva el volumen de PostgreSQL.
 
 ## Front de RF-6.4 / RF-6.7
 
@@ -111,11 +134,52 @@ Las APIs RF-6.5/6.6 no autentican ni identifican por sí solas a la persona que 
 
 ## Integración del QR con M8
 
-El cliente QR acepta `M8_URL` y `M8_QR_API_KEY` desde el entorno. En el Compose local se mantiene el simulador; al integrar M8, la clave se debe configurar fuera de Git y compartirse con M8 como `QR_INTERNAL_API_KEY`.
+M6 llama al M8 real en `http://m8-app:3000` por la red compartida `m6_viajes_default`. `QR_INTERNAL_API_KEY` se configura en `modulo6/.env` y M6 la recibe como `M8_QR_API_KEY`. El archivo `docker-compose.m8-hostports.yml`, ubicado en M6, se agrega al Compose de M8 para publicar su API en `localhost:3103` y despublicar su PostgreSQL, Redis y RabbitMQ del host; M6 mantiene sus puertos locales sin cambios.
+
+## Eventos de viaje para M4 (`trip.events`)
+
+M6 publica el ciclo de vida del viaje para que M4 actualice la disponibilidad del conductor.
+
+- **Exchange:** `trip.events` (tipo `topic`, durable).
+- **Routing keys:** `viaje.iniciado` (el viaje pasa a EN_CURSO), `viaje.finalizado` (pasa a COMPLETADO) y `viaje.cancelado` (cancelado por el cliente o el conductor).
+- **Mensaje:** JSON plano, `content-type: application/json`, persistente, con la propiedad AMQP `messageId` igual a `eventId`.
+
+```json
+{
+  "eventId": "3f6c1a52-9b1e-4c1a-8f0e-2d7b5c9a1e44",
+  "eventType": "viaje.finalizado",
+  "tripId": "9e51e073-f403-48f8-95b8-1287b87b440a",
+  "driverId": 7,
+  "occurredAt": "2026-11-17T15:20:31.512Z"
+}
+```
+
+- `driverId` es el userId numérico de M1 del conductor (el `driverUserId` que M5 envía al asignar). Si el viaje no lo tiene, M6 no publica en `trip.events`.
+- `eventId` es un UUID único por evento y se conserva en los reintentos, por lo que sirve como clave de idempotencia.
+- `eventType` es igual a la routing key.
+
+Los eventos se guardan en un outbox dentro de la misma transacción que cambia el estado del viaje y se publican después del commit. Si RabbitMQ no está disponible, se reintentan cada 5 segundos sin perderse.
+
+## Puertos y broker configurables
+
+Los valores por defecto son los de la tabla de servicios. Para convivir con otros módulos se pueden cambiar sin editar el compose (por ejemplo en `modulo6/.env`):
+
+| Variable | Uso | Por defecto |
+| --- | --- | --- |
+| `M6_VIAJES_HOST_PORT` | Puerto del host de Viajes | 3000 |
+| `M6_CANCELACION_HOST_PORT` | Puerto del host de Cancelaciones | 3001 |
+| `M6_FACHADA_HOST_PORT` | Puerto del host de la fachada RF-6.4/6.7 y su front | 3002 |
+| `M6_TRIPDB_HOST_PORT` | Puerto del host de PostgreSQL | 5432 |
+| `M6_REDIS_HOST_PORT` | Puerto del host de Redis | 6379 |
+| `M6_RABBITMQ_HOST_PORT` / `M6_RABBITMQ_MGMT_HOST_PORT` | Puertos del host de RabbitMQ | 5672 / 15672 |
+| `M6_RABBITMQ_URL` | Broker que usan Viajes y Cancelaciones | `amqp://guest:guest@rabbitmq:5672` |
+
+Para que M4 reciba los eventos, `M6_RABBITMQ_URL` debe apuntar al RabbitMQ compartido de la integración.
 
 ## Contratos
 
 - Todos los requisitos: [OpenAPI consolidado](openapi.yaml)
+- Eventos para M4: [sección `trip.events`](#eventos-de-viaje-para-m4-tripevents)
 
 ## Estructura
 
