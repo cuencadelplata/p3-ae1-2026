@@ -2,9 +2,10 @@ name: CI - Grupo 05 (Módulo 2 Clientes)
 
 on:
   push:
-    branches: [ Grupo05, M2-PerfilHistorialEstado ]
+    branches: [ Grupo05, M2-PerfilHistorialEstado, integration/m2-ae2 ]
   pull_request:
-    branches: [ Grupo05, M2-PerfilHistorialEstado ]
+    branches: [ Grupo05, M2-PerfilHistorialEstado, integration/m2-ae2, main ]
+    paths: [ 'm2/**', '.github/workflows/ci-grupo05.yml' ]
 
 jobs:
   test-and-build:
