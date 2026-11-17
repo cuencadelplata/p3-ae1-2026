@@ -199,6 +199,16 @@ describe('RF-6.4 - Finalización del viaje', () => {
     expect(authorizationCount).toBe(1);
   });
 
+  it('tolera un reloj levemente atrasado: horaFin se ajusta al inicio', async () => {
+    const viaje = await crearViajeEnCurso();
+    const response = await solicitudFinalizacion(viaje.id, { horaFin: new Date(Date.now() - 30_000).toISOString() });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.viaje.horaFin).toBe(body.viaje.inicio);
+    expect(body.viaje.tiempoMinutos).toBe(1);
+  });
+
   it('calcula la duración real entre el inicio y horaFin', () => {
     const inicio = new Date('2026-11-16T10:00:00Z');
     expect(minutosTranscurridos(inicio, new Date('2026-11-16T10:25:10Z'))).toBe(26);

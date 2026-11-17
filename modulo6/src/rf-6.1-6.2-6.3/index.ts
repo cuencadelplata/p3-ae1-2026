@@ -2,10 +2,16 @@ import express from 'express';
 import viajesRoutes from './routes/viajes.routes.js';
 import clientesRoutes from './routes/clientes.routes.js';
 import { cerrarPublicador, despacharEventosPendientes } from './services/eventos-viaje.service.js';
+import { middlewareObservabilidad, responderMetricas } from '../observabilidad/http.js';
+import { logger } from '../observabilidad/logger.js';
+import { inicializarSeriesDominio, registrarGaugesTripDb } from '../observabilidad/metricas.js';
+import { estadisticasTripDb } from './repositories/viaje.repository.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// RNF-13/RNF-19: X-Request-Id, métricas y log estructurado por solicitud.
+app.use(middlewareObservabilidad());
 app.use(express.json());
 
 // Health check endpoint
@@ -13,12 +19,17 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
+// Métricas Prometheus que lee Grafana Alloy.
+registrarGaugesTripDb(estadisticasTripDb);
+inicializarSeriesDominio();
+app.get('/metrics', (_req, res) => void responderMetricas(res));
+
 // Enlazamos las rutas del modulo
 app.use('/api/viajes', viajesRoutes);
 app.use('/api/clientes', clientesRoutes);
 
 app.listen(PORT, () => {
-    console.log(`Servidor del modulo corriendo en http://localhost:${PORT}`);
+    logger.info({ port: Number(PORT) }, 'Servidor del módulo Viajes iniciado');
 });
 
 // RF-6.4: relay del outbox. Reintenta los eventos de finalización que no se pudieron

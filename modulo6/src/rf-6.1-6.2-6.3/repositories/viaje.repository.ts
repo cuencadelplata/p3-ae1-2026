@@ -2,7 +2,7 @@ import pool from '../db/pool.js';
 import type { PoolClient } from 'pg';
 import type { Viaje } from '../models/viaje.model.js';
 import { EstadoViaje } from '../models/viaje.model.js';
-import { eventosViajeFinalizado } from '../services/eventos-viaje.service.js';
+import { eventosViajeFinalizado, traceparentActual } from '../services/eventos-viaje.service.js';
 //en este archivo definimos las funciones que interactúan con la base de datos para crear, buscar y actualizar viajes. Estas funciones son llamadas por los controladores del módulo de viajes.
 
 export interface FinalizacionPersistida {
@@ -66,6 +66,9 @@ async function ensureExtensionSchema(): Promise<void> {
             ON viaje_transiciones(viaje_id, id);
         CREATE INDEX IF NOT EXISTS viajes_cliente_id_fecha_idx
             ON viajes(cliente_id, fecha_creacion DESC, id DESC);
+        -- RF-6.7: registro de viajes filtrado por conductor.
+        CREATE INDEX IF NOT EXISTS viajes_conductor_id_fecha_idx
+            ON viajes(conductor_id, fecha_creacion DESC, id DESC);
 
         -- RF-6.7: la creación del viaje se registra como transición sin estado anterior.
         ALTER TABLE viaje_transiciones ALTER COLUMN estado_anterior DROP NOT NULL;
@@ -98,6 +101,8 @@ async function ensureExtensionSchema(): Promise<void> {
         );
         CREATE INDEX IF NOT EXISTS viaje_eventos_outbox_pendientes_idx
             ON viaje_eventos_outbox(creado_at) WHERE publicado_at IS NULL;
+        -- Contexto W3C de la solicitud que originó el evento, para continuar la traza al publicar.
+        ALTER TABLE viaje_eventos_outbox ADD COLUMN IF NOT EXISTS traceparent TEXT;
     `).then(() => undefined).catch((error: unknown) => {
         extensionSchemaPromise = undefined;
         throw error;
@@ -202,6 +207,66 @@ export async function buscarViajesPorCliente(clienteId: string): Promise<ViajeCo
          ORDER BY viajes.fecha_creacion DESC, viajes.id DESC`,
         [clienteId]
     );
+    return conHistorial(rows);
+}
+
+/** Valores para los gauges de métricas (viajes por estado y outbox pendiente). */
+export async function estadisticasTripDb(): Promise<{
+    porEstado: Array<{ estado: string; total: number }>;
+    outboxPendientes: number;
+}> {
+    await ensureExtensionSchema();
+    const [estados, outbox] = await Promise.all([
+        pool.query('SELECT estado, count(*)::int AS total FROM viajes GROUP BY estado'),
+        pool.query('SELECT count(*)::int AS total FROM viaje_eventos_outbox WHERE publicado_at IS NULL'),
+    ]);
+    return {
+        porEstado: estados.rows.map((row) => ({ estado: row.estado as string, total: row.total as number })),
+        outboxPendientes: outbox.rows[0].total as number,
+    };
+}
+
+export interface FiltrosRegistroViajes {
+    clienteId?: string;
+    conductorId?: string;
+    estado?: EstadoViaje;
+    limit: number;
+    offset: number;
+}
+
+/**
+ * RF-6.7: registro de viajes para operadores, filtrable por cliente, conductor y estado,
+ * con el historial de transiciones de cada viaje. Paginado por limit/offset.
+ */
+export async function buscarRegistroViajes(
+    filtros: FiltrosRegistroViajes,
+): Promise<{ total: number; viajes: ViajeConHistorial[] }> {
+    await ensureExtensionSchema();
+    const condiciones: string[] = [];
+    const valores: unknown[] = [];
+    const agregar = (sql: string, valor: unknown) => {
+        valores.push(valor);
+        condiciones.push(sql.replace('?', `$${valores.length}`));
+    };
+    if (filtros.clienteId) agregar('viajes.cliente_id = ?', filtros.clienteId);
+    if (filtros.conductorId) agregar('viajes.conductor_id = ?', filtros.conductorId);
+    if (filtros.estado) agregar('viajes.estado = ?', filtros.estado);
+    const where = condiciones.length > 0 ? `WHERE ${condiciones.join(' AND ')}` : '';
+
+    const totalResult = await pool.query(`SELECT count(*)::int AS total FROM viajes ${where}`, valores);
+    const { rows } = await pool.query(
+        `SELECT viajes.*, viaje_finalizaciones.data AS finalizacion_data
+         FROM viajes
+         LEFT JOIN viaje_finalizaciones ON viaje_finalizaciones.viaje_id = viajes.id
+         ${where}
+         ORDER BY viajes.fecha_creacion DESC, viajes.id DESC
+         LIMIT $${valores.length + 1} OFFSET $${valores.length + 2}`,
+        [...valores, filtros.limit, filtros.offset]
+    );
+    return { total: totalResult.rows[0].total as number, viajes: await conHistorial(rows) };
+}
+
+async function conHistorial(rows: any[]): Promise<ViajeConHistorial[]> {
     if (rows.length === 0) return [];
 
     const viajes: ViajeConHistorial[] = rows.map((row) => {
@@ -374,9 +439,9 @@ export async function finalizarSiEnCurso(
             paymentId: finalizacion.paymentId,
         })) {
             await client.query(
-                `INSERT INTO viaje_eventos_outbox (message_id, viaje_id, exchange, routing_key, payload)
-                 VALUES ($1, $2, $3, $4, $5::jsonb)`,
-                [evento.messageId, id, evento.exchange, evento.routingKey, JSON.stringify(evento.payload)]
+                `INSERT INTO viaje_eventos_outbox (message_id, viaje_id, exchange, routing_key, payload, traceparent)
+                 VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+                [evento.messageId, id, evento.exchange, evento.routingKey, JSON.stringify(evento.payload), traceparentActual()]
             );
         }
         await client.query('COMMIT');

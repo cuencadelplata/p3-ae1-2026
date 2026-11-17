@@ -14,6 +14,8 @@ import {
     type DatosPagoTarjeta,
 } from '../services/finalizacion.service.js';
 import { despacharEventosPendientes } from '../services/eventos-viaje.service.js';
+import { logger } from '../../observabilidad/logger.js';
+import { consultasHistorial, duracionFinalizacion, finalizaciones } from '../../observabilidad/metricas.js';
 
 class ErrorValidacionFinalizacion extends Error {}
 
@@ -189,10 +191,15 @@ function validarDatosFinalizacion(input: unknown, inicio: Date): DatosFinalizaci
     ) {
         throw new ErrorValidacionFinalizacion('metodoPago debe ser efectivo, tarjeta o transferencia');
     }
-    const horaFin = new Date(String(body.horaFin));
-    if (Number.isNaN(horaFin.getTime()) || horaFin < inicio) {
+    const horaFinRecibida = new Date(String(body.horaFin));
+    if (
+        Number.isNaN(horaFinRecibida.getTime()) ||
+        horaFinRecibida.getTime() < inicio.getTime() - MARGEN_RELOJ_MS
+    ) {
         throw new ErrorValidacionFinalizacion('horaFin debe ser una fecha válida posterior al inicio del viaje');
     }
+    // Un reloj del dispositivo apenas atrasado no debe impedir finalizar: se ajusta al inicio.
+    const horaFin = horaFinRecibida < inicio ? new Date(inicio) : horaFinRecibida;
     if (horaFin.getTime() > Date.now() + MARGEN_RELOJ_MS) {
         throw new ErrorValidacionFinalizacion('horaFin no puede estar en el futuro');
     }
@@ -232,19 +239,41 @@ export const finalizarViaje = async (req: Request, res: Response): Promise<any> 
         return res.status(400).json({ error: 'Falta el id del viaje en la URL' });
     }
 
+    // RF-6.4 observable: métricas por resultado y un log por intento (sin datos de pago).
+    const metodo = ['efectivo', 'tarjeta', 'transferencia'].includes(req.body?.metodoPago)
+        ? String(req.body.metodoPago)
+        : 'invalido';
+    const finTimer = duracionFinalizacion.startTimer();
+    const registrar = (resultado: string, extra: Record<string, unknown> = {}) => {
+        finTimer({ resultado });
+        finalizaciones.inc({ resultado, metodo_pago: metodo });
+        const nivel = resultado === 'completado' || resultado === 'repetida' ? 'info' : 'warn';
+        logger[nivel]({ evento: 'viaje.finalizacion', resultado, metodoPago: metodo, ...extra }, 'Finalización de viaje');
+    };
+
     try {
         const result = await viajeRepo.finalizarSiEnCurso(id, async (viaje, inicio) => {
             const data = validarDatosFinalizacion(req.body, inicio);
             return ejecutarServiciosFinalizacion(viaje, data, inicio);
         });
-        if (result.kind === 'not-found') return res.status(404).json({ error: 'Viaje no encontrado' });
+        if (result.kind === 'not-found') {
+            registrar('no_encontrado');
+            return res.status(404).json({ error: 'Viaje no encontrado' });
+        }
         if (result.kind === 'invalid-state') {
+            registrar('estado_invalido', { estado: result.estado });
             return res.status(400).json({
                 error: `No se puede finalizar un viaje en estado ${result.estado}`,
             });
         }
 
         const { viaje, finalizacion, repetida } = result;
+        registrar(repetida ? 'repetida' : 'completado', {
+            total: finalizacion.total,
+            tiempoMinutos: finalizacion.tiempoMinutos,
+            distanciaKm: finalizacion.distanciaKm,
+            estadoPago: finalizacion.estadoPago,
+        });
         if (!repetida) {
             // Publicación inmediata; si RabbitMQ falla, el relay periódico la reintenta.
             void despacharEventosPendientes();
@@ -267,12 +296,15 @@ export const finalizarViaje = async (req: Request, res: Response): Promise<any> 
         });
     } catch (error) {
         if (error instanceof ErrorServicioFinalizacion) {
+            registrar(error.status === 402 ? 'pago_rechazado' : 'error_dependencia', { causa: error.message });
             return res.status(error.status).json({ error: error.message });
         }
         if (error instanceof ErrorValidacionFinalizacion) {
+            registrar('datos_invalidos', { causa: error.message });
             return res.status(400).json({ error: error.message });
         }
-        console.error('ERROR EN finalizarViaje:', error);
+        registrar('error_interno');
+        logger.error({ err: error }, 'Error inesperado al finalizar el viaje');
         return res.status(503).json({ error: 'No se pudo finalizar el viaje' });
     }
 };
@@ -285,7 +317,11 @@ export const obtenerHistorialTransiciones = async (req: Request, res: Response):
 
     try {
         const result = await viajeRepo.buscarHistorialTransiciones(id);
-        if (!result.exists) return res.status(404).json({ error: 'Viaje no encontrado' });
+        if (!result.exists) {
+            consultasHistorial.inc({ tipo: 'viaje', resultado: 'no_encontrado' });
+            return res.status(404).json({ error: 'Viaje no encontrado' });
+        }
+        consultasHistorial.inc({ tipo: 'viaje', resultado: 'ok' });
         return res.json({
             historial: result.historial.map((transicion) => ({
                 from: viajeRepo.estadoHistorial(transicion.from),
@@ -295,7 +331,55 @@ export const obtenerHistorialTransiciones = async (req: Request, res: Response):
             })),
         });
     } catch (error) {
-        console.error('ERROR EN viajeRepo.buscarHistorialTransiciones:', error);
+        consultasHistorial.inc({ tipo: 'viaje', resultado: 'error' });
+        logger.error({ err: error }, 'No se pudo consultar el historial de transiciones');
+        return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
+    }
+};
+
+function parametroTexto(value: unknown, nombre: string): string | undefined {
+    if (value === undefined || value === '') return undefined;
+    if (typeof value !== 'string' || value.trim().length === 0 || value.length > 50) {
+        throw new ErrorValidacionFinalizacion(`${nombre} debe ser un texto de hasta 50 caracteres`);
+    }
+    return value.trim();
+}
+
+function parametroEntero(value: unknown, nombre: string, defecto: number, min: number, max: number): number {
+    if (value === undefined || value === '') return defecto;
+    const numero = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : NaN;
+    if (!Number.isSafeInteger(numero) || numero < min || numero > max) {
+        throw new ErrorValidacionFinalizacion(`${nombre} debe ser un entero entre ${min} y ${max}`);
+    }
+    return numero;
+}
+
+/** RF-6.7: GET /api/viajes?clienteId=&conductorId=&estado=&limit=&offset= */
+export const listarRegistroViajes = async (req: Request, res: Response): Promise<any> => {
+    let filtros: viajeRepo.FiltrosRegistroViajes;
+    try {
+        const estado = parametroTexto(req.query.estado, 'estado')?.toUpperCase();
+        if (estado !== undefined && !Object.values(EstadoViaje).includes(estado as EstadoViaje)) {
+            throw new ErrorValidacionFinalizacion(`estado debe ser uno de: ${Object.values(EstadoViaje).join(', ')}`);
+        }
+        filtros = {
+            clienteId: parametroTexto(req.query.clienteId, 'clienteId'),
+            conductorId: parametroTexto(req.query.conductorId, 'conductorId'),
+            estado: estado as EstadoViaje | undefined,
+            limit: parametroEntero(req.query.limit, 'limit', 20, 1, 100),
+            offset: parametroEntero(req.query.offset, 'offset', 0, 0, 1_000_000),
+        };
+    } catch (error) {
+        return res.status(400).json({ error: (error as Error).message });
+    }
+
+    try {
+        const { total, viajes } = await viajeRepo.buscarRegistroViajes(filtros);
+        consultasHistorial.inc({ tipo: 'registro', resultado: 'ok' });
+        return res.json({ total, limit: filtros.limit, offset: filtros.offset, viajes });
+    } catch (error) {
+        consultasHistorial.inc({ tipo: 'registro', resultado: 'error' });
+        logger.error({ err: error }, 'No se pudo consultar el registro de viajes');
         return res.status(503).json({ error: 'Base de datos no disponible, intente más tarde' });
     }
 };
