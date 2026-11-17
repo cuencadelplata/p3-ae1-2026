@@ -1,0 +1,57 @@
+# ADR-002 (RF8.7): Persistencia en notification_delivery, Device Tokens y Preferencias M2
+
+* **Estado:** Aceptado / Congelado (AE2 - Actualizado con acuerdos de integración)
+* **Fecha:** 2026-10-05
+* **Autor:** Santiago Meza (RF8.7 — Entrega de Notificaciones)
+* **Requerimientos asociados:** RF-8.7, RNF-04 (Propiedad de datos), RNF-11 (Configuración externa), RNF-13 (Observabilidad)
+
+---
+
+## 1. Contexto y Problema
+
+Para completar el ciclo de entrega de notificaciones en AE2:
+1. RF8.7 es el propietario del almacenamiento y gestión del ciclo de vida de los **Device Tokens** (FCM/APNs) vinculados al `userId` canónico de **M1**.
+2. Antes de realizar el envío PUSH, se debe consultar a **M2** la preferencia del cliente mediante una autenticación interna con API key (`x-api-key: ${M2_INTERNAL_API_KEY}`).
+3. La persistencia de solicitudes, tokens e intentos debe residir en un esquema exclusivo en `CommunicationsDB`: `notification_delivery`.
+
+---
+
+## 2. Decisiones de Diseño
+
+### Decisión 1: Esquema `notification_delivery` y Rol Dedicado (RNF-04)
+El script [`infra/postgres/init/04-notification-delivery.sh`](../../../infra/postgres/init/04-notification-delivery.sh) configura:
+- **Rol:** `m8_notification_delivery`.
+- **Esquema:** `notification_delivery`.
+- **Tablas:**
+  - `device_tokens`: `(token_id, user_id, token, platform, is_active, created_at, updated_at)`.
+  - `delivery_requests`: `(delivery_id, notification_id, message_id, trip_id, user_id, status, title, message, device_token, skip_reason)`.
+  - `delivery_attempts`: `(attempt_id, delivery_id, attempt_number, status, latency_ms, provider_response, error_message, attempted_at)`.
+
+### Decisión 2: API de Device Tokens Protegida con JWT de M1
+- Los endpoints REST (`POST /devices/tokens`, `GET /devices/tokens`, `DELETE /devices/tokens/:token`) exigen header `Authorization: Bearer <jwt>`.
+- El `userId` **nunca se toma de campos del body**; se extrae estrictamente del claim `sub` / `userId` del JWT de M1.
+- Si no hay token o es inválido, se rechaza inmediatamente con `401 Unauthorized`.
+- Especificación HTTP detallada en el [OpenAPI de RF8.7](../../../openapi/notification-delivery.openapi.yaml); la aplicación única también la expone en el [OpenAPI integrado](../../../openapi/m8-openapi.yaml).
+
+### Decisión 3: Integración Desacoplada con M2 (Preferencias)
+- Autenticación: header `x-api-key: ${M2_INTERNAL_API_KEY}` configurado por variable de entorno externa (nunca hardcodeado).
+- **Contrato publicado por M2 en `integration/m2-ae2` (`15a48f9`):**
+  - **Endpoint:** `GET /internal/preferences/{userId}`
+  - **Headers:** `x-api-key: <secret>`, `x-correlation-id: <correlationId>`
+  - **Respuesta esperada:**
+    ```json
+    {
+      "userId": 91,
+      "notificationsEnabled": true,
+      "pushEnabled": true,
+      "notificationChannel": "push"
+    }
+    ```
+- **Comportamiento si preferencia es OFF:** Se omite el envío PUSH, se registra en base de datos como `SKIPPED_PREFERENCE_OFF` con motivo `M2_PREFERENCE_DISABLED`, se audita y se emite `ACK` a RabbitMQ.
+- El canal predeterminado de M2 es `email`, por lo que `pushEnabled` es `false`. Una cuenta `INACTIVO` devuelve `notificationsEnabled: false`.
+- `404 CustomerNotFound` omite la entrega sin reintentar (`SKIPPED_NO_CUSTOMER_PROFILE`); `404 NotFound`, `401` y respuestas inválidas indican configuración errónea y van a DLQ. `503`, timeout y errores de red se reintentan.
+- M2 no tiene perfiles de conductores. `DRIVER_DOCUMENT_REGISTERED` identifica al conductor y se entrega usando su token activo de M8 sin consultar M2. Para otros eventos de viaje falta acordar el rol explícito del destinatario.
+
+### Decisión 4: Sanitización Estricta de Logs (RNF-13)
+- En cumplimiento de las políticas de seguridad: **nunca se imprimen device tokens, JWT ni API keys** en los logs.
+- Todos los logs se generan en JSON estructurado conteniendo `messageId`, `notificationId`, `userId`, `tripId`, `attempt`, `latencyMs` y `result`.

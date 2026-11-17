@@ -1,0 +1,14 @@
+services:
+  m8-app:
+    environment:
+      M2_API_URL: http://m2-preferences-sandbox:4012
+    depends_on:
+      m2-preferences-sandbox:
+        condition: service_started
+
+  m2-preferences-sandbox:
+    image: node:22-alpine
+    working_dir: /app
+    command: node server.mjs
+    volumes:
+      - ./infra/m2-preferences-sandbox:/app:ro

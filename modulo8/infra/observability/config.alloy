@@ -1,0 +1,26 @@
+// Configuración de Grafana Alloy para recolección de métricas unificadas de Módulo 8 (m8-app)
+
+prometheus.scrape "m8_app" {
+  targets = [
+    {
+      "__address__" = "m8-app:3000",
+      "service"     = "m8-app",
+      "module"      = "modulo-8",
+    },
+  ]
+  forward_to      = [prometheus.remote_write.grafanacloud.receiver]
+  scrape_interval = "10s"
+  scrape_timeout  = "5s"
+  metrics_path    = "/metrics"
+}
+
+prometheus.remote_write "grafanacloud" {
+  endpoint {
+    url = sys.env("GRAFANA_CLOUD_REMOTE_WRITE_URL")
+
+    basic_auth {
+      username = sys.env("GRAFANA_CLOUD_USER")
+      password = sys.env("GRAFANA_CLOUD_TOKEN")
+    }
+  }
+}
