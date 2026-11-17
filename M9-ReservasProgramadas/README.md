@@ -44,7 +44,18 @@ npm run k6:smoke
 npm run k6:activation
 ```
 
-Los comandos de este README se ejecutan **dentro de `M9-ReservasProgramadas`**, salvo indicación expresa. El `package.json` de la raíz también redirige los comandos principales hacia M9.
+Los comandos de este README se ejecutan **dentro de `M9-ReservasProgramadas`**, salvo indicación expresa. Su `package.json` y `package-lock.json` contienen los comandos y las dependencias del módulo; la raíz del repositorio no contiene un paquete npm de M9.
+
+Si se prefiere trabajar desde la raíz, indicar el módulo en cada comando:
+
+```powershell
+npm --prefix M9-ReservasProgramadas ci
+npm --prefix M9-ReservasProgramadas run local:up
+npm --prefix M9-ReservasProgramadas test
+npm --prefix M9-ReservasProgramadas run k6:smoke
+```
+
+Usar el mismo prefijo para los demás comandos npm. Esto mantiene la instalación y ejecución dentro de M9 sin utilizar los paquetes de otros módulos. Las credenciales Cloud se configuran en `M9-ReservasProgramadas/observability/.env.grafana-cloud`.
 
 ## Funcionalidades y reglas
 
