@@ -31,4 +31,20 @@ describe('DistanceCalculator (RF-4.5)', () => {
 
     expect(result.estimatedEtaMinutes).toBe(1);
   });
+
+  it('debe rechazar una velocidad promedio nula, negativa o no numérica', () => {
+    const origin = { latitude: -27.4692, longitude: -58.8306 };
+    const destination = { latitude: -27.4875, longitude: -58.7896 };
+
+    expect(() => DistanceCalculator.estimate(origin, destination, 0)).toThrow(RangeError);
+    expect(() => DistanceCalculator.estimate(origin, destination, -10)).toThrow(RangeError);
+    expect(() => DistanceCalculator.estimate(origin, destination, Number.NaN)).toThrow(RangeError);
+  });
+
+  it('debe devolver la misma distancia sin importar el sentido del recorrido', () => {
+    const a = { latitude: -27.4692, longitude: -58.8306 };
+    const b = { latitude: -27.4875, longitude: -58.7896 };
+
+    expect(DistanceCalculator.haversineDistance(a, b)).toBeCloseTo(DistanceCalculator.haversineDistance(b, a), 10);
+  });
 });

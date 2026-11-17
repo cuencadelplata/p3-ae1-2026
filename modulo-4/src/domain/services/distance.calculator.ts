@@ -55,6 +55,10 @@ export class DistanceCalculator {
     destination: Coordinates,
     averageSpeedKmH = 25
   ): DistanceEstimate {
+    if (!Number.isFinite(averageSpeedKmH) || averageSpeedKmH <= 0) {
+      throw new RangeError(`La velocidad promedio debe ser un número mayor a 0 (recibido: ${averageSpeedKmH})`);
+    }
+
     const rawDistanceKm = this.haversineDistance(origin, destination);
     const distanceKm = Math.round(rawDistanceKm * 100) / 100;
     const estimatedEtaMinutes = Math.max(1, Math.ceil((rawDistanceKm / averageSpeedKmH) * 60));
