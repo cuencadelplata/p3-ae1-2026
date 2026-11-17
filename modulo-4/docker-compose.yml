@@ -1,5 +1,6 @@
 services:
   m4-api:
+    image: "${M4_API_IMAGE:-segocodee/p3-m4-ubicacion:2.0.0}"
     build: .
     ports:
       - "3004:3004"
@@ -11,7 +12,7 @@ services:
       M3_URL: "${M3_URL:-http://host.docker.internal:3003}"
       REDIS_URL: "redis://redis:6379"
       REDIS_KEY_PREFIX: "driver:"
-      POSTGRES_URL: "postgres://postgres:postgres@postgres:5432/m4_locations"
+      POSTGRES_URL: "postgres://postgres:postgres@m4-postgres:5432/m4_locations"
       RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672"
       RABBITMQ_TRIP_EVENTS_EXCHANGE: "${RABBITMQ_TRIP_EVENTS_EXCHANGE:-trip.events}"
       RABBITMQ_TRIP_STARTED_KEY: "${RABBITMQ_TRIP_STARTED_KEY:-TripStarted}"
@@ -23,12 +24,13 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      postgres:
+      m4-postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
 
   m4-ui:
+    image: "${M4_UI_IMAGE:-segocodee/p3-m4-ui:1.0.0}"
     build: ./ui
     ports:
       - "8084:80"
@@ -45,7 +47,7 @@ services:
       timeout: 3s
       retries: 5
 
-  postgres:
+  m4-postgres:
     image: postgres:16-alpine
     ports:
       - "5432:5432"

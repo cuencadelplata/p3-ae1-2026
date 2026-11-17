@@ -70,6 +70,20 @@ Para detener todo:
 docker compose down
 ```
 
+### Integracion con todos los modulos
+
+El archivo `compose.integration.yml` agrega solamente la API, la interfaz demostrativa y la base PostgreSQL exclusiva de M4. No crea Redis ni RabbitMQ: utiliza los servicios compartidos llamados `redis` y `rabbitmq` dentro de la red del Compose general.
+
+Las conexiones se pueden reemplazar sin modificar codigo:
+
+```env
+REDIS_URL=redis://redis:6379
+RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+POSTGRES_URL=postgres://postgres:postgres@m4-postgres:5432/m4_locations
+```
+
+Al incorporarlo al Compose raiz, `m4-postgres` conserva su propio volumen y no publica el puerto 5432 en la maquina anfitriona. Los puertos 6379, 5672 y 15672 deben publicarse una sola vez desde los servicios compartidos.
+
 La demostracion detallada esta en [comandos.md](comandos.md).
 
 ## Desarrollo y pruebas
