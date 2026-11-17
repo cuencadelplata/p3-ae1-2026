@@ -4,8 +4,10 @@ info:
   version: 1.0.0
   description: API de registro, autenticacion, recuperacion de acceso e integracion OAuth2.
 servers:
+  - url: http://127.0.0.1:13001
+    description: M1 real via docker compose (modulo 3) — puerto host 13001
   - url: http://localhost:3001
-    description: Ejecucion local
+    description: Ejecucion local directa del contenedor M1
 tags:
   - name: Salud
   - name: Identidad y acceso

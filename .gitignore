@@ -1,0 +1,28 @@
+# Secrets / entorno local
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dependencias
+node_modules/
+**/node_modules/
+
+# Artefactos de test / build
+playwright-report/
+test-results/
+**/playwright-report/
+**/test-results/
+coverage/
+dist/
+build/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+.netlify/

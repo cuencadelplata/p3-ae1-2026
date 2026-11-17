@@ -1,5 +1,10 @@
 const { test, expect } = require('@playwright/test');
 const net = require('net');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+
+const execFileAsync = promisify(execFile);
+const REDIS_CONTAINER = process.env.REDIS_CONTAINER || 'm3-redis';
 
 function sendRedisCommand(...args) {
   const host = process.env.REDIS_HOST || '127.0.0.1';
@@ -28,6 +33,22 @@ function sendRedisCommand(...args) {
       socket.destroy(new Error('Redis command timeout'));
     });
   });
+}
+
+/**
+ * Simula caída de Redis con docker pause (CLIENT PAUSE cuelga en Redis
+ * compartido bajo carga / Windows Docker y no responde a tiempo).
+ */
+async function pauseRedisContainer() {
+  await execFileAsync('docker', ['pause', REDIS_CONTAINER]);
+}
+
+async function unpauseRedisContainer() {
+  try {
+    await execFileAsync('docker', ['unpause', REDIS_CONTAINER]);
+  } catch {
+    // Ya estaba unpaused
+  }
 }
 
 test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
@@ -114,14 +135,14 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
   });
 
   test('GET /api/conductor/valoraciones debe retornar las valoraciones de un conductor', async ({ request }) => {
-    const response = await request.get('/api/conductor/valoraciones?usuarioId=cond_001');
+    const response = await request.get('/api/conductor/valoraciones?conductorId=cond_001');
     expect(response.status()).toBe(200);
 
     const valoraciones = await response.json();
     expect(Array.isArray(valoraciones)).toBe(true);
   });
 
-  test('GET /api/conductor/valoraciones sin usuarioId debe retornar 400', async ({ request }) => {
+  test('GET /api/conductor/valoraciones sin evaluadorId/conductorId debe retornar 400', async ({ request }) => {
     const response = await request.get('/api/conductor/valoraciones');
     expect(response.status()).toBe(400);
 
@@ -131,13 +152,13 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
 
   test('POST /api/conductor/valoraciones debe registrar una calificación válida', async ({ request }) => {
     const payload = {
-      usuarioId: 'pasajero_tester_1',
+      evaluadoId: 'pasajero_tester_1',
       conductorId: 'cond_001',
       valoracion: 4,
       comentario: 'Viaje seguro y a tiempo'
     };
 
-    const response = await request.post('/api/conductor/valoraciones?usuarioId=cond_001', {
+    const response = await request.post('/api/conductor/valoraciones?conductorId=cond_001', {
       data: payload
     });
 
@@ -145,18 +166,19 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
     const created = await response.json();
     expect(created.valoracion).toBe(4);
     expect(created.comentario).toBe('Viaje seguro y a tiempo');
-    expect(created.conductorId).toBe('cond_001');
+    expect(created.evaluadorId).toBe('cond_001');
+    expect(created.evaluadoId).toBe('pasajero_tester_1');
   });
 
   test('POST /api/conductor/valoraciones con calificación fuera de rango (1-5) debe retornar 400', async ({ request }) => {
     const payload = {
-      usuarioId: 'pasajero_tester_invalid',
+      evaluadoId: 'pasajero_tester_invalid',
       conductorId: 'cond_001',
       valoracion: 10, // Inválido (> 5)
       comentario: 'Puntaje ilegal'
     };
 
-    const response = await request.post('/api/conductor/valoraciones?usuarioId=cond_001', {
+    const response = await request.post('/api/conductor/valoraciones?conductorId=cond_001', {
       data: payload
     });
 
@@ -375,6 +397,7 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
     });
 
     test('opera con resiliencia cuando Redis cae (fallback a BD en memoria) e invalida/recarga caché al recuperarse', async ({ request }) => {
+      test.setTimeout(60_000);
       // 1. Con Redis UP, dejar cond_003 en habilitado='activo' y disponible=true en caché y BD
       const setupHab = await request.put('/api/conductores/cond_003/habilitado', {
         data: { habilitado: 'activo' }
@@ -394,8 +417,8 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
       });
 
       try {
-        // 2. Simular caída de Redis pausando comandos
-        await sendRedisCommand('CLIENT', 'PAUSE', '10000');
+        // 2. Simular caída de Redis (docker pause del contenedor compartido)
+        await pauseRedisContainer();
 
         // Primera lectura detecta el fallo de Redis, activa markDown y responde desde BD
         const fallbackGetHab = await request.get('/api/conductores/cond_003/habilitado');
@@ -447,7 +470,7 @@ test.describe('M3 - API Conductores & Valoraciones (E2E Backend)', () => {
         });
       } finally {
         // 3. Recuperar Redis
-        await sendRedisCommand('CLIENT', 'UNPAUSE');
+        await unpauseRedisContainer();
       }
 
       // 4. Esperar a que redisHealth detecte PING -> PONG, invalide la caché obsoleta y recargue desde BD

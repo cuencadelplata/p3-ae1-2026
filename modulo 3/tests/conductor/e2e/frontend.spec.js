@@ -154,15 +154,15 @@ test.describe('M3 - Frontend Conductor & Valoraciones (E2E Test Runner)', () => 
     await expect(page.locator('#reqMethodBadge')).toHaveText('GET');
     await expect(page.locator('#reqEndpointUrl')).toHaveText('/conductor/valoraciones');
 
-    const usuarioIdInput = page.locator('#param_usuarioId');
-    await expect(usuarioIdInput).toBeVisible();
-    await usuarioIdInput.fill('usr_9988');
+    const evaluadorIdInput = page.locator('#param_evaluadorId');
+    await expect(evaluadorIdInput).toBeVisible();
+    await evaluadorIdInput.fill('cond_001');
 
     await page.locator('#sendBtn').click();
 
     const statusBadge = page.locator('#statusBadge');
     await expect(statusBadge).toContainText('200');
-    await expect(page.locator('#executedUrlText')).toContainText('usuarioId=usr_9988');
+    await expect(page.locator('#executedUrlText')).toContainText('evaluadorId=cond_001');
   });
 
   test('debe registrar una nueva valoración con POST /conductor/valoraciones', async ({ page }) => {
@@ -172,11 +172,11 @@ test.describe('M3 - Frontend Conductor & Valoraciones (E2E Test Runner)', () => 
     await expect(page.locator('#bodySection')).toBeVisible();
 
     const targetConductor = 'cond_001';
-    await page.locator('#param_usuarioId').fill(targetConductor);
+    await page.locator('#param_evaluadorId').fill(targetConductor);
 
     const valoracionPayload = {
-      usuarioId: 'pasajero_e2e',
-      conductorId: targetConductor,
+      evaluadoId: 'pasajero_e2e',
+      evaluadorId: targetConductor,
       valoracion: 5,
       comentario: 'Excelente servicio probado mediante Playwright E2E'
     };
@@ -193,6 +193,7 @@ test.describe('M3 - Frontend Conductor & Valoraciones (E2E Test Runner)', () => 
     const jsonOutput = page.locator('#jsonOutput');
     await expect(jsonOutput).toContainText('Excelente servicio probado mediante Playwright E2E');
     await expect(jsonOutput).toContainText('5');
+    await expect(jsonOutput).toContainText('"evaluadorId": "cond_001"');
   });
 
   test('debe registrar peticiones en el historial y permitir limpiarlo', async ({ page }) => {

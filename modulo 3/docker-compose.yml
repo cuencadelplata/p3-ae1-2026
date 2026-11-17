@@ -1,5 +1,43 @@
+# Stack M3: infra compartida (Redis/Rabbit) + microservicios independientes.
+# Redis/Rabbit se publican una sola vez (6379 / 5672 / 15672) en p3-shared
+# para que Conductor, Vehículos y otros módulos los reutilicen sin solaparse.
+
 services:
-  # ---------------- Infraestructura compartida ----------------
+  # ---------------- M1 — Identidad y Acceso (servicio real, sin mocks) ----------------
+  # Puerto host 13001: evita choque con previews locales en :3001
+  m1-identidad-acceso:
+    image: matsir/m1-identidad-acceso:latest
+    container_name: m1-identidad-acceso
+    restart: unless-stopped
+    ports:
+      - "13001:3001"
+    environment:
+      PORT: 3001
+      JWT_SECRET: ${JWT_SECRET:-clave-desarrollo-m1}
+    volumes:
+      - m1_identity_data:/app/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      default:
+        aliases:
+          - m1-identidad-acceso
+      p3-shared:
+        aliases:
+          - m1-identidad-acceso
+          - m1
+
+  # ---------------- Infraestructura compartida (única) ----------------
   redis:
     image: redis:7-alpine
     container_name: m3-redis
@@ -13,6 +51,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks:
+      default:
+        aliases:
+          - redis
+      p3-shared:
+        aliases:
+          - redis
+          - m3-redis
 
   rabbitmq:
     image: rabbitmq:4-management
@@ -32,8 +78,13 @@ services:
       timeout: 5s
       retries: 15
     networks:
-      - default
-      - p3-shared   # red compartida con otros módulos (M5, M6...)
+      default:
+        aliases:
+          - rabbitmq
+      p3-shared:
+        aliases:
+          - rabbitmq
+          - m3-rabbitmq
 
   # Cola temporal de M3. El proceso de conductores la apaga cuando RabbitMQ responde.
   kafka:
@@ -77,6 +128,9 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://grafana-alloy:4318
     ports:
       - "8083:8083"
+    networks:
+      - default
+      - p3-shared
     depends_on:
       redis:
         condition: service_healthy
@@ -128,6 +182,9 @@ services:
       default:
         aliases:
           - api   # nginx.conf del frontend hace proxy_pass a http://api:3000
+      p3-shared:
+        aliases:
+          - m3-conductor-api
     depends_on:
       redis:
         condition: service_healthy
@@ -202,9 +259,11 @@ services:
 
 networks:
   p3-shared:
+    external: true
     name: p3-shared
 
 volumes:
   redis_data:
   rabbitmq_data:
+  m1_identity_data:
 
