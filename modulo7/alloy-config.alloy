@@ -13,7 +13,7 @@ loki.write "grafana_cloud" {
     url = "https://logs-prod-024.grafana.net/loki/api/v1/push"
     basic_auth {
       username = "1883301"
-      password = "glc_eyJvIjoiMTk5MjkwOSIsIm4iOiJtNy1sb2dzLXRva2VuLW03LWxvZ3MtdG9rZW4iLCJrIjoiRjJyOWgwckM5akZhTDlmMEZqMnM0OThaIiwibSI6eyJyIjoicHJvZC11cy13ZXN0LTAifX0="
+            password = env("GRAFANA_LOKI_TOKEN")
     }
   }
 }
@@ -30,7 +30,6 @@ prometheus.remote_write "grafana_cloud" {
     url = "https://prometheus-prod-40-prod-sa-east-1.grafana.net/api/prom/push"
     basic_auth {
       username = "3775266"
-      password = "glc_eyJvIjoiMTk5MjkwOSIsIm4iOiJtNy1tZXRyaWNzLW03LXRva2VuIiwiayI6IjM5UmNOMFA1MDA1aDBwYjRLWmp6ZGNvOSIsIm0iOnsiciI6InByb2Qtc2EtZWFzdC0xIn19"
-    }
+            password = env("GRAFANA_METRICS_TOKEN")
   }
 }
