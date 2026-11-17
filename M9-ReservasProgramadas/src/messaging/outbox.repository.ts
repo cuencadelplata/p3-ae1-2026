@@ -6,6 +6,8 @@ export interface OutboxMessage {
   event: EventEnvelope;
   status: 'PENDING' | 'PUBLISHED' | 'FAILED';
   attempts: number;
+  /** Contexto W3C persistido al crear el evento; `null`/ausente en eventos previos a AE4. */
+  traceContext?: Record<string, string> | null;
 }
 
 export interface OutboxRepository {

@@ -26,7 +26,19 @@ describe('GET /health', () => {
       correlationId: 'correlation-test',
       method: 'GET',
       path: '/health',
+      routeKind: 'health',
       statusCode: 200,
+      durationMs: expect.any(Number),
     });
+  });
+
+  it('descarta un correlation id inválido y genera uno nuevo', async () => {
+    const logger = vi.fn();
+    const response = await request(createApp({ requestLogger: logger }))
+      .get('/health')
+      .set('X-Correlation-Id', `<script>${'x'.repeat(200)}`);
+
+    expect(response.headers['x-correlation-id']).toMatch(/^[0-9a-f-]{36}$/);
+    expect(logger.mock.calls[0]?.[0].correlationId).toBe(response.headers['x-correlation-id']);
   });
 });

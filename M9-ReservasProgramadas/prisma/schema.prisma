@@ -66,6 +66,8 @@ model OutboxEvent {
   nextAttemptAt DateTime     @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
   createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   publishedAt   DateTime?    @map("published_at") @db.Timestamptz(3)
+  /// AE4: contexto W3C capturado al crear el evento (null en eventos previos a AE4).
+  traceContext  Json?        @map("trace_context")
 
   @@index([status, nextAttemptAt, createdAt], map: "outbox_status_next_attempt_idx")
   @@index([aggregateId, createdAt], map: "outbox_aggregate_created_idx")

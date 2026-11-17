@@ -1,3 +1,6 @@
+// Debe ser el primer import: crea los proveedores OpenTelemetry antes que cualquier módulo.
+import { telemetry, telemetryEnabled } from './observability/register.js';
+
 import { createApp } from './app.js';
 import { EnvironmentTokenProvider, M5DispatchClient } from './clients/m5-dispatch.client.js';
 import { M7TariffClient } from './clients/m7-tariff.client.js';
@@ -27,6 +30,9 @@ import { ActivacionReservaService } from './services/activacion-reserva.service.
 import { ReservaService } from './services/reserva.service.js';
 import { BlockedRouteResolver } from './integration/route-estimate.port.js';
 import { ConfigurableStubRouteResolver } from './stubs/configurable-route-resolver.js';
+import { telemetryConfig } from './observability/config.js';
+import { StateMetricsCollector } from './observability/state-collector.js';
+import { createDatabaseStateQuery } from './repositories/prisma-observability.queries.js';
 
 const postgres = new PrismaConnection(env.DATABASE_URL);
 const repository = new PrismaReservaRepository(postgres.client);
@@ -103,7 +109,7 @@ const readinessService = new ReadinessService([
 const app = createApp({
   reservaService,
   readinessService,
-  requestLogger: (entry) => log('info', 'http_request', entry),
+  requestLogger: (entry) => log('info', 'http_request', { ...entry }),
 });
 
 const eventPublisher = new RabbitMqEventPublisher(rabbitMq);
@@ -118,6 +124,42 @@ const outboxWorker = new OutboxWorker(
   (error) => log('error', 'outbox_worker_error', safeErrorContext(error)),
 );
 const dispatchResultProcessor = new PrismaDispatchResultProcessor(postgres.client);
+
+// Recolector de estado agregado (backlog, colas, salud). Solo corre con telemetría activa
+// para no agregar consultas periódicas cuando nadie las exporta.
+const stateCollector = new StateMetricsCollector({
+  intervalMs: telemetryConfig().stateCollectorIntervalMs,
+  database: createDatabaseStateQuery(
+    postgres.client,
+    telemetryConfig().stuckActivationThresholdSeconds,
+  ),
+  queues: async () => {
+    const channel = rabbitMq.getChannel();
+    const { queue, retryQueue, deadLetterQueue } = rabbitMq.topology;
+    const roles: Array<[string, string]> = [
+      [queue, 'main'],
+      [retryQueue, 'retry'],
+      [deadLetterQueue, 'dead_letter'],
+    ];
+    return Promise.all(
+      roles.map(async ([name, role]) => {
+        const info = await channel.checkQueue(name);
+        return { queue: name, role, messages: info.messageCount, consumers: info.consumerCount };
+      }),
+    );
+  },
+  dependencies: [
+    { name: 'postgres', check: () => postgres.ping() },
+    { name: 'redis', check: () => redis.ping() },
+    { name: 'rabbitmq', check: () => rabbitMq.ping() },
+  ],
+  onError: (source, error) =>
+    log('warn', 'state_collector_failed', {
+      component: 'telemetry',
+      source,
+      ...safeErrorContext(error),
+    }),
+});
 const resultConsumer = new RabbitMqConsumer(rabbitMq, env.RABBITMQ_RETRY_LIMIT);
 
 const startRabbitConsumer = async (): Promise<void> => {
@@ -158,6 +200,7 @@ const start = async (): Promise<void> => {
   });
   scheduler.start();
   outboxWorker.start();
+  if (telemetryEnabled) stateCollector.start();
 
   let stopping = false;
   const shutdown = (): void => {
@@ -165,9 +208,13 @@ const start = async (): Promise<void> => {
     stopping = true;
     scheduler.stop();
     outboxWorker.stop();
+    stateCollector.stop();
     clearInterval(reconnectTask);
     server.close(() => {
-      void Promise.allSettled([redis.close(), rabbitMq.close(), postgres.close()]);
+      void Promise.allSettled([redis.close(), rabbitMq.close(), postgres.close()]).then(() =>
+        // Flush final con plazo acotado (OTEL_SHUTDOWN_TIMEOUT_MS): nunca bloquea la salida.
+        telemetry.shutdown(),
+      );
     });
   };
 

@@ -2,6 +2,18 @@ import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
+import { createHttpTelemetryMiddleware } from '../../observability/http-telemetry.js';
+
+// Rutas propias del stub M7 (identificado como servicio `m7-stub` en la telemetría).
+const m7Routes = (url: string, statusCode: number) => {
+  const path = url.split('?')[0];
+  if (path === '/tarifa/estimacion') return { route: path, kind: 'business' as const };
+  if (path === '/health') return { route: path, kind: 'health' as const };
+  return statusCode === 404
+    ? { route: 'unmatched', kind: 'unmatched' as const }
+    : { route: '/static', kind: 'static' as const };
+};
+
 const geoSchema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
@@ -20,6 +32,7 @@ const estimationSchema = z
 export const createM7StubApp = () => {
   const app = express();
   app.disable('x-powered-by');
+  app.use(createHttpTelemetryMiddleware(m7Routes));
   app.use(express.json());
   app.get('/health', (_request, response) => response.status(200).json({ status: 'ok' }));
   app.post('/tarifa/estimacion', (request, response) => {

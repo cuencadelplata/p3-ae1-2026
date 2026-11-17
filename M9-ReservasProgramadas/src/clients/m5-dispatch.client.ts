@@ -116,7 +116,7 @@ export class M5DispatchClient implements DispatchClient {
   public async createRequest(input: CreateRideRequestInput): Promise<M5RideRequest> {
     const authorization = await this.requireAuthorization();
     const idempotencyKey = await this.operationStore.getOrCreate(input.reserva.id);
-    return this.request('/api/v1/ride-requests', {
+    return this.request('create_request', '/api/v1/ride-requests', {
       method: 'POST',
       headers: {
         authorization,
@@ -130,7 +130,7 @@ export class M5DispatchClient implements DispatchClient {
 
   public async getRequest(requestId: string): Promise<M5RideRequest> {
     const authorization = await this.requireAuthorization();
-    return this.request(`/api/v1/ride-requests/${encodeURIComponent(requestId)}`, {
+    return this.request('get_request', `/api/v1/ride-requests/${encodeURIComponent(requestId)}`, {
       method: 'GET',
       headers: { authorization, ...this.correlationHeader() },
     });
@@ -151,6 +151,7 @@ export class M5DispatchClient implements DispatchClient {
         body: JSON.stringify(reason === undefined ? {} : { reason }),
       },
       this.timeoutMs,
+      'cancel_request',
     );
     if (!response.ok) throw ExternalServiceError.fromHttpStatus('M5', response.status);
     try {
@@ -166,12 +167,17 @@ export class M5DispatchClient implements DispatchClient {
     }
   }
 
-  private async request(path: string, init: RequestInit): Promise<M5RideRequest> {
+  private async request(
+    operation: string,
+    path: string,
+    init: RequestInit,
+  ): Promise<M5RideRequest> {
     const response = await fetchWithTimeout(
       'M5',
       new URL(path, this.baseUrl),
       init,
       this.timeoutMs,
+      operation,
     );
     if (!response.ok) throw ExternalServiceError.fromHttpStatus('M5', response.status);
     try {

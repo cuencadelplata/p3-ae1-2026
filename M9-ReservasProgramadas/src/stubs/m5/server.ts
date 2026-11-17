@@ -1,3 +1,6 @@
+// Primer import: telemetría opcional del stub (OTEL_SERVICE_NAME=m5-stub en Compose).
+import '../../observability/register.js';
+
 import { RabbitMqConnection } from '../../infrastructure/rabbitmq/rabbitmq.connection.js';
 import { createM5StubApp, createM5StubState } from './app.js';
 import { createM5StubDispatch, startM5StubMessaging } from './rabbitmq.js';

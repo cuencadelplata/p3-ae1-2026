@@ -57,6 +57,7 @@ export class M7TariffClient implements TarifaClient {
         body: JSON.stringify(toM7TariffRequest(input)),
       },
       this.timeoutMs,
+      'estimate',
     );
     if (!response.ok) throw ExternalServiceError.fromHttpStatus('M7', response.status);
     try {

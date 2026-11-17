@@ -368,3 +368,10 @@ La imagen histórica 1.x no demuestra esta implementación AE2.
 - `BLOCKED_CONTRACT_M5_SELECTION_POLICY`: RF-9.7 no está en OpenAPI M5.
 - `BLOCKED_EXTERNAL_CONTRACT`: eventos M5 definitivos.
 - QR/PDF: `PENDIENTE_CONFIRMACION_ACADEMICA`, owner M8.
+
+## Observabilidad y rendimiento (AE4)
+
+OpenTelemetry (trazas, métricas y logs) → Grafana Alloy → Grafana Cloud, y pruebas con
+Grafana k6. Apagada por defecto: el inicio normal y los tests no requieren cuenta cloud.
+Guía, arquitectura, catálogo de señales, dashboards, alertas y guion de demo en
+[`observability/README.md`](observability/README.md).

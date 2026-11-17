@@ -12,6 +12,7 @@ import {
   type RequestLogger,
 } from './integration/request-context.js';
 import { notFoundHandler } from './middleware/not-found.middleware.js';
+import { httpTelemetryMiddleware } from './observability/http-telemetry.js';
 import type { ReadinessService } from './readiness/readiness.service.js';
 import { healthRouter } from './routes/health.routes.js';
 import { createReadinessRouter } from './routes/readiness.routes.js';
@@ -32,6 +33,8 @@ export const createApp = ({
   const application = express();
 
   application.disable('x-powered-by');
+  // Primero: span SERVER, duración y solicitudes en curso abarcan todo el pipeline.
+  application.use(httpTelemetryMiddleware);
   application.use(
     helmet({
       contentSecurityPolicy: {

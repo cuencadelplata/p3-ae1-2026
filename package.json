@@ -28,6 +28,24 @@
     "format": "npm --prefix M9-ReservasProgramadas run format",
     "format:check": "npm --prefix M9-ReservasProgramadas run format:check",
     "typecheck": "npm --prefix M9-ReservasProgramadas run typecheck",
-    "verify": "npm --prefix M9-ReservasProgramadas run verify"
+    "verify": "npm --prefix M9-ReservasProgramadas run verify",
+    "obs:up": "npm --prefix M9-ReservasProgramadas run obs:up",
+    "obs:down": "npm --prefix M9-ReservasProgramadas run obs:down",
+    "obs:config": "npm --prefix M9-ReservasProgramadas run obs:config",
+    "obs:alloy:fmt": "npm --prefix M9-ReservasProgramadas run obs:alloy:fmt",
+    "obs:dashboards:check": "npm --prefix M9-ReservasProgramadas run obs:dashboards:check",
+    "telemetry:verify-export": "npm --prefix M9-ReservasProgramadas run telemetry:verify-export",
+    "k6:smoke": "npm --prefix M9-ReservasProgramadas run k6:smoke",
+    "k6:load": "npm --prefix M9-ReservasProgramadas run k6:load",
+    "k6:stress": "npm --prefix M9-ReservasProgramadas run k6:stress",
+    "k6:spike": "npm --prefix M9-ReservasProgramadas run k6:spike",
+    "k6:cache": "npm --prefix M9-ReservasProgramadas run k6:cache",
+    "k6:concurrency": "npm --prefix M9-ReservasProgramadas run k6:concurrency",
+    "k6:activation": "npm --prefix M9-ReservasProgramadas run k6:activation",
+    "k6:smoke:cloud": "npm --prefix M9-ReservasProgramadas run k6:smoke:cloud",
+    "k6:load:cloud": "npm --prefix M9-ReservasProgramadas run k6:load:cloud",
+    "k6:cleanup": "npm --prefix M9-ReservasProgramadas run k6:cleanup --",
+    "obs:fault-drill": "npm --prefix M9-ReservasProgramadas run obs:fault-drill --",
+    "obs:dashboards:build": "npm --prefix M9-ReservasProgramadas run obs:dashboards:build"
   }
 }

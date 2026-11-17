@@ -3,6 +3,7 @@ import type { DispatchClient, M5RideRequest } from '../clients/m5-dispatch.clien
 import type { Reserva } from '../domain/reserva.js';
 import type { RouteResolver } from '../integration/route-estimate.port.js';
 import type { DistributedLock } from '../locks/distributed-lock.js';
+import { recordActivationDelay, recordActivationResolution } from '../observability/metrics.js';
 import type { ReservaRepository } from '../repositories/reserva.repository.js';
 import { conReservaExclusiva } from './reserva-lock.js';
 
@@ -57,7 +58,10 @@ export class ActivacionReservaService {
       route ??= await this.routeResolver.resolve(actual.origen, actual.destino);
     } catch {
       const fallida = await this.repository.cambiarEstado(reservaId, 'PROGRAMADA', 'FALLIDA');
-      if (fallida !== null) await this.cache.set(fallida);
+      if (fallida !== null) {
+        recordActivationResolution('FALLIDA', actual.fechaHoraProgramada, this.dispatchMode);
+        await this.cache.set(fallida);
+      }
       return this.resultado(reservaId, false, fallida !== null);
     }
 
@@ -65,6 +69,9 @@ export class ActivacionReservaService {
       routeSnapshot: route,
     });
     if (reclamada === null) return this.resultado(reservaId);
+    // Retraso real de procesamiento: desde la fecha programada hasta el claim confirmado.
+    // La espera intencional previa a la fecha programada no se mide.
+    recordActivationDelay(actual.fechaHoraProgramada);
 
     if (this.dispatchMode === 'events') {
       await this.cache.set(reclamada);
@@ -105,7 +112,10 @@ export class ActivacionReservaService {
     if (request.status === 'ASSIGNED') {
       if (request.assignedDriverId === null) {
         const fallida = await this.repository.cambiarEstado(reserva.id, 'ACTIVANDO', 'FALLIDA');
-        if (fallida !== null) await this.cache.set(fallida);
+        if (fallida !== null) {
+          recordActivationResolution('FALLIDA', reserva.fechaHoraProgramada, 'rest');
+          await this.cache.set(fallida);
+        }
         return this.resultado(reserva.id, false, fallida !== null);
       }
       const activada = await this.repository.cambiarEstado(reserva.id, 'ACTIVANDO', 'ACTIVADA', {
@@ -113,7 +123,10 @@ export class ActivacionReservaService {
         assignedDriverId: request.assignedDriverId,
         criterioAsignacion: 'MEJOR_VALORACION',
       });
-      if (activada !== null) await this.cache.set(activada);
+      if (activada !== null) {
+        recordActivationResolution('ACTIVADA', reserva.fechaHoraProgramada, 'rest');
+        await this.cache.set(activada);
+      }
       return this.resultado(reserva.id, activada !== null);
     }
 
@@ -121,7 +134,10 @@ export class ActivacionReservaService {
       const fallida = await this.repository.cambiarEstado(reserva.id, 'ACTIVANDO', 'FALLIDA', {
         idSolicitud: request.requestId,
       });
-      if (fallida !== null) await this.cache.set(fallida);
+      if (fallida !== null) {
+        recordActivationResolution('FALLIDA', reserva.fechaHoraProgramada, 'rest');
+        await this.cache.set(fallida);
+      }
       return this.resultado(reserva.id, false, fallida !== null);
     }
 

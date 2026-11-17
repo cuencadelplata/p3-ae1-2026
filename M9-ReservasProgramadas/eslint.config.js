@@ -31,4 +31,11 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // Scripts k6: runtime propio (no Node ni navegador) con globales de k6.
+    files: ['performance/k6/**/*.js'],
+    languageOptions: {
+      globals: { __ENV: 'readonly', __VU: 'readonly', __ITER: 'readonly' },
+    },
+  },
 ]);

@@ -1,6 +1,9 @@
+import { ROOT_CONTEXT } from '@opentelemetry/api';
 import type { ConfirmChannel, ConsumeMessage } from 'amqplib';
 
 import type { RabbitMqConnection } from '../infrastructure/rabbitmq/rabbitmq.connection.js';
+import { now, recordMessagingConsume, recordMessagingPublish } from '../observability/metrics.js';
+import { extractTraceContext, SpanKind, withSpan } from '../observability/tracing.js';
 import type { EventEnvelope } from './event-envelope.js';
 import type { IdempotentEventHandler } from './processed-event.repository.js';
 
@@ -39,18 +42,39 @@ export class RabbitMqConsumer {
     handler: (event: EventEnvelope, routingKey: string) => Promise<void>,
   ): Promise<void> {
     const channel = this.connection.getChannel();
+    const startMs = now();
+    const eventType = typeof message.properties.type === 'string' ? message.properties.type : '';
+    const retryCount = this.retryCount(message);
     try {
-      const event = JSON.parse(message.content.toString('utf8')) as EventEnvelope;
-      if (this.idempotency === undefined) {
-        await handler(event, message.fields.routingKey);
-      } else {
-        await this.idempotency.handle(event.eventId, () =>
-          handler(event, message.fields.routingKey),
-        );
-      }
+      // Span CONSUMER hijo del `traceparent` recibido (se conserva en retry y DLQ).
+      await withSpan(
+        `process ${eventType || 'message'}`,
+        async () => {
+          const event = JSON.parse(message.content.toString('utf8')) as EventEnvelope;
+          if (this.idempotency === undefined) {
+            await handler(event, message.fields.routingKey);
+          } else {
+            await this.idempotency.handle(event.eventId, () =>
+              handler(event, message.fields.routingKey),
+            );
+          }
+        },
+        {
+          kind: SpanKind.CONSUMER,
+          parent: extractTraceContext(message.properties.headers, ROOT_CONTEXT),
+          attributes: {
+            'messaging.system': 'rabbitmq',
+            'messaging.operation.type': 'process',
+            'messaging.destination.name': this.connection.topology.queue,
+            'messaging.message.id': String(message.properties.messageId ?? ''),
+            'm9.event_type': eventType,
+            'm9.retry_count': retryCount,
+          },
+        },
+      );
       channel.ack(message);
+      recordMessagingConsume(eventType, 'ack', startMs);
     } catch {
-      const retryCount = this.retryCount(message);
       if (retryCount < this.retryLimit) {
         channel.publish(
           this.connection.topology.retryExchange,
@@ -70,9 +94,13 @@ export class RabbitMqConsumer {
           },
         );
         await channel.waitForConfirms();
+        recordMessagingPublish('retry', eventType, 'confirmed');
         channel.ack(message);
+        recordMessagingConsume(eventType, 'retry', startMs);
       } else {
+        // dead-letter-exchange conserva los headers originales (incluido traceparent).
         channel.nack(message, false, false);
+        recordMessagingConsume(eventType, 'dead_letter', startMs);
       }
     }
   }
