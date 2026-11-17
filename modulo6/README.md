@@ -50,12 +50,40 @@ Cada iteración crea un viaje y lo deja persistido en PostgreSQL; el perfil de e
 | --- | ---: | --- |
 | Viajes | 3000 | RF-6.1/6.2/6.3, persistencia y ciclo de vida |
 | Cancelaciones | 3001 | RF-6.5/6.6, delega cambios a Viajes y publica eventos |
-| Fachada | 3002 | RF-6.4/6.7, finalización e historial |
+| Fachada | 3002 | RF-6.4/6.7, finalización e historial; front de registro de viajes en `/` |
 | PostgreSQL | 5432 | Base compartida `tripdb` |
 | Redis | 6379 | Caché compartida |
 | RabbitMQ | 5672, gestión 15672 | Eventos de viajes y cancelaciones |
 
 Compose inicia un simulador interno para las dependencias M3/M4/M7/M8. Los tres servicios M6 comparten la misma imagen Node y la misma base; `docker compose down` detiene el entorno y conserva el volumen de PostgreSQL.
+
+## Front de RF-6.4 / RF-6.7
+
+Con el stack levantado, abrir **http://localhost:3002/**. La fachada sirve una página propia (`frontend-rf-6.4-6.7/`) que:
+
+- lista el registro de viajes (`GET /api/viajes`) filtrando por cliente, conductor y estado, con paginación; los filtros quedan en la URL para compartir la búsqueda;
+- muestra el detalle de un viaje: datos, resumen de la finalización y la línea de tiempo del historial de transiciones (solo inserción);
+- permite **finalizar** un viaje en curso (RF-6.4) con efectivo, transferencia o tarjeta (token de prueba; con el simulador, el token `rechazado` devuelve 402).
+
+## Observabilidad (logs, métricas y trazas)
+
+Cada servicio M6 emite:
+
+- **Trazas OpenTelemetry**: HTTP (fachada → Viajes), PostgreSQL, llamadas a M4/M7 y publicación en RabbitMQ. El outbox continúa la traza de la solicitud que finalizó el viaje. Los spans con viaje llevan el atributo `m6.trip_id`.
+- **Logs JSON** (pino) con `requestId` (`X-Request-Id`, se propaga de la fachada a Viajes), `tripId`, `trace_id` y `span_id`. Los datos de pago, emails y tokens se ocultan.
+- **Métricas Prometheus** en `GET /metrics` (prefijo `m6_`): solicitudes HTTP, finalizaciones por resultado, latencia de M4/M7, consultas al historial, eventos publicados, outbox pendiente y viajes por estado.
+
+Levantar el stack de observabilidad local (Alloy, Prometheus, Loki, Tempo y Grafana):
+
+```sh
+docker compose --profile observability up -d
+```
+
+Grafana queda en **http://localhost:3003** (admin / `admin`, o `GRAFANA_ADMIN_PASSWORD`) con el dashboard **M6 · Finalización (RF-6.4) e historial (RF-6.7)**. Escribir un `tripId` arriba filtra los logs y las trazas de ese viaje; desde un log se abre la traza y viceversa.
+
+Para enviar además a **Grafana Cloud** (como hacen los demás módulos), copiar [observabilidad/grafana-cloud.env.example](observabilidad/grafana-cloud.env.example) a `modulo6/.env` (ignorado por Git), completar las credenciales y volver a levantar el perfil. Con `ALLOY_CONFIG=config.cloud.alloy`, Alloy envía las métricas por remote write y las trazas y logs por el OTLP gateway. El dashboard se importa en Grafana Cloud desde [observabilidad/grafana/dashboards/m6-rf64-rf67.json](observabilidad/grafana/dashboards/m6-rf64-rf67.json) y se eligen los datasources de la cuenta en los selectores de arriba.
+
+Sin el perfil `observability` todo funciona igual: los servicios descartan la telemetría OTLP y `/metrics` sigue disponible.
 
 ## Contratos
 

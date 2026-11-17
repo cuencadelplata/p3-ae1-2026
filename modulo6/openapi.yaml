@@ -58,6 +58,75 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /api/viajes:
+    get:
+      tags: [Historial]
+      summary: Registro de viajes filtrable (RF-6.7)
+      description: |
+        Lista los viajes con su historial de transiciones y, si existe, su finalización.
+        Filtros opcionales y combinables por cliente, conductor y estado. Orden: más reciente primero.
+        La fachada RF-6.4/6.7 reenvía sólo estos parámetros.
+      operationId: listarRegistroViajes
+      servers:
+        - url: http://localhost:3000
+          description: API central Viajes
+        - url: http://localhost:3002
+          description: Fachada RF-6.4/6.7 (también sirve el front en /)
+      parameters:
+        - { name: clienteId, in: query, required: false, schema: { type: string, maxLength: 50 } }
+        - { name: conductorId, in: query, required: false, schema: { type: string, maxLength: 50 } }
+        - name: estado
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [SOLICITADO, ASIGNADO, CONDUCTOR_EN_CAMINO, ARRIBADO, EN_CURSO, COMPLETADO, CANCELADO]
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: Página del registro de viajes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [total, limit, offset, viajes]
+                properties:
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+                  viajes:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, clienteId, estado, fechaCreacion, historialTransiciones, finalizacion]
+                      properties:
+                        id: { type: string }
+                        clienteId: { type: string }
+                        conductorId: { type: string }
+                        estado: { type: string }
+                        origen: { type: string }
+                        destino: { type: string }
+                        fechaCreacion: { type: string, format: date-time }
+                        finalizacion:
+                          nullable: true
+                          allOf:
+                            - $ref: '#/components/schemas/FinalizarViajeResponse/properties/viaje'
+                        historialTransiciones:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/TransicionViaje'
+        '400':
+          description: Parámetros inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: TripDB no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags: [Viajes]
       summary: Solicitar un viaje
