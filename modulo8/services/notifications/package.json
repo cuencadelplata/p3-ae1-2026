@@ -1,0 +1,29 @@
+{
+  "name": "@m8/notifications-processing",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "test": "vitest run --config vitest.config.ts",
+    "test:integration": "pnpm --dir ../.. run ensure:dependencies && vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@m8/shared": "workspace:*",
+    "amqplib": "^0.10.9",
+    "express": "^5.2.1",
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.13.3",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.2.2",
+    "typescript": "^7.0.2",
+    "vite": "^6.0.0",
+    "vitest": "^4.1.11"
+  }
+}
