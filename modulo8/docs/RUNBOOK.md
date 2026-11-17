@@ -25,7 +25,7 @@ pnpm install --frozen-lockfile
 pnpm run build
 docker compose --env-file .env up -d --build
 docker compose --env-file .env ps
-Invoke-WebRequest http://localhost:3000/health/ready -UseBasicParsing
+Invoke-WebRequest http://localhost:8000/health/ready -UseBasicParsing
 ```
 
 El resultado esperado del readiness es `200` con estado `ok`, o `degraded`/
@@ -33,10 +33,10 @@ El resultado esperado del readiness es `200` con estado `ok`, o `degraded`/
 
 La aplicación se consulta en:
 
-- `http://localhost:3000/docs`;
-- `http://localhost:3000/openapi.yaml`;
-- `http://localhost:3000/health/live`;
-- `http://localhost:3000/health/ready`.
+- `http://localhost:8000/docs`;
+- `http://localhost:8000/openapi.yaml`;
+- `http://localhost:8000/health/live`;
+- `http://localhost:8000/health/ready`.
 
 ## Diagnóstico
 
@@ -124,7 +124,7 @@ docker image ls juanmainval/m8-notificaciones-qr
 docker pull juanmainval/m8-notificaciones-qr:2.0.0
 $env:M8_IMAGE = "juanmainval/m8-notificaciones-qr:2.0.0"
 docker compose --env-file .env up -d --no-build
-Invoke-WebRequest http://localhost:3000/health/ready -UseBasicParsing
+Invoke-WebRequest http://localhost:8000/health/ready -UseBasicParsing
 ```
 
 Para volver a la imagen local, cerrar la consola o ejecutar:

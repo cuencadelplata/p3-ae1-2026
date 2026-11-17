@@ -5,6 +5,7 @@ include:
   - path: ./modulo6/compose.integracion.yml
   - path: ./m2/docker-compose.app.yml
   - path: ./modulo7/compose.integracion.yml
+  - path: ./modulo8/compose.integracion.yaml
 
 services:
   m4-api:

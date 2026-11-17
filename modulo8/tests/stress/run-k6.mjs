@@ -21,7 +21,7 @@ if (!modes.has(mode) || !Number.isInteger(vus) || vus < 1 || vus > 600
 const envPath = path.join(moduleDir, '.env');
 const localEnv = existsSync(envPath) ? parse(readFileSync(envPath)) : {};
 const get = (name) => process.env[name] || localEnv[name] || '';
-const port = Number(get('M8_HOST_PORT') || 3000);
+const port = Number(get('M8_HOST_PORT') || 8000);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   console.error('M8_HOST_PORT debe ser un puerto válido.');
   process.exit(2);

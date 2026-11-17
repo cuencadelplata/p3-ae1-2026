@@ -54,10 +54,10 @@ El Compose local usa simuladores de M1, M2, M7 y del servicio fiscal. En la inte
 ```powershell
 docker compose --env-file .env up -d --build --wait
 docker compose --env-file .env ps
-Invoke-RestMethod http://localhost:3000/health/ready
+Invoke-RestMethod http://localhost:8000/health/ready
 ```
 
-Compose construye `modulo-8-m8-app:local` e inicia `m8-app` y sus dependencias. El puerto HTTP del host es `3000` por defecto; se cambia con `M8_HOST_PORT`. La URL interna de otros contenedores de esta red Compose es `http://m8-app:3000`; en la rama común se confirmará el nombre final de servicio.
+Compose construye `modulo-8-m8-app:local` e inicia `m8-app` y sus dependencias. El puerto HTTP del host es `8000` por defecto; se cambia con `M8_HOST_PORT`. La URL interna de otros contenedores es `http://m8-app:3000`. El Compose común publica M8 en `18000`; los puertos internos de contenedores distintos no chocan.
 
 - `/health/live`: confirma que el proceso responde.
 - `/health/ready` y `/health`: indican si M8 puede atender con sus dependencias.
@@ -109,6 +109,12 @@ pnpm run smoke:http
 Los scripts k6 viven en `tests/stress/`. `pnpm run load:ramp45` incrementa usuarios durante unos 45 segundos; `pnpm run load:capacity` busca una zona de saturación. **Los resultados describen el Compose local con simuladores**, no certifican la capacidad del sistema integrado. El [paso a paso](docs/guia-observabilidad-y-comandos.md) explica paneles, límites y escenarios.
 
 ## Frontend e integración común
+
+Para levantar M8 desde el `docker-compose.yml` de la raíz y probar el QR real
+con M6, ver [M8 en el Compose común](INTEGRACION_COMPOSE.md). Esa configuración
+comparte Redis y RabbitMQ, conserva PostgreSQL propio y publica M8 en el puerto
+18000 del host. El Compose aislado de este README se mantiene para las pruebas
+locales con simuladores.
 
 Las vistas que M8 puede aportar hoy son comprobantes (RF8.3/8.4), soporte (RF8.5) y dispositivos PUSH (RF8.7). El frontend común debe aportar navegación, sesión de M1, autorización y estilo compartido. El código de las vistas está en `frontend/m8.js`; `frontend/preview/` es sólo una herramienta local. RF8.2 se muestra en el viaje de M6, RF8.6 no necesita pantalla y RF8.1 requiere un endpoint seguro de consulta antes de prometer una bandeja de avisos. Ver la [guía del frontend](frontend/README.md).
 
