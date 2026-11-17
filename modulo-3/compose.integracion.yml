@@ -107,4 +107,6 @@ services:
 
 networks:
   reservas-network:
-    external: true
+    # Igual que M9, M6, M1 y M2: con include, Compose exige la misma definición en todos;
+    # con external: true el compose raíz falla ("conflicts with imported resource").
+    driver: bridge

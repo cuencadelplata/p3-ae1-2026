@@ -25,63 +25,96 @@
     }
   ],
   "paths": {
-    "/api/v1/geocodificacion": {
-      "get": {
-        "summary": "M4: búsqueda de direcciones en catálogo simulado",
-        "parameters": [
-          {
-            "name": "q",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
+    "/api/v1/geocode": {
+      "post": {
+        "summary": "M4: geocodificar una dirección (contrato real de modulo-4; el simulador de M2 usa el mismo)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "address"
+                ],
+                "properties": {
+                  "address": {
+                    "type": "string",
+                    "example": "Plaza 25 de Mayo, Resistencia"
+                  }
+                }
+              }
             }
           }
-        ],
+        },
         "responses": {
           "200": {
-            "description": "Coincidencias",
+            "description": "Dirección encontrada",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "required": [
+                    "address",
+                    "latitude",
+                    "longitude",
+                    "provider"
+                  ],
                   "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "required": [
-                          "direccion",
-                          "latitud",
-                          "longitud"
-                        ],
-                        "properties": {
-                          "direccion": {
-                            "type": "string",
-                            "minLength": 3,
-                            "maxLength": 250
-                          },
-                          "latitud": {
-                            "type": "number",
-                            "minimum": -90,
-                            "maximum": 90
-                          },
-                          "longitud": {
-                            "type": "number",
-                            "minimum": -180,
-                            "maximum": 180
-                          }
-                        }
-                      }
+                    "address": {
+                      "type": "string"
+                    },
+                    "latitude": {
+                      "type": "number",
+                      "minimum": -90,
+                      "maximum": 90
+                    },
+                    "longitude": {
+                      "type": "number",
+                      "minimum": -180,
+                      "maximum": 180
+                    },
+                    "provider": {
+                      "type": "string",
+                      "example": "SIMULATED"
                     }
                   }
                 }
               }
             }
           },
-          "401": {
-            "description": "Clave inválida",
+          "400": {
+            "description": "Falta address",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dirección no encontrada (M2 la traduce a una lista vacía)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Error del proveedor (M2 responde 503 MAPS_UNAVAILABLE)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Timeout del proveedor (M2 responde 503 MAPS_UNAVAILABLE)",
             "content": {
               "application/json": {
                 "schema": {

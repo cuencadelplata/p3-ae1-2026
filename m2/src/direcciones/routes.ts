@@ -7,6 +7,7 @@ import { prisma } from '../config/prisma';
 import { redisClient } from '../config/redis';
 import { ApiError, createSchema, expectedVersion, patchSchema, pointSchema } from './domain';
 import { DireccionesService } from './service';
+import { startGeocodificacionTimer } from '../observability/metrics';
 export const addresses=new DireccionesService(prisma,redisClient);
 export const router=Router();
 const wrap=(fn:(req:Request,res:Response)=>Promise<any>)=>(req:Request,res:Response,next:NextFunction)=>{void fn(req,res).catch(next);};
@@ -17,10 +18,21 @@ const idem=(req:Request)=>{
 };
 router.get('/geocodificacion',wrap(async(req,res)=>{
   const q=z.string().trim().min(3).max(200).parse(req.query.q);
+  const stop=startGeocodificacionTimer();
+  // Contrato real de M4: POST /api/v1/geocode {address} → {address, latitude, longitude, provider}; 404 si no la encuentra.
+  // M2 conserva hacia su front el formato propio {data:[{direccion, latitud, longitud}]}.
+  let data;
   try {
-    const result=await axios.get(`${process.env.M4_BASE_URL}/api/v1/geocodificacion`,{params:{q},timeout:2000,headers:{'x-correlation-id':res.locals.correlationId,'x-service-key':process.env.INTEGRATION_SECRET}});
-    return res.json({data:z.array(pointSchema).parse(result.data.data)});
-  } catch { throw new ApiError(503,'MAPS_UNAVAILABLE','No se pudo consultar el servicio de mapas'); }
+    const result=await axios.post(`${process.env.M4_BASE_URL}/api/v1/geocode`,{address:q},{timeout:2000,headers:{'x-correlation-id':res.locals.correlationId,'x-service-key':process.env.INTEGRATION_SECRET}});
+    const found=result.data;
+    data=z.array(pointSchema).parse([{direccion:String(found.address??q).slice(0,250),latitud:found.latitude,longitud:found.longitude}]);
+  } catch(e) {
+    // Dirección inexistente: M4 respondió bien, sólo que sin resultados.
+    if(axios.isAxiosError(e)&&e.response?.status===404) { stop('ok'); return res.json({data:[]}); }
+    stop('error'); throw new ApiError(503,'MAPS_UNAVAILABLE','No se pudo consultar el servicio de mapas');
+  }
+  stop('ok');
+  return res.json({data});
 }));
 router.get('/direcciones',wrap(async(req,res)=>{
   const query=z.object({tipo:z.enum(['ORIGEN','DESTINO']).optional(),favorita:z.enum(['true','false']).optional(),recientes:z.literal('true').optional(),page:z.coerce.number().int().min(1).default(1),limit:z.coerce.number().int().min(1).max(100).default(20)}).strict().parse(req.query);
