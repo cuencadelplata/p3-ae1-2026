@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#181818" />
+    <meta name="description" content="Vista previa de comprobantes, soporte y dispositivos de M8" />
+    <title>M8 · Vistas para integrar</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./preview/preview.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Vista previa de M8">
+        <div class="brand"><span class="brand-mark">↗</span><span>M<span class="brand-accent">8</span><small>vista previa</small></span></div>
+        <div class="side-label">VISTAS PARA INTEGRAR</div>
+        <nav class="side-nav">
+          <a href="#comprobantes" data-page="comprobantes"><span>▤</span> Comprobantes</a>
+          <a href="#soporte" data-page="soporte"><span>◌</span> Soporte</a>
+          <a href="#dispositivos" data-page="dispositivos"><span>↗</span> Dispositivos</a>
+        </nav>
+        <div class="sidebar-bottom">
+          <p>Esta navegación es sólo para revisar las vistas antes de incorporarlas a la aplicación común.</p>
+        </div>
+      </aside>
+
+      <div class="main-column">
+        <header class="topbar">
+          <button class="mobile-menu" id="mobile-menu" type="button" aria-label="Abrir menú">☰</button>
+          <div class="breadcrumbs">MÓDULO 8 <span>/</span> VISTA PREVIA</div>
+          <div class="top-actions"><span class="date-pill" id="today"></span><button class="account-button" id="account-button" type="button"><span class="account-avatar">M1</span><span>Conexión M1</span><span class="chevron">⌄</span></button></div>
+        </header>
+
+        <main id="page" tabindex="-1"></main>
+        <footer class="footer"><span>Vistas de M8 para el frontend común</span><span>La navegación y autenticación definitivas pertenecen a la aplicación integrada</span></footer>
+      </div>
+    </div>
+
+    <dialog id="auth-dialog" class="auth-dialog">
+      <form method="dialog" id="auth-form">
+        <div class="dialog-top"><span class="eyebrow">ACCESO SEGURO</span><button value="cancel" class="icon-button" aria-label="Cerrar">×</button></div>
+        <h2>Conectá tu sesión</h2>
+        <p>Usá el JWT de M1 para consultar tus comprobantes, tickets y dispositivos. Se conserva sólo mientras esta página está abierta.</p>
+        <label for="auth-token">Token de M1</label>
+        <input id="auth-token" type="password" autocomplete="off" placeholder="Pegá el token, sin Bearer" />
+        <div class="dialog-actions"><button type="button" class="button button-ghost" id="auth-clear">Quitar token</button><button class="button button-primary" value="save">Usar token <span>↗</span></button></div>
+      </form>
+    </dialog>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

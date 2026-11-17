@@ -1,0 +1,24 @@
+{
+  "name": "@m8/shared",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run tests/unit tests/integration/rf86-messaging.integration.test.ts",
+    "test:integration:real": "vitest run tests/integration/rf86-real-infrastructure.integration.test.ts"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.4",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.5",
+    "@types/node": "^24.13.3",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.11"
+  }
+}

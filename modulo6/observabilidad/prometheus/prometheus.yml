@@ -1,0 +1,4 @@
+# Prometheus local: no hace scrape propio, recibe las métricas que Alloy le envía
+# por remote write (--web.enable-remote-write-receiver).
+global:
+  evaluation_interval: 30s
