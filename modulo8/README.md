@@ -14,6 +14,16 @@ M8 es el servicio de comunicaciones de la plataforma de movilidad urbana. Tiene 
 
 Los destinatarios usan el `userId` **numérico** de M1. M8 no lee tablas ni Redis de otros módulos. Las integraciones externas son por REST o RabbitMQ. El [índice de contratos](contracts/README.md) enlaza el [OpenAPI integrado](openapi/m8-openapi.yaml) y el [catálogo de eventos](contracts/events/catalogo-eventos-v1.md).
 
+M8 consume `ride.requested`, `driver.offer.accepted` y `ride_request.cancelled`
+de M5 en `m8.notifications.m5-events`. La aceptación crea avisos para cliente y
+conductor; la cancelación previa al viaje avisa sólo al cliente. El
+[acuerdo M5 → M8](contracts/events/m5-m8-notificaciones.md) detalla destinatarios,
+correlación y el límite de entrega cuando RabbitMQ está caído antes de publicar.
+El nombre y el vehículo del conductor en el aviso son opcionales: para
+consultarlos dentro de la red común, configurar `M3_CONDUCTOR_BASE_URL` y
+`M3_VEHICLES_BASE_URL` con las URL base de ambos servicios de M3. Una falla de
+M3 no bloquea las notificaciones.
+
 ## Organización
 
 - `src/`: servidor, rutas y arranque único.

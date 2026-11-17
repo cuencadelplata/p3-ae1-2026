@@ -182,6 +182,27 @@ const migrations = [
          )`,
     ],
   },
+  {
+    version: 7,
+    name: "support_preassignment_cancellation_by_ride_request",
+    statements: [
+      `ALTER TABLE notifications.notifications
+         DROP CONSTRAINT IF EXISTS notifications_context_reference_check`,
+      `ALTER TABLE notifications.notifications
+         ADD CONSTRAINT notifications_context_reference_check
+         CHECK (
+           (event_type = 'TripRequested' AND ride_request_id IS NOT NULL AND trip_id IS NULL)
+           OR
+           (event_type = 'TripCancelled' AND ride_request_id IS NOT NULL AND trip_id IS NULL)
+           OR
+           (event_type = 'DriverDocumentRegistered' AND ride_request_id IS NULL AND trip_id IS NULL)
+           OR
+           (event_type NOT IN ('TripRequested', 'TripCancelled', 'DriverDocumentRegistered') AND trip_id IS NOT NULL)
+           OR
+           (event_type = 'TripCancelled' AND trip_id IS NOT NULL AND ride_request_id IS NULL)
+         )`,
+    ],
+  },
 ] as const;
 
 export async function runMigrations(pool: Pool): Promise<void> {

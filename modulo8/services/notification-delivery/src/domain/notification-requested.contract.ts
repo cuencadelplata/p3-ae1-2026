@@ -136,6 +136,10 @@ export function validateNotificationRequestedEnvelope(
     if (data.tripId !== undefined && (typeof data.tripId !== 'string' || data.tripId.trim() === '')) {
       throw new ContractValidationError('data.tripId debe ser texto no vacío cuando se informa.');
     }
+  } else if (data.eventType === 'TRIP_CANCELLED' && data.tripId === undefined) {
+    if (typeof data.rideRequestId !== 'string' || data.rideRequestId.trim() === '') {
+      throw new ContractValidationError('data.rideRequestId es obligatorio para cancelar una solicitud sin tripId.');
+    }
   } else {
     if (typeof data.tripId !== 'string' || data.tripId.trim() === '') {
       throw new ContractValidationError('data.tripId es obligatorio.');
