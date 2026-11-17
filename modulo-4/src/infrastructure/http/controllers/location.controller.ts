@@ -167,7 +167,9 @@ export class LocationController {
       const lon = Number.parseFloat(String(longitude || ''));
       const radius = radiusKm ? Number.parseFloat(String(radiusKm)) : 5;
       const rawLimit = maxCandidates || limit;
-      const maxLimit = rawLimit ? Number.parseInt(String(rawLimit), 10) : 10;
+      const parsedLimit = rawLimit ? Number.parseInt(String(rawLimit), 10) : 10;
+      // Un limite invalido (NaN, 0 o negativo) vaciaba o recortaba mal el resultado de slice(); se usa el valor por defecto.
+      const maxLimit = Number.isNaN(parsedLimit) || parsedLimit <= 0 ? 10 : parsedLimit;
 
       if (Number.isNaN(lat) || Number.isNaN(lon)) {
         throw new LocationValidationError('Los parámetros latitude y longitude son obligatorios y deben ser números válidos');
