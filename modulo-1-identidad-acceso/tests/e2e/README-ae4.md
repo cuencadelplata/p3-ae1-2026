@@ -5,6 +5,7 @@ Pegan contra M1, Redis y RabbitMQ **reales**, sin mocks. Usan solo Node (`node -
 | Archivo | Comando | Qué prueba | Duración |
 | --- | --- | --- | --- |
 | `rf-1.2-ae4.e2e.test.mjs` | `npm run test:e2e:ae4` | Login, `/auth/me`, rate limit con Redis real, eventos que llegan a RabbitMQ y métricas | ~1 s |
+| `rf-1.1-1.3-ae4.e2e.test.mjs` | `npm run test:e2e:rf11-rf13` | Registro con cada rol, 409 por email o DNI repetido, otro módulo valida el token y recibe `valid: true`, métrica de validaciones | ~2 s |
 | `resiliencia-ae4.e2e.test.mjs` | `npm run test:e2e:resiliencia` | Apaga y prende Redis y RabbitMQ: M1 no se cae y se reconecta solo | ~1 a 2 min |
 | `helpers-ae4.mjs` | — | Funciones compartidas | — |
 
@@ -26,6 +27,18 @@ Si la IP quedó bloqueada por un test anterior (por ejemplo, el de estrés), los
 4. 5 fallos y después 429 con `Retry-After`. Con la IP bloqueada, ni la contraseña correcta pasa. Las métricas suben exactamente lo que pasó.
 5. El evento `auth.ip_bloqueada` llega a RabbitMQ con `intentos: 5`.
 6. `/metrics` muestra Redis y RabbitMQ conectados.
+
+## `npm run test:e2e:rf11-rf13`: RF-1.1 y RF-1.3 de punta a punta
+
+Solo necesita M1 levantado (no usa la API de RabbitMQ).
+
+1. Registrar un `CLIENTE` y un `CONDUCTOR`: 201 con su rol y sin la contraseña.
+2. `OPERADOR` no se puede autorregistrar: 400.
+3. Email repetido (también con mayúsculas y espacios) o DNI repetido: 409.
+4. Datos inválidos: 400.
+5. Otro módulo valida el token con `GET /auth/validar-identidad-y-rol` y recibe `valid: true` con el rol correcto; `m1_validaciones_identidad_total{resultado="valida"}` sube 1.
+6. Sin token o con token inválido: 401, y sube `token_rechazado`.
+7. Cada rol entra solo a su ruta: `CONDUCTOR` al portal de conductores; `CLIENTE` no (403).
 
 ## `npm run test:e2e:resiliencia`: apagar y prender
 
