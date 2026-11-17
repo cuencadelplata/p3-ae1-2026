@@ -19,7 +19,7 @@ export async function ejecutarReintegroMP(
         authorization: `Bearer ${config.mpAccessToken}`,
         "X-Idempotency-Key": `reintegro-${paymentId}-${Date.now()}`,
       },
-      body: monto !== undefined ? JSON.stringify({ amount: monto }) : "{}",
+      body: "{}",
       signal: AbortSignal.timeout(10_000),
     }
   );

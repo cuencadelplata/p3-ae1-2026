@@ -5,7 +5,7 @@ services:
       - "16000:3000"
     env_file: .env
     environment:
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-app}:${RABBITMQ_PASSWORD:-app-local}@rabbitmq:5672
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgres://m7user:m7pass@postgres:5432/m7db
       CARGO_CANCELACION_URL: http://cargo-cancelacion:3007
