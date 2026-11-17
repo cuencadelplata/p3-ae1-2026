@@ -41,12 +41,11 @@ test.describe('M5 Dispatch Service — Pruebas End-to-End (E2E) con Playwright',
     // Activar vista Split (ambas pantallas visibles)
     await page.click('#tabBtnSplit');
 
-    // Aplicar preset de ruta rápida (Obelisco -> Recoleta)
-    await page.click("button:has-text('Obelisco ➔ Recoleta')");
-
     // Configurar un client ID único para evitar colisiones
     const uniqueClientId = `client_e2e_${Date.now()}`;
-    await page.fill('#clientId', uniqueClientId);
+    await page.locator('#clientId').evaluate((el: any, cid: string) => {
+      el.value = cid;
+    }, uniqueClientId);
 
     // 1. RF-5.1: Solicitar viaje
     await page.click('#btnSubmit');
@@ -54,23 +53,19 @@ test.describe('M5 Dispatch Service — Pruebas End-to-End (E2E) con Playwright',
     // Verificar que el viaje pasa a estar activo
     const statusBadge = page.locator('#tripStatusBadge');
     await expect(statusBadge).toBeVisible({ timeout: 5000 });
-    await expect(statusBadge).toContainText('SEARCHING');
+    await expect(statusBadge).toContainText(/SEARCHING|OFFERED/);
 
     // Verificar cálculo de tarifa estimada (M7 stub)
     const fareAmount = page.locator('#fareAmount');
     await expect(fareAmount).toBeVisible();
     await expect(fareAmount).not.toContainText('$0 ARS');
 
-    // 2. RF-5.2 & RF-5.3: Buscar candidatos y enviar ofertas
-    const btnSearch = page.locator('#btnSearchCandidates');
-    await btnSearch.click();
-
-    // Verificar que el badge de ofertas se actualiza a OFFERED
+    // 2. RF-5.2 & RF-5.3: Esperar despacho de ofertas (automático o manual)
     await expect(statusBadge).toContainText('OFFERED', { timeout: 8000 });
 
-    // Verificar lista de candidatos renderizada
-    const candidatesList = page.locator('#candidatesListContainer');
-    await expect(candidatesList).toBeVisible();
+    // Verificar marcadores de conductores con icono de auto en el mapa
+    const driverMapPins = page.locator('.custom-pin-driver');
+    await expect(driverMapPins.first()).toBeVisible({ timeout: 5000 });
 
     // 3. RF-5.4 & RF-5.5: El conductor ve la oferta entrante y la acepta
     const incomingOffer = page.locator('#driverPhoneIncomingOffer');
@@ -95,11 +90,10 @@ test.describe('M5 Dispatch Service — Pruebas End-to-End (E2E) con Playwright',
   // Test 3: Cancelación Previa por el Cliente (RF-5.6)
   // ==========================================================================
   test('E2E-03: Cancelación previa — El cliente cancela la solicitud antes de ser asignada', async ({ page }) => {
-    // Aplicar preset
-    await page.click("button:has-text('Palermo ➔ Pto. Madero')");
-
     const uniqueClientId = `client_cancel_${Date.now()}`;
-    await page.fill('#clientId', uniqueClientId);
+    await page.locator('#clientId').evaluate((el: any, cid: string) => {
+      el.value = cid;
+    }, uniqueClientId);
 
     // Crear solicitud
     await page.click('#btnSubmit');
@@ -108,18 +102,17 @@ test.describe('M5 Dispatch Service — Pruebas End-to-End (E2E) con Playwright',
     await expect(page.locator('#activeTripDetails')).toBeVisible({ timeout: 10_000 });
 
     const statusBadge = page.locator('#tripStatusBadge');
-    await expect(statusBadge).toContainText('SEARCHING');
+    await expect(statusBadge).toContainText(/SEARCHING|OFFERED/);
 
-    // Configurar listener para el diálogo `prompt()` de confirmación/motivo
-    page.on('dialog', async (dialog) => {
-      expect(dialog.type()).toBe('prompt');
-      await dialog.accept('Ya no requiero el traslado');
-    });
-
-    // Clic en cancelar solicitud (RF-5.6)
+    // Clic en cancelar solicitud (RF-5.6) para abrir pop-up modal
     const btnCancel = page.locator('#btnCancelTrip');
     await expect(btnCancel).toBeEnabled({ timeout: 5000 });
     await btnCancel.click();
+
+    // Completar motivo en el pop-up y confirmar
+    await expect(page.locator('#cancelModal')).toBeVisible({ timeout: 5000 });
+    await page.fill('#cancelReasonInput', 'Ya no requiero el traslado');
+    await page.click('#btnConfirmCancelModal');
 
     // Verificar banner de cancelación y estado
     const cancelledBanner = page.locator('#cancelledBanner');
@@ -136,18 +129,18 @@ test.describe('M5 Dispatch Service — Pruebas End-to-End (E2E) con Playwright',
   // ==========================================================================
   test('E2E-04: Rechazo de oferta — El conductor rechaza la oferta entrante', async ({ page }) => {
     await page.click('#tabBtnSplit');
-    await page.click("button:has-text('Belgrano ➔ Centro')");
 
     const uniqueClientId = `client_reject_${Date.now()}`;
-    await page.fill('#clientId', uniqueClientId);
+    await page.locator('#clientId').evaluate((el: any, cid: string) => {
+      el.value = cid;
+    }, uniqueClientId);
 
-    // Crear solicitud y despachar
+    // Crear solicitud (auto-despacha ofertas)
     await page.click('#btnSubmit');
-    await page.locator('#btnSearchCandidates').click();
 
     // Esperar oferta en el smartphone
     const incomingOffer = page.locator('#driverPhoneIncomingOffer');
-    await expect(incomingOffer).toBeVisible({ timeout: 5000 });
+    await expect(incomingOffer).toBeVisible({ timeout: 8000 });
 
     // Rechazar la oferta
     const btnReject = page.locator('#btnPhoneReject');

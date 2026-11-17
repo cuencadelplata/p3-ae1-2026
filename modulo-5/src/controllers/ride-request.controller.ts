@@ -121,6 +121,29 @@ export class RideRequestController {
   };
 
   /**
+   * POST /api/v1/ride-requests/:requestId/cancel-assigned
+   * Cancelación de viaje ya asignado por cliente o conductor
+   */
+  public cancelAssigned = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { requestId } = req.params;
+      const { actorType = 'CLIENT', reason, driverId } = req.body || {};
+      const actorId =
+        actorType === 'DRIVER' ? (driverId || this.extractDriverId(req)) : this.extractClientId(req);
+
+      const result = await this.rideRequestService.cancelAssignedRideRequest(
+        requestId,
+        actorId,
+        actorType === 'DRIVER' ? 'DRIVER' : 'CLIENT',
+        reason
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  /**
    * GET /api/v1/ride-requests/:requestId
    */
   public getById = async (req: Request, res: Response): Promise<void> => {

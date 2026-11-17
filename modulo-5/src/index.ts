@@ -33,6 +33,40 @@ const rideRequestService = new RideRequestService();
 const rideRequestController = new RideRequestController(rideRequestService);
 TelemetryService.getInstance();
 
+// Sembrar conductores mock para el simulador interactivo y tests E2E locales cuando M4 no está levantado
+rideRequestService.getM4ClientService().seedMockDrivers([
+  {
+    driverId: 'drv_101',
+    latitude: -34.6037,
+    longitude: -58.3816,
+    distanceKm: 1.2,
+    vehicleType: 'AUTO',
+    available: true,
+    rating: 4.9,
+    expiresAt: '2099-12-31T23:59:59.000Z'
+  },
+  {
+    driverId: 'drv_102',
+    latitude: -34.5885,
+    longitude: -58.3974,
+    distanceKm: 2.1,
+    vehicleType: 'AUTO',
+    available: true,
+    rating: 4.8,
+    expiresAt: '2099-12-31T23:59:59.000Z'
+  },
+  {
+    driverId: 'drv_103',
+    latitude: -34.6037,
+    longitude: -58.3816,
+    distanceKm: 0.8,
+    vehicleType: 'MOTO',
+    available: true,
+    rating: 5.0,
+    expiresAt: '2099-12-31T23:59:59.000Z'
+  }
+]);
+
 // Health check con diagnóstico de backing services (RNF-16 / AE2)
 app.get('/health', (_req, res) => {
   const redisReady = rideRequestService.getRedisService().isReady();
@@ -87,6 +121,7 @@ app.get(['/docs', '/reference'], (_req, res) => {
 app.post('/api/v1/ride-requests', authenticate, rideRequestController.create);
 app.get('/api/v1/ride-requests/:requestId', authenticate, rideRequestController.getById);
 app.post('/api/v1/ride-requests/:requestId/cancel', rideRequestController.cancel);
+app.post('/api/v1/ride-requests/:requestId/cancel-assigned', rideRequestController.cancelAssigned);
 app.delete('/api/v1/ride-requests/:requestId', rideRequestController.cancel);
 app.get('/api/v1/ride-requests/:requestId/audit', rideRequestController.getAuditLogs);
 app.post('/api/v1/ride-requests/:requestId/candidates', rideRequestController.searchCandidates);

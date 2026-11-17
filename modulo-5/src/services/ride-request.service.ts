@@ -1507,6 +1507,60 @@ export class RideRequestService {
   }
 
   /**
+   * Cancelación de viaje ya asignado (por cliente o conductor en curso)
+   */
+  public async cancelAssignedRideRequest(
+    requestId: string,
+    actorId: string,
+    actorType: 'CLIENT' | 'DRIVER',
+    reason?: string
+  ): Promise<CancelRideRequestResponseDTO> {
+    const request = this.requests.get(requestId) || (await this.dbService.getRideRequestById(requestId));
+    if (!request) {
+      throw new NotFoundError(`Solicitud de viaje ${requestId} no encontrada`, 'REQUEST_NOT_FOUND');
+    }
+    if (request.status === 'CANCELLED') {
+      throw new ConflictError('La solicitud ya se encuentra cancelada', 'REQUEST_ALREADY_CANCELLED');
+    }
+
+    const now = new Date();
+    request.status = 'CANCELLED';
+    request.updatedAt = now.toISOString();
+    request.cancelledAt = now.toISOString();
+    request.cancellationReason =
+      reason && reason.trim().length > 0
+        ? reason.trim()
+        : actorType === 'DRIVER'
+        ? 'Cancelado por el conductor'
+        : 'Cancelado por el cliente';
+
+    this.requests.set(request.id, request);
+    TelemetryService.getInstance().recordRideCancelled('OFFERED');
+
+    await this.dbService.saveRideRequest(request);
+    await this.dbService.logDispatchEvent(
+      request.id,
+      'RIDE_CANCELLED',
+      actorId,
+      `Cancelado por ${actorType}: ${request.cancellationReason}`
+    ).catch(() => {});
+
+    await this.redisService.releaseClientActiveLock(request.clientId);
+
+    return {
+      requestId: request.id,
+      clientId: request.clientId,
+      status: 'CANCELLED',
+      reason: request.cancellationReason,
+      cancelledAt: request.cancelledAt,
+      message:
+        actorType === 'DRIVER'
+          ? 'Viaje asignado cancelado por el conductor.'
+          : 'Viaje asignado cancelado por el cliente.'
+    };
+  }
+
+  /**
    * Obtiene eventos de auditoría inmutables (RNF-04)
    */
   public getAuditEvents(requestId?: string): DispatchAuditEvent[] {
