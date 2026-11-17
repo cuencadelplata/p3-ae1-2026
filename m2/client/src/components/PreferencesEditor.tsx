@@ -40,16 +40,16 @@ export default function PreferencesEditor({ customer, onUpdate }: Props) {
 
   return (
     <div className="card">
-      <h2 style={sectionTitle}>Preferences</h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        <label style={labelStyle}>
+      <h2 className="section-title">Preferences</h2>
+      <div className="stack">
+        <label className="field">
           Preferred vehicle
           <select name="preferredVehicleType" value={prefs.preferredVehicleType} onChange={handleChange}>
             <option value="auto">Auto</option>
             <option value="moto">Moto</option>
           </select>
         </label>
-        <label style={labelStyle}>
+        <label className="field">
           Notification channel
           <select name="notificationChannel" value={prefs.notificationChannel} onChange={handleChange}>
             <option value="email">Email</option>
@@ -58,12 +58,13 @@ export default function PreferencesEditor({ customer, onUpdate }: Props) {
         </label>
 
         {error && <p className="error-msg">{error}</p>}
-        {saved && <p style={{ color: '#166534', fontSize: '0.85rem' }}>✓ Saved</p>}
+        {saved && <p className="success-msg">✓ Saved</p>}
 
         <button
           onClick={handleSave}
           disabled={!dirty || saving}
-          style={{ background: '#6366f1', color: '#fff', alignSelf: 'flex-start' }}
+          className="btn-primary"
+          style={{ alignSelf: 'flex-start' }}
         >
           {saving ? 'Saving…' : 'Save preferences'}
         </button>
@@ -71,6 +72,3 @@ export default function PreferencesEditor({ customer, onUpdate }: Props) {
     </div>
   );
 }
-
-const sectionTitle: React.CSSProperties = { fontSize: '0.95rem', fontWeight: 600, marginBottom: '16px', color: '#374151' };
-const labelStyle: React.CSSProperties   = { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem', fontWeight: 500 };

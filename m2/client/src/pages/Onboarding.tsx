@@ -35,14 +35,14 @@ export default function Onboarding() {
   }
 
   return (
-    <div style={{ maxWidth: '480px', margin: '0 auto' }}>
-      <h1 style={{ fontSize: '1.4rem', marginBottom: '8px' }}>Completá tu perfil</h1>
-      <p style={{ color: '#6b7280', marginBottom: '24px', fontSize: '0.9rem' }}>
+    <div className="narrow">
+      <h1 className="page-title">Completá tu perfil</h1>
+      <p className="page-lead">
         Tu identidad ya está verificada por M1. Elegí tus preferencias para terminar de crear tu perfil.
       </p>
 
       <div className="card">
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSubmit} className="stack">
           <Field label="Vehículo preferido">
             <select value={preferredVehicleType} onChange={(e) => setVehicle(e.target.value as VehicleType)}>
               <option value="auto">Auto</option>
@@ -59,7 +59,7 @@ export default function Onboarding() {
           {error && <p className="error-msg">{error}</p>}
 
           <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-            <button type="submit" disabled={submitting} style={{ background: '#6366f1', color: '#fff' }}>
+            <button type="submit" disabled={submitting} className="btn-primary">
               {submitting ? 'Creando…' : 'Crear perfil'}
             </button>
           </div>
@@ -71,7 +71,7 @@ export default function Onboarding() {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem', fontWeight: 500 }}>
+    <label className="field">
       {label}
       {children}
     </label>

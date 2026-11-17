@@ -68,21 +68,20 @@ export default function Home() {
   }
 
   return (
-    <div style={{ maxWidth: '640px', margin: '0 auto', textAlign: 'center' }}>
-      <h1 style={{ fontSize: '1.6rem', marginBottom: '8px' }}>M2 · Perfil de Cliente</h1>
-      <p style={{ color: '#6b7280', marginBottom: '40px', fontSize: '0.95rem' }}>
+    <div className="hero">
+      <h1>M2 · <span className="accent">Perfil de Cliente</span></h1>
+      <p className="hero-lead">
         En el flujo real, M1 te redirige con tu token y vas directo a tu perfil.
         Como todavía no integramos con los demás módulos, usá los escenarios de prueba.
       </p>
 
-      <div style={demoBoxStyle}>
-        <span style={demoLabelStyle}>Modo demostración</span>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '16px' }}>
+      <div className="demo-box">
+        <span className="eyebrow">Modo demostración</span>
+        <div className="scenarios">
           <ScenarioCard
             title="Perfil habilitado"
             description="Usuario sin penalizaciones. Su estado de cuenta se mantiene ACTIVO."
-            accent="#166534"
-            background="#f0fdf4"
+            variant="ok"
             loading={loadingDemo === 'habilitado'}
             disabled={loadingDemo !== null}
             onClick={() => abrirDemo('habilitado')}
@@ -90,8 +89,7 @@ export default function Home() {
           <ScenarioCard
             title="Perfil inhabilitado"
             description="Usuario con penalizaciones vigentes. Al consultar su estado queda BLOQUEADO."
-            accent="#991b1b"
-            background="#fef2f2"
+            variant="danger"
             loading={loadingDemo === 'inhabilitado'}
             disabled={loadingDemo !== null}
             onClick={() => abrirDemo('inhabilitado')}
@@ -107,53 +105,23 @@ export default function Home() {
 interface ScenarioCardProps {
   title: string;
   description: string;
-  accent: string;
-  background: string;
+  variant: 'ok' | 'danger';
   loading: boolean;
   disabled: boolean;
   onClick: () => void;
 }
 
-function ScenarioCard({ title, description, accent, background, loading, disabled, onClick }: ScenarioCardProps) {
+function ScenarioCard({ title, description, variant, loading, disabled, onClick }: ScenarioCardProps) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-start',
-        gap: '10px',
-        padding: '28px 24px',
-        borderRadius: '12px',
-        border: `1px solid ${accent}22`,
-        background,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled && !loading ? 0.5 : 1,
-        textAlign: 'left',
-        transition: 'transform 0.1s, box-shadow 0.1s',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-      }}
+      className={`scenario scenario-${variant}`}
+      style={loading ? { opacity: 1 } : undefined}
     >
-      <span style={{ fontSize: '1.1rem', fontWeight: 700, color: accent }}>{title}</span>
-      <span style={{ fontSize: '0.85rem', color: '#4b5563', lineHeight: 1.4 }}>{description}</span>
-      <span style={{ marginTop: '8px', fontSize: '0.85rem', fontWeight: 600, color: accent }}>
-        {loading ? 'Preparando…' : 'Abrir perfil →'}
-      </span>
+      <span className="scenario-title">{title}</span>
+      <span className="scenario-desc">{description}</span>
+      <span className="scenario-cta">{loading ? 'Preparando…' : 'Abrir perfil →'}</span>
     </button>
   );
 }
-
-const demoBoxStyle: React.CSSProperties = {
-  border: '1px dashed #d1d5db',
-  borderRadius: '14px',
-  padding: '24px',
-  position: 'relative',
-};
-const demoLabelStyle: React.CSSProperties = {
-  fontSize: '0.72rem',
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: '0.08em',
-  color: '#9ca3af',
-};

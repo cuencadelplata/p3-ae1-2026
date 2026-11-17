@@ -8,7 +8,7 @@ export default function App() {
   return (
     <div className="layout">
       <header className="topbar">
-        <span className="topbar-brand">M2 · Customers</span>
+        <span className="topbar-brand">Clientes</span>
       </header>
       <main className="content">
         <Routes>
