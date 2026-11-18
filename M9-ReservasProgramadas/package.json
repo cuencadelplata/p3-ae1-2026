@@ -64,7 +64,13 @@
     "k6:repricing:cloud": "node scripts/run-k6.mjs repricing --cloud",
     "k6:cleanup": "node scripts/k6-cleanup.mjs",
     "obs:fault-drill": "node scripts/fault-drill.mjs",
-    "obs:dashboards:build": "node scripts/build-grafana-dashboards.mjs"
+    "obs:dashboards:build": "node scripts/build-grafana-dashboards.mjs",
+    "k6:parallel": "node scripts/run-k6.mjs parallel",
+    "k6:parallel:cloud": "node scripts/run-k6.mjs parallel --cloud",
+    "k6:breakpoint": "node scripts/run-k6.mjs breakpoint",
+    "k6:breakpoint:cloud": "node scripts/run-k6.mjs breakpoint --cloud",
+    "k6:soak": "node scripts/run-k6.mjs soak",
+    "k6:soak:cloud": "node scripts/run-k6.mjs soak --cloud"
   },
   "dependencies": {
     "@opentelemetry/api": "1.10.0",

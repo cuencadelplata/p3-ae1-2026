@@ -42,6 +42,9 @@ const SCENARIOS = [
   'activation',
   'dispatch',
   'repricing',
+  'parallel',
+  'breakpoint',
+  'soak',
 ];
 const PASSTHROUGH = [
   'PROFILE',
@@ -63,6 +66,17 @@ const PASSTHROUGH = [
   'ACTIVATION_TIMEOUT_SECONDS',
   'POLL_INTERVAL_SECONDS',
   'THINK_TIME_SECONDS',
+  'BATCH_SIZE',
+  'REQUEST_TIMEOUT',
+  'BREAKPOINT_RPS',
+  'BASELINE_RPS',
+  'BASELINE_DURATION',
+  'RAMP_DURATION',
+  'STEP_DURATION',
+  'RECOVERY_DURATION',
+  'SPIKE_WAVES',
+  'SPIKE_RAMP_DURATION',
+  'SPIKE_HOLD_DURATION',
 ];
 const CLOUD_VARS = ['K6_CLOUD_TOKEN', 'K6_CLOUD_STACK_ID', 'K6_CLOUD_PROJECT_ID'];
 
@@ -168,7 +182,8 @@ const result = spawnSync(command, args, {
 });
 metadata.finishedAt = new Date().toISOString();
 metadata.exitCode = result.status;
-metadata.thresholdsPassed = result.status === 0;
+metadata.thresholdsPassed = result.status === 0 ? true : result.status === 99 ? false : null;
+metadata.executionError = result.error?.message ?? null;
 writeFileSync(
   path.join(resultsDir, `${scenario}-${runId}.meta.json`),
   JSON.stringify(metadata, null, 2),

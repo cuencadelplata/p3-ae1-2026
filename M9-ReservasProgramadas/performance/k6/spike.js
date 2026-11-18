@@ -19,10 +19,12 @@ import {
   testTags,
 } from './lib/config.js';
 import { buildSummary } from './lib/summary.js';
+import { positiveInt } from './lib/capacity-plan.js';
 
 const BASE = num('BASE_VUS', 5);
 const SPIKE = num('SPIKE_VUS', 50);
 const short = __ENV.PROFILE === 'short';
+const WAVES = positiveInt(__ENV.SPIKE_WAVES, 2, 'SPIKE_WAVES');
 
 export const options = {
   scenarios: {
@@ -31,14 +33,17 @@ export const options = {
       startVUs: BASE,
       stages: [
         { duration: short ? '20s' : '1m', target: BASE }, // línea base
-        { duration: '10s', target: SPIKE }, // subida brusca
-        { duration: short ? '20s' : '30s', target: SPIKE }, // pico breve
-        { duration: '10s', target: BASE }, // bajada
-        { duration: short ? '30s' : '1m', target: BASE }, // recuperación observable
+        ...Array.from({ length: WAVES }, () => [
+          { duration: __ENV.SPIKE_RAMP_DURATION || '1s', target: SPIKE },
+          { duration: __ENV.SPIKE_HOLD_DURATION || (short ? '20s' : '30s'), target: SPIKE },
+          { duration: __ENV.SPIKE_RAMP_DURATION || '1s', target: BASE },
+          { duration: __ENV.RECOVERY_DURATION || (short ? '30s' : '1m'), target: BASE },
+        ]).flat(),
       ],
     },
   },
-  thresholds: BASE_THRESHOLDS,
+  thresholds: { ...BASE_THRESHOLDS, m9_pricing_degraded: ['rate<0.01'] },
+  summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(95)', 'p(99)'],
   tags: testTags('spike'),
   cloud: cloudOptions('pico'),
 };

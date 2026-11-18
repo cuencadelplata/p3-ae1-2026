@@ -48,3 +48,7 @@ services:
 
 volumes:
   m7-postgres-data:
+
+networks:
+  reservas-network:
+    driver: bridge

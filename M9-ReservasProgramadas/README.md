@@ -129,7 +129,7 @@ npm run integration:stop
 
 `integration:stop` detiene las tres APIs de la demo y conserva bases y volúmenes. Este modo configura M5 para el JWT de demo: los tokens emitidos con otra clave, como los de un M1 ajeno a esta demo, no autentican contra ese M5. No utilizarlo sobre un despliegue de producción.
 
-Los escenarios k6 existentes generan múltiples identidades y no son compatibles con esta demo de un único cliente. Los resultados históricos con stubs no acreditan el rendimiento de M5/M7 reales.
+El runner k6 detecta la red `movilidad-urbana` y usa el cliente único de demo. En una red personalizada, agregar `--integration` al runner o configurar `CLIENT_ID`. Los resultados históricos con stubs no acreditan el rendimiento de M5/M7 reales.
 
 Verificación del 17/11/2026: 94 pruebas de M9 y 13 de infraestructura aprobadas, más un recorrido contra M7/M5 reales que confirmó tarifa, solicitud `SEARCHING` y cancelación en ambos módulos. La Idempotency-Key se conserva al reintentar una activación después de un timeout; los logs del scheduler incluyen código y tipo de rechazo, sin credenciales. La opción de M4 real tiene pruebas del adaptador, pero su arranque completo no se validó en esta revisión.
 
@@ -207,20 +207,20 @@ El archivo `.env.example` contiene las variables disponibles. Para personalizar 
 
 Variables principales:
 
-| Variable                                       | Función                                                              |
-| ---------------------------------------------- | -------------------------------------------------------------------- |
-| `PORT`                                         | Puerto de M9                                                         |
-| `DATABASE_URL`, `REDIS_URL`, `RABBITMQ_URL`    | Conexiones de la aplicación                                          |
-| `DATABASE_CONNECTION_LIMIT`                    | Máximo de conexiones Prisma en Compose                               |
-| `M5_BASE_URL`, `M7_BASE_URL`                   | Dependencias REST                                                    |
-| `M5_SERVICE_TOKEN`                             | Autenticación de servicio hacia M5                                   |
-| `DISPATCH_MODE`                                | `events` por defecto; `rest` como alternativa de compatibilidad      |
-| `ROUTE_RESOLVER_MODE`                          | `stub` para ruta fija de demo; `m4` para resolución real; `blocked`  |
-| `M4_BASE_URL`, `M4_TIMEOUT_MS`                 | Servicio de geocodificación y estimación cuando se elige `m4`        |
-| `RESERVATION_JOB_INTERVAL`                     | Expresión cron del scheduler                                         |
-| `OUTBOX_POLL_INTERVAL_MS`                      | Intervalo del worker                                                 |
-| `REDIS_CACHE_TTL_SECONDS`, `REDIS_LOCK_TTL_MS` | Duración de caché y locks                                            |
-| `OTEL_ENABLED`                                 | Activación de exportadores OpenTelemetry                             |
+| Variable                                       | Función                                                             |
+| ---------------------------------------------- | ------------------------------------------------------------------- |
+| `PORT`                                         | Puerto de M9                                                        |
+| `DATABASE_URL`, `REDIS_URL`, `RABBITMQ_URL`    | Conexiones de la aplicación                                         |
+| `DATABASE_CONNECTION_LIMIT`                    | Máximo de conexiones Prisma en Compose                              |
+| `M5_BASE_URL`, `M7_BASE_URL`                   | Dependencias REST                                                   |
+| `M5_SERVICE_TOKEN`                             | Autenticación de servicio hacia M5                                  |
+| `DISPATCH_MODE`                                | `events` por defecto; `rest` como alternativa de compatibilidad     |
+| `ROUTE_RESOLVER_MODE`                          | `stub` para ruta fija de demo; `m4` para resolución real; `blocked` |
+| `M4_BASE_URL`, `M4_TIMEOUT_MS`                 | Servicio de geocodificación y estimación cuando se elige `m4`       |
+| `RESERVATION_JOB_INTERVAL`                     | Expresión cron del scheduler                                        |
+| `OUTBOX_POLL_INTERVAL_MS`                      | Intervalo del worker                                                |
+| `REDIS_CACHE_TTL_SECONDS`, `REDIS_LOCK_TTL_MS` | Duración de caché y locks                                           |
+| `OTEL_ENABLED`                                 | Activación de exportadores OpenTelemetry                            |
 
 Las URLs de variables son las vistas **desde el proceso**: dentro de Docker se utilizan nombres de servicio; un proceso ejecutado en Windows utiliza los puertos publicados en localhost.
 
@@ -278,15 +278,20 @@ npm run k6:activation
 
 El runner utiliza la imagen `grafana/k6:2.3.0` en la red Compose. **Las pruebas locales no requieren tokens ni instalar k6 en el host.**
 
-| Comando          | Escenario                                                              |
-| ---------------- | ---------------------------------------------------------------------- |
-| `k6:smoke`       | CRUD completo, 2 VUs durante 30 s por defecto                          |
-| `k6:load`        | Mezcla de lecturas/escrituras, 10 VUs durante 3 min                    |
-| `k6:stress`      | Incremento de VUs, sostenimiento y descenso                            |
-| `k6:spike`       | Pico de concurrencia y recuperación                                    |
-| `k6:cache`       | Comparación de lecturas en frío/caliente tras esperar el TTL           |
-| `k6:concurrency` | Modificación/cancelación de reservas compartidas; conflictos esperados |
-| `k6:activation`  | Reservas próximas y espera acotada hasta el resultado final            |
+| Comando          | Escenario                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------- |
+| `k6:smoke`       | CRUD completo, 2 VUs durante 30 s por defecto                                       |
+| `k6:load`        | Mezcla de lecturas/escrituras, 10 VUs durante 3 min                                 |
+| `k6:stress`      | Incremento de VUs, sostenimiento y descenso                                         |
+| `k6:spike`       | Pico de concurrencia y recuperación                                                 |
+| `k6:cache`       | Comparación de lecturas en frío/caliente tras esperar el TTL                        |
+| `k6:concurrency` | Modificación/cancelación de reservas compartidas; conflictos esperados              |
+| `k6:activation`  | Reservas próximas y espera acotada hasta el resultado final                         |
+| `k6:parallel`    | 10 VUs, lotes de 5 solicitudes simultáneas por VU; CRUD y recotización              |
+| `k6:breakpoint`  | Escalones de 10, 25, 50, 100, 200 y 400 solicitudes/s, hasta 200 VUs y recuperación |
+| `k6:soak`        | 15 VUs durante 15 minutos; reutiliza reservas para observar estabilidad             |
+| `k6:dispatch`    | Activación, envío y resultado del despacho M5                                       |
+| `k6:repricing`   | Recotización mediante M7                                                            |
 
 Todos se ejecutan como `npm run <comando>`. Los JSON de resultados y sus metadatos se guardan en `performance/results/`, incluidos los ensayos fallidos. Código 0 significa que los umbrales evaluados aprobaron; 99 significa incumplimiento de thresholds.
 
@@ -303,11 +308,66 @@ try {
 }
 ```
 
-Los umbrales son referencias iniciales, no SLA aprobados. El escenario stress actual ejecuta creación y lecturas; no acredita modificación/cancelación por mostrar umbrales sin muestras de esas operaciones. Una prueba corta tampoco determina la capacidad máxima.
+Los umbrales son referencias iniciales, no SLA aprobados. `stress` mezcla CRUD, recotización, contención e idempotencia; sostiene cada escalón y vuelve a una carga baja para observar recuperación. `spike` genera dos picos con subidas de un segundo y recuperación entre ellos. Se conserva el código de error cuando fallan los umbrales; no se relajan para aprobar una sobrecarga. Los resúmenes incluyen p95 y p99.
+
+### Solicitudes simultáneas, límite y resistencia
+
+Con la integración y Alloy iniciados, ejecutar las pruebas **una por vez**:
+
+```powershell
+npm run integration:obs:up
+npm run k6:parallel
+npm run k6:breakpoint
+npm run k6:soak
+```
+
+`parallel` usa `http.batch`: hasta 50 solicitudes simultáneas configuradas (10 usuarios × 5 por lote). Las fases esperan a que termine la anterior: crear → consultar/listar → modificar horario → recotizar → cancelar. Comprueba estados, identidad, cambios y tarifa. Las reservas de un lote son independientes; para competir por una misma reserva usar `k6:concurrency`.
+
+`breakpoint` aumenta la tasa de llegada aunque el servidor se vuelva lento. Cada iteración hace una petición; tras crear como máximo una reserva por VU, la mezcla es 60% consulta, 20% listado, 10% modificación de horario y 10% recotización. No equivale a probar cientos de creaciones por segundo ni activa viajes. Cada escalón tiene rampa y meseta, seguido por recuperación a 5 solicitudes/s. Se etiquetan `stage` y `target_rps`; el resumen compara p95, errores, tarifa degradada y muestras por meseta. Si falla algún umbral, la prueba continúa para registrar la recuperación y al final termina con código 99.
+
+El límite inicial explorable es 400 solicitudes/s con un máximo de 200 VUs; si todos los escalones pasan, subir `BREAKPOINT_RPS` y repetir. `dropped_iterations` indica que no se inició toda la carga prevista: revisar VUs, recursos del generador y latencia de M9. No demuestra por sí solo la capacidad máxima del servidor. El resumen siempre distingue el objetivo de carga de una capacidad confirmada.
+
+En esta PC de 6 GB, usar primero un recorrido corto:
+
+```powershell
+$env:PROFILE = 'short'
+$env:BREAKPOINT_RPS = '10,25,50,100'
+$env:MAX_VUS = '50'
+try {
+    npm run k6:breakpoint
+} finally {
+    Remove-Item Env:PROFILE, Env:BREAKPOINT_RPS, Env:MAX_VUS -ErrorAction SilentlyContinue
+}
+```
+
+Configuraciones principales:
+
+| Prueba          | Variables                                                                            | Valores por defecto           |
+| --------------- | ------------------------------------------------------------------------------------ | ----------------------------- |
+| Paralela        | `VUS`, `BATCH_SIZE`, `DURATION`                                                      | 10, 5, 2m                     |
+| Límite          | `BREAKPOINT_RPS`, `PRE_ALLOCATED_VUS`, `MAX_VUS`                                     | 10,25,50,100,200,400; 20; 200 |
+| Fases de límite | `BASELINE_DURATION`, `RAMP_DURATION`, `STEP_DURATION`, `RECOVERY_DURATION`           | 30s, 10s, 45s, 1m             |
+| Resistencia     | `VUS`, `DURATION`, `THINK_TIME_SECONDS`                                              | 15, 15m, 0.2                  |
+| Picos           | `BASE_VUS`, `SPIKE_VUS`, `SPIKE_WAVES`, `SPIKE_RAMP_DURATION`, `SPIKE_HOLD_DURATION` | 5, 50, 2, 1s, 30s             |
+| HTTP            | `REQUEST_TIMEOUT`                                                                    | 10s                           |
+
+`PROFILE=short` reduce las duraciones, pero no reduce los VUs ni los objetivos de tasa. `soak` limita el crecimiento del dataset reutilizando una reserva por VU; mirar memoria de Node, conexiones PostgreSQL, caché y backlog Outbox durante la prueba. La creación de reservas y su cancelación lógica siguen dejando datos; no se borran automáticamente.
+
+Para enviar también los resultados del generador a Grafana Cloud k6:
+
+```powershell
+npm run k6:parallel:cloud
+npm run k6:breakpoint:cloud
+npm run k6:soak:cloud
+```
+
+En Grafana Cloud k6, filtrar la corrida por `run_id` y comparar operaciones (`op`), fases (`stage` en breakpoint, `phase` en parallel), errores, p95/p99 y usuarios activos. La duración de lote es `m9_batch_duration`; los errores sin respuesta HTTP se cuentan en `m9_transport_errors`. En el dashboard normal de M9, mirar las métricas del servicio, M7, PostgreSQL, Redis y Outbox en el mismo intervalo. Alloy envía esas señales aun cuando k6 corre localmente; las métricas propias del generador se envían a Cloud k6 solo con los comandos `:cloud`.
 
 Si se personalizó la red o el puerto de M9, ajustar `K6_DOCKER_NETWORK` y `BASE_URL`. Desde el contenedor, `localhost` es el propio k6; normalmente se utiliza `http://m9-reservas:3000`. La alternativa `node scripts/run-k6.mjs smoke --host-k6` requiere un binario k6 instalado y utiliza localhost del host.
 
 Los datos ficticios se asocian con `RUN_ID`. DELETE es lógico y las pruebas incrementan el dataset. La limpieza administrativa se puede inspeccionar primero con `npm run k6:cleanup -- <RUN_ID>`; agregar `--confirm` elimina las reservas seleccionadas y sus eventos. Utilizarla solo en el entorno aislado de pruebas.
+
+Validación del 18/11/2026: 106 pruebas automatizadas de M9 aprobadas (incluidas 12 del plan y resumen de capacidad). Los 12 escenarios fueron inspeccionados con k6 2.3.0. Se ejecutaron `parallel`, `breakpoint` y `soak` en recorridos breves contra una API simulada; estrés, pico y concurrencia se verificaron con una iteración. La API simulada registró hasta 8 solicitudes simultáneas con 2 VUs y lotes de 4. Un caso con respuestas 503 comprobó la conservación del resultado fallido y código 99. Esto valida los scripts; no mide el límite real de M9/M5/M7 ni acredita envío a Cloud en esta revisión.
 
 ## Observabilidad con Grafana Cloud
 
@@ -389,16 +449,16 @@ El log permite abrir la traza cuando la fuente Loki tiene configurado el enlace 
 
 Importar únicamente `observability/grafana/dashboards/m9-observabilidad.json` desde Grafana → Dashboards → Import. Se muestra como **M9 Reservas · Requerimientos funcionales**, con pestañas nativas dentro del mismo dashboard:
 
-| Pestaña | Información principal |
-| --- | --- |
-| RF-9.1 · Crear reserva | Creaciones confirmadas, transición inicial a PROGRAMADA, rechazos y latencia |
-| RF-9.2 · Consultar reserva | GET individual/listado, respuestas HTTP, latencia y caché |
-| RF-9.3 · Modificar reserva | Modificaciones, rechazos, PATCH y latencia |
-| RF-9.4 · Cancelar reserva | Cancelación lógica y estado de origen de cada transición a CANCELADA |
-| RF-9.5 · Activar reserva | Scheduler, vencidas, estancadas, retrasos y resultados de activación |
-| RF-9.6 · Tarifa estimada | Llamadas y latencia de M7, degradaciones y contexto HTTP |
-| RF-9.7 · Mejor calificación | Contexto de M5 y asignaciones confirmadas; evidencia específica de priorización pendiente |
-| Diagnóstico e infraestructura | Paneles compartidos de API/runtime, PostgreSQL, Redis, Outbox, RabbitMQ, Inbox y k6 |
+| Pestaña                       | Información principal                                                                     |
+| ----------------------------- | ----------------------------------------------------------------------------------------- |
+| RF-9.1 · Crear reserva        | Creaciones confirmadas, transición inicial a PROGRAMADA, rechazos y latencia              |
+| RF-9.2 · Consultar reserva    | GET individual/listado, respuestas HTTP, latencia y caché                                 |
+| RF-9.3 · Modificar reserva    | Modificaciones, rechazos, PATCH y latencia                                                |
+| RF-9.4 · Cancelar reserva     | Cancelación lógica y estado de origen de cada transición a CANCELADA                      |
+| RF-9.5 · Activar reserva      | Scheduler, vencidas, estancadas, retrasos y resultados de activación                      |
+| RF-9.6 · Tarifa estimada      | Llamadas y latencia de M7, degradaciones y contexto HTTP                                  |
+| RF-9.7 · Mejor calificación   | Contexto de M5 y asignaciones confirmadas; evidencia específica de priorización pendiente |
+| Diagnóstico e infraestructura | Paneles compartidos de API/runtime, PostgreSQL, Redis, Outbox, RabbitMQ, Inbox y k6       |
 
 Cada RF incluye métricas, logs de contexto y trazas con filtros propios de la operación. Los 58 paneles anteriores se conservan, distribuidos entre las pestañas; las métricas compartidas quedan en diagnóstico. Elegir las fuentes del stack en las variables de métricas, logs y trazas. **Para logs utilizar la fuente de la aplicación, no `alert-state-history`.**
 
@@ -441,12 +501,12 @@ La revisión de rendimiento del 17/11/2026 agregó un índice para el orden del 
 
 Resultados locales con el perfil `standard`, hasta 50 usuarios y sin modificar los umbrales:
 
-| Ejecución | Operaciones | p95 crear | p95 consultar | p95 listar | Resultado |
-| --- | ---: | ---: | ---: | ---: | --- |
-| `revision-p95-stress-confirmacion-20261117` (6 minutos) | 24.052 | 292,48 ms | 152,14 ms | 183,72 ms | Cumple |
-| `revision-p95-spike-final-20261117` (2 min 50 s) | 8.221 | 109,76 ms | 48,05 ms | No ejercitado | Cumple |
+| Ejecución                                               | Operaciones | p95 crear | p95 consultar |    p95 listar | Resultado |
+| ------------------------------------------------------- | ----------: | --------: | ------------: | ------------: | --------- |
+| `revision-p95-stress-confirmacion-20261117` (6 minutos) |      24.052 | 292,48 ms |     152,14 ms |     183,72 ms | Cumple    |
+| `revision-p95-spike-final-20261117` (2 min 50 s)        |       8.221 | 109,76 ms |      48,05 ms | No ejercitado | Cumple    |
 
-Ambas ejecuciones terminaron con 100 % de checks, sin errores HTTP y sin degradaciones de tarifa. Estos tiempos no garantizan el rendimiento en otro equipo: un estrés previo con los mismos cambios obtuvo 854,24 ms de p95 al crear y falló ese umbral. En esta PC de 6 GB, ejecutar k6 sin compilaciones ni otras pruebas simultáneas y cerrar aplicaciones que compitan por recursos. Los escenarios de estrés y spike no validan actualizar ni cancelar.
+Ambas ejecuciones terminaron con 100 % de checks, sin errores HTTP y sin degradaciones de tarifa. Estos tiempos no garantizan el rendimiento en otro equipo: un estrés previo con los mismos cambios obtuvo 854,24 ms de p95 al crear y falló ese umbral. En esta PC de 6 GB, ejecutar k6 sin compilaciones ni otras pruebas simultáneas y cerrar aplicaciones que compitan por recursos. Esas corridas históricas no validaron actualizar ni cancelar; los escenarios actuales sí incluyen esas operaciones y requieren nuevas mediciones.
 
 - `performance/results/`: resúmenes y metadatos k6 generados localmente; Git ignora esta carpeta y el runner la crea cuando hace falta.
 - `observability/resultados/`: logs de verificación, capturas y resultados de revisión/ensayos.

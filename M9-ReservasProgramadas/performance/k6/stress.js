@@ -25,35 +25,57 @@ import {
   testTags,
 } from './lib/config.js';
 import { buildSummary } from './lib/summary.js';
+import { positiveInt } from './lib/capacity-plan.js';
 
 const STAGE = duration('1m', '30s');
-const steps = (__ENV.STRESS_STEPS || '5,10,25,50').split(',').map(Number);
+const steps = (__ENV.STRESS_STEPS || '5,10,25,50')
+  .split(',')
+  .map((value) => positiveInt(value.trim(), undefined, 'STRESS_STEPS'));
+if (__ENV.MODE && !['vus', 'arrival'].includes(__ENV.MODE))
+  throw new Error('MODE debe ser vus o arrival');
 
 const vuScenario = {
   executor: 'ramping-vus',
   startVUs: 0,
   stages: [
-    ...steps.map((target) => ({ duration: STAGE, target })),
-    { duration: STAGE, target: steps[steps.length - 1] }, // sostenimiento
-    { duration: STAGE, target: 0 }, // descenso / recuperación
+    ...steps.flatMap((target) => [
+      { duration: STAGE, target },
+      { duration: STAGE, target },
+    ]),
+    { duration: '10s', target: steps[0] },
+    { duration: STAGE, target: steps[0] }, // recuperación con tráfico real
   ],
   gracefulRampDown: '10s',
 };
 
-const rates = (__ENV.STRESS_RPS || '10,25,50,100').split(',').map(Number);
+const rates = (__ENV.STRESS_RPS || '10,25,50,100')
+  .split(',')
+  .map((value) => positiveInt(value.trim(), undefined, 'STRESS_RPS'));
 const arrivalScenario = {
   executor: 'ramping-arrival-rate',
   startRate: rates[0],
   timeUnit: '1s',
   preAllocatedVUs: num('PRE_ALLOCATED_VUS', 20),
   maxVUs: num('MAX_VUS', 100),
-  stages: [...rates.map((target) => ({ duration: STAGE, target })), { duration: STAGE, target: 0 }],
+  stages: [
+    ...rates.flatMap((target) => [
+      { duration: STAGE, target },
+      { duration: STAGE, target },
+    ]),
+    { duration: '10s', target: rates[0] },
+    { duration: STAGE, target: rates[0] },
+  ],
 };
 
 export const options = {
   scenarios: { stress: __ENV.MODE === 'arrival' ? arrivalScenario : vuScenario },
   // Los umbrales no abortan la prueba: se quiere ver el incumplimiento y la recuperación.
-  thresholds: BASE_THRESHOLDS,
+  thresholds: {
+    ...BASE_THRESHOLDS,
+    m9_pricing_degraded: ['rate<0.01'],
+    ...(__ENV.MODE === 'arrival' ? { dropped_iterations: ['count==0'] } : {}),
+  },
+  summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(95)', 'p(99)'],
   tags: testTags(__ENV.MODE === 'arrival' ? 'stress-arrival' : 'stress'),
   cloud: cloudOptions(__ENV.MODE === 'arrival' ? 'estrés por tasa' : 'estrés por VUs'),
 };

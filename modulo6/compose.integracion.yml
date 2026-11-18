@@ -8,7 +8,7 @@
 # Variables (en el .env de la raíz, nunca en Git):
 #   M7_API_KEY, QR_INTERNAL_API_KEY  secretos compartidos con M7 y M8
 #   M6_M7_URL, M6_M8_URL             URLs de M7 y M8 si cambian sus nombres de servicio
-#   M6_M3_URL                        M3 todavía no está en main: por defecto usa el simulador
+#   M6_M3_URL                        M3 real: base con /api para /conductor/:id/estado
 #   M6_*_HOST_PORT                   puertos del host (tabla acordada: 15000-15002)
 #   RABBITMQ_USER, RABBITMQ_PASSWORD los mismos que usa el RabbitMQ compartido
 
@@ -47,7 +47,7 @@ services:
       M7_API_KEY: "${M7_API_KEY:-}"
       M8_URL: "${M6_M8_URL:-http://m8-app:3000}"
       M8_QR_API_KEY: "${QR_INTERNAL_API_KEY:-}"
-      M3_URL: "${M6_M3_URL:-http://m6-sim-m3:3001}"
+      M3_URL: "${M6_M3_URL:-http://m3-conductor-api:3000/api}"
       OTEL_SERVICE_NAME: m6-viajes
       OTEL_EXPORTER_OTLP_ENDPOINT: "${M6_OTEL_ENDPOINT:-}"
     depends_on:
@@ -119,9 +119,9 @@ services:
       - reservas-network
     restart: unless-stopped
 
-  # Sólo para M3 (estado del conductor), que todavía no está en main.
-  # Cuando M3 se sume al stack, definir M6_M3_URL con su servicio y quitar este contenedor.
+  # Simulador opcional: --profile m6-simulator y M6_M3_URL=http://m6-sim-m3:3001.
   m6-sim-m3:
+    profiles: [m6-simulator]
     <<: *m6-imagen
     command: ["node", "dist/simulator/rf-6.4-6.7/m6-rf-6.4-rf6.7/server.js"]
     expose:

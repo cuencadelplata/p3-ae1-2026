@@ -46,6 +46,21 @@ async function main() {
       stdio: 'inherit',
       env: {
         ...process.env,
+        // Los includes se interpolan completos aunque solo arranquen M9/M5/M7.
+        // Las claves auxiliares son privadas, reproducibles y distintas por servicio.
+        ...Object.fromEntries(
+          [
+            'M8_POSTGRES_PASSWORD',
+            'M8_NOTIFICATIONS_DB_PASSWORD',
+            'M8_RECEIPTS_DB_PASSWORD',
+            'M8_SUPPORT_DB_PASSWORD',
+            'M8_DELIVERY_DB_PASSWORD',
+          ].map((name) => [
+            name,
+            process.env[name] || createHmac('sha256', secret).update(name).digest('hex'),
+          ]),
+        ),
+        JWT_SECRET: process.env.JWT_SECRET || secret,
         M9_DEMO_JWT_SECRET: secret,
         M9_DEMO_TOKEN: createDemoToken(secret),
         M9_DEMO_ROUTE_MODE: withM4 ? 'm4' : 'stub',

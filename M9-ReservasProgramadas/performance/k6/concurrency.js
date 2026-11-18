@@ -4,7 +4,7 @@
 // Invariantes verificadas en teardown:
 //   1) cada reserva compartida termina en PROGRAMADA o CANCELADA (nunca otro estado);
 //   2) una reserva CANCELADA no se puede volver a cancelar (409 RESERVA_NO_CANCELABLE).
-import { check } from 'k6';
+import { check, fail } from 'k6';
 import http from 'k6/http';
 
 import { conflictive, crear, parse } from './lib/api.js';
@@ -36,6 +36,7 @@ export function setup() {
     const reserva = crear(reservaPayload(800_000 + index));
     if (reserva !== null) ids.push(reserva.id);
   }
+  if (ids.length !== SHARED) fail('No se pudo crear el conjunto completo de reservas compartidas');
   return { ids };
 }
 
