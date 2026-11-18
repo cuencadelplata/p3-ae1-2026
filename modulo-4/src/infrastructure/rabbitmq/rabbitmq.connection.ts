@@ -5,84 +5,80 @@ import { Logger } from '../logger/structured.logger.js';
 export class RabbitMQConnection {
   private connection: amqp.ChannelModel | null = null;
   private channel: amqp.Channel | null = null;
-  private isConnecting = false;
+  private pendingConnection: Promise<void> | null = null;
+  private closed = false;
 
   public constructor(private readonly url: string) {}
 
   public async getChannel(): Promise<amqp.Channel | null> {
     if (this.channel) return this.channel;
-    await this.connect();
+    if (this.closed) return null;
+
+    this.pendingConnection ??= this.connect().finally(() => {
+      this.pendingConnection = null;
+    });
+    await this.pendingConnection;
     return this.channel;
   }
 
-  public async connect(): Promise<void> {
-    if (this.connection && this.channel) return;
-    if (this.isConnecting) return;
-
-    this.isConnecting = true;
+  private async connect(): Promise<void> {
+    let connection: amqp.ChannelModel | undefined;
     try {
       Logger.info(`Conectando a RabbitMQ en: ${this.url.replace(/\/\/.*@/, '//***@')}`);
-      const conn = await amqp.connect(this.url);
-      const ch = await conn.createChannel();
+      connection = await amqp.connect(this.url, { timeout: 5_000 });
+      const conn = connection;
+      let disconnected = false;
 
-      this.connection = conn;
-      this.channel = ch;
+      const invalidate = () => {
+        disconnected = true;
+        if (this.connection === conn) {
+          this.connection = null;
+          this.channel = null;
+        }
+      };
 
-      this.connection.on('error', (err: unknown) => {
-        Logger.error('Error en conexión de RabbitMQ', err);
-        this.connection = null;
-        this.channel = null;
+      conn.on('error', (error) => {
+        Logger.error('Error en conexión de RabbitMQ', error);
+        invalidate();
       });
-
-      this.connection.on('close', () => {
+      conn.once('close', () => {
         Logger.warn('Conexión con RabbitMQ cerrada');
-        this.connection = null;
-        this.channel = null;
+        invalidate();
       });
 
-      await this.setupTopology(ch);
+      const channel = await conn.createChannel();
+      channel.on('error', (error) => Logger.error('Error en canal de RabbitMQ', error));
+      channel.once('close', () => {
+        invalidate();
+        void conn.close().catch(() => undefined);
+      });
+
+      await this.setupTopology(channel);
+      if (this.closed || disconnected) {
+        await conn.close().catch(() => undefined);
+        return;
+      }
+      this.connection = conn;
+      this.channel = channel;
       Logger.info('Conexión y topología de RabbitMQ inicializadas con éxito');
     } catch (error) {
       Logger.error('Falla al conectar con RabbitMQ', error);
-      this.connection = null;
-      this.channel = null;
-    } finally {
-      this.isConnecting = false;
+      await connection?.close().catch(() => undefined);
     }
-  }
-
-  public async connectWithRetry(maxAttempts = 10, delayMs = 1_000): Promise<boolean> {
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      await this.connect();
-
-      if (await this.isConnected()) {
-        return true;
-      }
-
-      if (attempt < maxAttempts) {
-        Logger.warn(`RabbitMQ no disponible. Reintento ${attempt}/${maxAttempts} en ${delayMs} ms`);
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-    }
-
-    Logger.error(`No se pudo conectar con RabbitMQ después de ${maxAttempts} intentos`);
-    return false;
   }
 
   public async isConnected(): Promise<boolean> {
-    return Boolean(this.connection && this.channel);
+    return this.channel !== null;
   }
 
   public async close(): Promise<void> {
-    try {
-      if (this.channel) await this.channel.close();
-      if (this.connection) await this.connection.close();
-    } catch (error) {
+    this.closed = true;
+    const connection = this.connection;
+    this.connection = null;
+    this.channel = null;
+    await connection?.close().catch((error) => {
       Logger.warn('Error al cerrar conexión de RabbitMQ', { error });
-    } finally {
-      this.channel = null;
-      this.connection = null;
-    }
+    });
   }
 
   private async setupTopology(channel: amqp.Channel): Promise<void> {
