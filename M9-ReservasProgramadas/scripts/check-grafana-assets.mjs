@@ -37,6 +37,7 @@ known.add('nodejs_eventloop_utilization_ratio');
 addHistogram('v8js_gc_duration_seconds');
 
 const errors = [];
+const usedMetrics = new Set();
 const metricToken =
   /\b(m9_[a-z0-9_]+|http_server_[a-z_]+|process_[a-z_]+|v8js_[a-z_]+|nodejs_[a-z_]+)\b/g;
 const balanced = (expr) => {
@@ -53,6 +54,7 @@ const checkExpr = (where, expr) => {
   // Etiquetas (selectores {…} y cláusulas by/without (…)) no son nombres de métricas.
   const metricsOnly = expr.replace(/\{[^}]*\}/g, '').replace(/\b(by|without)\s*\([^)]*\)/g, '');
   for (const [token] of metricsOnly.matchAll(metricToken)) {
+    usedMetrics.add(token);
     if (!known.has(token)) errors.push(`${where}: métrica desconocida "${token}"`);
   }
 };
@@ -60,15 +62,48 @@ const checkExpr = (where, expr) => {
 const dashDir = path.join(root, 'observability', 'grafana', 'dashboards');
 const uids = new Set();
 let exprCount = 0;
-for (const file of readdirSync(dashDir).filter((name) => name.endsWith('.json'))) {
+const dashboardFiles = readdirSync(dashDir).filter((name) => name.endsWith('.json'));
+if (dashboardFiles.length !== 1 || dashboardFiles[0] !== 'm9-observabilidad.json') {
+  errors.push('Se espera un único archivo de dashboard: m9-observabilidad.json');
+}
+for (const file of dashboardFiles) {
   const dashboard = JSON.parse(readFileSync(path.join(dashDir, file), 'utf8'));
   if (uids.has(dashboard.uid)) errors.push(`${file}: UID duplicado ${dashboard.uid}`);
   uids.add(dashboard.uid);
   const vars = dashboard.templating.list.map((item) => item.name);
-  for (const required of ['datasource', 'loki', 'tempo', 'env', 'service']) {
+  for (const required of ['datasource', 'loki', 'tempo', 'env', 'service', 'k6_run']) {
     if (!vars.includes(required)) errors.push(`${file}: falta variable $${required}`);
   }
+  const panelIds = new Set();
+  const occupied = [];
   for (const panel of dashboard.panels) {
+    if (panelIds.has(panel.id)) errors.push(`${file}: ID de panel duplicado ${panel.id}`);
+    panelIds.add(panel.id);
+    const pos = panel.gridPos;
+    if (
+      !pos ||
+      ![pos.x, pos.y, pos.w, pos.h].every(Number.isInteger) ||
+      pos.x < 0 ||
+      pos.y < 0 ||
+      pos.w <= 0 ||
+      pos.h <= 0 ||
+      pos.x + pos.w > 24
+    ) {
+      errors.push(`${file} · ${panel.title}: posición de panel inválida`);
+    } else {
+      for (const previous of occupied) {
+        const other = previous.gridPos;
+        if (
+          pos.x < other.x + other.w &&
+          other.x < pos.x + pos.w &&
+          pos.y < other.y + other.h &&
+          other.y < pos.y + pos.h
+        ) {
+          errors.push(`${file}: ${panel.title} se superpone con ${previous.title}`);
+        }
+      }
+      occupied.push(panel);
+    }
     for (const target of panel.targets ?? []) {
       if (target.datasource?.type === 'prometheus' && typeof target.expr === 'string') {
         exprCount += 1;
@@ -76,6 +111,14 @@ for (const file of readdirSync(dashDir).filter((name) => name.endsWith('.json'))
       }
     }
   }
+}
+
+// Un histograma puede visualizarse por buckets o count/sum; no hace falta
+// graficar cada serie derivada, pero sí cubrir cada instrumento implementado.
+const family = (name) => name.replace(/_(bucket|sum|count)$/, '');
+const covered = new Set([...usedMetrics].map(family));
+for (const metric of new Set([...known].map(family))) {
+  if (!covered.has(metric)) errors.push(`El dashboard no cubre la métrica ${metric}`);
 }
 
 const alerts = readFileSync(

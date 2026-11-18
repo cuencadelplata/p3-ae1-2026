@@ -6,7 +6,7 @@ La implementación utiliza **Node.js, TypeScript, Express, Prisma, PostgreSQL, R
 
 ## Inicio rápido
 
-Requisitos: **Node.js 22.15.0 o posterior compatible**, npm y **Docker Desktop con Docker Compose 2.24 o superior**. En Windows, usar contenedores Linux y ejecutar los ejemplos en PowerShell.
+Requisitos: **Node.js 22.15.0 o posterior compatible**, npm y **Docker Desktop con Docker Compose 2.24.4 o superior**. En Windows, usar contenedores Linux y ejecutar los ejemplos en PowerShell.
 
 Desde la raíz del repositorio:
 
@@ -14,15 +14,18 @@ Desde la raíz del repositorio:
 cd M9-ReservasProgramadas
 npm ci
 npm run db:generate
-npm run local:up
+npm run integration:up
+npm run integration:check
 ```
 
-**Para esta ejecución local no hace falta crear un `.env` ni configurar tokens de Grafana.** Compose incluye los valores del entorno de demostración. La primera ejecución descarga imágenes, instala dependencias de la imagen y compila el módulo; puede demorar varios minutos.
+**Para esta demostración no hace falta crear un `.env` ni copiar tokens.** El runner genera una clave aleatoria local en `.integration/demo-auth.json`, ignorada por Git y Docker, y firma un JWT de 24 horas para el cliente `99999999-9999-4999-8999-999999999999`. Comparte esa clave con M5 al iniciar los contenedores. Repetir `integration:up` renueva el token. Es una identidad de demostración, no un inicio de sesión de M1 ni una credencial de producción.
+
+El comando usa el Compose de la raíz y el complemento de M9 para iniciar M9, M5, M7 y sus dependencias. Compila un servicio por vez y publica sus APIs en localhost. La primera ejecución puede demorar varios minutos. `local:up` inicia solo M9 y su infraestructura; por sí solo no levanta M5/M7 reales.
 
 Comprobar el arranque:
 
 ```powershell
-docker compose ps
+docker compose -f ../docker-compose.yml ps
 Invoke-RestMethod http://localhost:3000/health
 Invoke-RestMethod http://localhost:3000/readiness
 ```
@@ -40,8 +43,7 @@ Para comenzar las pruebas:
 
 ```powershell
 npm test
-npm run k6:smoke
-npm run k6:activation
+npm run integration:check
 ```
 
 Los comandos de este README se ejecutan **dentro de `M9-ReservasProgramadas`**, salvo indicación expresa. Su `package.json` y `package-lock.json` contienen los comandos y las dependencias del módulo; la raíz del repositorio no contiene un paquete npm de M9.
@@ -50,9 +52,9 @@ Si se prefiere trabajar desde la raíz, indicar el módulo en cada comando:
 
 ```powershell
 npm --prefix M9-ReservasProgramadas ci
-npm --prefix M9-ReservasProgramadas run local:up
+npm --prefix M9-ReservasProgramadas run integration:up
 npm --prefix M9-ReservasProgramadas test
-npm --prefix M9-ReservasProgramadas run k6:smoke
+npm --prefix M9-ReservasProgramadas run integration:check
 ```
 
 Usar el mismo prefijo para los demás comandos npm. Esto mantiene la instalación y ejecución dentro de M9 sin utilizar los paquetes de otros módulos. Las credenciales Cloud se configuran en `M9-ReservasProgramadas/observability/.env.grafana-cloud`.
@@ -91,26 +93,45 @@ Cliente / interfaz / k6
           |
    Servicios de M9 ----- REST -----> M7: tarifa
       |       |
-      |       +---- Redis: caché y locks
+      |       +--------- REST -----> M5: solicitud, estado y cancelación
+      |
+      +---- Redis: caché y locks
       |
       +---- Prisma / PostgreSQL: reservas, Outbox e Inbox
                          |
                   Outbox worker
                          |
-                      RabbitMQ
-                         |
-                    M5: despacho
-                         |
-                 Resultado por evento
-                         |
-                 Inbox / estado final
+                      RabbitMQ: eventos de M9
 ```
 
-El scheduler busca reservas vencidas. La transición `PROGRAMADA → ACTIVANDO` y el evento `reservation.ready-for-dispatch.v1` se persisten en una misma transacción. El worker publica los pendientes con confirmación del broker. M5 responde con `ride-request.assigned.v1` o `ride-request.failed.v1`; M9 registra el Inbox y el estado final en una transacción.
+El scheduler busca reservas vencidas. La transición `PROGRAMADA → ACTIVANDO` y el evento `reservation.ready-for-dispatch.v1` se persisten en una misma transacción. El worker publica los pendientes con confirmación del broker. Con M5 real, `DISPATCH_MODE=rest`: M9 crea la solicitud por HTTP con una Idempotency-Key durable y consulta su estado hasta confirmar asignación o fallo. Los eventos `ride-request.assigned.v1` y `ride-request.failed.v1` pertenecen al flujo alternativo del stub; M5 real no consume el contrato de eventos de M9.
 
 Las entregas repetidas pueden ocurrir: el Inbox evita repetir el efecto de un `eventId` procesado. Los fallos de publicación/consumo utilizan reintentos y DLQ. La idempotencia del despacho no implica que `POST /reservas` sea idempotente; no reintentar creaciones indiscriminadamente.
 
-Compose levanta **stubs locales de M5 y M7**, junto con M9, PostgreSQL, Redis y RabbitMQ. El stub M5 automatiza una demostración de rechazo del primer candidato y aceptación del siguiente. Es un doble de pruebas; el contrato de integración real debe acordarse con el módulo correspondiente.
+`integration:up` usa **M5 y M7 reales del repositorio**. La ruta de esta demo es fija: coordenadas de ejemplo en Corrientes, distancia de 4,5 km y duración de 14 minutos; esos datos no son una medición real ni representan cualquier dirección ingresada. M7 calcula una tarifa real sobre esa entrada de ejemplo y M5 recibe el despacho. Los stubs de los servicios M5/M7 se conservan para las pruebas automatizadas y no intervienen en este arranque.
+
+Para obtener coordenadas y distancia mediante M4 real, ejecutar `npm run integration:up -- --with-m4`. Esa opción construye e inicia también M4, utiliza `/api/v1/geocode` y `/api/v1/estimate`, y puede necesitar Internet para geocodificar. Para detener también M4, usar `npm run integration:stop -- --with-m4`. La búsqueda de conductores y las ofertas de M5 requieren M4 y la disponibilidad real de esos conductores.
+
+### Demostración integrada con un cliente
+
+En la interfaz de M9 usar el cliente `99999999-9999-4999-8999-999999999999`. El modo demo rechaza crear reservas de otros clientes y el scheduler no despacha reservas anteriores con otra identidad. No guardar JWT en el formulario, el código ni Git.
+
+`npm run integration:check` crea una reserva de demostración con horario a 30 segundos, exige la ruta configurada y una tarifa válida, compara la tarifa con M7 y comprueba en M5 la solicitud y su cliente. Si sigue `ACTIVANDO`, cancela y verifica la cancelación en ambos módulos. Conserva la reserva y un resumen sin credenciales en `.integration/check-last.json`. Una degradación de tarifa no se considera aprobada. La consulta autenticada a M5 precede a la cancelación porque la ruta actual de cancelación de M5 obtiene el cliente de `x-user-id`.
+
+La asignación requiere conductores disponibles y su aceptación real en M5; M9 no inventa una aceptación. Crear el viaje posterior requiere que M5 tenga configurados M6 y `M6_INTERNAL_API_KEY`. Si no hay conductores, `FALLIDA` puede ser el resultado de negocio correcto. Esta prueba comprueba tarifa/despacho/cancelación, no garantiza un viaje creado en M6.
+
+```powershell
+npm run integration:config
+npm run integration:up
+npm run integration:check
+npm run integration:stop
+```
+
+`integration:stop` detiene las tres APIs de la demo y conserva bases y volúmenes. Este modo configura M5 para el JWT de demo: los tokens emitidos con otra clave, como los de un M1 ajeno a esta demo, no autentican contra ese M5. No utilizarlo sobre un despliegue de producción.
+
+Los escenarios k6 existentes generan múltiples identidades y no son compatibles con esta demo de un único cliente. Los resultados históricos con stubs no acreditan el rendimiento de M5/M7 reales.
+
+Verificación del 17/11/2026: 94 pruebas de M9 y 13 de infraestructura aprobadas, más un recorrido contra M7/M5 reales que confirmó tarifa, solicitud `SEARCHING` y cancelación en ambos módulos. La Idempotency-Key se conserva al reintentar una activación después de un timeout; los logs del scheduler incluyen código y tipo de rechazo, sin credenciales. La opción de M4 real tiene pruebas del adaptador, pero su arranque completo no se validó en esta revisión.
 
 En Compose, el scheduler y el polling Outbox utilizan intervalos de 5 segundos por defecto. Fuera de Compose, el cron predeterminado del código es de 30 segundos.
 
@@ -124,11 +145,12 @@ En Compose, el scheduler y el polling Outbox utilizan intervalos de 5 segundos p
 | OpenAPI JSON                     | <http://localhost:3000/openapi.json> |
 | Liveness                         | <http://localhost:3000/health>       |
 | Readiness                        | <http://localhost:3000/readiness>    |
-| Stub M5                          | <http://localhost:3001>              |
+| M5 real                          | <http://localhost:3005>              |
+| M7 real                          | <http://localhost:17000>             |
 | RabbitMQ Management              | <http://localhost:15672>             |
 | Alloy, con observabilidad activa | <http://localhost:12345>             |
 
-PostgreSQL utiliza el puerto 5432, Redis el 6379 y AMQP el 5672. El stub M7 está disponible internamente en `http://m7-stub:3002`, sin publicar ese puerto al host. Las credenciales predeterminadas de PostgreSQL y RabbitMQ son `m9` / `m9-local`, exclusivamente para la demostración local.
+PostgreSQL utiliza el puerto 5432, Redis el 6379 y AMQP el 5672. La demostración integrada usa los nombres internos `m5-dispatch-service:3005` y `m7-api:3000`. Las credenciales predeterminadas de PostgreSQL y RabbitMQ son `m9` / `m9-local`, exclusivamente para la demostración local.
 
 ## API
 
@@ -193,7 +215,8 @@ Variables principales:
 | `M5_BASE_URL`, `M7_BASE_URL`                   | Dependencias REST                                                    |
 | `M5_SERVICE_TOKEN`                             | Autenticación de servicio hacia M5                                   |
 | `DISPATCH_MODE`                                | `events` por defecto; `rest` como alternativa de compatibilidad      |
-| `ROUTE_RESOLVER_MODE`                          | `stub` para demostración; `blocked` hasta contar con resolución real |
+| `ROUTE_RESOLVER_MODE`                          | `stub` para ruta fija de demo; `m4` para resolución real; `blocked` para deshabilitarla |
+| `M4_BASE_URL`, `M4_TIMEOUT_MS`                 | Servicio de geocodificación y estimación cuando se elige `m4` |
 | `RESERVATION_JOB_INTERVAL`                     | Expresión cron del scheduler                                         |
 | `OUTBOX_POLL_INTERVAL_MS`                      | Intervalo del worker                                                 |
 | `REDIS_CACHE_TTL_SECONDS`, `REDIS_LOCK_TTL_MS` | Duración de caché y locks                                            |
@@ -364,7 +387,9 @@ El log permite abrir la traza cuando la fuente Loki tiene configurado el enlace 
 
 ### Dashboards y alertas
 
-Importar los JSON de `observability/grafana/dashboards/` desde Grafana → Dashboards → Import. Elegir las fuentes del stack en las variables de métricas, logs y trazas. **Para logs utilizar la fuente de la aplicación, no `alert-state-history`.**
+Importar únicamente `observability/grafana/dashboards/m9-observabilidad.json` desde Grafana → Dashboards → Import. Este archivo reúne todas las secciones en **M9 Reservas · Observabilidad completa**: API/runtime, reservas, scheduler, Outbox, RabbitMQ, Inbox, Redis, PostgreSQL, dependencias REST, logs y trazas. Elegir las fuentes del stack en las variables de métricas, logs y trazas. **Para logs utilizar la fuente de la aplicación, no `alert-state-history`.**
+
+Conserva el UID `m9-ae4-general`: si ya existe el dashboard general, importar con la opción de sobrescribir para actualizarlo. Los antiguos dashboards de reservas y procesamiento que ya estén en Grafana no se eliminan al importar; pueden quitarse manualmente después de comprobar el unificado. El repositorio y el generador mantienen un solo JSON de dashboard. Las evidencias históricas se conservan.
 
 Los paneles cubren API/runtime, reservas y procesamiento asíncrono. El archivo `observability/grafana/alerts/m9-alertas.rules.yaml` contiene ocho reglas en formato Prometheus/Mimir ruler. Se importan con el mecanismo correspondiente a reglas Mimir, o se recrean como reglas Grafana-managed; no se importan como dashboards.
 

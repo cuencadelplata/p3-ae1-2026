@@ -32,6 +32,24 @@ const dispatch = (created: M5RideRequest, queried = created): DispatchClient => 
 });
 
 describe('activación programada', () => {
+  it('no despacha reservas anteriores de otro cliente con el token de demo', async () => {
+    const repository = new InMemoryReservaRepository();
+    const reserva = await crearVencida(repository);
+    const client = dispatch(ride('SEARCHING'));
+    const activation = new ActivacionReservaService(
+      repository,
+      client,
+      routeResolverDemo(),
+      undefined,
+      undefined,
+      'rest',
+      '99999999-9999-4999-8999-999999999999',
+    );
+    await activation.activar(reserva.id);
+    expect(client.createRequest).not.toHaveBeenCalled();
+    expect(await repository.obtenerPorId(reserva.id)).toMatchObject({ estado: 'PROGRAMADA' });
+  });
+
   it('mantiene ACTIVANDO al crear la solicitud y activa solo cuando M5 informa ASSIGNED', async () => {
     const repository = new InMemoryReservaRepository();
     const reserva = await crearVencida(repository);

@@ -238,8 +238,14 @@ export class PrismaReservaRepository implements ReservaRepository {
     const correlationId = this.correlationId();
     const changed = await measureDb('reservation.change_status', () =>
       this.prisma.$transaction(async (transaction) => {
-        const idempotencyKey =
-          estadoEsperado === 'PROGRAMADA' && nuevoEstado === 'ACTIVANDO' ? randomUUID() : undefined;
+        if (estadoEsperado === 'PROGRAMADA' && nuevoEstado === 'ACTIVANDO') {
+          // Un timeout puede ocultar una solicitud ya creada en M5. Inicializar
+          // una sola vez, dentro de esta transacción, y conservarla al reintentar.
+          await transaction.reservation.updateMany({
+            where: { id, status: estadoEsperado, dispatchIdempotencyKey: null },
+            data: { dispatchIdempotencyKey: randomUUID() },
+          });
+        }
         const result = await transaction.reservation.updateMany({
           where: { id, status: estadoEsperado },
           data: {
@@ -257,7 +263,6 @@ export class PrismaReservaRepository implements ReservaRepository {
                   routeSnapshot:
                     cambio.routeSnapshot === null ? Prisma.DbNull : toJson(cambio.routeSnapshot),
                 }),
-            ...(idempotencyKey === undefined ? {} : { dispatchIdempotencyKey: idempotencyKey }),
             version: { increment: 1 },
           },
         });

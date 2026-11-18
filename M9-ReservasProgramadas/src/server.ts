@@ -4,7 +4,9 @@ import { telemetry, telemetryEnabled } from './observability/register.js';
 import { createApp } from './app.js';
 import { EnvironmentTokenProvider, M5DispatchClient } from './clients/m5-dispatch.client.js';
 import { M7TariffClient } from './clients/m7-tariff.client.js';
+import { M4RouteResolver } from './clients/m4-route.resolver.js';
 import { env } from './config/env.js';
+import { ExternalServiceError } from './errors/external-service.error.js';
 import { RedisReservationCache } from './cache/redis-reservation-cache.js';
 import { RedisConnection } from './infrastructure/redis/redis.connection.js';
 import { RabbitMqConnection } from './infrastructure/rabbitmq/rabbitmq.connection.js';
@@ -71,12 +73,15 @@ const routeResolver =
         distanceKm: env.ROUTE_STUB_DISTANCE_KM,
         estimatedDurationMin: env.ROUTE_STUB_DURATION_MIN,
       })
-    : new BlockedRouteResolver();
+    : env.ROUTE_RESOLVER_MODE === 'm4'
+      ? new M4RouteResolver(env.M4_BASE_URL, env.M4_TIMEOUT_MS)
+      : new BlockedRouteResolver();
 const dispatchClient = new M5DispatchClient(
   env.M5_BASE_URL,
   env.M5_TIMEOUT_MS,
   new EnvironmentTokenProvider(env.M5_SERVICE_TOKEN),
   new PrismaDispatchOperationStore(postgres.client),
+  env.M5_DEMO_CLIENT_ID,
 );
 
 const reservaService = new ReservaService(
@@ -86,6 +91,7 @@ const reservaService = new ReservaService(
   cache,
   distributedLock,
   dispatchClient,
+  env.M5_DEMO_CLIENT_ID,
 );
 const activacionService = new ActivacionReservaService(
   repository,
@@ -94,12 +100,24 @@ const activacionService = new ActivacionReservaService(
   cache,
   distributedLock,
   env.DISPATCH_MODE,
+  env.M5_DEMO_CLIENT_ID,
 );
 const scheduler = new ReservasScheduler(
   repository,
   activacionService,
   env.RESERVATION_JOB_INTERVAL,
-  (error) => log('error', 'reservation_scheduler_error', safeErrorContext(error)),
+  (error) =>
+    log('error', 'reservation_scheduler_error', {
+      ...safeErrorContext(error),
+      ...(error instanceof ExternalServiceError
+        ? {
+            dependency: error.service,
+            code: error.code,
+            kind: error.kind,
+            statusCode: error.statusCode,
+          }
+        : {}),
+    }),
 );
 const readinessService = new ReadinessService([
   { name: 'postgres', check: () => postgres.ping() },

@@ -269,6 +269,32 @@ describe('backing services reales', () => {
     expect(outbox).toMatchObject({ status: 'PENDING', attempts: 0 });
   });
 
+  it('conserva la Idempotency-Key al reclamar de nuevo una reserva tras un timeout de M5', async () => {
+    const repository = new PrismaReservaRepository(postgres.client);
+    const created = track(await repository.crear(reservationInput()));
+    const operations = new PrismaDispatchOperationStore(postgres.client);
+    await repository.cambiarEstado(created.id, 'PROGRAMADA', 'ACTIVANDO');
+    const firstKey = await operations.getOrCreate(created.id);
+    await repository.cambiarEstado(created.id, 'ACTIVANDO', 'PROGRAMADA');
+    await repository.cambiarEstado(created.id, 'PROGRAMADA', 'ACTIVANDO');
+    expect(await operations.getOrCreate(created.id)).toBe(firstKey);
+  });
+
+  it('conserva el identificador numérico de conductor recibido por REST desde M5', async () => {
+    const repository = new PrismaReservaRepository(postgres.client);
+    const created = track(await repository.crear(reservationInput()));
+    await repository.cambiarEstado(created.id, 'PROGRAMADA', 'ACTIVANDO');
+    await repository.cambiarEstado(created.id, 'ACTIVANDO', 'ACTIVADA', {
+      assignedDriverId: '101',
+      idSolicitud: randomUUID(),
+      criterioAsignacion: 'MEJOR_VALORACION',
+    });
+    expect(await repository.obtenerPorId(created.id)).toMatchObject({
+      estado: 'ACTIVADA',
+      assignedDriverId: '101',
+    });
+  });
+
   it('procesa una asignación una sola vez con dos consumidores Prisma', async () => {
     const repository = new PrismaReservaRepository(postgres.client);
     const created = track(await repository.crear(reservationInput()));

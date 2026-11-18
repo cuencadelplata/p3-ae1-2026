@@ -1,5 +1,5 @@
 /**
- * Genera los dashboards de Grafana (JSON importables) a partir de definiciones en código:
+ * Genera un único dashboard de Grafana (JSON importable) con todas las secciones de M9:
  *   node scripts/build-grafana-dashboards.mjs
  *
  * Nombres de métricas: los de src/observability/metrics.ts traducidos por la ingesta OTLP de
@@ -202,29 +202,7 @@ const dashboard = (uid, title, description, panels, extraVars = []) => ({
   time: { from: 'now-1h', to: 'now' },
   templating: templating(extraVars),
   annotations: { list: [] },
-  links: [
-    {
-      title: 'M9 · General',
-      type: 'link',
-      url: '/d/m9-ae4-general',
-      keepTime: true,
-      includeVars: true,
-    },
-    {
-      title: 'M9 · Reservas',
-      type: 'link',
-      url: '/d/m9-ae4-reservas',
-      keepTime: true,
-      includeVars: true,
-    },
-    {
-      title: 'M9 · Procesamiento',
-      type: 'link',
-      url: '/d/m9-ae4-procesamiento',
-      keepTime: true,
-      includeVars: true,
-    },
-  ],
+  links: [],
   panels,
 });
 
@@ -578,6 +556,11 @@ const procesamiento = dashboard(
       ],
       { stack: true },
     ),
+    ts(
+      'Duración p95 de los ciclos de Outbox',
+      [[q(0.95, `m9_outbox_batch_duration_seconds_bucket{${S}}`, 'batch'), '{{batch}}']],
+      { unit: 's', w: 24 },
+    ),
     row('RabbitMQ e Inbox'),
     ts(
       'Mensajes en cola por rol (profundidad real)',
@@ -627,6 +610,16 @@ const procesamiento = dashboard(
         ],
       ],
       { w: 8, stack: true },
+    ),
+    ts(
+      'Duración p95 del procesamiento de mensajes',
+      [
+        [
+          q(0.95, `m9_messaging_process_duration_seconds_bucket{${S}}`, 'event_type, result'),
+          '{{event_type}} {{result}}',
+        ],
+      ],
+      { unit: 's', w: 24 },
     ),
     row('Caché Redis y locks'),
     ts(
@@ -710,13 +703,29 @@ const procesamiento = dashboard(
   ],
 );
 
-for (const [file, value] of [
-  ['m9-general.json', general],
-  ['m9-reservas.json', reservas],
-  ['m9-procesamiento.json', procesamiento],
-]) {
-  writeFileSync(path.join(OUT, file), `${JSON.stringify(value, null, 2)}\n`);
-  console.log(
-    `dashboard ${value.uid} -> observability/grafana/dashboards/${file} (${value.panels.length} paneles)`,
-  );
-}
+// Un solo UID y conjunto de variables. Mantener el UID del dashboard general
+// permite actualizarlo al importar sin crear otra copia en Grafana.
+let yOffset = 0;
+let panelId = 1;
+const panels = [general, reservas, procesamiento].flatMap((section) => {
+  const translated = section.panels.map((panel) => ({
+    ...panel,
+    id: panelId++,
+    gridPos: { ...panel.gridPos, y: panel.gridPos.y + yOffset },
+  }));
+  yOffset += Math.max(...section.panels.map((panel) => panel.gridPos.y + panel.gridPos.h));
+  return translated;
+});
+const unified = {
+  ...general,
+  title: 'M9 Reservas · Observabilidad completa',
+  description:
+    'Dashboard único de M9: API, runtime, dependencias, reservas, scheduler, Outbox, RabbitMQ, Inbox, Redis, PostgreSQL, logs y trazas. Filtrar por entorno, servicio y RUN_ID para correlacionar pruebas k6.',
+  version: 2,
+  panels,
+};
+const file = 'm9-observabilidad.json';
+writeFileSync(path.join(OUT, file), `${JSON.stringify(unified, null, 2)}\n`);
+console.log(
+  `dashboard ${unified.uid} -> observability/grafana/dashboards/${file} (${panels.length} paneles)`,
+);

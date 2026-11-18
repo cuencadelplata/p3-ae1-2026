@@ -79,6 +79,11 @@ export class ReservasScheduler {
         );
       }),
     );
+    // Un fallo de una activación (M5 caído, 401, timeout) no corta el lote, pero debe quedar
+    // registrado: la reserva vuelve a PROGRAMADA y se reintenta en la próxima ejecución.
+    for (const result of resultados) {
+      if (result.status === 'rejected') this.onError(result.reason);
+    }
     const activadas = resultados.filter(
       (result) => result.status === 'fulfilled' && result.value.activada,
     ).length;

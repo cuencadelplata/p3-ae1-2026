@@ -77,6 +77,7 @@ export class ReservaService {
     private readonly cache: ReservationCache = NOOP_RESERVATION_CACHE,
     private readonly distributedLock?: DistributedLock,
     private readonly dispatchClient?: DispatchClient,
+    private readonly demoClientId?: string,
   ) {}
 
   public async crear(input: CrearReserva): Promise<Reserva> {
@@ -84,6 +85,13 @@ export class ReservaService {
   }
 
   private async crearMedida(input: CrearReserva): Promise<Reserva> {
+    if (this.demoClientId !== undefined && input.clienteId !== this.demoClientId) {
+      throw new AppError(
+        403,
+        'CLIENTE_DEMO_REQUERIDO',
+        `Esta demostración admite únicamente el cliente ${this.demoClientId}.`,
+      );
+    }
     this.validarFechaFutura(input.fechaHoraProgramada);
     this.validarOrigenDestino(input.origen, input.destino);
 
