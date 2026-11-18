@@ -18,6 +18,11 @@ const NOMBRES: Record<string, string> = {
   MOCK: 'Proveedor de prueba',
 }
 
+const LOGOS: Record<string, string> = {
+  GOOGLE: '/logos/google.jpg',
+  AUTH0: '/logos/auth0.png',
+}
+
 // Google y Auth0 vuelven a la raíz de la interfaz (http://localhost:5173/).
 // Esa dirección tiene que estar registrada en cada proveedor como URL de retorno permitida.
 // El proveedor elegido se guarda antes de salir, porque la URL de retorno no lo trae.
@@ -112,13 +117,26 @@ export default function OAuth2Login({ onLoginSuccess }: OAuth2LoginProps) {
             type="button"
             onClick={() => ingresar(p.provider)}
             disabled={!p.configured || ingresando !== ''}
-            className="btn-secondary flex items-center justify-center gap-2"
+            className="btn-secondary relative flex items-center justify-center gap-2 px-4 py-3.5"
             title={p.configured ? p.description : 'No configurado en este entorno'}
           >
-            <LogIn className="w-4 h-4" />
-            {ingresando === p.provider
-              ? 'Conectando…'
-              : `${NOMBRES[p.provider] ?? p.provider}${p.configured ? '' : ' (no configurado)'}`}
+            <LogIn className="w-4 h-4 text-[var(--text-dim)]" />
+            <span className="font-medium text-sm">
+              {ingresando === p.provider
+                ? 'Conectando…'
+                : `${NOMBRES[p.provider] ?? p.provider}${p.configured ? '' : ' (no configurado)'}`}
+            </span>
+
+            {/* Logo a la derecha */}
+            {LOGOS[p.provider] && (
+              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center bg-white px-2 py-0.5 rounded-md shadow-sm">
+                <img
+                  src={LOGOS[p.provider]}
+                  alt={NOMBRES[p.provider]}
+                  className="h-4.5 w-auto max-w-[65px] object-contain"
+                />
+              </span>
+            )}
           </button>
         ))}
       </div>
