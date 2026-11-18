@@ -45,6 +45,7 @@ npm run integration:check
 
 ## 4. Grafana Cloud
 
+Crear una cuenta en grafana, extraer los datos Grafana Cloud y K6.
 Una sola vez, crear o editar **`observability/.env.grafana-cloud`**. Si ya está configurado, omitir este paso:
 
 ```powershell
