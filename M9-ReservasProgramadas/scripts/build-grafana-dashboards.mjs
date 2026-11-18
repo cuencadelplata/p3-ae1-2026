@@ -9,6 +9,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { buildFunctionalDashboard } from './grafana-rf-dashboard.mjs';
 
 const OUT = path.resolve(import.meta.dirname, '..', 'observability', 'grafana', 'dashboards');
 mkdirSync(OUT, { recursive: true });
@@ -703,29 +704,19 @@ const procesamiento = dashboard(
   ],
 );
 
-// Un solo UID y conjunto de variables. Mantener el UID del dashboard general
-// permite actualizarlo al importar sin crear otra copia en Grafana.
-let yOffset = 0;
-let panelId = 1;
-const panels = [general, reservas, procesamiento].flatMap((section) => {
-  const translated = section.panels.map((panel) => ({
-    ...panel,
-    id: panelId++,
-    gridPos: { ...panel.gridPos, y: panel.gridPos.y + yOffset },
-  }));
-  yOffset += Math.max(...section.panels.map((panel) => panel.gridPos.y + panel.gridPos.h));
-  return translated;
+const unified = buildFunctionalDashboard({
+  sections: [general, reservas, procesamiento],
+  variables: general.templating.list,
+  stat,
+  ts,
+  logs,
+  traces,
+  q,
+  S,
+  BIZ,
 });
-const unified = {
-  ...general,
-  title: 'M9 Reservas · Observabilidad completa',
-  description:
-    'Dashboard único de M9: API, runtime, dependencias, reservas, scheduler, Outbox, RabbitMQ, Inbox, Redis, PostgreSQL, logs y trazas. Filtrar por entorno, servicio y RUN_ID para correlacionar pruebas k6.',
-  version: 2,
-  panels,
-};
 const file = 'm9-observabilidad.json';
 writeFileSync(path.join(OUT, file), `${JSON.stringify(unified, null, 2)}\n`);
 console.log(
-  `dashboard ${unified.uid} -> observability/grafana/dashboards/${file} (${panels.length} paneles)`,
+  `dashboard ${unified.metadata.name} -> observability/grafana/dashboards/${file} (${unified.spec.layout.spec.tabs.length} pestañas, ${Object.keys(unified.spec.elements).length} paneles)`,
 );

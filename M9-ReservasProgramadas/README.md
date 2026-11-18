@@ -387,9 +387,26 @@ El log permite abrir la traza cuando la fuente Loki tiene configurado el enlace 
 
 ### Dashboards y alertas
 
-Importar únicamente `observability/grafana/dashboards/m9-observabilidad.json` desde Grafana → Dashboards → Import. Este archivo reúne todas las secciones en **M9 Reservas · Observabilidad completa**: API/runtime, reservas, scheduler, Outbox, RabbitMQ, Inbox, Redis, PostgreSQL, dependencias REST, logs y trazas. Elegir las fuentes del stack en las variables de métricas, logs y trazas. **Para logs utilizar la fuente de la aplicación, no `alert-state-history`.**
+Importar únicamente `observability/grafana/dashboards/m9-observabilidad.json` desde Grafana → Dashboards → Import. Se muestra como **M9 Reservas · Requerimientos funcionales**, con pestañas nativas dentro del mismo dashboard:
 
-Conserva el UID `m9-ae4-general`: si ya existe el dashboard general, importar con la opción de sobrescribir para actualizarlo. Los antiguos dashboards de reservas y procesamiento que ya estén en Grafana no se eliminan al importar; pueden quitarse manualmente después de comprobar el unificado. El repositorio y el generador mantienen un solo JSON de dashboard. Las evidencias históricas se conservan.
+| Pestaña | Información principal |
+| --- | --- |
+| RF-9.1 · Crear reserva | Creaciones confirmadas, transición inicial a PROGRAMADA, rechazos y latencia |
+| RF-9.2 · Consultar reserva | GET individual/listado, respuestas HTTP, latencia y caché |
+| RF-9.3 · Modificar reserva | Modificaciones, rechazos, PATCH y latencia |
+| RF-9.4 · Cancelar reserva | Cancelación lógica y estado de origen de cada transición a CANCELADA |
+| RF-9.5 · Activar reserva | Scheduler, vencidas, estancadas, retrasos y resultados de activación |
+| RF-9.6 · Tarifa estimada | Llamadas y latencia de M7, degradaciones y contexto HTTP |
+| RF-9.7 · Mejor calificación | Contexto de M5 y asignaciones confirmadas; evidencia específica de priorización pendiente |
+| Diagnóstico e infraestructura | Paneles compartidos de API/runtime, PostgreSQL, Redis, Outbox, RabbitMQ, Inbox y k6 |
+
+Cada RF incluye métricas, logs de contexto y trazas con filtros propios de la operación. Los 58 paneles anteriores se conservan, distribuidos entre las pestañas; las métricas compartidas quedan en diagnóstico. Elegir las fuentes del stack en las variables de métricas, logs y trazas. **Para logs utilizar la fuente de la aplicación, no `alert-state-history`.**
+
+El archivo utiliza el recurso `dashboard.grafana.app/v2` con `TabsLayout`: requiere una instancia compatible con dashboards dinámicos. No convertirlo al modelo Classic, que no representa estas pestañas. Referencia: [agrupaciones y pestañas de Grafana](https://grafana.com/docs/grafana/latest/visualizations/dashboards/build-dashboards/create-dashboard/dashboard-groupings/).
+
+Las notas dentro de cada RF separan los datos observados del cumplimiento funcional. En particular: GET exitosos no certifican propiedad de datos (RF-9.2); la edición de conductor no está en el DTO actual (RF-9.3); el código admite ciertas cancelaciones en ACTIVANDO (diferencia con RF-9.4); el cuerpo REST hacia M5 no envía criterio de asignación y M9 no mide puntuaciones ni la secuencia de ofertas (RF-9.7). El tablero no cambia estas reglas ni inventa indicadores para darlas por cumplidas. Los logs HTTP de RF-9.6 son contexto, no prueba directa de una consulta a M7.
+
+Conserva el identificador `m9-ae4-general` en `metadata.name`: si ya existe el dashboard general, importar con la opción de sobrescribir para actualizarlo. Los antiguos dashboards de reservas y procesamiento que ya estén en Grafana no se eliminan al importar; pueden quitarse manualmente después de comprobar el unificado. El repositorio y el generador mantienen un solo JSON de dashboard. Las evidencias históricas se conservan.
 
 Los paneles cubren API/runtime, reservas y procesamiento asíncrono. El archivo `observability/grafana/alerts/m9-alertas.rules.yaml` contiene ocho reglas en formato Prometheus/Mimir ruler. Se importan con el mecanismo correspondiente a reglas Mimir, o se recrean como reglas Grafana-managed; no se importan como dashboards.
 
@@ -399,7 +416,7 @@ Las reglas cubren 5xx, p95, dependencia caída, telemetría ausente, scheduler s
 npm run obs:dashboards:check
 ```
 
-El checker valida estructura y nombres de métricas; la comprobación final de paneles y alertas requiere datos reales en Grafana.
+El checker valida las siete pestañas RF, sus bloques de métricas/logs/trazas, las referencias de paneles, su distribución y la cobertura del catálogo de métricas. La comprobación final de consultas, presentación y alertas requiere importar el recurso en Grafana y disponer de datos reales; la validación local no implica una publicación en Cloud.
 
 ### Enviar resultados k6 a Cloud
 
