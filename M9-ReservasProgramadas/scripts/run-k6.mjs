@@ -18,10 +18,34 @@ import os from 'node:os';
 import path from 'node:path';
 
 const K6_IMAGE = 'grafana/k6:2.3.0';
-const NETWORK = process.env.K6_DOCKER_NETWORK ?? 'm9-reservas-programadas_reservas-network';
-const SCENARIOS = ['smoke', 'load', 'stress', 'spike', 'cache', 'concurrency', 'activation'];
+const DEMO_CLIENT_ID = '99999999-9999-4999-8999-999999999999';
+
+const detectActiveNetwork = () => {
+  if (process.env.K6_DOCKER_NETWORK) return process.env.K6_DOCKER_NETWORK;
+  const probe = spawnSync(
+    'docker',
+    ['ps', '--filter', 'label=com.docker.compose.service=m9-reservas', '--format', '{{.Networks}}'],
+    { encoding: 'utf8' },
+  );
+  const net = (probe.stdout || '').trim().split(/\r?\n/)[0]?.split(',')[0]?.trim();
+  return net || 'm9-reservas-programadas_reservas-network';
+};
+
+const NETWORK = detectActiveNetwork();
+const SCENARIOS = [
+  'smoke',
+  'load',
+  'stress',
+  'spike',
+  'cache',
+  'concurrency',
+  'activation',
+  'dispatch',
+  'repricing',
+];
 const PASSTHROUGH = [
   'PROFILE',
+  'CLIENT_ID',
   'VUS',
   'DURATION',
   'MODE',
@@ -78,6 +102,9 @@ const readCloudEnv = () => {
 };
 
 const scriptEnv = { BASE_URL: baseUrl, RUN_ID: runId, SCENARIO_NAME: scenario };
+if (NETWORK === 'movilidad-urbana_reservas-network' || flags.includes('--integration')) {
+  scriptEnv.CLIENT_ID = DEMO_CLIENT_ID;
+}
 for (const name of PASSTHROUGH)
   if (process.env[name] !== undefined) scriptEnv[name] = process.env[name];
 const cloudEnv = cloud ? readCloudEnv() : {};

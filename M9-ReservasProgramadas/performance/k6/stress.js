@@ -6,11 +6,20 @@
 //                       (iteraciones que el generador no pudo lanzar: límite del generador).
 import { sleep } from 'k6';
 
-import { crear, listar, obtener } from './lib/api.js';
+import {
+  actualizar,
+  cancelar,
+  conflictive,
+  crear,
+  listar,
+  obtener,
+  verificarIdempotenciaCancelacion,
+} from './lib/api.js';
 import {
   BASE_THRESHOLDS,
   cloudOptions,
   duration,
+  futureIso,
   num,
   reservaPayload,
   testTags,
@@ -49,19 +58,46 @@ export const options = {
   cloud: cloudOptions(__ENV.MODE === 'arrival' ? 'estrés por tasa' : 'estrés por VUs'),
 };
 
+export function setup() {
+  const sharedIds = [];
+  for (let index = 0; index < 4; index += 1) {
+    const reserva = crear(reservaPayload(600_000 + index));
+    if (reserva !== null) sharedIds.push(reserva.id);
+  }
+  return { sharedIds };
+}
+
 const own = [];
 let created = 0;
 
-export default function () {
-  // Mezcla simplificada 70/30: lecturas dominantes, creación como escritura principal.
-  const slot = (__ITER + __VU) % 10;
+export default function (data) {
+  const sharedIds = data?.sharedIds ?? [];
+  const slot = (__ITER + __VU) % 12;
   if (slot < 3 || own.length === 0) {
     const reserva = crear(reservaPayload(__VU * 100_000 + created++));
     if (reserva !== null) own.push(reserva.id);
-  } else if (slot < 9) {
+  } else if (slot < 7) {
     obtener(own[__ITER % own.length]);
+  } else if (slot === 7) {
+    listar((__ITER % 4) + 1, 20);
+  } else if (slot === 8) {
+    const id = own[__ITER % own.length];
+    actualizar(id, {
+      destino: `Destino stress ${(__ITER + __VU) % 50}`,
+      vehiculo: __ITER % 2 === 0 ? 'MOTO' : 'AUTO',
+    });
+  } else if (slot === 9 && sharedIds.length > 0) {
+    const sharedId = sharedIds[(__ITER + __VU) % sharedIds.length];
+    conflictive('PATCH', sharedId, {
+      fechaHoraProgramada: futureIso(2 * 24 * 60 + ((__ITER + __VU) % 300)),
+    });
+  } else if (slot === 10 && own.length > 1) {
+    const id = own.pop();
+    if (id !== undefined && cancelar(id) !== null && __ITER % 3 === 0) {
+      verificarIdempotenciaCancelacion(id);
+    }
   } else {
-    listar();
+    obtener(own[__ITER % own.length]);
   }
   if (__ENV.MODE !== 'arrival') sleep(num('THINK_TIME_SECONDS', 0.3));
 }

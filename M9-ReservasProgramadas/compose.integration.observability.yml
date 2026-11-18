@@ -1,0 +1,40 @@
+# Complemento de observabilidad para la demostración integrada (../docker-compose.yml + compose.integration.yml).
+# Activa Grafana Alloy y la exportación OTLP desde M9 hacia Grafana Cloud durante la integración con M5 y M7 reales.
+# Requiere observability/.env.grafana-cloud (copiar desde grafana-cloud.env.example).
+
+services:
+  alloy:
+    image: grafana/alloy:v1.21.3
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    env_file:
+      - path: ./M9-ReservasProgramadas/observability/.env.grafana-cloud
+        required: true
+    volumes:
+      - ./M9-ReservasProgramadas/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data
+    expose:
+      - '4318'
+    ports:
+      - '127.0.0.1:${ALLOY_UI_PORT:-12345}:12345'
+    networks:
+      - reservas-network
+    restart: unless-stopped
+
+  m9-reservas:
+    environment:
+      OTEL_ENABLED: 'true'
+      OTEL_SERVICE_NAME: m9-reservas
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
+      DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:-local-docker}
+      OTEL_TRACES_SAMPLER_RATIO: ${OTEL_TRACES_SAMPLER_RATIO:-1}
+      OTEL_METRIC_EXPORT_INTERVAL_MS: ${OTEL_METRIC_EXPORT_INTERVAL_MS:-15000}
+    depends_on:
+      alloy:
+        condition: service_started
+
+volumes:
+  alloy-data:

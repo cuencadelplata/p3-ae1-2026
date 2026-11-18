@@ -1,11 +1,16 @@
-// Carga de referencia: mezcla reproducible 70 % lecturas / 30 % escrituras.
-//   GET /reservas/:id 55 % · GET /reservas 15 % · POST 15 % · PATCH 10 % · DELETE 5 %
-// Cada VU trabaja con SUS propias reservas: las escrituras no chocan artificialmente.
-// GET /reservas es paginado (página 1, 20 por defecto); CANCELADA persiste, así que la tabla
-// crece durante la prueba. Su latencia se informa por separado (op:list).
+// Carga de referencia: mezcla reproducible de lecturas, escrituras, recotización M7,
+// paginación, contención sobre reservas compartidas y verificación de idempotencia.
 import { sleep } from 'k6';
 
-import { actualizar, cancelar, crear, listar, obtener } from './lib/api.js';
+import {
+  actualizar,
+  cancelar,
+  conflictive,
+  crear,
+  listar,
+  obtener,
+  verificarIdempotenciaCancelacion,
+} from './lib/api.js';
 import {
   BASE_THRESHOLDS,
   cloudOptions,
@@ -29,17 +34,20 @@ const MIX = [
   'get',
   'get',
   'get',
-  'get',
   'list',
   'list',
   'list',
   'create',
   'create',
   'create',
-  'update',
-  'update',
+  'update_schedule',
+  'update_reprice',
+  'shared_lock',
   'cancel',
 ];
+
+const SHARED_POOL = num('SHARED_RESERVATIONS', 5);
+const PAGE_SIZES = [10, 20, 50];
 
 export const options = {
   scenarios: {
@@ -54,6 +62,15 @@ export const options = {
   cloud: cloudOptions('carga de referencia'),
 };
 
+export function setup() {
+  const sharedIds = [];
+  for (let index = 0; index < SHARED_POOL; index += 1) {
+    const reserva = crear(reservaPayload(500_000 + index));
+    if (reserva !== null) sharedIds.push(reserva.id);
+  }
+  return { sharedIds };
+}
+
 const own = []; // reservas PROGRAMADA creadas por este VU
 let created = 0;
 
@@ -64,23 +81,49 @@ const ensureOwn = () => {
   return reserva?.id ?? null;
 };
 
-export default function () {
+export default function (data) {
   const op = MIX[(__ITER * 7 + __VU) % MIX.length];
+  const sharedIds = data?.sharedIds ?? [];
+
   if (op === 'create') {
     const reserva = crear(reservaPayload(__VU * 100_000 + created++));
     if (reserva !== null) own.push(reserva.id);
   } else if (op === 'list') {
-    listar();
+    const page = (__ITER % 5) + 1;
+    const pageSize = PAGE_SIZES[__ITER % PAGE_SIZES.length];
+    listar(page, pageSize);
   } else if (op === 'get') {
-    const id = ensureOwn();
-    if (id !== null) obtener(own[__ITER % own.length] ?? id);
-  } else if (op === 'update') {
+    if (sharedIds.length > 0 && __ITER % 3 === 0) {
+      obtener(sharedIds[(__ITER + __VU) % sharedIds.length]);
+    } else {
+      const id = ensureOwn();
+      if (id !== null) obtener(own[__ITER % own.length] ?? id);
+    }
+  } else if (op === 'update_schedule') {
     const id = ensureOwn();
     if (id !== null)
       actualizar(id, { fechaHoraProgramada: futureIso(2 * 24 * 60 + (__ITER % 600)) });
+  } else if (op === 'update_reprice') {
+    const id = ensureOwn();
+    if (id !== null) {
+      actualizar(id, {
+        destino: `Destino carga ${(__ITER + __VU) % 70}`,
+        vehiculo: __ITER % 2 === 0 ? 'MOTO' : 'AUTO',
+      });
+    }
+  } else if (op === 'shared_lock') {
+    if (sharedIds.length > 0) {
+      const targetId = sharedIds[(__ITER + __VU) % sharedIds.length];
+      conflictive('PATCH', targetId, {
+        fechaHoraProgramada: futureIso(2 * 24 * 60 + ((__ITER + __VU) % 400)),
+      });
+    }
   } else {
     const id = ensureOwn();
-    if (id !== null && cancelar(id) !== null) own.splice(own.indexOf(id), 1);
+    if (id !== null && cancelar(id) !== null) {
+      own.splice(own.indexOf(id), 1);
+      if (__ITER % 2 === 0) verificarIdempotenciaCancelacion(id);
+    }
   }
   sleep(num('THINK_TIME_SECONDS', 0.5));
 }

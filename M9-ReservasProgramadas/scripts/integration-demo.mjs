@@ -17,7 +17,9 @@ export const createDemoToken = (secret, now = Math.floor(Date.now() / 1000)) => 
 async function main() {
   const action = process.argv[2];
   const withM4 = process.argv.includes('--with-m4');
-  const targets = withM4 ? [...services, 'm4-api'] : services;
+  const withObs = process.argv.includes('--with-obs');
+  const buildTargets = withM4 ? [...services, 'm4-api'] : services;
+  const targets = withObs ? [...buildTargets, 'alloy'] : buildTargets;
   if (!['up', 'stop', 'config'].includes(action)) throw new Error('Usar up, stop o config.');
   let secret;
   try {
@@ -30,7 +32,14 @@ async function main() {
     secret = randomBytes(48).toString('hex');
     await writeFile(authFile, JSON.stringify({ secret }), { flag: 'wx', mode: 0o600 });
   }
-  const args = ['compose', '-f', '../docker-compose.yml', '-f', 'compose.integration.yml'];
+  const args = [
+    'compose',
+    '-f',
+    '../docker-compose.yml',
+    '-f',
+    'compose.integration.yml',
+    ...(withObs ? ['-f', 'compose.integration.observability.yml'] : []),
+  ];
   const run = async (command) => {
     const child = spawn('docker', [...args, '--parallel', '1', ...command], {
       cwd: fileURLToPath(new URL('../', import.meta.url)),
@@ -53,9 +62,10 @@ async function main() {
   if (action === 'config') await run(['config', '--quiet']);
   if (action === 'up') {
     // Un único servicio por build evita que Bake compile varios módulos a la vez.
-    for (const service of targets) await run(['build', service]);
+    for (const service of buildTargets) await run(['build', service]);
     await run(['up', '--no-build', '-d', ...targets]);
     console.log(withM4 ? 'Ruta obtenida de M4.' : 'Ruta fija de demostración; M4 no se inicia.');
+    if (withObs) console.log('Grafana Alloy activo (UI en http://localhost:12345, OTLP en :4318).');
     console.log(`Integración iniciada. Cliente de demostración: ${DEMO_CLIENT_ID}`);
     console.log('Ejecutar npm run integration:check para probar M9 → M7 y M9 → M5.');
   }

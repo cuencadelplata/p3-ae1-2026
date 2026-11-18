@@ -215,8 +215,8 @@ Variables principales:
 | `M5_BASE_URL`, `M7_BASE_URL`                   | Dependencias REST                                                    |
 | `M5_SERVICE_TOKEN`                             | Autenticación de servicio hacia M5                                   |
 | `DISPATCH_MODE`                                | `events` por defecto; `rest` como alternativa de compatibilidad      |
-| `ROUTE_RESOLVER_MODE`                          | `stub` para ruta fija de demo; `m4` para resolución real; `blocked` para deshabilitarla |
-| `M4_BASE_URL`, `M4_TIMEOUT_MS`                 | Servicio de geocodificación y estimación cuando se elige `m4` |
+| `ROUTE_RESOLVER_MODE`                          | `stub` para ruta fija de demo; `m4` para resolución real; `blocked`  |
+| `M4_BASE_URL`, `M4_TIMEOUT_MS`                 | Servicio de geocodificación y estimación cuando se elige `m4`        |
 | `RESERVATION_JOB_INTERVAL`                     | Expresión cron del scheduler                                         |
 | `OUTBOX_POLL_INTERVAL_MS`                      | Intervalo del worker                                                 |
 | `REDIS_CACHE_TTL_SECONDS`, `REDIS_LOCK_TTL_MS` | Duración de caché y locks                                            |

@@ -1,8 +1,23 @@
 // Pico: carga base, aumento brusco y breve (SPIKE_VUS), vuelta a la base y recuperación.
 import { sleep } from 'k6';
 
-import { crear, obtener } from './lib/api.js';
-import { BASE_THRESHOLDS, cloudOptions, num, reservaPayload, testTags } from './lib/config.js';
+import {
+  actualizar,
+  cancelar,
+  conflictive,
+  crear,
+  listar,
+  obtener,
+  verificarIdempotenciaCancelacion,
+} from './lib/api.js';
+import {
+  BASE_THRESHOLDS,
+  cloudOptions,
+  futureIso,
+  num,
+  reservaPayload,
+  testTags,
+} from './lib/config.js';
 import { buildSummary } from './lib/summary.js';
 
 const BASE = num('BASE_VUS', 5);
@@ -28,15 +43,42 @@ export const options = {
   cloud: cloudOptions('pico'),
 };
 
+export function setup() {
+  const sharedIds = [];
+  for (let index = 0; index < 3; index += 1) {
+    const reserva = crear(reservaPayload(650_000 + index));
+    if (reserva !== null) sharedIds.push(reserva.id);
+  }
+  return { sharedIds };
+}
+
 const own = [];
 let created = 0;
 
-export default function () {
-  if (own.length === 0 || __ITER % 4 === 0) {
+export default function (data) {
+  const sharedIds = data?.sharedIds ?? [];
+  const step = (__ITER + __VU) % 8;
+  if (own.length === 0 || step < 2) {
     const reserva = crear(reservaPayload(__VU * 100_000 + created++));
     if (reserva !== null) own.push(reserva.id);
-  } else {
+  } else if (step < 5) {
     obtener(own[__ITER % own.length]);
+  } else if (step === 5) {
+    actualizar(own[__ITER % own.length], {
+      vehiculo: __ITER % 2 === 0 ? 'MOTO' : 'AUTO',
+      fechaHoraProgramada: futureIso(2 * 24 * 60 + (__ITER % 240)),
+    });
+  } else if (step === 6 && sharedIds.length > 0) {
+    conflictive('PATCH', sharedIds[(__ITER + __VU) % sharedIds.length], {
+      fechaHoraProgramada: futureIso(2 * 24 * 60 + ((__ITER + __VU) % 240)),
+    });
+  } else if (own.length > 1) {
+    const id = own.pop();
+    if (id !== undefined && cancelar(id) !== null && __ITER % 4 === 0) {
+      verificarIdempotenciaCancelacion(id);
+    }
+  } else {
+    listar(1, 20);
   }
   sleep(num('THINK_TIME_SECONDS', 0.3));
 }
