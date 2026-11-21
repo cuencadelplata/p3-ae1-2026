@@ -1,6 +1,6 @@
-# M5 (Solicitud y Despacho) dentro del stack común `movilidad-urbana`.
+# M5 (Solicitud y Despacho) dentro del stack común movilidad-urbana.
 #
-# Lo incluye el docker-compose.yml de la raíz. Usa la red `reservas-network`
+# Lo incluye el docker-compose.yml de la raíz. Usa la red reservas-network
 # y el RabbitMQ y Redis compartidos que define M9. Para desarrollo y tests
 # aislados se sigue usando modulo-5/docker-compose.yml.
 #
@@ -20,6 +20,9 @@ services:
       dockerfile: Dockerfile
     ports:
       - "127.0.0.1:${M5_HOST_PORT:-3005}:3005"
+    env_file:
+      - path: .env
+        required: false
     environment:
       NODE_ENV: production
       PORT: "3005"
@@ -39,7 +42,7 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3005/health"]
+      test: [ "CMD", "wget", "-qO-", "http://localhost:3005/health" ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -58,7 +61,7 @@ services:
     volumes:
       - m5-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d dispatch_db"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d dispatch_db" ]
       interval: 5s
       timeout: 5s
       retries: 10
