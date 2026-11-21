@@ -14,10 +14,10 @@
 
 x-m2-app: &m2-app
   image: ${M2_API_IMAGE:-leangau/integration-m2-ae2:api}
-  # Se construye siempre con el código de esta carpeta: la imagen publicada puede estar
-  # atrasada (por ejemplo, sin las métricas de RF-2.2). build se resuelve relativo a m2/.
+  # Por defecto se usa la imagen publicada en Docker Hub (la publica el CI en cada merge a main,
+  # ver .github/workflows/ci-grupo05.yml). Para traer la última: docker compose pull.
+  # Para probar con el código local: docker compose up --build (build es relativo a m2/).
   build: .
-  pull_policy: build
   restart: unless-stopped
 
 x-m2-env: &m2-env
