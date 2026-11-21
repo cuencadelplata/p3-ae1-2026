@@ -49,11 +49,11 @@ services:
       DB_USER: postgres
       DB_PASSWORD: ${M2_POSTGRES_PASSWORD:-postgres}
       DB_NAME: profiles
-      # M1 todavía no está en el stack común y Soporte (M8) no expone penalizaciones:
-      # se usan los stubs internos de M2. Cuando M1 entre al stack:
-      #   M2_M1_SERVICE_URL=http://m1-identidad-acceso:3001
+      # M1 real (servicio m1-identidad-acceso de modulo-1-identidad-acceso/compose.integracion.yml).
+      M1_SERVICE_URL: ${M2_M1_SERVICE_URL:-http://m1-identidad-acceso:3001}
+      # Soporte todavía no expone penalizaciones por usuario: se usa el stub interno de M2.
+      # STUBS_ENABLED solo queda por ese stub (el de M1 sigue montado pero M2 no lo usa).
       STUBS_ENABLED: ${M2_STUBS_ENABLED:-true}
-      M1_SERVICE_URL: ${M2_M1_SERVICE_URL:-http://localhost:3000/__stubs/m1}
       SOPORTE_SERVICE_URL: ${M2_SOPORTE_SERVICE_URL:-http://localhost:3000/__stubs/soporte}
       # M6 real (servicio m6-viajes de modulo6/compose.integracion.yml)
       M6_SERVICE_URL: ${M2_M6_SERVICE_URL:-http://m6-viajes:3000}
