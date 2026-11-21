@@ -73,7 +73,7 @@ HTTP. No comparten memoria, igual que dos contenedores.
 
 ## 4. Cómo repetir la comprobación actual
 
-Desde `modulo-8`, ejecutar `pnpm run test:receipts`. La suite de concurrencia
+Desde `modulo8`, ejecutar `pnpm run test:receipts`. La suite de concurrencia
 levanta dos procesos Node independientes con sus propias conexiones y verifica
 que los pedidos simultáneos dejan un solo comprobante y un solo evento. Para
 comprobar además la app integrada y RabbitMQ, ejecutar `pnpm run test:e2e`.

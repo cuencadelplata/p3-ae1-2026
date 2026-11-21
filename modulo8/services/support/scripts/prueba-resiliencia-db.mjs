@@ -6,7 +6,7 @@
  * en lugar de colgarse y que, cuando la base vuelve, todo se recupera sin
  * reiniciar el servicio y sin tickets ni historial a medias.
  *
- * Requiere el stack levantado (docker compose up -d en modulo-8) y el CLI de
+ * Requiere el stack levantado (docker compose up -d en modulo8) y el CLI de
  * Docker. PostgreSQL se vuelve a iniciar siempre al terminar, aunque algo falle.
  *
  *   pnpm --filter m8-soporte run prueba:resiliencia:db

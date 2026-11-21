@@ -5,7 +5,7 @@
  * en proceso y verifica que Support sigue vivo, que la API de tickets responde
  * y que el consumer legacy vuelve a conectarse solo cuando el broker regresa.
  *
- * Requiere el stack levantado (docker compose up -d en modulo-8) y el CLI de
+ * Requiere el stack levantado (docker compose up -d en modulo8) y el CLI de
  * Docker. RabbitMQ se vuelve a iniciar siempre al terminar, aunque algo falle.
  *
  *   pnpm --filter m8-soporte run prueba:resiliencia

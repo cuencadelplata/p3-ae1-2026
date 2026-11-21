@@ -165,7 +165,7 @@ Las respuestas de error siguen `{ "error": "...", "message": "..." }`; los error
 
 ### Salud y métricas
 
-`GET /health` es público y expone PostgreSQL, Redis y las dependencias registradas, además de los circuit breakers. PostgreSQL es crítico: su caída devuelve `503 DEGRADED`. Redis es no crítico: su caída devuelve `200 DEGRADED`. El registro permite agregar los módulos externos como dependencias no críticas. `GET /metrics` es público y devuelve métricas Prometheus de HTTP, circuit breakers y caché. Los logs estructurados incluyen `requestId` para correlacionar cada solicitud y sus errores.
+`GET /health` es público y expone PostgreSQL, Redis y las dependencias registradas, además de los circuit breakers. PostgreSQL es crítico: su caída devuelve `503 DEGRADED`. Redis es no crítico: su caída devuelve `200 DEGRADED`. El registro permite agregar los módulos externos como dependencias no críticas. `GET /metrics` es público y devuelve métricas Prometheus de HTTP, circuit breakers y caché, más las métricas de negocio de RF-2.2 (ver [METRICAS-RF-2.2.md](observability/METRICAS-RF-2.2.md)). El worker expone las suyas (mensajes y outbox) en el puerto `9464`. Cómo levantar la observabilidad, los scripts de k6 y qué mostrar de métricas y logs: [OBSERVABILIDAD.md](observability/OBSERVABILIDAD.md). Los logs estructurados incluyen `requestId` para correlacionar cada solicitud y sus errores.
 
 ---
 
@@ -232,7 +232,7 @@ Todas las rutas requieren el **mismo token de M1** que el resto de M2 (rol `CLIE
 | DELETE | `/api/v1/direcciones/{id}` | Eliminar dirección propia |
 | GET | `/api/v1/direcciones/sugerencias` | Candidatos para ambos extremos y regreso B → A |
 | POST | `/api/v1/direcciones/desde-viaje` | Recupera recientes consultando M6 por viajeId |
-| GET | `/api/v1/geocodificacion?q=Plaza` | Buscar en M4 (simulado) |
+| GET | `/api/v1/geocodificacion?q=Plaza` | Buscar una dirección en M4 (M2 llama a `POST /api/v1/geocode` de M4) |
 | POST | `/api/v1/calificaciones` | Calificar al conductor de un viaje completado |
 | GET | `/api/v1/calificaciones/viaje/{viajeId}` | Calificación de un viaje (cache-aside en Redis) |
 
@@ -261,7 +261,7 @@ Filtros: `?favorita=true`, `?recientes=true`, `?tipo=DESTINO&page=1&limit=20` (m
 | Módulo | Interacción | En el compose |
 |---|---|---|
 | M1 Identidad | Token JWT validado por M2 (igual que RF-2.1) | Stub de M1 dentro de la API |
-| M4 Ubicación | `GET /api/v1/geocodificacion?q=...` | Servicio `m4` (puerto 4004) |
+| M4 Ubicación | `POST /api/v1/geocode` `{ address }` (contrato del M4 real) | Simulador `m4` (puerto 4004); en el stack integrado, `m4-api:3004` |
 | M6 Viajes | `GET /api/viajes/{viajeId}` y evento `TripCompleted.v1` | Servicio `m6-sim` (puerto 4000) |
 | M8 Comunicaciones | Consume `FavoriteAddressChanged.v1` | Servicio `m8` (puerto 4008) |
 
@@ -321,7 +321,8 @@ M6:      GET /api/clientes/{clienteId}/viajes   (sin autenticación; clienteId =
 
 M6:      GET /api/viajes/{viajeId}   (RF-2.2 importación de recientes y RF-2.4)
          → 200 { id, clienteId, estado, origen, destino, ... }
-M4:      GET /api/v1/geocodificacion?q=...   x-service-key: <INTEGRATION_SECRET>
+M4:      POST /api/v1/geocode   { "address": "..." }
+         → 200 { address, latitude, longitude, provider } | 404 (M2 devuelve lista vacía) | 502/504 (M2 devuelve 503)
 ```
 
 M2 es consumido por:

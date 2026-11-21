@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 
-// Tests de integración: requieren el PostgreSQL de modulo-8 levantado
+// Tests de integración: requieren el PostgreSQL de modulo8 levantado
 // (docker compose up -d postgres). Cada archivo trabaja en un schema efímero.
 export default defineConfig({
   test: {

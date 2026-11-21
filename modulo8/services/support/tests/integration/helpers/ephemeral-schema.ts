@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createSupportPool } from '../../../src/db/pool.js';
 
-// Usuario administrador local de modulo-8/compose.yaml: puede crear y borrar
+// Usuario administrador local de modulo8/compose.yaml: puede crear y borrar
 // schemas. Los tests nunca tocan el schema "support" real.
 export const TEST_DATABASE_URL =
   process.env.SUPPORT_TEST_DATABASE_URL ?? 'postgres://m8_admin:m8_admin_local@localhost:5432/m8';

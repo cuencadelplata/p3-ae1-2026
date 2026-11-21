@@ -14,6 +14,10 @@
 
 x-m2-app: &m2-app
   image: ${M2_API_IMAGE:-leangau/integration-m2-ae2:api}
+  # Se construye siempre con el código de esta carpeta: la imagen publicada puede estar
+  # atrasada (por ejemplo, sin las métricas de RF-2.2). build se resuelve relativo a m2/.
+  build: .
+  pull_policy: build
   restart: unless-stopped
 
 x-m2-env: &m2-env
@@ -24,7 +28,8 @@ x-m2-env: &m2-env
   RABBITMQ_URL: ${M2_RABBITMQ_URL:-amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672}
   # Otros módulos, por nombre de servicio dentro de reservas-network
   M6_BASE_URL: ${M2_M6_BASE_URL:-http://m6-viajes:3000}
-  M4_BASE_URL: ${M2_M4_BASE_URL:-http://m4:4004}
+  # M4 real del compose raíz (servicio m4-api): POST /api/v1/geocode
+  M4_BASE_URL: ${M2_M4_BASE_URL:-http://m4-api:3004}
   INTEGRATION_SECRET: ${M2_INTEGRATION_SECRET:-integration-dev}
   CACHE_TTL_SECONDS: ${M2_CACHE_TTL_SECONDS:-60}
   CHECKPOINT_DISABLE: "1"
@@ -153,4 +158,7 @@ volumes:
 # Red del stack común (la define M9). Al declararla con el mismo nombre, Compose la une
 # a la existente en lugar de crear otra.
 networks:
-  reservas-network: {}
+  reservas-network:
+    # Igual que en M9 y M6: Compose exige que las redes importadas con include
+    # tengan la misma definición; con {} el compose raíz falla ("conflicts with imported resource").
+    driver: bridge

@@ -1,9 +1,10 @@
 # Observabilidad de M2: Alloy envía las métricas a Grafana Cloud y, como respaldo ante cortes
 # de internet, a un Prometheus + Grafana locales. k6 corre las pruebas de carga.
 # Se usa encima del compose principal, desde m2/:
-#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d --build
 #   docker compose -f docker-compose.yml -f docker-compose.observability.yml run --rm k6 run /scripts/smoke.js
 #   docker compose -f docker-compose.yml -f docker-compose.observability.yml run --rm k6 run /scripts/carga.js
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml run --rm k6 run /scripts/direcciones.js   (RF-2.2)
 # (En Git Bash, anteponer MSYS_NO_PATHCONV=1 a los "run".)
 #
 # Tablero:  Grafana Cloud (con internet)  |  http://localhost:3001 (local, sin login, siempre)
@@ -12,6 +13,17 @@
 # Sin las credenciales GRAFANA_CLOUD_* en .env, Alloy arranca igual: el envío a Cloud falla,
 # pero el respaldo local recibe todo.
 services:
+  # Construye M2 con el código local: la imagen de Docker Hub no tiene las métricas de RF-2.2.
+  # Por eso este compose se levanta con --build.
+  api:
+    build: .
+  migrate:
+    build: .
+  worker:
+    build: .
+  m6-sim:
+    build: .
+
   alloy:
     image: grafana/alloy:v1.9.0
     container_name: p3-alloy
@@ -87,6 +99,9 @@ services:
     environment:
       M2_URL: http://api:3000
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-internal-dev}
+      # direcciones.js publica TripCompleted por el simulador de M6
+      M6_SIM_URL: http://m6-sim:4000
+      INTEGRATION_SECRET: ${INTEGRATION_SECRET:-integration-dev}
       K6_OUT: experimental-prometheus-rw
       K6_PROMETHEUS_RW_SERVER_URL: http://alloy:9999/api/v1/metrics/write
       K6_PROMETHEUS_RW_TREND_STATS: "p(95),p(99),avg,max"

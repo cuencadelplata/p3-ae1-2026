@@ -10,7 +10,7 @@ if (mode !== "dependencies" && mode !== "stack") {
 }
 
 if (!existsSync(envFile)) {
-  throw new Error("Falta modulo-8/.env; crearlo a partir de .env.example y definir claves privadas antes de iniciar las pruebas.");
+  throw new Error("Falta modulo8/.env; crearlo a partir de .env.example y definir claves privadas antes de iniciar las pruebas.");
 }
 
 const config = parse(readFileSync(envFile));
@@ -22,7 +22,7 @@ const requiredSecrets = [
 ];
 for (const name of requiredSecrets) {
   if (!config[name] || config[name].includes("replace-with-")) {
-    throw new Error(`Configurar ${name} en modulo-8/.env antes de iniciar Compose.`);
+    throw new Error(`Configurar ${name} en modulo8/.env antes de iniciar Compose.`);
   }
 }
 

@@ -6,6 +6,9 @@ import { parse } from 'dotenv';
 
 const moduleRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repositoryRoot = resolve(moduleRoot, '..');
+// Prefijo de los archivos del módulo según git ls-files (por ejemplo "modulo8/").
+// Se calcula a partir de la ubicación real para no depender del nombre de la carpeta.
+const modulePrefix = `${relative(repositoryRoot, moduleRoot).split('\\').join('/')}/`;
 const problems = [];
 
 const tracked = execFileSync('git', ['ls-files', '-z'], {
@@ -14,7 +17,7 @@ const tracked = execFileSync('git', ['ls-files', '-z'], {
 }).split('\0').filter(Boolean);
 
 for (const file of tracked) {
-  if (!file.startsWith('modulo-8/')) continue;
+  if (!file.startsWith(modulePrefix)) continue;
   if (/(^|\/)\.env($|\.(?!example$))|\.(pem|p12|pfx|key)$/i.test(file)) {
     problems.push(`${file}: archivo privado rastreado por Git`);
   }

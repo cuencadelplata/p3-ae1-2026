@@ -1,4 +1,4 @@
-﻿asyncapi: 2.6.0
+asyncapi: 2.6.0
 info:
   title: Valoraciones M3
   version: 1.0.0
@@ -8,7 +8,6 @@ info:
     M3 consume viaje.finalizado (publicado por M6) y publica valoracion.habilitada.
     Tras POST /conductor/valoraciones publica valoracion.registrada.
     El panel de M3 se suscribe a valoracion.habilitada para mostrar la notificación.
-    Fuente canónica del contrato AsyncAPI: asyncapi.yml (este archivo es copia con el mismo contenido).
     Catálogo unificado: docs/EVENTOS.md
 
 servers:

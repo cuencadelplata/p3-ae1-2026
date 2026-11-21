@@ -71,6 +71,7 @@ services:
 
       OTEL_SERVICE_NAME: m3-conductor-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4318
+      M6_VIAJES_URL: ${M6_VIAJES_URL:-http://viajes:3000}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
@@ -82,6 +83,163 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
+
+  # Contratos HTTP que M6 necesita para arribo/finalización (no simulan el evento).
+  m6-sim:
+    image: p3-ae1-2026-modulo6:local
+    build:
+      context: ../../modulo6
+      dockerfile: Dockerfile
+    container_name: p3-m3-m6-sim
+    restart: unless-stopped
+    command: ["node", "dist/simulator/rf-6.4-6.7/m6-rf-6.4-rf6.7/server.js"]
+    environment:
+      PORT: "3001"
+    expose:
+      - "3001"
+    networks:
+      - default
+      - p3-shared
+
+  m7-e2e:
+    build:
+      context: ../../modulo6/tests-e2e/support
+      dockerfile: Dockerfile
+    container_name: p3-m3-m7-e2e
+    restart: unless-stopped
+    environment:
+      PROVIDER: m7
+      INTERNAL_API_KEY: m3-m6-m7-secret
+      PORT: "3000"
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - default
+      - p3-shared
+
+  m8-e2e:
+    build:
+      context: ../../modulo6/tests-e2e/support
+      dockerfile: Dockerfile
+    container_name: p3-m3-m8-e2e
+    restart: unless-stopped
+    environment:
+      PROVIDER: m8
+      INTERNAL_API_KEY: m3-m6-qr-secret
+      PORT: "3000"
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - default
+      - p3-shared
+
+  # M6 — Viajes: publica viaje.finalizado en viajes.events (Rabbit compartido).
+  # Valoraciones (M3) lo consume para habilitar la valoración del pasajero.
+  m6-tripdb:
+    image: p3-ae1-2026-modulo6-db:local
+    build:
+      context: ../../modulo6
+      dockerfile: Dockerfile.postgres
+    container_name: p3-m3-m6-tripdb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: m6
+      POSTGRES_PASSWORD: ${M6_DB_PASSWORD:-m6pass}
+      POSTGRES_DB: tripdb
+    volumes:
+      - m6_tripdb_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U m6 -d tripdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - default
+
+  viajes:
+    image: p3-ae1-2026-modulo6:local
+    build:
+      context: ../../modulo6
+      dockerfile: Dockerfile
+    container_name: p3-m3-viajes
+    restart: unless-stopped
+    command:
+      [
+        "node",
+        "--import",
+        "./dist/src/observabilidad/telemetria.js",
+        "dist/src/rf-6.1-6.2-6.3/index.js",
+      ]
+    ports:
+      - "${M6_VIAJES_HOST_PORT:-15000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DB_HOST: m6-tripdb
+      DB_PORT: "5432"
+      DB_USER: m6
+      DB_PASSWORD: ${M6_DB_PASSWORD:-m6pass}
+      DB_NAME: tripdb
+      REDIS_URL: redis://m3-redis:6379
+      RABBITMQ_URL: amqp://admin:admin123@m3-rabbitmq:5672
+      M3_URL: ${M6_M3_URL:-http://api:3000}
+      M4_URL: ${M6_M4_URL:-http://m6-sim:3001/api/v1}
+      M7_URL: ${M6_M7_URL:-http://m7-e2e:3000}
+      M7_API_KEY: ${M7_API_KEY:-m3-m6-m7-secret}
+      M8_URL: ${M6_M8_URL:-http://m8-e2e:3000}
+      M8_QR_API_KEY: ${QR_INTERNAL_API_KEY:-m3-m6-qr-secret}
+      OTEL_SERVICE_NAME: m6-viajes
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4318
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      m6-tripdb:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      m6-sim:
+        condition: service_started
+      m7-e2e:
+        condition: service_healthy
+      m8-e2e:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - default
+      - p3-shared
 
   # Frontends React de src/app (alta-conductor.tsx y valoraciones.tsx),
   # compilados en Dockerfile.client y servidos por Nginx.
@@ -107,3 +265,6 @@ networks:
   p3-shared:
     external: true
     name: p3-shared
+
+volumes:
+  m6_tripdb_data:

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import axios from 'axios'
 import { API_URL } from '../api'
+import OAuth2Login from './OAuth2Login'
 
 interface LoginProps {
   aviso?: string
@@ -124,11 +125,11 @@ export default function Login({ aviso, onLoginSuccess, onSwitchToRegister, onSwi
           ¿Olvidaste tu contraseña?
         </button>
 
-        <div className="relative my-9">
-          <div className="hairline" />
-          <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 px-3 text-[10px] tracking-[0.3em] uppercase text-[var(--text-dim)] bg-[var(--surface)]">
-          </span>
-        </div>
+        <div className="hairline my-9" />
+
+        <OAuth2Login onLoginSuccess={(token) => onLoginSuccess(token, {})} />
+
+        <div className="hairline my-9" />
 
         <button onClick={onSwitchToRegister} className="btn-secondary">
           Crear una cuenta

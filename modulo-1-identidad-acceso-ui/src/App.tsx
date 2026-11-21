@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 import Login from './components/Login'
 import Register from './components/Register.tsx'
 import Dashboard from './components/Dashboard.tsx'
 import PasswordRecovery from './components/PasswordRecovery'
+import { completarOAuth2, proveedorPendiente, redirectUriOAuth2 } from './components/OAuth2Login'
 
 type AuthState = 'login' | 'register' | 'recovery' | 'dashboard'
 
@@ -20,6 +21,24 @@ function App() {
     setAviso('')
     setAuthState('dashboard')
   }
+
+  // RF-1.5: al volver de Google o Auth0, la URL trae ?code=...&state=...
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('code')
+    const state = params.get('state')
+    if (!code || !state) return
+    window.history.replaceState({}, '', window.location.pathname)
+    const provider = proveedorPendiente()
+    if (!provider) {
+      setAviso('No se pudo completar el ingreso externo: volvé a intentarlo.')
+      return
+    }
+    completarOAuth2(provider, code, state, redirectUriOAuth2())
+      .then(handleLoginSuccess)
+      .catch((err) => setAviso(`No se pudo ingresar con ${provider}: ${err.response?.data?.error ?? 'error de M1'}`))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleLogout = (mensaje?: string) => {
     setAviso(mensaje ?? '')

@@ -7,7 +7,7 @@
  * Si recibe varias URL base de la misma aplicación, reparte las solicitudes
  * entre ellas; la unicidad depende de la restricción UNIQUE de la base.
  *
- * Uso, con el stack levantado (docker compose up -d en modulo-8):
+ * Uso, con el stack levantado (docker compose up -d en modulo8):
  *   pnpm run prueba:concurrencia
  */
 import { execSync } from 'node:child_process';
