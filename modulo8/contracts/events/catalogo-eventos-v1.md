@@ -377,7 +377,7 @@ Su finalidad es solicitar la entrega de una notificación lógica ya creada por 
 
 | Atributo | Valor |
 | --- | --- |
-| Routing keys activas | M5: `ride.requested`, `driver.offer.accepted`, `ride_request.cancelled`; M6: `driver.arrived`, `trip.started` |
+| Routing keys activas | M5: `ride.requested`, `driver.offer.accepted`, `ride_request.cancelled`; M6: `driver.arrived`, `trip.started`, `trip.completed`, `trip.cancelled` |
 | Productor | M6 (Viajes) / M5 (Despacho) |
 | Consumidor | RF8.6: colas `m8.notifications.m5-events` y `m8.notifications.trip-events` |
 | Estado | Contratos M5 y M6 acordados; consumidores locales activos. La prueba conjunta con los productores reales se realiza en la rama común. |
@@ -392,6 +392,20 @@ Falta comprobar los dos eventos contra M6 real en la rama común; el adaptador
 local no acredita por sí solo una integración entre módulos. M8 no convierte
 `clienteId` libre ni consulta bases ajenas. Los eventos de M6 adicionales de
 la tabla inferior se mantienen como propuestas de catálogo.
+
+**Finalización (2026-11-23):** M6 publica `TripCompleted` en `mobility.events`
+con routing key `trip.completed`, `data.tripId` y `data.recipientId =
+clientUserId` desde su outbox, con `producer: "m6-viajes"`. RF8.6 la liga a
+`m8.notifications.trip-events` y acepta `m6` y `m6-viajes` como productores de
+M6; RF8.1 crea el aviso "Tu viaje ha finalizado." para el cliente. La misma
+routing key la consume Comprobantes en su propia cola (sección 5.6).
+
+**Cancelación después de la asignación (2026-11-23):** M8 ya escucha
+`trip.cancelled` en la misma cola. M6 debe publicar `TripCancelled` con el
+mismo sobre que `TripCompleted` (`producer: "m6-viajes"`, `correlationId =
+tripId`) y un mensaje por destinatario: `data.recipientId` del cliente y, si
+había conductor asignado, otro con el del conductor. M8 guarda cada aviso con
+`trip_id` (la migración 7 ya lo admite). Pedido enviado a M6.
 
 **Acuerdo M5 del 2026-11-17:** `ride.requested` se correlaciona por
 `rideRequestId`; `driver.offer.accepted` se publica después de M6, se
