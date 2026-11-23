@@ -20,6 +20,12 @@ Las contraseñas `M8_*` son exclusivas de la base de M8 y no cambian las de M9.
 `M1_JWT_SECRET` y `M2_INTERNAL_API_KEY` deben coincidir con los contratos privados
 de esos módulos cuando se prueben sus funcionalidades.
 
+Quien también tenga `modulo8/.env` (el del Compose aislado) debe dejar
+`RABBITMQ_USER` y `RABBITMQ_PASSWORD` escritos en `.env.integracion`: Compose lee
+el `.env` de la carpeta de cada archivo incluido para las variables que no
+recibe, y el aislado usa `guest`, que el broker común rechaza
+(`ACCESS_REFUSED` en los logs de `m8-app`).
+
 Si el equipo ya tiene un `.env` en la raíz, agregar allí las variables de la
 plantilla y omitir `--env-file` en los comandos siguientes. Todos deben levantar
 el proyecto con el mismo archivo de configuración.
@@ -60,6 +66,33 @@ obtiene el QR de M8 real y lo valida al iniciar el viaje. Comprueba el estado
 de prueba y registros relacionados; no borra datos ni usa los scripts de carga
 del Compose aislado. El conductor de esta prueba lo habilita `m6-sim-m3`, el
 simulador M3 previsto por el Compose común de M6.
+
+## Comprobante PDF (RF-8.3) con el viaje real
+
+Al finalizar un viaje, M6 publica `TripCompleted` en `mobility.events`.
+M8 lo recibe en la cola `m8.receipts.trip-completed` y arma el comprobante con
+los datos de cada dueño: recorrido, horarios, distancia y total de M6; vehículo
+y patente de M3; estado e importe del pago de M7. Antes de generar el PDF lo
+autoriza con `m8-fiscal-sandbox`, el autorizador fiscal simulado que se levanta
+junto con `m8-app`. El contrato está en la sección 5.6 del
+[catálogo de eventos](contracts/events/catalogo-eventos-v1.md).
+
+El cliente y el conductor del viaje consultan el comprobante con su token de
+M1. Como M1 no comparte nombres con otros servicios, el PDF muestra el número de
+usuario de cada uno.
+
+Prueba de punta a punta (registra usuarios en M1, conductor y vehículo en M3,
+hace el viaje completo en M6 y espera el comprobante en M8):
+
+```powershell
+docker compose --env-file modulo8/.env.integracion up -d --build --wait m8-app m6-viajes m4-api m3-conductor-api m3-vehiculos m1-identidad-acceso m7-api
+cd modulo8
+node tests/e2e/shared-compose-receipt.mjs
+```
+
+Requiere M7 configurado (su `modulo7/.env`, con `M7_API_KEY` igual a la de M6 y
+M8). `RECEIPT_E2E_METODO_PAGO` elige el medio de pago (por defecto `tarjeta`).
+Para ver la cola y la DLQ: RabbitMQ → Queues → `m8.receipts.trip-completed*`.
 
 ## Alcance de los demás requerimientos
 
