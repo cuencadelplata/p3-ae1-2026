@@ -4,6 +4,7 @@ export const SUPPORT_ERROR_CODES = [
   'SUPPORT_VALIDATION_ERROR',
   'SUPPORT_AUTH_REQUIRED',
   'SUPPORT_INVALID_TOKEN',
+  'SUPPORT_FORBIDDEN',
   'SUPPORT_TICKET_NOT_FOUND',
   'SUPPORT_INVALID_TRANSITION',
   'SUPPORT_CONCURRENCY_CONFLICT',
@@ -49,6 +50,10 @@ export function authRequired(): SupportError {
 
 export function invalidToken(): SupportError {
   return new SupportError(401, 'SUPPORT_INVALID_TOKEN', 'El token de autenticación no es válido.');
+}
+
+export function forbidden(): SupportError {
+  return new SupportError(403, 'SUPPORT_FORBIDDEN', 'El usuario autenticado no tiene permisos para esta operación.');
 }
 
 export function ticketNotFound(): SupportError {

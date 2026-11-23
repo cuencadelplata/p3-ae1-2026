@@ -6,7 +6,7 @@ import { PgDeviceTokenRepository } from '../infrastructure/database/device-token
 import { PgDeliveryRepository } from '../infrastructure/database/delivery.repository.js';
 import { PgMessagingInboxRepository } from '../infrastructure/database/inbox.repository.js';
 import { PostgresTechnicalInbox } from '@m8/shared';
-import { HttpM2PreferencesClient } from '../infrastructure/clients/m2-preferences.client.js';
+import { CircuitBreakerM2PreferencesClient, HttpM2PreferencesClient } from '../infrastructure/clients/m2-preferences.client.js';
 import { SandboxPushProvider } from '../infrastructure/provider/sandbox-push-provider.js';
 import { NotificationDeliveryService } from '../services/notification-delivery.service.js';
 import { RabbitMqDeliveryConsumer } from '../infrastructure/messaging/rabbitmq-delivery-consumer.js';
@@ -31,7 +31,9 @@ async function bootstrap() {
   const inboxStore = new PostgresTechnicalInbox(pgPool);
   const inboxRepo = new PgMessagingInboxRepository(pgPool);
 
-  const m2Client = new HttpM2PreferencesClient(M2_API_URL, M2_INTERNAL_API_KEY, M2_TIMEOUT_MS);
+  const m2Client = new CircuitBreakerM2PreferencesClient(
+    new HttpM2PreferencesClient(M2_API_URL, M2_INTERNAL_API_KEY, M2_TIMEOUT_MS),
+  );
   const pushProvider = new SandboxPushProvider();
 
   const deliveryService = new NotificationDeliveryService(

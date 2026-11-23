@@ -87,3 +87,48 @@ test('un timeout de M2 queda disponible para retry', async () => {
     globalThis.fetch = previousFetch;
   }
 });
+
+test('el circuit breaker deja de consultar a M2 tras fallas seguidas y vuelve a probar al vencer', async () => {
+  const { CircuitBreakerM2PreferencesClient } = await import('../../src/infrastructure/clients/m2-preferences.client.js');
+  let calls = 0;
+  let up = false;
+  const inner = {
+    async getPreferences(userId: number) {
+      calls += 1;
+      if (!up) throw new M2PreferencesError('UNAVAILABLE', 'M2 caido');
+      return { userId, notificationsEnabled: true, pushEnabled: true };
+    },
+  };
+  let now = 0;
+  const breaker = new CircuitBreakerM2PreferencesClient(inner, { failureThreshold: 3, openMs: 1000, now: () => now });
+
+  for (let i = 0; i < 3; i += 1) await assert.rejects(breaker.getPreferences(7, 'c'));
+  assert.equal(breaker.state(), 'open');
+  assert.equal(calls, 3);
+
+  // Abierto: falla al instante como UNAVAILABLE (reintentable) sin llamar a M2.
+  await assert.rejects(breaker.getPreferences(7, 'c'), (error: unknown) =>
+    error instanceof M2PreferencesError && error.code === 'UNAVAILABLE');
+  assert.equal(calls, 3);
+
+  // Vencido el tiempo, una prueba: si M2 volvió, se cierra.
+  now = 1000;
+  up = true;
+  const preferences = await breaker.getPreferences(7, 'c');
+  assert.equal(preferences.pushEnabled, true);
+  assert.equal(breaker.state(), 'closed');
+  assert.equal(calls, 4);
+});
+
+test('un error de negocio de M2 no abre el circuito', async () => {
+  const { CircuitBreakerM2PreferencesClient } = await import('../../src/infrastructure/clients/m2-preferences.client.js');
+  const inner = {
+    async getPreferences(): Promise<never> {
+      throw new M2PreferencesError('CUSTOMER_NOT_FOUND', 'sin perfil');
+    },
+  };
+  const breaker = new CircuitBreakerM2PreferencesClient(inner, { failureThreshold: 1 });
+  await assert.rejects(breaker.getPreferences(7, 'c'));
+  await assert.rejects(breaker.getPreferences(7, 'c'));
+  assert.equal(breaker.state(), 'closed');
+});

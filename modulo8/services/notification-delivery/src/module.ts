@@ -5,7 +5,7 @@ import { closePgPool, getPgPool, isPostgresReady } from './infrastructure/databa
 import { PgDeviceTokenRepository } from './infrastructure/database/device-token.repository.js';
 import { PgDeliveryRepository } from './infrastructure/database/delivery.repository.js';
 import { PgMessagingInboxRepository } from './infrastructure/database/inbox.repository.js';
-import { HttpM2PreferencesClient } from './infrastructure/clients/m2-preferences.client.js';
+import { CircuitBreakerM2PreferencesClient, HttpM2PreferencesClient } from './infrastructure/clients/m2-preferences.client.js';
 import { RabbitMqDeliveryConsumer } from './infrastructure/messaging/rabbitmq-delivery-consumer.js';
 import { SandboxPushProvider } from './infrastructure/provider/sandbox-push-provider.js';
 import { NotificationDeliveryService } from './services/notification-delivery.service.js';
@@ -28,11 +28,11 @@ export function createDeliveryModule(options: DeliveryModuleOptions = {}) {
   const deliveries = new PgDeliveryRepository(pool);
   const inbox = new PgMessagingInboxRepository(pool);
   const provider = new SandboxPushProvider();
-  const preferences = new HttpM2PreferencesClient(
+  const preferences = new CircuitBreakerM2PreferencesClient(new HttpM2PreferencesClient(
     process.env.M2_API_URL ?? 'http://localhost:3002',
     process.env.M2_INTERNAL_API_KEY ?? '',
     Number(process.env.M2_TIMEOUT_MS ?? 3000),
-  );
+  ));
   const service = new NotificationDeliveryService(inbox, deliveries, tokens, preferences, provider);
   let connection: amqp.ChannelModel | undefined;
   let consumer: DeliveryConsumerLifecycle | undefined;

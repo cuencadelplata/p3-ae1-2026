@@ -5,6 +5,7 @@ import YAML from 'yaml';
 import { apiReference } from '@scalar/express-api-reference';
 import { createSupportController, publicarEvento } from './controllers/support.controller.js';
 import { authenticateWithM1 } from './http/authentication.js';
+import { autorizarTicket } from './http/authorization.js';
 import { correlationId } from './http/correlation.js';
 import { supportErrorHandler } from './http/error-handler.js';
 import type { SupportReadiness } from './http/readiness.js';
@@ -24,11 +25,11 @@ export interface SupportAppDeps {
 
 // Rutas de tickets, relativas a /tickets.
 const TICKET_ROUTES = [
-  { method: 'post', path: '/', handler: 'crearTicket' },
-  { method: 'get', path: '/:id', handler: 'obtenerTicket' },
-  { method: 'patch', path: '/:id/estado', handler: 'actualizarEstado' },
-  { method: 'get', path: '/:id/historial', handler: 'obtenerHistorial' },
-  { method: 'get', path: '/', handler: 'listarTodos' },
+  { method: 'post', path: '/', handler: 'crearTicket', permiso: 'autenticado' },
+  { method: 'get', path: '/:id', handler: 'obtenerTicket', permiso: 'operadorOCreador' },
+  { method: 'patch', path: '/:id/estado', handler: 'actualizarEstado', permiso: 'operador' },
+  { method: 'get', path: '/:id/historial', handler: 'obtenerHistorial', permiso: 'operadorOCreador' },
+  { method: 'get', path: '/', handler: 'listarTodos', permiso: 'operador' },
 ] as const;
 
 const LEGACY_EVENT_ROUTE = { method: 'post', path: '/events/publish' } as const;
@@ -51,8 +52,12 @@ export function registerSupportRoutes(router: IRouter, deps: SupportAppDeps) {
   if (deps.identityVerifier) {
     tickets.use(authenticateWithM1(deps.identityVerifier));
   }
-  for (const { method, path, handler } of TICKET_ROUTES) {
-    tickets[method](path, controller[handler]);
+  for (const { method, path, handler, permiso } of TICKET_ROUTES) {
+    if (deps.identityVerifier) {
+      tickets[method](path, autorizarTicket(permiso, deps.ticketService), controller[handler]);
+    } else {
+      tickets[method](path, controller[handler]);
+    }
   }
   tickets.use(supportErrorHandler);
 

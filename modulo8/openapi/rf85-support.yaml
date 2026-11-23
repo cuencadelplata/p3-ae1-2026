@@ -32,6 +32,11 @@ info:
       `503 SUPPORT_IDENTITY_UNAVAILABLE` con `Retry-After`. Falla cerrado: sin
       identidad confirmada no se atiende el pedido.
 
+    **Permisos** (sólo con la autenticación habilitada). Cualquier usuario
+    autenticado crea tickets. Listar todos y cambiar el estado es del rol
+    `OPERADOR`. Ver un ticket o su historial: el `OPERADOR` o quien lo creó.
+    En otro caso: `403 SUPPORT_FORBIDDEN`.
+
     **Errores.** Todas las respuestas de error tienen la forma
     `{ error: { code, message, details? }, correlationId }`.
 
@@ -239,6 +244,8 @@ paths:
           $ref: '#/components/responses/ErrorDeValidacion'
         '401':
           $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '503':
@@ -272,6 +279,8 @@ paths:
           $ref: '#/components/responses/TicketNoEncontrado'
         '401':
           $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '503':
@@ -394,6 +403,8 @@ paths:
                     correlationId: 7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
         '401':
           $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '503':
@@ -446,6 +457,8 @@ paths:
           $ref: '#/components/responses/TicketNoEncontrado'
         '401':
           $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '503':
@@ -584,6 +597,25 @@ components:
                   code: SUPPORT_TICKET_NOT_FOUND
                   message: Ticket no encontrado.
                 correlationId: trip-42
+    SinPermiso:
+      description: |
+        Sólo con la autenticación habilitada. El usuario está autenticado
+        pero su rol no alcanza: la operación es del `OPERADOR` o, para ver
+        un ticket y su historial, de quien lo creó.
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/X-Correlation-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            sinPermiso:
+              value:
+                error:
+                  code: SUPPORT_FORBIDDEN
+                  message: El usuario autenticado no tiene permisos para esta operación.
+                correlationId: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
     NoAutenticado:
       description: |
         Sólo con la autenticación habilitada. Falta la cabecera
@@ -858,6 +890,7 @@ components:
                 - SUPPORT_VALIDATION_ERROR
                 - SUPPORT_AUTH_REQUIRED
                 - SUPPORT_INVALID_TOKEN
+                - SUPPORT_FORBIDDEN
                 - SUPPORT_TICKET_NOT_FOUND
                 - SUPPORT_INVALID_TRANSITION
                 - SUPPORT_CONCURRENCY_CONFLICT

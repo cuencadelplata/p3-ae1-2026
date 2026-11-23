@@ -46,7 +46,9 @@ describe('WWW-Authenticate en las respuestas 401', () => {
 
   it('las demás respuestas no la llevan', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    verificar.mockResolvedValueOnce({ userId: 9, role: 'OPERADOR' });
     const ok = await request(app()).get('/tickets').set('Authorization', 'Bearer x');
+    const sinPermiso = await request(app()).get('/tickets').set('Authorization', 'Bearer x');
     verificar.mockRejectedValueOnce(identityUnavailable());
     const noDisponible = await request(app()).get('/tickets').set('Authorization', 'Bearer x');
     const sinAuth = await request(appCon()).post('/tickets').send({ tripId: 1 });
@@ -54,7 +56,8 @@ describe('WWW-Authenticate en las respuestas 401', () => {
     expect(ok.status).toBe(200);
     expect(noDisponible.status).toBe(503);
     expect(sinAuth.status).toBe(400);
-    for (const res of [ok, noDisponible, sinAuth]) {
+    expect(sinPermiso.status).toBe(403);
+    for (const res of [ok, noDisponible, sinAuth, sinPermiso]) {
       expect(res.headers['www-authenticate']).toBeUndefined();
     }
   });
