@@ -22,6 +22,7 @@ Reemplaza al contrato AE1 de RabbitMQ, disponible en el historial Git.
 | 2026-10-05 | Importe cobrado en la respuesta de M7 | M7 (RF-7.3) | M7 agregó `total` y `moneda` a `GET /metodo-pago/{viajeId}`, guardados al autorizar (commit `063e112` de M7). Comprobantes los usa desde la versión 2.3.0 (ver 5.1) |
 | 2026-10-04 | El reenvío devuelve el enlace temporal de la sección 6 | Lucas Cremaschi (RF-8.4) | Acordado sin cambios en el contrato |
 | 2026-11-23 | Disparador de Comprobantes en el Compose común (AE4) | M6 (contrato ya publicado) | Comprobantes consume `TripCompleted` de M6 en su propia cola y completa los datos por REST con M6, M3 y M7 (ver 5.6). No requiere cambios en M6 |
+| 2026-11-23 | Efectivo y transferencia pendientes en M7 | Grupo M8 (M7 se adapta) | Se emite el comprobante con el pago pendiente (ver 5.1). Mientras M7 no corra en el Compose común se usa el simulador de su contrato (perfil `m7-sandbox`) |
 
 
 ## 2. Topología
@@ -254,7 +255,8 @@ rama común.
 | M7 | Modelo de Comprobantes | Efecto en la emisión |
 | --- | --- | --- |
 | `estado: autorizado` | `APROBADO` | Se emite. |
-| `estado: pendiente` o `404` | `PENDIENTE` / sin pago | No se emite. Reintentable: `409 PAYMENT_PENDING` o `PAYMENT_NOT_FOUND` por REST; reintento con descuento de intentos en el consumidor. |
+| `estado: pendiente` con `tipo: efectivo` o `transferencia` (desde 2026-11-23) | `PENDIENTE` | Se emite con el pago pendiente: esos medios se cobran fuera de la pasarela y M7 no los autoriza después. Acuerdo del grupo M8. |
+| `estado: pendiente` con tarjeta, o `404` | `PENDIENTE` / sin pago | No se emite. Reintentable: `409 PAYMENT_PENDING` o `PAYMENT_NOT_FOUND` por REST; reintento con descuento de intentos en el consumidor. |
 | `estado: rechazado` | `RECHAZADO` | No se emite. Terminal: `422 PAYMENT_REJECTED` por REST; DLQ sin reintentos en el consumidor. |
 | Sin respuesta, `5xx` o fuera de contrato | — | Dependencia no disponible: `503 PAYMENTS_SERVICE_UNAVAILABLE`; el mensaje espera sin descontar intentos. |
 | `tipo: efectivo` / `tarjeta` / `transferencia` | `EFECTIVO` / `TARJETA` / `TRANSFERENCIA` | El medio de pago del comprobante se toma de M7. |
@@ -526,9 +528,9 @@ Decisiones:
   Por REST (`POST /api/v1/receipts`) los nombres siguen siendo obligatorios.
 - **Conductor.** `conductorId` de M6 debe ser el `userId` numérico de M1 (como
   lo envía M5 al asignar). Si no lo es, el mensaje va a la DLQ.
-- **Pago.** Se aplica la misma regla de 5.1: emite con pago autorizado en M7.
-  Pendiente y sin registrar se reintentan; rechazado va a la DLQ. El tratamiento
-  de efectivo y transferencia (que M7 deja pendientes) se define con M7.
+- **Pago.** Se aplica la misma regla de 5.1: tarjeta autorizada, o efectivo y
+  transferencia pendientes, emiten. Tarjeta pendiente y pago sin registrar se
+  reintentan; rechazado va a la DLQ.
 - **Tarifa.** M6 informa solo el total; el comprobante no muestra desglose.
   El importe final es el que informa M7.
 - **Autorización de acceso.** `customerUserId` = `recipientId` y
