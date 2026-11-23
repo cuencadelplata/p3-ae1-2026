@@ -16,7 +16,17 @@ export const M6_TRIP_EVENTS_EXCHANGE = "mobility.events";
 export const M6_TRIP_EVENT_KEYS = {
   "driver.arrived": "DriverArrived",
   "trip.started": "TripStarted",
+  // RF-8.1 finalizacion: M6 publica TripCompleted para M8 al completar el viaje
+  // (desde su outbox, con data.tripId y data.recipientId = clientUserId).
+  "trip.completed": "TripCompleted",
+  // RF-8.1 cancelacion despues de la asignacion: M6 publica TripCancelled con el
+  // mismo sobre, un mensaje por destinatario (cliente y conductor).
+  "trip.cancelled": "TripCancelled",
 } as const;
+
+// DriverArrived y TripStarted salen con producer "m6"; TripCompleted sale del
+// outbox de M6 con producer "m6-viajes". Los dos identifican al mismo modulo.
+const M6_PRODUCERS: readonly string[] = ["m6", "m6-viajes"];
 
 type RabbitMqChannel = Parameters<EventConsumer["start"]>[0];
 
@@ -49,8 +59,8 @@ export function parseM6TripEventEnvelope(content: Buffer, routingKey?: string): 
   if (mapped.data.eventType !== expectedType) {
     throw new NonRetryableMessagingError("eventType no coincide con la routing key.");
   }
-  if ((raw as EventEnvelope).producer !== "m6") {
-    throw new NonRetryableMessagingError("producer debe ser m6.");
+  if (!M6_PRODUCERS.includes((raw as EventEnvelope).producer)) {
+    throw new NonRetryableMessagingError("producer debe ser m6 o m6-viajes.");
   }
   return raw as EventEnvelope;
 }
@@ -81,6 +91,8 @@ export class M6TripEventsConsumer {
     });
     await assertTopology(channel, topology);
     await channel.bindQueue(M6_TRIP_EVENTS_QUEUE, M6_TRIP_EVENTS_EXCHANGE, "trip.started");
+    await channel.bindQueue(M6_TRIP_EVENTS_QUEUE, M6_TRIP_EVENTS_EXCHANGE, "trip.completed");
+    await channel.bindQueue(M6_TRIP_EVENTS_QUEUE, M6_TRIP_EVENTS_EXCHANGE, "trip.cancelled");
 
     const consumer = new EventConsumer({
       consumerId: M6_TRIP_EVENTS_QUEUE,
