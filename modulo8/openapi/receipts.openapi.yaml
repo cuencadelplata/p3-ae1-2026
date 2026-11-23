@@ -15,11 +15,14 @@ info:
     - **Pago verificado en M7 (2.2.0):** antes de emitir se consulta `GET /metodo-pago/{viajeId}` de M7.
       Solo un pago `autorizado` genera comprobante, y el medio de pago se toma de M7.
     - **Importe de M7 (2.3.0):** el total y la moneda del comprobante se toman de M7 cuando los informa.
+    - **Viaje real de M6 (2.4.0):** en el Compose común la emisión se dispara con `trip.completed` de M6 y los
+      datos se consultan a M6 y M3. Esos comprobantes pueden no tener `customer.fullName` ni `driver.fullName`
+      (M1 no comparte nombres): el PDF muestra el número de usuario.
     - **Dependencias caídas:** responden `503` con `Retry-After` (nunca `500`); el servicio sigue atendiendo.
 
-    Los contratos asincrónicos (`payment.confirmed`, `receipt.issued`) y el contrato interno con Receipts
+    Los contratos asincrónicos (`payment.confirmed`, `trip.completed`, `receipt.issued`) y el contrato interno con Receipts
     Delivery están en `contracts/events/catalogo-eventos-v1.md`; no forman parte de esta API pública.
-  version: 2.3.0
+  version: 2.4.0
 servers:
   - url: http://localhost:3000/api/v1
     description: Aplicación única de M8

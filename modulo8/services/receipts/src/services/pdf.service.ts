@@ -121,10 +121,14 @@ function drawParties(doc: Doc, receipt: Receipt): void {
   const columnWidth = (width - COLUMN_GAP) / 2;
   const top = doc.y;
 
-  const customerRows: Row[] = [
-    ['Nombre', receipt.customer.fullName],
-    ['Identificador', receipt.customer.id],
-  ];
+  // Un comprobante emitido desde TripCompleted no trae el nombre: M1 no lo
+  // comparte con otros servicios y se imprime el numero de usuario.
+  const customerRows: Row[] = receipt.customer.fullName
+    ? [
+        ['Nombre', receipt.customer.fullName],
+        ['Identificador', receipt.customer.id],
+      ]
+    : [['N.º de usuario', receipt.customer.id]];
   if (receipt.customer.documentId) {
     customerRows.push(['Documento', receipt.customer.documentId]);
   }
@@ -134,8 +138,12 @@ function drawParties(doc: Doc, receipt: Receipt): void {
 
   const vehicle = receipt.driver.vehicle;
   const driverRows: Row[] = [
-    ['Nombre', receipt.driver.fullName],
-    ['Identificador', receipt.driver.id],
+    ...(receipt.driver.fullName
+      ? ([
+          ['Nombre', receipt.driver.fullName],
+          ['Identificador', receipt.driver.id],
+        ] as Row[])
+      : ([['N.º de usuario', receipt.driver.id]] as Row[])),
     ['Vehiculo', `${labelForVehicleType(vehicle.type)}${vehicle.model ? ` - ${vehicle.model}` : ''}`],
     ['Dominio', vehicle.plate],
   ];

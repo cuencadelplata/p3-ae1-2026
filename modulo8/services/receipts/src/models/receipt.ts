@@ -12,7 +12,11 @@ export type DeliveryChannel = (typeof DELIVERY_CHANNELS)[number];
 
 export interface Customer {
   id: string;
-  fullName: string;
+  /**
+   * Obligatorio por REST. Falta en los comprobantes emitidos desde TripCompleted:
+   * M6 informa solo el userId de M1 y M1 no comparte nombre ni email.
+   */
+  fullName?: string;
   email?: string;
   documentId?: string;
 }
@@ -25,7 +29,8 @@ export interface Vehicle {
 
 export interface Driver {
   id: string;
-  fullName: string;
+  /** Obligatorio por REST. Puede faltar desde TripCompleted: M3 no guarda el nombre (es de M1). */
+  fullName?: string;
   vehicle: Vehicle;
 }
 
