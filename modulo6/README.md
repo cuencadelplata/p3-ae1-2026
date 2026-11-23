@@ -33,7 +33,7 @@ Antes de levantar Compose:
 docker compose --env-file .env -f compose.yaml -f compose.integracion-real.yaml -f ../modulo6/docker-compose.m8-hostports.yml up -d --build --wait
 ```
 
-La URL interna configurada es `http://m8-app:3000`. M6 conserva sus puertos locales habituales; M8 queda publicado en `http://localhost:3103` para las comprobaciones desde el host. En el Compose integrado M6 consulta M3 por `http://m3-api:3000/api/conductor/{id}/estado`; el Compose aislado usa el simulador de M3 si no se configura `M3_URL`.
+La URL interna configurada es `http://m8-app:3000`. M6 conserva sus puertos locales habituales; M8 queda publicado en `http://localhost:3103`. M3, M4, M7 y M8 se consumen mediante sus APIs reales configuradas; el Compose aislado puede apuntar a M3 mediante `M3_URL`.
 
 Para detener M8 desde `modulo8/` y luego M6 desde `modulo6/`:
 
@@ -82,7 +82,7 @@ El frontend de RF-6.1/6.2/6.3 se sirve desde la misma API M6, en `http://localho
 | Redis | 6379 | Caché compartida |
 | RabbitMQ | 5672, gestión 15672 | Eventos de viajes y cancelaciones |
 
-Compose inicia un simulador interno únicamente para M3/M4. El QR se solicita y valida contra M8 real (`m8-app:3000`); las llamadas de tarifa y pago de M7 se dirigen a la API real mediante `M7_URL` y `M7_API_KEY`. Los tres servicios M6 comparten la misma imagen Node y la misma base; `npm run docker:down` detiene M6 y conserva el volumen de PostgreSQL.
+Compose utiliza únicamente servicios reales o proveedores E2E externos. El QR se solicita y valida contra M8 real (`m8-app:3000`); las llamadas de tarifa y pago de M7 se dirigen a la API real mediante `M7_URL` y `M7_API_KEY`. Los tres servicios M6 comparten la misma imagen Node y la misma base; `npm run docker:down` detiene M6 y conserva el volumen de PostgreSQL.
 
 ## Front de RF-6.4 / RF-6.7
 
@@ -90,7 +90,7 @@ Con el stack levantado, abrir **http://localhost:3002/**. La fachada sirve una p
 
 - lista el registro de viajes (`GET /api/viajes`) filtrando por cliente, conductor y estado, con paginación; los filtros quedan en la URL para compartir la búsqueda;
 - muestra el detalle de un viaje: datos, resumen de la finalización y la línea de tiempo del historial de transiciones (solo inserción);
-- permite **finalizar** un viaje en curso (RF-6.4) con efectivo, transferencia o tarjeta (token de prueba; con el simulador, el token `rechazado` devuelve 402).
+- permite **finalizar** un viaje en curso (RF-6.4) con efectivo, transferencia o tarjeta (dependiendo del método configurado en M7).
 
 ## Observabilidad (logs, métricas y trazas)
 
@@ -195,10 +195,6 @@ modulo6/
 │   └── rf-6.5-6.6/
 ├── tests-e2e/
 │   ├── rf-6.1-6.2-6.3/
-│   ├── rf-6.4-6.7/
-│   └── rf-6.5-6.6/
-├── simulator/
-│   ├── rf-6.1-6.2-6.3/   # mock M8
 │   ├── rf-6.4-6.7/
 │   └── rf-6.5-6.6/
 ├── rf-6.1-6.2-6.3/   # SQL y documentación específica

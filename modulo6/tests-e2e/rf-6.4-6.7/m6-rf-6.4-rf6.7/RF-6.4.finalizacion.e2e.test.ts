@@ -133,29 +133,4 @@ describe('RF-6.4 - Finalización del viaje en Docker', () => {
       await conexion.close();
     }
   });
-
-  it('keeps API alive while simulator is stopped', async () => {
-    const viajeId = await crearViaje({ clienteId: `E2E-64-outage-${Date.now()}`, iniciar: true });
-
-    execFileSync('docker', ['compose', 'stop', 'simulador']);
-    try {
-      const apiUrl = process.env.E2E_API_URL ?? 'http://127.0.0.1:3002';
-      let health: Response | undefined;
-      for (let attempt = 0; attempt < 10; attempt += 1) {
-        try {
-          health = await fetch(`${apiUrl}/health`);
-          if (health.status === 200) break;
-        } catch {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-      }
-      expect(health?.status).toBe(200);
-
-      const { response } = await post(`/api/viajes/${viajeId}/finalizacion`, datosFinalizacion());
-      expect(response.status).toBe(503);
-      expect(await health?.json()).toEqual({ status: 'ok' });
-    } finally {
-      execFileSync('docker', ['compose', 'start', 'simulador']);
-    }
-  });
 });

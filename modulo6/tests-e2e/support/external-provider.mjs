@@ -86,6 +86,21 @@ const server = createServer(async (request, response) => {
     }
   }
 
+  if (provider === 'm3' && request.method === 'GET' && /^\/api\/conductor\/[^/]+\/estado$/.test(request.url)) {
+    const conductorId = decodeURIComponent(request.url.split('/')[3]);
+    return send(conductorId.startsWith('inexistente') ? 404 : 200, {
+      usuarioID: conductorId,
+      habilitado: conductorId !== 'suspendido',
+      disponible: conductorId !== 'suspendido',
+      estado: conductorId === 'suspendido' ? 'suspendido' : 'activo',
+      estado_conexion: conductorId === 'suspendido' ? 'desconectado' : 'conectado',
+    });
+  }
+
+  if (provider === 'm4' && request.method === 'POST' && request.url === '/api/v1/estimate') {
+    return send(200, { distanceKm: 12.5, estimatedEtaMinutes: 30 });
+  }
+
   return send(404, { error: 'Not found' });
 });
 

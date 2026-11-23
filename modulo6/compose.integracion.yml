@@ -2,13 +2,13 @@
 #
 # Lo incluye el docker-compose.yml de la raíz. Usa la red `reservas-network`
 # y el RabbitMQ y Redis compartidos que define M9, y llama a los módulos reales
-# por su nombre de servicio. Para desarrollo y tests aislados con simuladores
+# por su nombre de servicio. Para desarrollo y tests aislados con APIs reales
 # se sigue usando modulo6/docker-compose.yml.
 #
 # Variables (en el .env de la raíz, nunca en Git):
 #   M7_API_KEY, QR_INTERNAL_API_KEY  secretos compartidos con M7 y M8
 #   M6_M7_URL, M6_M8_URL             URLs de M7 y M8 si cambian sus nombres de servicio
-#   M6_M3_URL                        M3 todavía no está en main: por defecto usa el simulador
+#   M6_M3_URL                        URL de M3 en la red integrada
 #   M6_*_HOST_PORT                   puertos del host (tabla acordada: 15000-15002)
 #   RABBITMQ_USER, RABBITMQ_PASSWORD los mismos que usa el RabbitMQ compartido
 
