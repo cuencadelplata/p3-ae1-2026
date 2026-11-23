@@ -202,6 +202,7 @@ export const cancelarViaje = async (req: Request, res: Response): Promise<any> =
         });
     }
 
+    void despacharEventosPendientes();
     return res.json(viajeRespuestaLegacy(viaje));
 };
 

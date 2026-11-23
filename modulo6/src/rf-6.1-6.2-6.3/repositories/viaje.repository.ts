@@ -2,7 +2,12 @@ import pool from '../db/pool.js';
 import type { PoolClient } from 'pg';
 import type { Viaje } from '../models/viaje.model.js';
 import { EstadoViaje } from '../models/viaje.model.js';
-import { eventosViajeFinalizado, traceparentActual } from '../services/eventos-viaje.service.js';
+import {
+    eventoTripEvents,
+    eventosViajeCancelado,
+    eventosViajeFinalizado,
+    traceparentActual,
+} from '../services/eventos-viaje.service.js';
 //en este archivo definimos las funciones que interactúan con la base de datos para crear, buscar y actualizar viajes. Estas funciones son llamadas por los controladores del módulo de viajes.
 
 export interface FinalizacionPersistida {
@@ -372,7 +377,11 @@ export async function buscarViajesPorConductor(conductorId: string): Promise<Arr
     }));
 }
 
-export async function cancelarSiCancelable(id: string, actor?: string, motivo?: string): Promise<Viaje | null> {
+export async function cancelarSiCancelable(
+    id: string,
+    actor: 'cliente' | 'conductor' = 'cliente',
+    motivo = '',
+): Promise<Viaje | null> {
     await ensureExtensionSchema();
     const client = await pool.connect();
     try {
@@ -397,8 +406,36 @@ export async function cancelarSiCancelable(id: string, actor?: string, motivo?: 
             motivo ? `: ${motivo}` : '',
         ].filter(Boolean).join(' ');
         await insertarTransicion(client, id, estadoAnterior, EstadoViaje.CANCELADO, detalle);
+        const cancelado = mapRow(rows[0]);
+        const canceladoAt = new Date();
+        const eventos = [
+            eventoTripEvents('viaje.cancelado', {
+                viajeId: id,
+                driverUserId: cancelado.driverUserId,
+                conductorId: cancelado.conductorId ?? null,
+                occurredAt: canceladoAt,
+            }),
+            ...eventosViajeCancelado({
+                viajeId: id,
+                clienteId: cancelado.clienteId,
+                conductorId: cancelado.conductorId ?? null,
+                clientUserId: cancelado.clientUserId,
+                driverUserId: cancelado.driverUserId,
+                canceladoAt,
+                cancelledBy: actor,
+                motivo,
+            }),
+        ];
+        for (const evento of eventos) {
+            if (!evento) continue;
+            await client.query(
+                `INSERT INTO viaje_eventos_outbox (message_id, viaje_id, exchange, routing_key, payload, traceparent)
+                 VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+                [evento.messageId, id, evento.exchange, evento.routingKey, JSON.stringify(evento.payload), traceparentActual()]
+            );
+        }
         await client.query('COMMIT');
-        return mapRow(rows[0]);
+        return cancelado;
     } catch (error) {
         await rollback(client);
         throw error;

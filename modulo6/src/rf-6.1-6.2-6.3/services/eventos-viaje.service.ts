@@ -33,6 +33,17 @@ export interface DatosViajeFinalizado {
     paymentId: string;
 }
 
+export interface DatosViajeCancelado {
+    viajeId: string;
+    clienteId: string;
+    conductorId: string | null;
+    clientUserId?: number | null;
+    driverUserId?: number | null;
+    canceladoAt: Date;
+    cancelledBy: 'cliente' | 'conductor';
+    motivo: string;
+}
+
 export const EXCHANGE_M8 = 'mobility.events';
 export const EXCHANGE_M3 = 'viajes.events';
 export const EXCHANGE_M4 = 'trip.events';
@@ -43,6 +54,34 @@ export function idUsuarioNumerico(value: string | null | undefined): number | un
     if (!value || !/^\d+$/.test(value)) return undefined;
     const id = Number(value);
     return Number.isSafeInteger(id) && id > 0 ? id : undefined;
+}
+
+export function idUsuarioM1(guardado: number | null | undefined, textual: string | null | undefined): number | undefined {
+    if (typeof guardado === 'number' && Number.isSafeInteger(guardado) && guardado > 0) return guardado;
+    return idUsuarioNumerico(textual);
+}
+
+export type EventoTrip = 'viaje.iniciado' | 'viaje.finalizado' | 'viaje.cancelado';
+
+export function eventoTripEvents(
+    tipo: EventoTrip,
+    datos: { viajeId: string; driverUserId?: number | null; conductorId?: string | null; occurredAt: Date },
+): EventoSalida | null {
+    const driverId = idUsuarioM1(datos.driverUserId, datos.conductorId);
+    if (driverId === undefined) return null;
+    const messageId = randomUUID();
+    return {
+        messageId,
+        exchange: EXCHANGE_M4,
+        routingKey: tipo,
+        payload: {
+            eventId: messageId,
+            eventType: tipo,
+            tripId: datos.viajeId,
+            driverId,
+            occurredAt: datos.occurredAt.toISOString(),
+        },
+    };
 }
 
 export function eventosViajeFinalizado(datos: DatosViajeFinalizado): EventoSalida[] {
@@ -109,6 +148,41 @@ export function eventosViajeFinalizado(datos: DatosViajeFinalizado): EventoSalid
                 tripId: datos.viajeId,
                 driverId,
                 occurredAt,
+            },
+        });
+    }
+
+    return eventos;
+}
+
+export function eventosViajeCancelado(datos: DatosViajeCancelado): EventoSalida[] {
+    const occurredAt = datos.canceladoAt.toISOString();
+    const eventos: EventoSalida[] = [];
+    const destinatarios = [
+        idUsuarioM1(datos.clientUserId, datos.clienteId),
+        datos.conductorId ? idUsuarioM1(datos.driverUserId, datos.conductorId) : undefined,
+    ];
+
+    for (const recipientId of destinatarios) {
+        if (recipientId === undefined) continue;
+        const messageId = randomUUID();
+        eventos.push({
+            messageId,
+            exchange: EXCHANGE_M8,
+            routingKey: 'trip.cancelled',
+            payload: {
+                messageId,
+                eventType: 'TripCancelled',
+                version: 1,
+                occurredAt,
+                correlationId: datos.viajeId,
+                producer: PRODUCER,
+                data: {
+                    tripId: datos.viajeId,
+                    recipientId,
+                    cancelledBy: datos.cancelledBy,
+                    motivo: datos.motivo,
+                },
             },
         });
     }
