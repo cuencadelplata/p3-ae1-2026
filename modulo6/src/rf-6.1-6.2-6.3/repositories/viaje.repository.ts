@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 import type { Viaje } from '../models/viaje.model.js';
 import { EstadoViaje } from '../models/viaje.model.js';
 import {
+    eventosViajeCancelado,
     eventosViajeFinalizado,
     eventoTripEvents,
     traceparentActual,
@@ -407,7 +408,11 @@ export async function buscarViajesPorConductor(conductorId: string): Promise<Arr
     }));
 }
 
-export async function cancelarSiCancelable(id: string, actor?: string, motivo?: string): Promise<Viaje | null> {
+export async function cancelarSiCancelable(
+    id: string,
+    actor: 'cliente' | 'conductor' = 'cliente',
+    motivo = '',
+): Promise<Viaje | null> {
     await ensureExtensionSchema();
     const client = await pool.connect();
     try {
@@ -433,13 +438,27 @@ export async function cancelarSiCancelable(id: string, actor?: string, motivo?: 
         ].filter(Boolean).join(' ');
         await insertarTransicion(client, id, estadoAnterior, EstadoViaje.CANCELADO, detalle);
         const cancelado = mapRow(rows[0]);
-        // M4: si había conductor asignado, vuelve a quedar disponible.
-        await insertarEventosOutbox(client, id, [eventoTripEvents('viaje.cancelado', {
-            viajeId: id,
-            driverUserId: cancelado.driverUserId,
-            conductorId: cancelado.conductorId ?? null,
-            occurredAt: new Date(),
-        })]);
+        const canceladoAt = new Date();
+        await insertarEventosOutbox(client, id, [
+            // M4: si había conductor asignado, vuelve a quedar disponible.
+            eventoTripEvents('viaje.cancelado', {
+                viajeId: id,
+                driverUserId: cancelado.driverUserId,
+                conductorId: cancelado.conductorId ?? null,
+                occurredAt: canceladoAt,
+            }),
+            // M8: aviso de cancelación al cliente y, si lo había, al conductor.
+            ...eventosViajeCancelado({
+                viajeId: id,
+                clienteId: cancelado.clienteId,
+                conductorId: cancelado.conductorId ?? null,
+                clientUserId: cancelado.clientUserId,
+                driverUserId: cancelado.driverUserId,
+                canceladoAt,
+                cancelledBy: actor,
+                motivo,
+            }),
+        ]);
         await client.query('COMMIT');
         return cancelado;
     } catch (error) {
