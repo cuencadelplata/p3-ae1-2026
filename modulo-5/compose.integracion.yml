@@ -1,6 +1,6 @@
-# M5 (Solicitud y Despacho) dentro del stack común `movilidad-urbana`.
+# M5 (Solicitud y Despacho) dentro del stack común movilidad-urbana.
 #
-# Lo incluye el docker-compose.yml de la raíz. Usa la red `reservas-network`
+# Lo incluye el docker-compose.yml de la raíz. Usa la red reservas-network
 # y el RabbitMQ y Redis compartidos que define M9. Para desarrollo y tests
 # aislados se sigue usando modulo-5/docker-compose.yml.
 #
@@ -20,15 +20,20 @@ services:
       dockerfile: Dockerfile
     ports:
       - "127.0.0.1:${M5_HOST_PORT:-3005}:3005"
+    env_file:
+      - path: .env
+        required: false
     environment:
       NODE_ENV: production
       PORT: "3005"
       DATABASE_URL: "postgresql://postgres:${M5_DB_PASSWORD:-postgres}@m5-postgres-db:5432/dispatch_db?schema=public"
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: "amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672"
+      M1_AUTH_URL: "${M1_AUTH_URL:-http://m1-identidad-acceso:3001}"
       M4_SERVICE_URL: "${M4_SERVICE_URL:-http://m4-api:3004/api/v1}"
       M6_SERVICE_URL: "${M6_SERVICE_URL:-http://m6-viajes:3000}"
       M6_INTERNAL_API_KEY: "${M6_INTERNAL_API_KEY:-}"
+      M7_URL: "${M7_URL:-http://m7-api:3000}"
       AUTH_MODE: "${AUTH_MODE:-jwt}"
       JWT_SECRET: "${JWT_SECRET:-clave-solo-para-demo-local-cambiar}"
     depends_on:
@@ -39,7 +44,7 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3005/health"]
+      test: [ "CMD", "wget", "-qO-", "http://localhost:3005/health" ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -58,7 +63,7 @@ services:
     volumes:
       - m5-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d dispatch_db"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d dispatch_db" ]
       interval: 5s
       timeout: 5s
       retries: 10
