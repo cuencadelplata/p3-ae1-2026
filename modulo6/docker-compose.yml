@@ -17,7 +17,7 @@ services:
       M8_QR_API_KEY: ${QR_INTERNAL_API_KEY:-}
       M3_URL: ${M3_URL:-http://host.docker.internal:5000}
       M4_URL: ${M4_URL:-http://host.docker.internal:3004/api/v1}
-      M7_URL: ${M7_URL:-http://host.docker.internal:16000}
+      M7_URL: ${M7_URL:-http://host.docker.internal:17000}
       M7_API_KEY: ${M7_API_KEY:-}
       REDIS_URL: redis://redis:6379
       # Broker de eventos. Para la integración, apuntarlo al RabbitMQ compartido con M4/M5/M7/M8.
