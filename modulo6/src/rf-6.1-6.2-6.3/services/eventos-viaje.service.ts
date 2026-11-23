@@ -37,6 +37,17 @@ export interface DatosViajeFinalizado {
     paymentId: string;
 }
 
+export interface DatosViajeCancelado {
+    viajeId: string;
+    clienteId: string;
+    conductorId: string | null;
+    clientUserId?: number | null;
+    driverUserId?: number | null;
+    canceladoAt: Date;
+    cancelledBy: 'cliente' | 'conductor';
+    motivo: string;
+}
+
 export const EXCHANGE_M8 = 'mobility.events';
 export const EXCHANGE_M3 = 'viajes.events';
 export const EXCHANGE_M4 = 'trip.events';
@@ -148,6 +159,44 @@ export function eventosViajeFinalizado(datos: DatosViajeFinalizado): EventoSalid
     if (paraM4) eventos.push(paraM4);
 
     return eventos;
+}
+
+/**
+ * TripCancelled para M8 (mobility.events, trip.cancelled), con el mismo sobre que TripCompleted.
+ * Un evento por destinatario: el cliente y, si había uno asignado, el conductor.
+ * Se omite el destinatario que no tiene userId numérico de M1.
+ */
+export function eventosViajeCancelado(datos: DatosViajeCancelado): EventoSalida[] {
+    const occurredAt = datos.canceladoAt.toISOString();
+    const destinatarios = [
+        idUsuarioM1(datos.clientUserId, datos.clienteId),
+        datos.conductorId ? idUsuarioM1(datos.driverUserId, datos.conductorId) : undefined,
+    ];
+
+    return destinatarios
+        .filter((recipientId): recipientId is number => recipientId !== undefined)
+        .map((recipientId) => {
+            const messageId = randomUUID();
+            return {
+                messageId,
+                exchange: EXCHANGE_M8,
+                routingKey: 'trip.cancelled',
+                payload: {
+                    messageId,
+                    eventType: 'TripCancelled',
+                    version: 1,
+                    occurredAt,
+                    correlationId: datos.viajeId,
+                    producer: PRODUCER,
+                    data: {
+                        tripId: datos.viajeId,
+                        recipientId,
+                        cancelledBy: datos.cancelledBy,
+                        motivo: datos.motivo,
+                    },
+                },
+            };
+        });
 }
 
 const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://localhost:5672';

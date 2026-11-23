@@ -217,7 +217,7 @@ export const cancelarViaje = async (req: Request, res: Response): Promise<any> =
         });
     }
 
-    // viaje.cancelado (trip.events) quedó en el outbox; se publica ahora o lo reintenta el relay.
+    // viaje.cancelado (M4) y TripCancelled (M8) quedaron en el outbox; se publican ahora o los reintenta el relay.
     void despacharEventosPendientes();
     return res.json(viajeRespuestaLegacy(viaje));
 };

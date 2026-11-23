@@ -358,6 +358,50 @@ describe('RF-6.4 - Finalización del viaje', () => {
     });
   });
 
+  it('guarda el evento M4 y un TripCancelled M8 por destinatario al cancelar', async () => {
+    const crearResponse = await fetch(`${apiUrl}/api/viajes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        clienteId: 'cliente-texto',
+        clientUserId: 42,
+        origen: 'Calle A',
+        destino: 'Calle B',
+      }),
+    });
+    const viaje = await crearResponse.json() as { id: string };
+    await viajeRepo.actualizarEstado(viaje.id, EstadoViaje.CONDUCTOR_EN_CAMINO, 'conductor-texto', 55);
+
+    const cancelacion = await fetch(`${apiUrl}/api/viajes/${viaje.id}/cancelacion`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ actor: 'conductor', motivo: 'Imprevisto' }),
+    });
+    expect(cancelacion.status).toBe(200);
+
+    const { rows } = await pool.query(
+      'SELECT exchange, routing_key, payload FROM viaje_eventos_outbox WHERE viaje_id = $1 ORDER BY exchange, routing_key',
+      [viaje.id],
+    );
+    const eventosM8 = rows.filter((row) => row.exchange === 'mobility.events');
+
+    expect(rows.filter((row) => row.exchange === 'trip.events')).toHaveLength(1);
+    expect(rows.find((row) => row.exchange === 'trip.events')).toMatchObject({
+      routing_key: 'viaje.cancelado',
+      payload: { eventType: 'viaje.cancelado', tripId: viaje.id, driverId: 55 },
+    });
+    expect(eventosM8).toHaveLength(2);
+    expect(eventosM8.every((evento) => evento.routing_key === 'trip.cancelled')).toBe(true);
+    expect(eventosM8.map((evento) => (evento.payload.data as { recipientId: number }).recipientId)
+      .sort()).toEqual([42, 55]);
+    expect(eventosM8[0].payload).toMatchObject({
+      eventType: 'TripCancelled',
+      correlationId: viaje.id,
+      producer: 'm6-viajes',
+      data: { tripId: viaje.id, cancelledBy: 'conductor', motivo: 'Imprevisto' },
+    });
+  });
+
   it('omite los eventos que requieren ids numéricos de M1 cuando no los hay', async () => {
     const viaje = await crearViajeEnCurso('cliente-texto', 'conductor-texto');
     expect((await solicitudFinalizacion(viaje.id)).status).toBe(200);
