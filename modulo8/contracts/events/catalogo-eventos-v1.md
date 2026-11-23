@@ -21,6 +21,7 @@ Reemplaza al contrato AE1 de RabbitMQ, disponible en el historial Git.
 | 2026-10-04 | Forma de integración de M7 con Comprobantes | M7 (RF-7.3) / Invaldi (M8) | M7 se integra solo por REST y no publicará `payment.confirmed`. Comprobantes consulta `GET /metodo-pago/{viajeId}` de M7 y emite solo con el pago autorizado (ver 5.1). Importe y moneda: consulta pendiente a M7 |
 | 2026-10-05 | Importe cobrado en la respuesta de M7 | M7 (RF-7.3) | M7 agregó `total` y `moneda` a `GET /metodo-pago/{viajeId}`, guardados al autorizar (commit `063e112` de M7). Comprobantes los usa desde la versión 2.3.0 (ver 5.1) |
 | 2026-10-04 | El reenvío devuelve el enlace temporal de la sección 6 | Lucas Cremaschi (RF-8.4) | Acordado sin cambios en el contrato |
+| 2026-11-23 | Disparador de Comprobantes en el Compose común (AE4) | M6 (contrato ya publicado) | Comprobantes consume `TripCompleted` de M6 en su propia cola y completa los datos por REST con M6, M3 y M7 (ver 5.6). No requiere cambios en M6 |
 
 
 ## 2. Topología
@@ -46,6 +47,9 @@ que dos módulos compitan por el mismo mensaje: cada uno recibe su propia copia.
 | `m8.receipts.payment-confirmed` | Ligada a `mobility.events` con `payment.confirmed`. La consume el servicio. |
 | `m8.receipts.payment-confirmed.retry` | Sin consumidores. El mensaje espera ahí el tiempo de reintento y RabbitMQ lo devuelve a la cola principal. |
 | `m8.receipts.payment-confirmed.dlq` | Ligada a `mobility.events.dlx` con la clave `m8.receipts.payment-confirmed`. Mensajes inválidos o con reintentos agotados. |
+| `m8.receipts.trip-completed` | Ligada a `mobility.events` con `trip.completed` (M6). Se declara solo si `M6_TRIPS_URL` está configurada (Compose común). |
+| `m8.receipts.trip-completed.retry` | Igual que la de `payment-confirmed`: espera sin consumidores y vuelve a la cola principal. |
+| `m8.receipts.trip-completed.dlq` | Ligada a `mobility.events.dlx` con la clave `m8.receipts.trip-completed`. |
 
 ## 3. Sobre del mensaje
 
@@ -260,8 +264,8 @@ En consecuencia:
 
 - Comprobantes consulta a M7 antes de emitir, tanto en `POST /api/v1/receipts`
   como al consumir este evento. El cliente REST no depende de un evento
-  disparador: el disparador definitivo (por ejemplo `trip.completed` de M6 vía
-  RF-8.6) se define al cerrar el contrato con M6.
+  disparador. En el Compose común (AE4) el disparador es `trip.completed` de M6,
+  consumido directamente por Comprobantes en su propia cola (sección 5.6).
 - M7 agregó `total` y `moneda` a su respuesta el 2026-10-05, a pedido de
   Comprobantes; se informan recién al autorizar el pago. El desglose de la tarifa
   no es de M7: sigue llegando en la entrada y solo se muestra si cierra con el
@@ -478,6 +482,72 @@ Su proveedor actual es sandbox y la E2E con M3 real sigue pendiente.
 
 El contrato completo está en
 [`m3-driver-document-registered.contract.md`](./m3-driver-document-registered.contract.md).
+
+### 5.6 `trip.completed` (M6 → Comprobantes, RF-8.3)
+
+Disparador de la emisión en el Compose común. M6 publica `TripCompleted` al
+finalizar un viaje, desde su outbox y en la misma transacción que pasa el viaje
+a `COMPLETADO` (`modulo6/src/rf-6.1-6.2-6.3/services/eventos-viaje.service.ts`).
+Comprobantes lo recibe en `m8.receipts.trip-completed`, una cola propia: RF-8.6
+no la comparte y cada consumidor recibe su copia.
+
+```json
+{
+  "messageId": "uuid",
+  "eventType": "TripCompleted",
+  "version": 1,
+  "occurredAt": "2026-11-23T15:31:00.000Z",
+  "correlationId": "<tripId>",
+  "producer": "m6-viajes",
+  "data": { "tripId": "<tripId>", "recipientId": 105, "total": 5390.5, "paymentId": "<pagoId>" }
+}
+```
+
+El evento es delgado: solo identifica el viaje y al cliente (`recipientId`,
+`userId` numérico de M1). Comprobantes completa el resto consultando a cada
+dueño del dato por REST, sin leer bases ajenas:
+
+| Dato del comprobante | Dueño | Operación |
+| --- | --- | --- |
+| Estado, cliente, conductor, origen y destino | M6 | `GET /api/viajes/{id}` |
+| Inicio, fin, distancia, duración, tipo de vehículo, medio de pago, total y moneda | M6 | `GET /api/viajes?clienteId=&estado=COMPLETADO` (registro RF-6.7, campo `finalizacion`) |
+| Vehículo activo del tipo del viaje (patente, marca, modelo) | M3 | `GET /api/v1/drivers/{userId}/vehicles` |
+| Alta del conductor (y nombre, si algún día lo informa) | M3 | `GET /api/conductores/{userId}` |
+| Estado del pago, medio e importe cobrado | M7 | `GET /metodo-pago/{viajeId}` (sección 5.1) |
+| Cliente | M1 vía M6 | `recipientId` del evento |
+
+Decisiones:
+
+- **Nombres.** M1 es el único que guarda nombre y email, y solo los devuelve
+  con el token del propio usuario (`GET /auth/me`). M3 guarda del conductor
+  `usuarioID`, ciudad y estado, sin nombre. El comprobante emitido desde este
+  evento muestra el número de usuario de M1 del cliente y del conductor; no
+  inventa datos y no expone datos personales que el dueño no comparte (RNF-23).
+  Por REST (`POST /api/v1/receipts`) los nombres siguen siendo obligatorios.
+- **Conductor.** `conductorId` de M6 debe ser el `userId` numérico de M1 (como
+  lo envía M5 al asignar). Si no lo es, el mensaje va a la DLQ.
+- **Pago.** Se aplica la misma regla de 5.1: emite con pago autorizado en M7.
+  Pendiente y sin registrar se reintentan; rechazado va a la DLQ. El tratamiento
+  de efectivo y transferencia (que M7 deja pendientes) se define con M7.
+- **Tarifa.** M6 informa solo el total; el comprobante no muestra desglose.
+  El importe final es el que informa M7.
+- **Autorización de acceso.** `customerUserId` = `recipientId` y
+  `driverUserId` = `conductorId`: el cliente y el conductor del viaje consultan
+  el comprobante con su token de M1 (RF-8.4).
+
+Clasificación de fallas (misma política que 5.1):
+
+| Situación | Resultado |
+| --- | --- |
+| Sobre inválido, otro `eventType`, `version` distinta, `correlationId` ≠ `data.tripId`, `recipientId` no numérico | DLQ sin reintentos |
+| Conductor sin `userId` numérico o medio de pago desconocido | DLQ sin reintentos |
+| Pago rechazado en M7, rechazo del autorizador fiscal | DLQ sin reintentos |
+| M6, M3, M7, fiscal o PostgreSQL sin respuesta o con `5xx` | Espera en la cola de reintentos sin descontar intentos |
+| Viaje todavía no visible como `COMPLETADO`, sin vehículo activo en M3, pago pendiente | Reintento con descuento; agotados, DLQ |
+| `messageId` ya procesado, o comprobante ya emitido para el `tripId` | Se descarta sin emitir otro |
+
+Prueba de punta a punta con todos los módulos reales:
+`modulo8/tests/e2e/shared-compose-receipt.mjs`.
 
 
 
