@@ -6,7 +6,7 @@ export function createSimulator() {
             body += chunk;
         const input = body ? JSON.parse(body) : {};
         let result;
-        if (request.method === 'GET' && request.url?.match(/^\/conductor\/[^/]+\/estado$/)) {
+        if (request.method === 'GET' && request.url?.match(/^(?:\/api)?\/conductor\/[^/]+\/estado$/)) {
             result = { habilitado: true };
         }
         else if (request.method === 'POST' && request.url === '/api/v1/estimate') {

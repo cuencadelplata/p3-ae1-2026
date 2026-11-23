@@ -33,7 +33,7 @@ Antes de levantar Compose:
 docker compose --env-file .env -f compose.yaml -f compose.integracion-real.yaml -f ../modulo6/docker-compose.m8-hostports.yml up -d --build --wait
 ```
 
-La URL interna configurada es `http://m8-app:3000`. M6 conserva sus puertos locales habituales; M8 queda publicado en `http://localhost:3103` para las comprobaciones desde el host. M3 y M4 continúan usando el simulador de M6.
+La URL interna configurada es `http://m8-app:3000`. M6 conserva sus puertos locales habituales; M8 queda publicado en `http://localhost:3103` para las comprobaciones desde el host. En el Compose integrado M6 consulta M3 por `http://m3-api:3000/api/conductor/{id}/estado`; el Compose aislado usa el simulador de M3 si no se configura `M3_URL`.
 
 Para detener M8 desde `modulo8/` y luego M6 desde `modulo6/`:
 

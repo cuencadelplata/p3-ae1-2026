@@ -15,7 +15,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://alloy:4318}
       M8_URL: ${M8_URL:-http://m8-app:3000}
       M8_QR_API_KEY: ${QR_INTERNAL_API_KEY:-}
-      M3_URL: http://simulador:3001
+      M3_URL: ${M3_URL:-http://simulador:3001}
       M4_URL: http://simulador:3001/api/v1
       M7_URL: ${M7_URL:-http://host.docker.internal:16000}
       M7_API_KEY: ${M7_API_KEY:-}
