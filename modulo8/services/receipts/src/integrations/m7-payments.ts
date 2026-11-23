@@ -123,7 +123,22 @@ export function applyM7Amount(fare: Fare, amount: M7Amount | undefined): Fare {
 }
 
 /**
- * Decide si el pago habilita la emision: solo un pago autorizado por M7.
+ * Medios que se cobran fuera de la pasarela: M7 los registra y quedan
+ * pendientes, porque nadie los autoriza despues (lo cobra el conductor o llega
+ * por transferencia). Acuerdo del grupo M8 (2026-11-23).
+ */
+export const OFF_GATEWAY_METHODS: readonly PaymentMethod[] = ['EFECTIVO', 'TRANSFERENCIA'];
+
+export function isOffGatewayPending(payment: Pick<M7Payment, 'method' | 'status'>): boolean {
+  return payment.status === 'PENDIENTE' && OFF_GATEWAY_METHODS.includes(payment.method);
+}
+
+/**
+ * Decide si el pago habilita la emision:
+ * - autorizado: se emite;
+ * - pendiente en efectivo o transferencia: se emite con el pago pendiente;
+ * - pendiente con tarjeta o sin registrar: todavia no (reintentable);
+ * - rechazado: nunca.
  * payment es null cuando M7 no tiene un pago registrado para el viaje.
  */
 export function ensureAuthorized(payment: M7Payment | null, tripId: string): M7Payment {
@@ -132,6 +147,9 @@ export function ensureAuthorized(payment: M7Payment | null, tripId: string): M7P
   }
   if (payment.status === 'RECHAZADO') {
     throw new PaymentNotAuthorizedError('PAYMENT_REJECTED', tripId, `M7 rechazo el pago del viaje ${tripId}`);
+  }
+  if (isOffGatewayPending(payment)) {
+    return payment;
   }
   if (payment.status !== 'APROBADO') {
     throw new PaymentNotAuthorizedError('PAYMENT_PENDING', tripId, `El pago del viaje ${tripId} esta pendiente de autorizacion en M7`);

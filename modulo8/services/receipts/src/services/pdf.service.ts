@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit';
 
 import { env } from '../config/env';
+import { isOffGatewayPending } from '../integrations/m7-payments';
 import type { Fare, Receipt } from '../models/receipt';
 import {
   formatCurrency,
@@ -258,7 +259,14 @@ function drawPaymentSection(doc: Doc, receipt: Receipt): void {
 
   const rows: Row[] = [
     ['Metodo de pago', labelForPaymentMethod(receipt.payment.method)],
-    ['Estado', labelForPaymentStatus(receipt.payment.status)],
+    [
+      'Estado',
+      isOffGatewayPending(receipt.payment)
+        ? receipt.payment.method === 'EFECTIVO'
+          ? 'Pendiente: se abona al conductor'
+          : 'Pendiente: se abona por transferencia'
+        : labelForPaymentStatus(receipt.payment.status),
+    ],
   ];
   if (receipt.payment.authorizationCode) {
     rows.push(['Codigo de autorizacion', receipt.payment.authorizationCode]);

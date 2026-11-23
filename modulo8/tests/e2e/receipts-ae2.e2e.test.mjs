@@ -234,9 +234,9 @@ async function m7(path, body) {
   assert.ok(response.ok, `M7 ${path} respondio ${response.status}`);
 }
 
-test("con el pago pendiente en M7 no se emite; al autorizarse, el reintento emite con el medio de pago y el importe de M7", async () => {
+test("con la tarjeta pendiente en M7 no se emite; al autorizarse, el reintento emite con el medio de pago y el importe de M7", async () => {
   const tripId = `${run}-m7-pendiente`;
-  await m7("/metodo-pago", { clienteId: "cli-e2e", viajeId: tripId, tipo: "transferencia" });
+  await m7("/metodo-pago", { clienteId: "cli-e2e", viajeId: tripId, tipo: "tarjeta" });
 
   const event = paymentConfirmed(tripId);
   await publish("payment.confirmed", event, event.messageId);
@@ -251,7 +251,7 @@ test("con el pago pendiente en M7 no se emite; al autorizarse, el reintento emit
     },
     { what: "la emision del comprobante en el reintento", timeoutMs: 20000 },
   );
-  assert.equal(receipt.payment.method, "TRANSFERENCIA");
+  assert.equal(receipt.payment.method, "TARJETA");
   assert.equal(receipt.fare.total, 1800, "el total sale de M7, no del evento (1500)");
 });
 

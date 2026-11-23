@@ -51,7 +51,7 @@ const port = readPort('PORT', 3008);
 export const env = {
   nodeEnv: readText('NODE_ENV', 'development'),
   serviceName: 'm8-documentos',
-  serviceVersion: readText('SERVICE_VERSION', '2.4.0'),
+  serviceVersion: readText('SERVICE_VERSION', '2.5.0'),
   port,
 
   /** Prefijo de la API REST versionada. */

@@ -129,7 +129,14 @@ describe('Decision de emision segun el pago (Unit)', () => {
     assert.deepEqual(ensureAuthorized(payment('APROBADO'), 'trip-m7-1'), payment('APROBADO'));
   });
 
-  it('un pago pendiente debe rechazar la emision de forma reintentable', () => {
+  it('efectivo o transferencia pendientes deben habilitar la emision', () => {
+    for (const method of ['EFECTIVO', 'TRANSFERENCIA'] as const) {
+      const pending: M7Payment = { ...payment('PENDIENTE'), method };
+      assert.deepEqual(ensureAuthorized(pending, 'trip-m7-1'), pending);
+    }
+  });
+
+  it('un pago con tarjeta pendiente debe rechazar la emision de forma reintentable', () => {
     assert.throws(
       () => ensureAuthorized(payment('PENDIENTE'), 'trip-m7-1'),
       (error: unknown) =>
