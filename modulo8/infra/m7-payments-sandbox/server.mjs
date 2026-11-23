@@ -16,6 +16,18 @@
  * exige idOrden y total; el sandbox los acepta opcionales para que las pruebas
  * puedan autorizar un pago sin importe.
  *
+ * Tambien la estimacion de tarifa (RF-7.1), que M6 pide al finalizar un viaje:
+ *   POST /tarifa/estimacion  { origen, destino, distanciaKm, tiempoEstimadoMin, vehicleType }
+ *     -> 200 { estimacionId, estimatedFare, currency, desglose, ... } | 400 { error }
+ *   Misma formula que M7: (500 + km x 250 + min x 50) x multiplicador (auto 1.0, moto 0.7).
+ *
+ * Con M7_API_KEY configurada, /metodo-pago exige el header x-api-key como M7
+ * (401 si falta o no coincide). Sin ella no se exige, como en las pruebas aisladas.
+ * Al autorizar, el token "tarjeta-rechazada" simula el rechazo de Mercado Pago (402).
+ *
+ * Asi el sandbox puede reemplazar a M7 en el Compose comun (perfil m7-sandbox)
+ * mientras M7 no este disponible, sin cambiar M6 ni M8.
+ *
  * Agregados del sandbox:
  *   GET  /health
  *   GET|PUT /admin/mode   { mode: "normal" | "slow" | "down" }, igual que el fiscal-sandbox.
@@ -37,6 +49,15 @@ const MODES = ['normal', 'slow', 'down'];
 const TIPOS = ['efectivo', 'tarjeta', 'transferencia'];
 const UNREGISTERED_TRIPS = process.env.UNREGISTERED_TRIPS === 'not_found' ? 'not_found' : 'autorizado';
 const DEFAULT_TIPO = TIPOS.includes(process.env.DEFAULT_TIPO) ? process.env.DEFAULT_TIPO : 'tarjeta';
+
+const API_KEY = process.env.M7_API_KEY?.trim() ?? '';
+const REJECTED_CARD_TOKEN = 'tarjeta-rechazada';
+
+// Formula publicada por M7 (openapi.yaml, /tarifa/estimacion).
+const TARIFA_BASE = 500;
+const PRECIO_POR_KM = 250;
+const PRECIO_POR_MINUTO = 50;
+const VEHICLE_MULTIPLIER = { auto: 1.0, moto: 0.7 };
 
 let mode = MODES.includes(process.env.M7_MODE) ? process.env.M7_MODE : 'normal';
 
@@ -129,6 +150,39 @@ function transition(res, viajeId, estado, body) {
   return send(res, 200, payment);
 }
 
+async function estimateFare(req, res) {
+  const body = await readJson(req);
+  const { distanciaKm, tiempoEstimadoMin, vehicleType } = body ?? {};
+  if (typeof distanciaKm !== 'number' || distanciaKm <= 0) {
+    return send(res, 400, { error: 'distanciaKm debe ser un número mayor a 0' });
+  }
+  if (typeof tiempoEstimadoMin !== 'number' || tiempoEstimadoMin <= 0) {
+    return send(res, 400, { error: 'tiempoEstimadoMin debe ser un número mayor a 0' });
+  }
+  const multiplicador = VEHICLE_MULTIPLIER[vehicleType];
+  if (!multiplicador) {
+    return send(res, 400, { error: "vehicleType debe ser 'auto' o 'moto'" });
+  }
+  const costoDistancia = distanciaKm * PRECIO_POR_KM;
+  const costoTiempo = tiempoEstimadoMin * PRECIO_POR_MINUTO;
+  const estimatedFare = Math.round((TARIFA_BASE + costoDistancia + costoTiempo) * multiplicador * 100) / 100;
+  log('info', 'tarifa estimada', { distanciaKm, tiempoEstimadoMin, vehicleType, estimatedFare });
+  return send(res, 200, {
+    estimacionId: `est_${Date.now()}`,
+    distanciaKm,
+    tiempoEstimadoMin,
+    vehicleType,
+    estimatedFare,
+    currency: 'ARS',
+    desglose: { tarifaBase: TARIFA_BASE, costoDistancia, costoTiempo, multiplicadorVehiculo: multiplicador },
+    calculadoEn: new Date().toISOString(),
+  });
+}
+
+function hasValidApiKey(req) {
+  return !API_KEY || req.headers['x-api-key'] === API_KEY;
+}
+
 async function changeMode(req, res) {
   const body = await readJson(req);
   if (!MODES.includes(body?.mode)) {
@@ -162,10 +216,17 @@ const server = createServer((req, res) => {
       await new Promise((resolve) => setTimeout(resolve, SLOW_DELAY_MS));
     }
 
+    if (req.method === 'POST' && (path === '/tarifa/estimacion' || path === '/tarifas/estimacion')) {
+      return estimateFare(req, res);
+    }
+
+    const match = PAYMENT_PATH.exec(path);
+    if ((path === '/metodo-pago' || match) && !hasValidApiKey(req)) {
+      return sendMessage(res, 401, 'API key inválida o ausente');
+    }
     if (req.method === 'POST' && path === '/metodo-pago') {
       return register(req, res);
     }
-    const match = PAYMENT_PATH.exec(path);
     if (match) {
       const viajeId = decodeURIComponent(match[1]);
       if (req.method === 'GET' && !match[2]) {
@@ -173,6 +234,10 @@ const server = createServer((req, res) => {
       }
       if (req.method === 'POST' && match[2]) {
         const body = await readJson(req);
+        if (match[2] === 'autorizar' && body?.token === REJECTED_CARD_TOKEN) {
+          log('warn', 'pago rechazado por la pasarela simulada', { viajeId });
+          return send(res, 402, { mensaje: 'El pago no fue aprobado por Mercado Pago', estadoMP: 'rejected' });
+        }
         return transition(res, viajeId, match[2] === 'autorizar' ? 'autorizado' : 'rechazado', body);
       }
     }

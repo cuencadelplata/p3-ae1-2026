@@ -10,7 +10,8 @@
 //       autoriza con el fiscal simulado y guarda el PDF.
 //   El cliente consulta su comprobante con su token de M1 y lo descarga.
 //
-// Requisitos: stack común levantado (ver INTEGRACION_COMPOSE.md) y M7 configurado.
+// Requisitos: stack común levantado (ver INTEGRACION_COMPOSE.md) con M7 real o
+// con el simulador de su contrato (perfil m7-sandbox).
 // Uso, desde modulo8:  node tests/e2e/shared-compose-receipt.mjs
 import assert from 'node:assert/strict';
 import { randomInt, randomUUID } from 'node:crypto';
@@ -88,6 +89,11 @@ const driverProfile = await request(m3Conductor, '/api/conductores', {
   method: 'POST', token: driver.token, body: { ciudad: 'Corrientes', tipovehiculo: 'auto' },
 });
 assert.equal(driverProfile.status, 201, `M3 alta de conductor: ${show(driverProfile)}`);
+// M6 solo registra el arribo de un conductor habilitado en M3 (lo hace un operador).
+const enabled = await request(m3Conductor, `/api/conductores/${driver.userId}/habilitado`, {
+  method: 'PUT', body: { habilitado: 'activo' },
+});
+assert.equal(enabled.status, 200, `M3 habilitar conductor: ${show(enabled)}`);
 const plate = `AB${randomInt(100, 999)}CD`;
 const vehicle = await request(m3Vehicles, `/api/v1/drivers/${driver.userId}/vehicles`, {
   method: 'POST',
@@ -149,6 +155,9 @@ assert.equal(data.tripId, tripId);
 assert.equal(data.customer.id, String(customer.userId));
 assert.equal(data.driver.vehicle.plate, plate);
 assert.equal(data.fare.total, finished.data.viaje.total);
+assert.equal(data.payment.method, paymentMethod.toUpperCase());
+// Tarjeta: M7 la autoriza. Efectivo y transferencia se cobran fuera de la pasarela y quedan pendientes.
+assert.equal(data.payment.status, paymentMethod === 'tarjeta' ? 'APROBADO' : 'PENDIENTE');
 assert.ok(data.fiscal?.authorizationCode, 'el comprobante debe tener autorización fiscal');
 
 // Otro usuario no puede ver el comprobante (RF-8.4 con M1 real)

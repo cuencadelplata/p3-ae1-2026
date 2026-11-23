@@ -81,17 +81,38 @@ El cliente y el conductor del viaje consultan el comprobante con su token de
 M1. Como M1 no comparte nombres con otros servicios, el PDF muestra el número de
 usuario de cada uno.
 
-Prueba de punta a punta (registra usuarios en M1, conductor y vehículo en M3,
-hace el viaje completo en M6 y espera el comprobante en M8):
+Regla de pago (acuerdo del grupo M8): con tarjeta se emite cuando M7 la
+autoriza; efectivo y transferencia se cobran fuera de la pasarela, M7 los deja
+pendientes y el comprobante se emite con el pago pendiente. Un pago rechazado no
+genera comprobante.
 
-```powershell
-docker compose --env-file modulo8/.env.integracion up -d --build --wait m8-app m6-viajes m4-api m3-conductor-api m3-vehiculos m1-identidad-acceso m7-api
-cd modulo8
-node tests/e2e/shared-compose-receipt.mjs
+### M7 real o simulador de su contrato
+
+El M7 real necesita su configuración privada (`modulo7/.env`: Supabase, Mercado
+Pago y `M7_API_KEY`). Si no está disponible, M8 trae un simulador del mismo
+contrato (tarifa con la fórmula de M7, registro, consulta, autorización y
+rechazo del pago, `x-api-key`). Para usarlo, agregar a `.env.integracion`:
+
+```
+M6_M7_URL=http://m8-m7-sandbox:4020
+M8_M7_PAYMENTS_URL=http://m8-m7-sandbox:4020
 ```
 
-Requiere M7 configurado (su `modulo7/.env`, con `M7_API_KEY` igual a la de M6 y
-M8). `RECEIPT_E2E_METODO_PAGO` elige el medio de pago (por defecto `tarjeta`).
+Con el M7 real se quitan esas dos líneas y se levanta `m7-api` en lugar del perfil.
+
+### Prueba de punta a punta
+
+Registra usuarios en M1, conductor y vehículo en M3, hace el viaje completo en
+M6 y espera el comprobante en M8:
+
+```powershell
+docker compose --env-file modulo8/.env.integracion --profile m7-sandbox up -d --build --wait m8-app m8-m7-sandbox m6-viajes m4-api m3-conductor-api m3-vehiculos m1-identidad-acceso
+cd modulo8
+node tests/e2e/shared-compose-receipt.mjs
+$env:RECEIPT_E2E_METODO_PAGO = 'efectivo'; node tests/e2e/shared-compose-receipt.mjs
+```
+
+`RECEIPT_E2E_METODO_PAGO` elige el medio de pago (por defecto `tarjeta`).
 Para ver la cola y la DLQ: RabbitMQ → Queues → `m8.receipts.trip-completed*`.
 
 ## Alcance de los demás requerimientos

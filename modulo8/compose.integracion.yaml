@@ -58,6 +58,20 @@ services:
       - reservas-network
     restart: unless-stopped
 
+  # Simulador del contrato de M7 (tarifa y pagos) para cuando M7 no puede correr
+  # en el stack común. No arranca por defecto: perfil m7-sandbox, y M6 y M8 lo
+  # usan solo si M6_M7_URL y M8_M7_PAYMENTS_URL apuntan a él (INTEGRACION_COMPOSE.md).
+  m8-m7-sandbox:
+    profiles: ["m7-sandbox"]
+    build:
+      context: ./infra/m7-payments-sandbox
+    environment:
+      UNREGISTERED_TRIPS: not_found
+      M7_API_KEY: "${M7_API_KEY:-}"
+    networks:
+      - reservas-network
+    restart: unless-stopped
+
   m8-postgres:
     image: postgres:17-alpine
     environment:
