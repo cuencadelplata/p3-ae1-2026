@@ -112,7 +112,23 @@ node tests/e2e/shared-compose-receipt.mjs
 $env:RECEIPT_E2E_METODO_PAGO = 'efectivo'; node tests/e2e/shared-compose-receipt.mjs
 ```
 
+La prueba también recorre los avisos del viaje (RF-8.1 → RF-8.6 → RF-8.7): el
+cliente crea su perfil en M2 con canal push y registra un dispositivo en M8, y
+la llegada del conductor, el inicio y la finalización quedan entregados por
+push. Además reenvía el comprobante (RF-8.4).
+
 `RECEIPT_E2E_METODO_PAGO` elige el medio de pago (por defecto `tarjeta`).
+
+## Soporte, entrega de avisos y observabilidad
+
+- `/tickets` (RF-8.5) exige un Bearer de M1 en el stack común y aplica permisos:
+  cualquier usuario crea tickets; listar y cambiar estados es del `OPERADOR`;
+  ver un ticket o su historial, del `OPERADOR` o de quien lo creó.
+- RF-8.7 consulta preferencias a M2 con circuit breaker: si M2 no responde,
+  tras 3 fallas deja de consultarlo 30 s y falla al instante, sin frenar al
+  resto de la app (`UV_THREADPOOL_SIZE=16` en `m8-app`).
+- Métricas de `m8-app` a Grafana Cloud desde el stack común: perfil
+  `observability` (`m8-alloy`), con `GRAFANA_CLOUD_*` en `.env.integracion`.
 Para ver la cola y la DLQ: RabbitMQ → Queues → `m8.receipts.trip-completed*`.
 
 ## Alcance de los demás requerimientos

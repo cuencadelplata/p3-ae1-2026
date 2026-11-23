@@ -84,6 +84,19 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const customer = await m1Session('CLIENTE', 'Cliente');
 const driver = await m1Session('CONDUCTOR', 'Conductor');
 
+// 1b. Perfil del cliente en M2 (avisos por push) y su dispositivo en M8 (RF-8.7):
+// así los avisos del viaje recorren la entrega real (preferencias de M2 + push).
+const m2 = url('M2_TEST_URL', 11000);
+const profile = await request(m2, '/v1/customers', {
+  method: 'POST', token: customer.token,
+  body: { preferences: { preferredVehicleType: 'auto', notificationChannel: 'push' } },
+});
+assert.equal(profile.status, 201, `M2 alta de perfil: ${show(profile)}`);
+const device = await request(m8, '/devices/tokens', {
+  method: 'POST', token: customer.token, body: { token: `device-e2e-${randomUUID()}`, platform: 'ANDROID' },
+});
+assert.equal(device.status, 201, `M8 registro de dispositivo: ${show(device)}`);
+
 // 2. Conductor y vehículo en M3
 const driverProfile = await request(m3Conductor, '/api/conductores', {
   method: 'POST', token: driver.token, body: { ciudad: 'Corrientes', tipovehiculo: 'auto' },
@@ -172,6 +185,20 @@ const link = (reference.data.data ?? reference.data).url;
 const pdf = await fetch(link, { signal: AbortSignal.timeout(15000) });
 assert.equal(pdf.status, 200);
 assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0, 4).toString(), '%PDF');
+
+// RF-8.4: reenvío del mismo comprobante. Sin email del cliente (M1 no lo
+// comparte) hay que indicar el destino; el reenvío da un enlace nuevo al mismo PDF.
+const noDestination = await request(m8, `/api/v1/receipts/${tripId}/resend`, {
+  method: 'POST', token: customer.token, body: { channel: 'EMAIL' },
+});
+assert.equal(noDestination.data?.error?.code, 'DELIVERY_DESTINATION_REQUIRED', `reenvío sin destino: ${show(noDestination)}`);
+const resent = await request(m8, `/api/v1/receipts/${tripId}/resend`, {
+  method: 'POST', token: customer.token, body: { channel: 'EMAIL', destination: 'cliente.e2e@example.com' },
+});
+assert.equal(resent.status, 202, `M8 reenvío: ${show(resent)}`);
+assert.equal(resent.data.data.receiptId, data.receiptId, 'el reenvío no emite otro comprobante');
+const resentPdf = await fetch(resent.data.data.lastDelivery.url, { signal: AbortSignal.timeout(15000) });
+assert.equal(resentPdf.status, 200);
 
 // Repetir la finalización no emite otro comprobante (idempotencia en M6 y en M8)
 const repeated = await request(m6, `/api/viajes/${tripId}/finalizacion`, {
