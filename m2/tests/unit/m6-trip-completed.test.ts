@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { tripEventSchema } from '../../src/direcciones/domain';
 import { sincronizarViajeCompletado, importarViaje } from '../../src/direcciones/importar-viaje';
@@ -60,6 +60,44 @@ describe('tripEventSchema', () => {
 describe('sincronizarViajeCompletado', () => {
   const normalized = () => tripEventSchema.parse(m6Event()) as Extract<ReturnType<typeof tripEventSchema.parse>, { source: 'm6' }>;
 
+  // GET /api/viajes/{id} de M6 (main): trae origen, destino y completadoAt; clienteId es el de M6,
+  // que puede no coincidir con el id de M1 que llega como recipientId.
+  it('usa GET /api/viajes/{id} y guarda a nombre del recipientId aunque M6 tenga otro clienteId', async () => {
+    const event = normalized();
+    vi.spyOn(modulo6Client, 'obtenerViajePorId').mockResolvedValue({
+      id: event.viajeId, clienteId: 'cliente-mail@ejemplo.com', conductorId: '7', estado: 'COMPLETADO',
+      origen: 'Av. Siempre Viva 742', destino: 'Terminal de Ómnibus',
+      fechaCreacion: '2026-11-17T11:30:00.000Z', completadoAt: '2026-11-17T12:00:00.000Z',
+    } as any);
+    const historial = vi.spyOn(modulo6Client, 'obtenerViajeDeCliente');
+    const service = { recordJourney: vi.fn().mockResolvedValue(undefined) };
+
+    await sincronizarViajeCompletado(event, service as any);
+
+    expect(historial).not.toHaveBeenCalled();
+    expect(service.recordJourney).toHaveBeenCalledWith(expect.objectContaining({
+      viajeId: event.viajeId, clienteId: '42', via: 'evento_m6',
+      origen: { direccion: 'Av. Siempre Viva 742', latitud: null, longitud: null },
+    }));
+  });
+
+  it('si M6 no responde al pedir el viaje por id, falla para reintentar (no cae al historial)', async () => {
+    const event = normalized();
+    vi.spyOn(modulo6Client, 'obtenerViajePorId').mockRejectedValue(new Modulo6UnavailableError());
+    const historial = vi.spyOn(modulo6Client, 'obtenerViajeDeCliente');
+    const service = { recordJourney: vi.fn() };
+    await expect(sincronizarViajeCompletado(event, service as any)).rejects.toBeInstanceOf(Modulo6UnavailableError);
+    expect(historial).not.toHaveBeenCalled();
+  });
+});
+
+// Versión anterior de M6: GET /api/viajes/{id} sin direcciones → se buscan en el historial del cliente.
+describe('sincronizarViajeCompletado con M6 sin direcciones en GET por id', () => {
+  const normalized = () => tripEventSchema.parse(m6Event()) as Extract<ReturnType<typeof tripEventSchema.parse>, { source: 'm6' }>;
+  beforeEach(() => {
+    vi.spyOn(modulo6Client, 'obtenerViajePorId').mockImplementation(async (id: string) => { throw new TripNotFoundError(id); });
+  });
+
   it('pide el viaje a M6 y registra origen y destino como finalización', async () => {
     const event = normalized();
     const spy = vi.spyOn(modulo6Client, 'obtenerViajeDeCliente').mockResolvedValue(m6Trip(event.viajeId) as any);
@@ -73,6 +111,7 @@ describe('sincronizarViajeCompletado', () => {
       origen: { direccion: 'Av. Siempre Viva 742', latitud: null, longitud: null },
       destino: { direccion: 'Terminal de Ómnibus', latitud: null, longitud: null },
       fechaViaje: new Date(event.occurredAt), fechaReferencia: 'FINALIZACION', eventId: event.eventId,
+      via: 'evento_m6',
     });
   });
 

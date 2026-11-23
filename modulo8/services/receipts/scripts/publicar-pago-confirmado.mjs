@@ -15,7 +15,7 @@
  * esa primera verificacion y el repetido se detectaria en la segunda capa: la
  * restriccion UNIQUE por viaje ("comprobante ya existente").
  *
- * Uso: con el stack levantado (docker compose up -d en modulo-8), ejecutar
+ * Uso: con el stack levantado (docker compose up -d en modulo8), ejecutar
  * configurar RABBITMQ_URL en el entorno antes de ejecutar este script.
  */
 import { randomUUID } from 'node:crypto';
@@ -159,6 +159,6 @@ async function main() {
 
 main().catch((error) => {
   console.error(`\nNo se pudo ejecutar la demo: ${error.message}`);
-  console.error('Asegurate de tener el stack levantado: docker compose up -d (en modulo-8)\n');
+  console.error('Asegurate de tener el stack levantado: docker compose up -d (en modulo8)\n');
   process.exit(1);
 });

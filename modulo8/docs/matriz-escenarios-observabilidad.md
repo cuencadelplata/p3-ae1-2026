@@ -1,11 +1,11 @@
 # Guía de escenarios de M8: k6 y Grafana
 
-Abrí PowerShell en la raíz del repositorio. El primer bloque entra a `modulo-8/`; luego ejecutá **un escenario por vez**. Mirá en Grafana el mismo intervalo horario en que corriste cada comando. Estas pruebas usan el Compose local y servicios simulados: todavía no acreditan M1, M2, M3, M6, M7 ni PUSH reales.
+Abrí PowerShell en la raíz del repositorio. El primer bloque entra a `modulo8/`; luego ejecutá **un escenario por vez**. Mirá en Grafana el mismo intervalo horario en que corriste cada comando. Estas pruebas usan el Compose local y servicios simulados: todavía no acreditan M1, M2, M3, M6, M7 ni PUSH reales.
 
 ## Preparación
 
 ```powershell
-cd .\modulo-8
+cd .\modulo8
 pnpm run ensure:stack
 docker compose --env-file .env --profile observability up -d alloy
 docker compose --env-file .env ps
@@ -103,7 +103,7 @@ Cada corrida sube por 50, 100, 200, 400 y 600 usuarios virtuales (VU), cinco seg
 
 ### Encontrar el límite práctico del QR
 
-El script acepta niveles personalizados de hasta 1200 VU. En PowerShell, desde `modulo-8/`, ejecutá:
+El script acepta niveles personalizados de hasta 1200 VU. En PowerShell, desde `modulo8/`, ejecutá:
 
 ```powershell
 $env:CAPACITY_LEVELS='600,625,650,700'
@@ -139,7 +139,7 @@ En una terminal iniciá la mezcla HTTP. Sube hasta 600 VU y mantiene ese nivel c
 pnpm run load:ramp45
 ```
 
-Mientras corre, en **otra terminal** dentro de `modulo-8/`, publicá 600 eventos M3 simulados:
+Mientras corre, en **otra terminal** dentro de `modulo8/`, publicá 600 eventos M3 simulados:
 
 ```powershell
 node tests/stress/run-m3-batch.mjs 600

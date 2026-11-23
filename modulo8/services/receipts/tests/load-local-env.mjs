@@ -5,7 +5,7 @@ import { parse } from 'dotenv';
 
 const envFile = resolve(dirname(fileURLToPath(import.meta.url)), '../../../.env');
 if (!existsSync(envFile)) {
-  throw new Error('Falta modulo-8/.env para las pruebas de comprobantes.');
+  throw new Error('Falta modulo8/.env para las pruebas de comprobantes.');
 }
 
 const local = parse(readFileSync(envFile));
@@ -13,7 +13,7 @@ const get = (name, fallback = '') => process.env[name] || local[name] || fallbac
 const required = (name) => {
   const value = get(name);
   if (!value || value.startsWith('replace-with-')) {
-    throw new Error(`Configurar ${name} en modulo-8/.env antes de probar comprobantes.`);
+    throw new Error(`Configurar ${name} en modulo8/.env antes de probar comprobantes.`);
   }
   return value;
 };

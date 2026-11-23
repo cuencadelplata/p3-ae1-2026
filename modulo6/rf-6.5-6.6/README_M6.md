@@ -46,38 +46,7 @@ npm run docker:up
 npm run docker:down
 ```
 
-La suite unitaria usa dobles inyectables para RF-6 y RabbitMQ. No requiere Docker.
-
-Para ejecutar el simulador HTTP RF-6 local, desde esta carpeta:
-
-```sh
-npm run simulator:rf6
-```
-
-El simulador escucha en el puerto `3000` (configurable con `PORT`) y soporta crear,
-consultar, asignar y cancelar viajes usando los contratos documentados en
-`simulator/rf-6.5-6.6/m6-rf6.5-rf6.6/rf-6-apis.yaml`. En la cancelación por conductor, M6
-publica el evento `cancelacion_conductor` en la cola `despacho.reabrir`, que es la
-cola consumida por la rama `ae2/lautaro-romero`.
-
-Para simular también el consumidor M5 de esa rama, con RabbitMQ disponible:
-
-```sh
-npm run simulator:m5
-```
-
-El simulador M5 escucha en el puerto `3002` (`M5_SIMULATOR_PORT`) y en la cola
-`despacho.reabrir`. Antes de cancelar, se puede registrar una solicitud asignada:
-
-```sh
-curl -X POST http://localhost:3002/simulator/requests \
-	-H 'content-type: application/json' \
-	-d '{"viajeId":"viaje-123","clienteId":"cliente-123","conductorId":"conductor-123"}'
-```
-
-Luego de cancelar ese viaje desde M6, `GET
-http://localhost:3002/simulator/requests/viaje-123` permite verificar que volvió a
-`SEARCHING`, se limpió el conductor asignado y se excluyó al conductor que canceló.
+La suite unitaria usa dobles inyectables para RF-6 y RabbitMQ. No requiere Docker ni servidores simulados dentro de M6.
 
 Para ejecutar los tests e2e se necesita tener disponible el servicio RF-6 en
 `RF6_API_URL` y RabbitMQ en `RABBITMQ_URL`. Por defecto usan `http://127.0.0.1:3000`
@@ -117,4 +86,4 @@ Respuesta exitosa: `200 OK`, con el viaje cancelado y el resultado del retorno a
  - `RABBITMQ_URL`: URL del broker. Por defecto: `amqp://rabbitmq:5672`.
  - `PORT`: puerto de esta API. Por defecto: `3001`.
 
-El contrato consumido por esta API se documenta en [rf-6-apis.yaml](../simulator/rf-6.5-6.6/m6-rf6.5-rf6.6/rf-6-apis.yaml); en esa carpeta también se conservan los simuladores RF-6 y M5. Los comandos npm se ejecutan desde `modulo6`.
+Las cancelaciones se integran mediante Viajes y RabbitMQ compartido. Las pruebas usan APIs reales o proveedores externos E2E configurados.

@@ -31,7 +31,7 @@ fachada) no publican puertos.
 ## Requisitos
 
 - Docker Compose 2.24 o superior (los overrides usan `!override` y `!reset`).
-- `modulo-8/.env` creado a partir de `.env.example`.
+- `modulo8/.env` creado a partir de `.env.example`.
 - Ramas usadas: M6 `ae2/m6-codutti-diez-mordka-mortola`, M1
   `integration/m1-ae2`.
 
@@ -46,13 +46,13 @@ git fetch origin
 TMP="$(mktemp -d)"
 git worktree add --detach "$TMP/m6" origin/ae2/m6-codutti-diez-mordka-mortola
 git worktree add --detach "$TMP/m1" origin/integration/m1-ae2
-OVR="$PWD/modulo-8/infra/integracion-real"
+OVR="$PWD/modulo8/infra/integracion-real"
 ```
 
 ## 2. Levantar M6 y M1
 
 ```bash
-docker compose -p m6-integracion --env-file "$PWD/modulo-8/.env" \
+docker compose -p m6-integracion --env-file "$PWD/modulo8/.env" \
   -f "$TMP/m6/modulo6/docker-compose.yml" -f "$OVR/m6.override.yaml" \
   up -d --build --wait
 
@@ -71,12 +71,12 @@ Si se usan otros nombres, definir `M6_NETWORK` y `M1_NETWORK`.
 M6 debe leer la clave y enviarla en ambas rutas QR. Al validar, debe enviar
 un UUID de operación estable en `Idempotency-Key` y repetirlo sin cambios si
 se pierde la respuesta. Hasta que M6 publique ese cambio, su llamada al M8
-real recibirá 401. La clave local está en `modulo-8/.env`, nunca en Git.
+real recibirá 401. La clave local está en `modulo8/.env`, nunca en Git.
 
 ## 3. Levantar M8 conectado a ellos
 
 ```bash
-cd modulo-8
+cd modulo8
 docker compose --env-file .env -f compose.yaml -f compose.integracion-real.yaml \
   up -d --build --wait
 ```
@@ -164,11 +164,11 @@ curl -s -X POST http://localhost:3000/tickets \
 Primero M8, para que suelte las redes de M6 y M1:
 
 ```bash
-cd modulo-8
+cd modulo8
 docker compose --env-file .env up -d --wait
 cd ..
 
-docker compose -p m6-integracion --env-file "$PWD/modulo-8/.env" \
+docker compose -p m6-integracion --env-file "$PWD/modulo8/.env" \
   -f "$TMP/m6/modulo6/docker-compose.yml" -f "$OVR/m6.override.yaml" down
 docker compose -p m1-integracion \
   -f "$TMP/m1/modulo-1-identidad-acceso/docker-compose.yml" -f "$OVR/m1.override.yaml" down
@@ -188,7 +188,7 @@ El paso 3 reconstruye `modulo-8-m8-app:local` con el código de la rama. Si
 antes `m8-app` corría una imagen publicada, volver a ella sin construir:
 
 ```bash
-cd modulo-8
+cd modulo8
 M8_IMAGE=juanmainval/m8-notificaciones-qr:2.0.1 docker compose --env-file .env up -d --no-build --wait
 ```
 
@@ -197,7 +197,7 @@ sobre datos que se quieran conservar.
 
 ## Variables opcionales
 
-Se pueden definir en `modulo-8/.env` o en la línea de comandos. Ninguna es
+Se pueden definir en `modulo8/.env` o en la línea de comandos. Ninguna es
 obligatoria: los valores por defecto corresponden a estos pasos.
 
 | Variable | Por defecto | Dónde se usa |

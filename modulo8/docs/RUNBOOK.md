@@ -5,7 +5,7 @@ de la aplicación integrada M8.
 
 ## Preparación
 
-Desde `modulo-8/`, crear el archivo local de configuración si todavía no
+Desde `modulo8/`, crear el archivo local de configuración si todavía no
 existe:
 
 ```powershell
@@ -89,7 +89,7 @@ RF8.1, el relay y la entrega PUSH sandbox de RF8.7. Repite `messageId`, envía
 un evento inválido y verifica que un evento posterior se entregue. No acredita
 que el M3 desplegado emita el `userId` canónico de M1 ni un PUSH externo real.
 
-Desde `modulo-8/`, con `.env` configurado:
+Desde `modulo8/`, con `.env` configurado:
 
 ```powershell
 docker compose -f compose.yaml -f tests/e2e/compose-m3-document.yaml up -d --build m8-app m2-preferences-sandbox

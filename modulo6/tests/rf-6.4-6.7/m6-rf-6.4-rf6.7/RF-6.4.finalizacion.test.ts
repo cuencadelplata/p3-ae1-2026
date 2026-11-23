@@ -3,19 +3,17 @@ import type { Server } from 'node:http';
 import { crearViaje, startServices, stopServices, StubViajesApiClient } from './helpers.js';
 
 describe('RF-6.4 - Fachada de finalización', () => {
-  const services: { api?: Server; simulator?: Server } = {};
+  const services: { api?: Server } = {};
 
   afterEach(() => {
-    if (services.api && services.simulator) stopServices(services.api, services.simulator);
+    if (services.api) stopServices(services.api);
     services.api = undefined;
-    services.simulator = undefined;
   });
 
   it('reenvía la finalización a Viajes y conserva su respuesta', async () => {
     const viajesApi = new StubViajesApiClient();
     const running = await startServices(viajesApi);
     services.api = running.api;
-    services.simulator = running.simulator;
     const viaje = await crearViaje(running.url, 'C-1');
     viajesApi.cambiarEstado(viaje.id, 'EN_CURSO');
 
@@ -59,7 +57,6 @@ describe('RF-6.4 - Fachada de finalización', () => {
     const viajesApi = new StubViajesApiClient();
     const running = await startServices(viajesApi);
     services.api = running.api;
-    services.simulator = running.simulator;
     const viaje = await crearViaje(running.url, 'C-2');
 
     const response = await fetch(`${running.url}/api/viajes/${viaje.id}/finalizacion`, {
@@ -93,7 +90,6 @@ describe('RF-6.4 - Fachada de finalización', () => {
       obtenerHistorial: async () => ({ status: 200, body: { historial: [] } }),
     });
     services.api = running.api;
-    services.simulator = running.simulator;
     const viaje = await crearViaje(running.url);
 
     const response = await fetch(`${running.url}/api/viajes/${viaje.id}/finalizacion`, {
@@ -102,26 +98,5 @@ describe('RF-6.4 - Fachada de finalización', () => {
       body: JSON.stringify({}),
     });
     expect(response.status).toBe(502);
-  });
-
-  it('no simula las APIs de tarifas ni pagos provistas por M7', async () => {
-    const running = await startServices();
-    services.api = running.api;
-    services.simulator = running.simulator;
-    const simulatorPort = (running.simulator.address() as { port: number }).port;
-    const simulatorUrl = `http://127.0.0.1:${simulatorPort}`;
-
-    const fareResponse = await fetch(`${simulatorUrl}/tarifa/estimacion`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-    const paymentResponse = await fetch(`${simulatorUrl}/metodo-pago`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-    expect(fareResponse.status).toBe(404);
-    expect(paymentResponse.status).toBe(404);
   });
 });

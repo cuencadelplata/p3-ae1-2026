@@ -9,7 +9,7 @@
     "amqplib": "^2.0.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.64.1",
+    "@playwright/test": "^1.65.1",
     "@types/amqplib": "^0.10.8",
     "@types/node": "^26.6.6"
   }

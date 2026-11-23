@@ -10,7 +10,7 @@ transiciones, historial, persistencia y recuperación ante una caída de la base
 
 ## 1. Preparar el entorno
 
-Abrir PowerShell en `modulo-8` y levantar la aplicación integrada:
+Abrir PowerShell en `modulo8` y levantar la aplicación integrada:
 
 ```powershell
 Copy-Item .env.example .env -ErrorAction SilentlyContinue

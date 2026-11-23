@@ -1,6 +1,6 @@
 services:
   m7-api:
-    build: .
+    image: aylen0/m7-tarifas-ae2:latest
     ports:
       - "17000:3000"
     env_file: .env

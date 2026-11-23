@@ -2,15 +2,45 @@
 services:
   viajes:
     environment:
+      M3_URL: http://m3-e2e-test:3000
+      M4_URL: http://m4-e2e-test:3000/api/v1
       M7_URL: http://m7-e2e-test:3000
       M7_API_KEY: m6-rf-e2e-m7-secret
       M8_URL: http://m8-e2e-test:3000
       M8_QR_API_KEY: m6-rf-e2e-qr-secret
     depends_on:
+      m3-e2e-test:
+        condition: service_healthy
+      m4-e2e-test:
+        condition: service_healthy
       m7-e2e-test:
         condition: service_healthy
       m8-e2e-test:
         condition: service_healthy
+
+  m3-e2e-test:
+    build:
+      context: ./tests-e2e/support
+      dockerfile: Dockerfile
+    environment:
+      PROVIDER: m3
+      PORT: 3000
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
+  m4-e2e-test:
+    build:
+      context: ./tests-e2e/support
+      dockerfile: Dockerfile
+    environment:
+      PROVIDER: m4
+      PORT: 3000
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 
   m7-e2e-test:
     build:

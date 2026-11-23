@@ -1,6 +1,5 @@
 import { createServer, type Server } from 'node:http';
 import { createViajeApi, type ViajesApiClient } from '../../../src/rf-6.4-6.7/api.js';
-import { createSimulator } from '../../../simulator/rf-6.4-6.7/m6-rf-6.4-rf6.7/server.js';
 
 interface TestViaje {
   id: string;
@@ -93,15 +92,12 @@ export class StubViajesApiClient implements ViajesApiClient {
 
 export async function startServices(viajesApi: ViajesApiClient = new StubViajesApiClient()): Promise<{
   api: Server;
-  simulator: Server;
   url: string;
   viajesApi: ViajesApiClient;
 }> {
-  const simulator = createSimulator();
-  await listen(simulator);
   const api = createViajeApi({ viajesApi });
   const apiPort = await listen(api);
-  return { api, simulator, url: `http://127.0.0.1:${apiPort}`, viajesApi };
+  return { api, url: `http://127.0.0.1:${apiPort}`, viajesApi };
 }
 
 export function stopServices(...servers: Server[]): void {

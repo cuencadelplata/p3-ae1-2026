@@ -154,4 +154,4 @@ en `/health/ready`.
 * `tests/integration/download-link.test.ts`: TTL, token opaco y vencimiento (410).
 * `tests/unit/m7-payments.mapper.test.ts` y `tests/integration/m7-payments.test.ts`: traducción de
   estados y medios de M7, pendiente que se emite al autorizarse, rechazo terminal y M7 caído.
-* `tests/e2e/receipts-ae2.e2e.test.mjs` (en `modulo-8`): los mismos flujos contra los contenedores.
+* `tests/e2e/receipts-ae2.e2e.test.mjs` (en `modulo8`): los mismos flujos contra los contenedores.

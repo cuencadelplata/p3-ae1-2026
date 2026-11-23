@@ -1,6 +1,6 @@
 import { describe, it, beforeAll, afterAll, expect } from 'vitest';
 import axios from 'axios';
-import { execFileSync, execSync, spawn, type ChildProcess } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { resolve } from 'path';
 
 let API_URL = '';
@@ -11,36 +11,13 @@ const M8_QR_API_KEY = process.env.M8_QR_API_KEY ?? process.env.QR_INTERNAL_API_K
 const M8_AUTH_CONFIG = M8_QR_API_KEY ? { headers: { 'x-api-key': M8_QR_API_KEY } } : {};
 const PROJECT_ROOT = resolve(__dirname, '../../');
 let containerId: string | null = null;
-let mockM8Process: ChildProcess | null = null;
 
 describe('E2E Tests - Docker Container', () => {
   beforeAll(async () => {
     // Si `npm run docker:e2e:up` ya publicó el M8 de prueba en :3103, se usa ese y no se lanza el mock.
     const m8YaDisponible = await axios.get('http://localhost:3103/health', { timeout: 1000 }).then(() => true, () => false);
     if (!process.env.M8_URL && !m8YaDisponible) {
-      mockM8Process = spawn(process.execPath, ['simulator/rf-6.1-6.2-6.3/mock-m8/server.js'], {
-        cwd: PROJECT_ROOT,
-        env: { ...process.env, PORT: '3103' },
-        stdio: 'ignore',
-      });
-
-      let attempts = 0;
-      while (attempts < 30) {
-        try {
-          await axios.get('http://localhost:3103/health', { timeout: 1000 });
-          break;
-        } catch {
-          if (mockM8Process.exitCode !== null) {
-            throw new Error('El mock M8 no pudo iniciarse');
-          }
-          attempts++;
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
-      }
-
-      if (attempts >= 30) {
-        throw new Error('El mock M8 no respondió dentro de 30 segundos');
-      }
+      throw new Error('Se requiere M8 real o el proveedor E2E m8-e2e-test en Docker');
     }
 
     console.log('Construyendo imagen de Docker...');
@@ -153,10 +130,6 @@ describe('E2E Tests - Docker Container', () => {
       } catch (error) {
         console.error('Error al detener el contenedor:', error);
       }
-    }
-
-    if (mockM8Process && mockM8Process.exitCode === null) {
-      mockM8Process.kill();
     }
   });
 

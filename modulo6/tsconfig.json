@@ -13,8 +13,7 @@
     "types": ["node", "vitest/globals"]
   },
   "include": [
-    "src/**/*.ts",
-    "simulator/**/*.ts"
+    "src/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }

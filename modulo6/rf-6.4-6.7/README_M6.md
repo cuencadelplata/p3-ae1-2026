@@ -83,9 +83,9 @@ npm run test:e2e:rf-6.4-6.7
 npm run docker:e2e:down
 ```
 
-La suite E2E incluye pruebas que detienen y vuelven a iniciar el simulador y la base de datos de ese stack para comprobar los errores y la disponibilidad de la fachada. Requiere Docker Compose y permiso para ejecutar `docker compose stop/start`.
+Las suites E2E validan M6 contra servicios reales o proveedores externos E2E configurados por Docker Compose.
 
-La suite unitaria/de integración local usa puertos efímeros y levanta el servicio M6 y el simulador durante cada prueba. No requiere iniciar Docker.
+La suite unitaria usa dobles inyectables para la API central y no requiere Docker.
 
 ## Endpoints provistos por la API
 
@@ -117,11 +117,8 @@ Respuesta exitosa: `200 OK`, con la propiedad `historial`.
 
 ## Entorno de integración
 
-El simulador dentro de este módulo proporciona, solo para pruebas E2E, contratos compatibles con las dependencias HTTP que aún no están disponibles en esta integración:
-
- - M3: `GET /conductor/{conductorId}/estado`
- - M4: `POST /api/v1/estimate`
-
-M7 se consume como servicio real mediante `M7_URL` y `M7_API_KEY`; M8 se consume por `http://m8-app:3000` con `QR_INTERNAL_API_KEY`.
+M6 consume M3, M4, M7 y M8 mediante sus APIs reales. Las URLs se configuran con `M3_URL`, `M4_URL`, `M7_URL` y `M8_URL`.
 
 En ejecución normal, estas responsabilidades y sus datos pertenecen al módulo central, no a esta fachada.
+
+M6 consume M3/M4/M7/M8 mediante sus APIs reales configuradas por entorno. No incluye proveedores simulados internos.

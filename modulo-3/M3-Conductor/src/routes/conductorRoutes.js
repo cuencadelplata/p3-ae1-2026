@@ -20,7 +20,8 @@ const {
 const {
   obtenerPendientes,
   obtenerNotificaciones,
-  streamNotificaciones
+  streamNotificaciones,
+  demoViajeFinalizado
 } = require("../controllers/notificacionesController");
 
 /**
@@ -57,5 +58,6 @@ router.post("/conductor/valoraciones", crearValoracion);
 router.get("/valoraciones/pendientes", obtenerPendientes);
 router.get("/valoraciones/notificaciones", obtenerNotificaciones);
 router.get("/valoraciones/notificaciones/stream", streamNotificaciones);
+router.post("/valoraciones/demo-viaje-finalizado", demoViajeFinalizado);
 
 module.exports = router;

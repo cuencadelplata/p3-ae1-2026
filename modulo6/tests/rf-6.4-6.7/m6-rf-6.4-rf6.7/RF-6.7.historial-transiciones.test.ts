@@ -3,19 +3,17 @@ import type { Server } from 'node:http';
 import { crearViaje, startServices, stopServices, StubViajesApiClient } from './helpers.js';
 
 describe('RF-6.7 - Fachada de historial', () => {
-  const services: { api?: Server; simulator?: Server } = {};
+  const services: { api?: Server } = {};
 
   afterEach(() => {
-    if (services.api && services.simulator) stopServices(services.api, services.simulator);
+    if (services.api) stopServices(services.api);
     services.api = undefined;
-    services.simulator = undefined;
   });
 
   it('devuelve sin alteraciones el historial almacenado por Viajes', async () => {
     const viajesApi = new StubViajesApiClient();
     const running = await startServices(viajesApi);
     services.api = running.api;
-    services.simulator = running.simulator;
     const viaje = await crearViaje(running.url, 'C-40');
     viajesApi.agregarTransicion(viaje.id, 'solicitado', 'asignado', 'Asignación del conductor');
     viajesApi.agregarTransicion(viaje.id, 'asignado', 'en curso', 'Inicio de viaje');
@@ -42,7 +40,6 @@ describe('RF-6.7 - Fachada de historial', () => {
   it('propaga 404 cuando Viajes no conoce el viaje', async () => {
     const running = await startServices();
     services.api = running.api;
-    services.simulator = running.simulator;
 
     const response = await fetch(`${running.url}/api/viajes/inexistente/historial-transiciones`);
     expect(response.status).toBe(404);

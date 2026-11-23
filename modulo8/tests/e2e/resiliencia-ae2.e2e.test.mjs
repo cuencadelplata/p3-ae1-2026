@@ -15,7 +15,7 @@
  *                        pagos esperan y se emiten al volver. Tambien si la base
  *                        esta caida cuando el servicio arranca.
  *
- * Requiere el stack levantado (docker compose up -d en modulo-8) y el CLI de
+ * Requiere el stack levantado (docker compose up -d en modulo8) y el CLI de
  * Docker. Cada prueba vuelve a levantar lo que apago aunque falle.
  */
 import assert from "node:assert/strict";

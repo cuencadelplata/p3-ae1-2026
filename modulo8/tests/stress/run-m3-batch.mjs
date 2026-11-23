@@ -19,7 +19,7 @@ if (!Number.isInteger(total) || total < 1 || total > 600
 }
 for (const name of ['RABBITMQ_URL', 'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD', 'M1_JWT_SECRET']) {
   if (!process.env[name] || process.env[name].startsWith('replace-with-')) {
-    console.error(`Configurar ${name} en modulo-8/.env.`);
+    console.error(`Configurar ${name} en modulo8/.env.`);
     process.exit(2);
   }
 }
