@@ -34,7 +34,6 @@ echo -e "${BLUE}"
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║        PRUEBA DE INTEGRACIÓN COMPLETA — M7                  ║"
 echo "║  RF-7.1 RF-7.2 RF-7.3 RF-7.4 RF-7.5 RF-7.6 RF-7.7         ║"
-echo "║  Stack: REAL (M6+M7+RabbitMQ+Redis+Postgres — sin mocks)    ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 

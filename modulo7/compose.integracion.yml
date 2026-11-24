@@ -9,41 +9,11 @@ services:
     environment:
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672
       REDIS_URL: redis://redis:6379
-      DATABASE_URL: postgres://m7user:m7pass@m7-postgres:5432/m7db?sslmode=disable
-      # El endpoint de cargo-cancelacion es del mismo M7 (código de Lautaro en src/Lautaro/).
-      # No hay servicio externo: apunta a sí mismo.
       CARGO_CANCELACION_URL: http://m7-api:3000
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      m7-postgres:
-        condition: service_healthy
     networks:
       - reservas-network
     restart: on-failure
 
-  m7-postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: m7user
-      POSTGRES_PASSWORD: m7pass
-      POSTGRES_DB: m7db
-    volumes:
-      - m7-postgres-data:/var/lib/postgresql/data
-      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U m7user -d m7db"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - reservas-network
-
-volumes:
-  m7-postgres-data:
-
 networks:
   reservas-network:
-    driver: bridge
+    external: true
