@@ -4,13 +4,14 @@ import axios from 'axios'
 import { API_URL } from '../api'
 
 interface RegisterProps {
-  onRegisterSuccess: (token: string, user: any) => void
+  onRegisterSuccess: (token: string) => void
   onSwitchToLogin: () => void
+  fixedRole?: 'CLIENTE' | 'CONDUCTOR'
 }
 
 type UserRole = 'CLIENTE' | 'CONDUCTOR' | 'OPERADOR'
 
-export default function Register({ onRegisterSuccess, onSwitchToLogin }: RegisterProps) {
+export default function Register({ onRegisterSuccess, onSwitchToLogin, fixedRole }: RegisterProps) {
   const [name, setName] = useState('')
   const [surname, setSurname] = useState('')
   const [dni, setDni] = useState('')
@@ -18,7 +19,7 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin }: Registe
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [role, setRole] = useState<UserRole>('CLIENTE')
+  const [role, setRole] = useState<UserRole>(fixedRole ?? 'CLIENTE')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -51,10 +52,7 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin }: Registe
       })
 
       const { token } = loginResponse.data
-      const parts = token.split('.')
-      const decoded = JSON.parse(atob(parts[1]))
-
-      onRegisterSuccess(token, { ...decoded, ...loginResponse.data.usuario })
+      onRegisterSuccess(token)
     } catch (err: any) {
       setError(err.response?.data?.error || err.response?.data?.message || 'Error al registrarse')
     } finally {
@@ -152,7 +150,7 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin }: Registe
           <div>
             <label className="field-label">Tipo de usuario</label>
             <div className="grid grid-cols-2 gap-2.5">
-              {roles.map((r) => (
+              {roles.filter((option) => !fixedRole || option.value === fixedRole).map((r) => (
                 <button
                   key={r.value}
                   type="button"

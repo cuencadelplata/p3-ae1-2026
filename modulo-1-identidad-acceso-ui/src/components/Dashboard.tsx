@@ -13,8 +13,10 @@ import {
   RefreshCw,
   KeyRound,
   Link2,
+  Route,
 } from 'lucide-react'
 import { API_URL } from '../api'
+import RideFlow from './RideFlow'
 
 interface DashboardProps {
   token: string
@@ -70,6 +72,7 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   const [error, setError] = useState('')
   const [revocando, setRevocando] = useState(false)
   const [vinculados, setVinculados] = useState<ProveedorVinculado[] | null>(null)
+  const [verViaje, setVerViaje] = useState(false)
 
   const headers = { Authorization: `Bearer ${token}` }
 
@@ -140,6 +143,10 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   const nombreCompleto = perfil ? `${perfil.nombre} ${perfil.apellido}` : ''
   const iniciales = perfil ? `${perfil.nombre[0] ?? ''}${perfil.apellido[0] ?? ''}`.toUpperCase() : '?'
 
+  if (verViaje && perfil?.rol === 'CLIENTE') {
+    return <RideFlow key={perfil.userId} passenger={{ ...perfil, token }} onBack={() => setVerViaje(false)} />
+  }
+
   return (
     <div className="w-full max-w-3xl">
       <div className="glass rounded-[1.75rem] p-9 md:p-12">
@@ -178,6 +185,12 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
                 </div>
               </div>
             </div>
+
+            {perfil.rol === 'CLIENTE' && (
+              <button className="btn-primary mt-6 inline-flex items-center gap-2" onClick={() => setVerViaje(true)}>
+                <Route className="w-4 h-4" aria-hidden="true" /> Abrir flujo de viaje
+              </button>
+            )}
 
             <div className="mt-10 flex items-center justify-between">
               <p className="eyebrow">Mis datos</p>

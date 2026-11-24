@@ -65,8 +65,9 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: "http://localhost:${M1_HOST_PORT:-10000}"
+        VITE_FLOW_SANDBOX_PAYMENT: "${VITE_FLOW_SANDBOX_PAYMENT:-false}"
     ports:
-      - "${M1_UI_PORT:-5173}:80"
+      - "127.0.0.1:${M1_UI_PORT:-5173}:80"
     depends_on:
       m1-identidad-acceso:
         condition: service_healthy
