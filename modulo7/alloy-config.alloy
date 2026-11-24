@@ -13,13 +13,13 @@ loki.write "grafana_cloud" {
     url = "https://logs-prod-024.grafana.net/loki/api/v1/push"
     basic_auth {
       username = "1883301"
-      password = env("GRAFANA_LOKI_TOKEN")
+      password = env("GRAFANA_LOGS_TOKEN")
     }
   }
 }
 
 prometheus.scrape "m7" {
-  targets         = [{ __address__ = "movilidad-urbana-m7-api-1:3000" }]
+  targets         = [{ __address__ = "modulo7-m7-api-1:3000" }]
   scrape_interval = "15s"
   metrics_path    = "/metrics"
   forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
