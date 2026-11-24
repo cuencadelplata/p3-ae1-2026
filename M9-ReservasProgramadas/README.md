@@ -37,6 +37,19 @@ node scripts/check-real-routes.mjs
 
 ## 3. Pruebas locales
 
+Para el stack real (sin la demo), M9 usa `ROUTE_RESOLVER_MODE=m4` y
+`M4_BASE_URL=http://m4-api:3004` dentro de Docker. El emisor de autorización
+acordado con M1/M5 debe configurarse mediante `M9_DISPATCH_AUTH_URL` y
+`M9_DISPATCH_AUTH_TOKEN`, fuera de Git. La versión actual de M1 no publica
+ese endpoint: no reemplazarlo por el login del pasajero ni por una URL inventada.
+El adaptador preparado espera un POST con `{clientId, audience: "m5", scope:
+"ride-requests:write"}` y una respuesta `{access_token}` validable por M1.
+Confirmar ese contrato con los responsables antes de usarlo.
+
+Un error al resolver la ruta conserva la reserva `PROGRAMADA` y se reintenta;
+no se envía una solicitud sin coordenadas. Las reservas que ya terminaron
+`FALLIDA` no se reactivan automáticamente.
+
 ```powershell
 npm test
 npm run typecheck

@@ -71,17 +71,11 @@ export class ActivacionReservaService {
       return this.resultado(reservaId);
     }
 
-    let route = actual.routeSnapshot;
-    try {
-      route ??= await this.routeResolver.resolve(actual.origen, actual.destino);
-    } catch {
-      const fallida = await this.repository.cambiarEstado(reservaId, 'PROGRAMADA', 'FALLIDA');
-      if (fallida !== null) {
-        recordActivationResolution('FALLIDA', actual.fechaHoraProgramada, this.dispatchMode);
-        await this.cache.set(fallida);
-      }
-      return this.resultado(reservaId, false, fallida !== null);
-    }
+    // Un fallo de M4 o de configuracion no confirma un rechazo de negocio.
+    // Conservar PROGRAMADA y propagar el error permite al scheduler reintentar
+    // sin crear solicitudes de M5 con coordenadas inventadas.
+    const route =
+      actual.routeSnapshot ?? (await this.routeResolver.resolve(actual.origen, actual.destino));
 
     const reclamada = await this.repository.cambiarEstado(reservaId, 'PROGRAMADA', 'ACTIVANDO', {
       routeSnapshot: route,

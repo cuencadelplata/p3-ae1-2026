@@ -16,6 +16,39 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe('recuperacion de activacion interrumpida', () => {
+  it('conserva PROGRAMADA si M4 falla y despacha al recuperarse la ruta', async () => {
+    const repository = new InMemoryReservaRepository();
+    const created = await repository.crear({ ...expired, routeSnapshot: null });
+    const resolve = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('M4 no disponible'))
+      .mockResolvedValue(routeSnapshot);
+    const createRequest = vi.fn(async () => ({
+      requestId: 'request-1',
+      clientId: '101',
+      status: 'SEARCHING' as const,
+      assignedDriverId: null,
+    }));
+    const service = new ActivacionReservaService(
+      repository,
+      { createRequest } as unknown as DispatchClient,
+      { resolve },
+    );
+    await expect(service.activar(created.id)).rejects.toThrow('M4 no disponible');
+    expect(await repository.obtenerPorId(created.id)).toMatchObject({
+      estado: 'PROGRAMADA',
+      idSolicitud: null,
+    });
+    expect(createRequest).not.toHaveBeenCalled();
+    await service.activar(created.id);
+    expect(createRequest).toHaveBeenCalledTimes(1);
+    expect(await repository.obtenerPorId(created.id)).toMatchObject({
+      estado: 'ACTIVANDO',
+      idSolicitud: 'request-1',
+      routeSnapshot,
+    });
+  });
+
   it('recupera un claim viejo sin solicitud y lo vuelve a despachar una sola vez', async () => {
     const now = Date.now();
     vi.useFakeTimers();
