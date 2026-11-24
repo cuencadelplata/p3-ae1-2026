@@ -18,7 +18,7 @@ let app: Express;
 function nuevaInstancia() {
   const repositorio = new PostgresTicketRepository(db.newPool(), db.schema);
   const ticketService = new TicketService(repositorio, new NoopSupportEventPublisher());
-  return { repositorio, app: createSupportApp({ ticketService, legacyEvents: false }) };
+  return { repositorio, app: createSupportApp({ ticketService }) };
 }
 
 beforeAll(async () => {

@@ -5,7 +5,7 @@
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { app, createApp } from "../../src/app";
+import { createApp } from "../../src/app";
 import type { PushProvider } from "../../src/notifications/push-provider";
 
 const successfulPushProvider: PushProvider = { async send() {} };
@@ -20,7 +20,7 @@ const validRequest = {
 describe("RF-8.1 — POST /notifications", () => {
   it("no informa una entrega simulada en la app integrada", async () => {
     const send = vi.fn();
-    const response = await request(createApp({ send }, false)).post("/notifications").send(validRequest);
+    const response = await request(createApp()).post("/notifications").send(validRequest);
     expect(response.status).toBe(410);
     expect(response.body.error.code).toBe("LEGACY_NOTIFICATION_DISABLED");
     expect(send).not.toHaveBeenCalled();
@@ -152,13 +152,6 @@ describe("RF-8.1 — POST /notifications", () => {
 
     expect(response.status).toBe(201);
     expect(response.body.message).toBe(message);
-  });
-
-  it("usa la composición real de AE1 con mockPushProvider", async () => {
-    const response = await request(app).post("/notifications").send(validRequest);
-
-    expect(response.status).toBe(201);
-    expect(response.body.status).toBe("PROCESSED");
   });
 
   it("responde 500 seguro cuando falla el proveedor PUSH", async () => {

@@ -25,7 +25,7 @@ beforeEach(() => {
   publish = vi.fn<SupportEventPublisher['publish']>(async () => undefined);
   existe = vi.fn<TripVerifier['existe']>(async () => true);
   const tripVerifier: TripVerifier = { existe, isReachable: async () => true };
-  app = createSupportApp({ ticketService: new TicketService(repository, { publish }, tripVerifier), legacyEvents: false });
+  app = createSupportApp({ ticketService: new TicketService(repository, { publish }, tripVerifier) });
 });
 
 afterEach(() => {
@@ -270,7 +270,7 @@ describe('POST /tickets: reintentos idempotentes sin consultar a M6', () => {
 
 describe('POST /tickets sin verificador (M6_TRIPS_URL sin definir)', () => {
   beforeEach(() => {
-    app = createSupportApp({ ticketService: new TicketService(repository, { publish }), legacyEvents: false });
+    app = createSupportApp({ ticketService: new TicketService(repository, { publish }) });
   });
 
   it('acepta cualquier tripId, como antes', async () => {

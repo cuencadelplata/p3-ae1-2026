@@ -5,22 +5,18 @@ import { loadM1IdentityConfig, loadM6TripsConfig, loadSupportConfig, type Suppor
 import { loadDatabaseRetryMs, loadSupportDbConfig } from './db/config.js';
 import { SupportDatabase } from './db/database.js';
 import { createSupportPool } from './db/pool.js';
-import {
-  LegacyRabbitSupportEventPublisher,
-  NoopSupportEventPublisher,
-} from './events/support-event-publisher.js';
+import { NoopSupportEventPublisher } from './events/support-event-publisher.js';
 import { checkSupportReadiness, type ReadinessProbes } from './http/readiness.js';
 import { createM1IdentityClient, type IdentityVerifier } from './integrations/m1-identity.js';
 import { createM6TripsClient, type TripVerifier } from './integrations/m6-trips.js';
-import { RabbitMQConsumer } from './rabbitmq/consumer.js';
 import { PostgresTicketRepository } from './repositories/postgres-ticket.repository.js';
 import type { TicketRepository } from './repositories/ticket.repository.js';
 import { TicketService } from './services/ticket.service.js';
 
 // Arma las dependencias de Support según la configuración. No abre puertos
-// ni conecta al broker hasta que el entrypoint lo pide.
+// hasta que el entrypoint lo pide.
 export function createSupportRuntime(
-  config: SupportConfig,
+  _config: SupportConfig,
   ticketRepository: TicketRepository,
   database?: ReadinessProbes['database'],
   includeStandaloneHttpApp = true,
@@ -29,19 +25,15 @@ export function createSupportRuntime(
   // Sin verificador de identidad /tickets no exige Bearer.
   identityVerifier?: IdentityVerifier,
 ) {
-  const eventPublisher = config.legacyEvents
-    ? new LegacyRabbitSupportEventPublisher()
-    : new NoopSupportEventPublisher();
-  const ticketService = new TicketService(ticketRepository, eventPublisher, tripVerifier);
+  const ticketService = new TicketService(ticketRepository, new NoopSupportEventPublisher(), tripVerifier);
   const readiness = () =>
     checkSupportReadiness({
       database,
-      legacyBroker: config.legacyEvents ? () => RabbitMQConsumer.isConnected() : undefined,
       trips: tripVerifier ? () => tripVerifier.isReachable() : undefined,
       identity: identityVerifier ? () => identityVerifier.isReachable() : undefined,
     });
   const app = includeStandaloneHttpApp
-    ? createSupportApp({ ticketService, legacyEvents: config.legacyEvents, readiness, identityVerifier })
+    ? createSupportApp({ ticketService, readiness, identityVerifier })
     : express();
 
   return {
@@ -49,13 +41,6 @@ export function createSupportRuntime(
     ticketService,
     readiness,
     identityVerifier,
-
-    // Inicia el consumo asíncrono (RF-8.6) sólo si lo heredado de AE1 está habilitado.
-    async startLegacyEvents() {
-      if (!config.legacyEvents) return;
-      if (!config.rabbitUrl) throw new Error('RABBITMQ_URL es obligatoria para los eventos heredados de Support.');
-      await RabbitMQConsumer.connect(config.rabbitUrl);
-    },
   };
 }
 

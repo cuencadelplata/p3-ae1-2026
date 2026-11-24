@@ -12,56 +12,56 @@ function database(available: boolean, migrationsApplied: boolean) {
 
 function appCon(readiness?: () => Promise<SupportReadiness>) {
   const ticketService = new TicketService(new InMemoryTicketRepository(), new NoopSupportEventPublisher());
-  return createSupportApp({ ticketService, legacyEvents: false, readiness });
+  return createSupportApp({ ticketService, readiness });
 }
 
 describe('checkSupportReadiness', () => {
-  it('ok: base disponible, migraciones aplicadas y broker conectado', async () => {
-    const readiness = await checkSupportReadiness({ database: database(true, true), legacyBroker: () => true });
+  it('ok: base disponible, migraciones aplicadas y M6 disponible', async () => {
+    const readiness = await checkSupportReadiness({ database: database(true, true), trips: async () => true });
 
     expect(readiness).toEqual({
       status: 'ok',
       checks: {
         postgres: { status: 'available', critical: true },
         migrations: { status: 'applied', critical: true },
-        rabbitmq: { status: 'available', critical: false },
+        trips: { status: 'available', critical: false },
       },
     });
   });
 
-  it('degraded: base bien pero broker heredado caído', async () => {
-    const readiness = await checkSupportReadiness({ database: database(true, true), legacyBroker: () => false });
+  it('degraded: base bien pero M6 caído', async () => {
+    const readiness = await checkSupportReadiness({ database: database(true, true), trips: async () => false });
 
     expect(readiness.status).toBe('degraded');
-    expect(readiness.checks.rabbitmq).toEqual({ status: 'unavailable', critical: false });
+    expect(readiness.checks.trips).toEqual({ status: 'unavailable', critical: false });
     expect(readiness.checks.postgres?.status).toBe('available');
   });
 
   it('unavailable: base caída', async () => {
-    const readiness = await checkSupportReadiness({ database: database(false, true), legacyBroker: () => true });
+    const readiness = await checkSupportReadiness({ database: database(false, true), trips: async () => true });
 
     expect(readiness.status).toBe('unavailable');
     expect(readiness.checks.postgres).toEqual({ status: 'unavailable', critical: true });
   });
 
   it('unavailable: migraciones pendientes aunque la base responda', async () => {
-    const readiness = await checkSupportReadiness({ database: database(true, false), legacyBroker: () => true });
+    const readiness = await checkSupportReadiness({ database: database(true, false), trips: async () => true });
 
     expect(readiness.status).toBe('unavailable');
     expect(readiness.checks.migrations).toEqual({ status: 'pending', critical: true });
   });
 
-  it('la base caída pesa más que el broker caído: unavailable, no degraded', async () => {
-    const readiness = await checkSupportReadiness({ database: database(false, false), legacyBroker: () => false });
+  it('la base caída pesa más que M6 caído: unavailable, no degraded', async () => {
+    const readiness = await checkSupportReadiness({ database: database(false, false), trips: async () => false });
 
     expect(readiness.status).toBe('unavailable');
   });
 
-  it('sin broker heredado (SUPPORT_LEGACY_EVENTS=off) RabbitMQ no se informa ni degrada', async () => {
+  it('sin verificación de M6 ni M1 solo informa la base', async () => {
     const readiness = await checkSupportReadiness({ database: database(true, true) });
 
     expect(readiness.status).toBe('ok');
-    expect(readiness.checks.rabbitmq).toBeUndefined();
+    expect(Object.keys(readiness.checks).sort()).toEqual(['migrations', 'postgres']);
   });
 });
 
@@ -78,7 +78,7 @@ describe('GET /health/live', () => {
 
 describe('GET /health/ready', () => {
   it('200 ok con el detalle de checks', async () => {
-    const app = appCon(() => checkSupportReadiness({ database: database(true, true), legacyBroker: () => true }));
+    const app = appCon(() => checkSupportReadiness({ database: database(true, true), trips: async () => true }));
 
     const res = await request(app).get('/health/ready');
 
@@ -88,14 +88,14 @@ describe('GET /health/ready', () => {
       checks: {
         postgres: { status: 'available', critical: true },
         migrations: { status: 'applied', critical: true },
-        rabbitmq: { status: 'available', critical: false },
+        trips: { status: 'available', critical: false },
       },
       service: 'm8-soporte',
     });
   });
 
-  it('200 degraded con el broker caído', async () => {
-    const app = appCon(() => checkSupportReadiness({ database: database(true, true), legacyBroker: () => false }));
+  it('200 degraded con M6 caído', async () => {
+    const app = appCon(() => checkSupportReadiness({ database: database(true, true), trips: async () => false }));
 
     const res = await request(app).get('/health/ready');
 
@@ -120,7 +120,7 @@ describe('GET /health/ready', () => {
   it('usa sólo los estados del contrato común: ok, degraded o unavailable', async () => {
     for (const probes of [
       { database: database(true, true) },
-      { database: database(true, true), legacyBroker: () => false },
+      { database: database(true, true), trips: async () => false },
       { database: database(false, false) },
     ]) {
       const { status } = await checkSupportReadiness(probes);
@@ -153,7 +153,6 @@ describe('registerSupportRoutes', () => {
     const host = express();
     registerSupportRoutes(host, {
       ticketService: new TicketService(new InMemoryTicketRepository(), new NoopSupportEventPublisher()),
-      legacyEvents: false,
     });
 
     expect((await request(host).get('/health')).status).toBe(404);

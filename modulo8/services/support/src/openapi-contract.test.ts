@@ -54,7 +54,7 @@ let app: Express;
 
 beforeEach(() => {
   const ticketService = new TicketService(new InMemoryTicketRepository(), new NoopSupportEventPublisher());
-  app = createSupportApp({ ticketService, legacyEvents: true });
+  app = createSupportApp({ ticketService });
 });
 
 describe('contrato OpenAPI de RF8.5 (openapi/rf85-support.yaml)', () => {
@@ -65,7 +65,7 @@ describe('contrato OpenAPI de RF8.5 (openapi/rf85-support.yaml)', () => {
 
   it('documenta exactamente las rutas que registra la aplicación', () => {
     const documentadas = documentedOperations().map(({ method, path: routePath }) => `${method.toUpperCase()} ${routePath}`);
-    const registradas = SUPPORT_API_ROUTES.filter(({ path: routePath }) => routePath !== '/events/publish').map(
+    const registradas = SUPPORT_API_ROUTES.map(
       ({ method, path: routePath }) => `${method.toUpperCase()} ${routePath.replace(/:([A-Za-z]+)/g, '{$1}')}`,
     );
 

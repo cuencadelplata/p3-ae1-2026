@@ -21,7 +21,6 @@ function appCon(m: SupportModule) {
 
 function crearModulo(env: Record<string, string>) {
   vi.stubEnv('SUPPORT_DATABASE_URL', DATABASE_URL);
-  vi.stubEnv('SUPPORT_LEGACY_EVENTS', 'off');
   vi.stubEnv('M6_TRIPS_URL', '');
   vi.stubEnv('SUPPORT_M1_IDENTITY_URL', '');
   for (const [nombre, valor] of Object.entries(env)) {

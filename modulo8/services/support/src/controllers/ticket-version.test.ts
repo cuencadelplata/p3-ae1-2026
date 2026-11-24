@@ -14,7 +14,7 @@ let ticketService: TicketService;
 beforeEach(() => {
   repository = new InMemoryTicketRepository();
   ticketService = new TicketService(repository, new NoopSupportEventPublisher());
-  app = createSupportApp({ ticketService, legacyEvents: false });
+  app = createSupportApp({ ticketService });
 });
 
 async function crearTicket() {

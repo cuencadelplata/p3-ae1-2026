@@ -23,7 +23,7 @@ function appConRepositorioCaido() {
     vi.spyOn(repository, metodo).mockImplementation(caida as never);
   }
   const ticketService = new TicketService(repository, new NoopSupportEventPublisher());
-  return createSupportApp({ ticketService, legacyEvents: false });
+  return createSupportApp({ ticketService });
 }
 
 describe('SUPPORT_DB_UNAVAILABLE', () => {

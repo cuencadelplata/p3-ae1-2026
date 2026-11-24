@@ -13,7 +13,7 @@ let publish: ReturnType<typeof vi.fn<SupportEventPublisher['publish']>>;
 beforeEach(() => {
   repository = new InMemoryTicketRepository();
   publish = vi.fn<SupportEventPublisher['publish']>(async () => undefined);
-  app = createSupportApp({ ticketService: new TicketService(repository, { publish }), legacyEvents: false });
+  app = createSupportApp({ ticketService: new TicketService(repository, { publish }) });
 });
 
 async function crearTicket(headers: Record<string, string> = {}) {

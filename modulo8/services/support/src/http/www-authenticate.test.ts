@@ -11,7 +11,7 @@ let verificar: ReturnType<typeof vi.fn<IdentityVerifier['verificar']>>;
 
 function appCon(identityVerifier?: IdentityVerifier) {
   const ticketService = new TicketService(new InMemoryTicketRepository(), new NoopSupportEventPublisher());
-  return createSupportApp({ ticketService, legacyEvents: false, identityVerifier });
+  return createSupportApp({ ticketService, identityVerifier });
 }
 
 beforeEach(() => {

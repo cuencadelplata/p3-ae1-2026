@@ -11,7 +11,7 @@ let app: Express;
 
 beforeEach(() => {
   const ticketService = new TicketService(new InMemoryTicketRepository(), new NoopSupportEventPublisher());
-  app = createSupportApp({ ticketService, legacyEvents: true });
+  app = createSupportApp({ ticketService });
 });
 
 describe('SupportController', () => {
@@ -118,31 +118,6 @@ describe('SupportController', () => {
       const res = await request(app).get('/tickets');
       expect(res.status).toBe(200);
       expect(res.body).toEqual([]);
-    });
-  });
-
-  describe('POST /events/publish', () => {
-    it('debe devolver 200 al publicar un evento', async () => {
-      const res = await request(app)
-        .post('/events/publish')
-        .send({
-          routingKey: 'viaje.completado',
-          payload: { viajeId: 'v-100', importe: 1200 },
-          count: 2
-        });
-
-      expect(res.status).toBe(200);
-      expect(res.body.solicitados).toBe(2);
-      expect(res.body.routingKey).toBe('viaje.completado');
-    });
-
-    it('debe devolver 400 si falta routingKey o payload', async () => {
-      const res = await request(app)
-        .post('/events/publish')
-        .send({ routingKey: 'viaje.completado' });
-
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error');
     });
   });
 });
