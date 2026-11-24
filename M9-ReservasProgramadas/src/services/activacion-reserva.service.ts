@@ -1,7 +1,8 @@
 import { NOOP_RESERVATION_CACHE, type ReservationCache } from '../cache/reservation-cache.js';
 import type { DispatchClient, M5RideRequest } from '../clients/m5-dispatch.client.js';
 import type { Reserva } from '../domain/reserva.js';
-import type { RouteResolver } from '../integration/route-estimate.port.js';
+import { AppError } from '../errors/app.error.js';
+import type { RouteResolver, RouteSnapshot } from '../integration/route-estimate.port.js';
 import type { DistributedLock } from '../locks/distributed-lock.js';
 import { recordActivationDelay, recordActivationResolution } from '../observability/metrics.js';
 import type { ReservaRepository } from '../repositories/reserva.repository.js';
@@ -71,11 +72,23 @@ export class ActivacionReservaService {
       return this.resultado(reservaId);
     }
 
-    // Un fallo de M4 o de configuracion no confirma un rechazo de negocio.
-    // Conservar PROGRAMADA y propagar el error permite al scheduler reintentar
-    // sin crear solicitudes de M5 con coordenadas inventadas.
-    const route =
-      actual.routeSnapshot ?? (await this.routeResolver.resolve(actual.origen, actual.destino));
+    // Un fallo técnico de M4 o de configuración conserva PROGRAMADA para reintento.
+    // Solo un rechazo de negocio 4xx sobre el recorrido (p. ej. distancia 0 km) cierra en FALLIDA.
+    let route: RouteSnapshot;
+    try {
+      route =
+        actual.routeSnapshot ?? (await this.routeResolver.resolve(actual.origen, actual.destino));
+    } catch (error) {
+      if (error instanceof AppError && error.statusCode < 500) {
+        const fallida = await this.repository.cambiarEstado(reservaId, 'PROGRAMADA', 'FALLIDA');
+        if (fallida !== null) {
+          recordActivationResolution('FALLIDA', actual.fechaHoraProgramada, this.dispatchMode);
+          await this.cache.set(fallida);
+        }
+        return this.resultado(reservaId, false, fallida !== null);
+      }
+      throw error;
+    }
 
     const reclamada = await this.repository.cambiarEstado(reservaId, 'PROGRAMADA', 'ACTIVANDO', {
       routeSnapshot: route,

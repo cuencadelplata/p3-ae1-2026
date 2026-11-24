@@ -201,6 +201,7 @@ export class ReservaService {
         cambios.moneda = fare.moneda;
         cambios.estimacionTarifaId = fare.estimacionId;
       } catch (error) {
+        if (error instanceof AppError && error.statusCode < 500) throw error;
         degradation = degradationCause(stage, error);
         if (cambiaRecorrido) cambios.routeSnapshot = null;
         cambios.tarifaEstimada = null;
@@ -287,6 +288,7 @@ export class ReservaService {
     try {
       route = await this.routeResolver.resolve(origin, destination);
     } catch (error) {
+      if (error instanceof AppError && error.statusCode < 500) throw error;
       // Política de degradación existente: la reserva puede guardarse sin tarifa.
       return { pricing: null, cause: degradationCause('route', error) };
     }

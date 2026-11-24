@@ -49,4 +49,27 @@ describe('M4RouteResolver', () => {
       new M4RouteResolver('http://m4:3004', 1000).resolve('Origen', 'Destino'),
     ).rejects.toThrow();
   });
+
+  it('rechaza con 400 claro cuando M4 redondea la distancia a 0 km por cercanía', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: URL) => ({
+        ok: true,
+        json: async () =>
+          url.pathname.endsWith('estimate')
+            ? { distanceKm: 0, estimatedEtaMinutes: 1 }
+            : { latitude: -27.4692, longitude: -58.8306 },
+      })),
+    );
+    await expect(
+      new M4RouteResolver('http://m4:3004', 1000).resolve(
+        'Junín 1200, Corrientes',
+        'Junín 1202, Corrientes',
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'DATOS_INVALIDOS',
+      message: expect.stringContaining('demasiado cercanos'),
+    });
+  });
 });
