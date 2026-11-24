@@ -19,6 +19,8 @@ import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware
 import { authenticateInternalApiKey } from "../middleware/internal-api-key.middleware";
 import { loginRateLimit } from "../middleware/login-rate-limit.middleware";
 import { obtenerMiPerfil, obtenerNombreUsuarioInterno } from "../controllers/me.controller";
+import { emitirTokenDelegadoHandler } from "../controllers/delegated-token.controller";
+import { autenticarCredencialDelegacion } from "../middleware/delegation-credential.middleware";
 
 const router = Router();
 
@@ -97,6 +99,14 @@ router.get(
     "/oauth2/userinfo",
     authenticateToken,
     getUserInfo
+);
+
+// ============ Token delegado para M9 (reservas programadas) ============
+// M9 lo pide con su credencial de servicio cuando llega la hora de una reserva.
+router.post(
+    "/token-delegado",
+    autenticarCredencialDelegacion,
+    emitirTokenDelegadoHandler
 );
 
 // ============ Demostración RF-1.3 (Roles) ============

@@ -16,6 +16,13 @@
 #   M1_UI_PORT         puerto de la interfaz de M1 (por defecto 5173). Es la dirección de retorno
 #                      registrada en Google y Auth0: si se cambia, hay que registrarla también ahí
 #   M1_UI_IMAGE        imagen de la interfaz (por defecto se construye desde modulo-1-identidad-acceso-ui)
+#   M1_OPERADOR_EMAIL, M1_OPERADOR_PASSWORD   cuenta OPERADOR semilla. Con M1_OPERADOR_PASSWORD
+#                      definida, la contraseña se aplica también a un operador que ya existía
+#                      (al reiniciar M1). Sin ella, en development se usa una contraseña de
+#                      desarrollo conocida y en production no se crea el operador
+#   M9_DISPATCH_AUTH_TOKEN   credencial con la que M9 pide tokens delegados en
+#                      POST /auth/token-delegado. Es la misma variable que lee M9, así que
+#                      los dos módulos quedan sincronizados. Sin ella el endpoint responde 503
 
 services:
   m1-identidad-acceso:
@@ -40,6 +47,9 @@ services:
       AUTH0_DOMAIN: "${M1_AUTH0_DOMAIN:-}"
       AUTH0_CLIENT_ID: "${M1_AUTH0_CLIENT_ID:-}"
       AUTH0_CLIENT_SECRET: "${M1_AUTH0_CLIENT_SECRET:-}"
+      M1_OPERADOR_EMAIL: "${M1_OPERADOR_EMAIL:-}"
+      M1_OPERADOR_PASSWORD: "${M1_OPERADOR_PASSWORD:-}"
+      DELEGACION_M9_CREDENCIAL: "${M9_DISPATCH_AUTH_TOKEN:-}"
     volumes:
       - m1-identity-data:/app/data
     depends_on:
