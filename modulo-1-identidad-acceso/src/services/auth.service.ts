@@ -9,6 +9,7 @@ import {
 import { normalizarEmail } from "../utils/auth.validators";
 import { RegisterUserRequestDTO, RegisterUserResponseDTO } from "../types/auth.dto";
 import { validateRegisterRequest } from "../utils/validators";
+import { marcaDeTiempoMs } from "../utils/reloj";
 
 export class AuthError extends Error {
     constructor(
@@ -127,7 +128,9 @@ export async function loginUser(
     const token = jwt.sign(
         {
             userId: usuario.id,
-            role: usuario.rol
+            role: usuario.rol,
+            // Momento exacto de emisión, para la revocación (RF-1.4).
+            iatMs: marcaDeTiempoMs()
         },
         jwtSecret,
         {

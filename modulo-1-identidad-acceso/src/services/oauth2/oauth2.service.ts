@@ -12,6 +12,7 @@ import {
     updateOAuth2LastLogin
 } from "../../repositories/user.repository";
 import { esRolRegistrable } from "../../utils/auth.validators";
+import { marcaDeTiempoMs } from "../../utils/reloj";
 import { OAuth2AdapterFactory } from "./oauth2.factory";
 import {
     OAuth2Error,
@@ -357,7 +358,9 @@ export class OAuth2Service {
                 email: user.email,
                 role: user.rol,
                 authMethod: "oauth2",
-                provider
+                provider,
+                // Momento exacto de emisión, para la revocación (RF-1.4).
+                iatMs: marcaDeTiempoMs()
             },
             config.jwtSecret,
             { expiresIn: "1h", algorithm: "HS256" }

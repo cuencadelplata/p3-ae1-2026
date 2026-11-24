@@ -8,6 +8,7 @@ import { UserRole, OAuth2Provider } from "../types/user.types";
 import { AuthError } from "./auth.service";
 import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../config/env";
+import { marcaDeTiempoMs } from "../utils/reloj";
 
 /**
  * RF-1.5: Integración Estándar
@@ -148,7 +149,9 @@ function generateOAuth2Token(
             userId,
             role,
             email,
-            authMethod: "oauth2"
+            authMethod: "oauth2",
+            // Momento exacto de emisión, para la revocación (RF-1.4).
+            iatMs: marcaDeTiempoMs()
         },
         jwtSecret,
         {

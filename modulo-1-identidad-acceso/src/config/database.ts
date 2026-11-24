@@ -1,7 +1,8 @@
-import bcrypt from "bcryptjs";
 import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
+
+import { asegurarOperadorSemilla } from "./operador-semilla";
 
 const dataDirectory = path.join(
     process.cwd(),
@@ -138,21 +139,8 @@ if (!existingOauthColumns.has("last_login_at")) {
     }
 }
 
-// RF-1.3: usuario OPERADOR semilla para pruebas e integración entre módulos.
-// El registro público sigue rechazando OPERADOR (400).
-const operadorEmail = (process.env.M1_OPERADOR_EMAIL || "operador@movilidad.com").trim().toLowerCase();
-const operadorPassword = process.env.M1_OPERADOR_PASSWORD || "operador123";
-const operadorExiste = db
-    .prepare("SELECT id FROM usuarios WHERE email = ?")
-    .get(operadorEmail);
-
-if (!operadorExiste) {
-    const passwordHash = bcrypt.hashSync(operadorPassword, 10);
-    db.prepare(`
-        INSERT OR IGNORE INTO usuarios (nombre, apellido, dni, telefono, email, password_hash, rol, estado)
-        VALUES ('Operador', 'Sistema', '00000001', '0000000000', ?, ?, 'OPERADOR', 'ACTIVO')
-    `).run(operadorEmail, passwordHash);
-}
+// RF-1.3: usuario OPERADOR semilla (ver operador-semilla.ts).
+asegurarOperadorSemilla(db);
 
 export default db;
 

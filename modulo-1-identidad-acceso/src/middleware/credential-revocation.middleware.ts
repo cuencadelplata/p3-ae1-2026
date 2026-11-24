@@ -39,7 +39,12 @@ export async function rechazarCredencialRevocada(
     try {
         const revocada = await credencialFueRevocada(
             decoded.userId,
-            decoded.iat
+            {
+                iat: decoded.iat,
+                iatMs: typeof decoded.iatMs === "number"
+                    ? decoded.iatMs
+                    : undefined
+            }
         );
 
         if (revocada) {

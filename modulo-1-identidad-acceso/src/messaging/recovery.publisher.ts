@@ -73,14 +73,16 @@ export function publicarRecuperacionSolicitada(
 export function publicarCredencialesRevocadas(
     userId: number,
     motivo: MotivoDeRevocacion,
-    revocadasDesde: number
+    revocadasDesdeMs: number
 ): Promise<void> {
     return publicarEvento(
         EVENTOS_RECUPERACION.CREDENCIALES_REVOCADAS,
         {
             userId,
             motivo,
-            revocadasDesde
+            // En segundos, como antes; revocadasDesdeMs es el valor exacto.
+            revocadasDesde: Math.floor(revocadasDesdeMs / 1000),
+            revocadasDesdeMs
         }
     );
 }
