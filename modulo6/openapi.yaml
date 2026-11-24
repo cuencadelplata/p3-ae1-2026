@@ -790,12 +790,17 @@ components:
               format: date-time
     ViajeIntegracionResponse:
       type: object
-      required: [id, clienteId, estado]
+      required: [id, clienteId, clientUserId, estado]
       properties:
         id:
           type: string
         clienteId:
           type: string
+        clientUserId:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: ID de usuario de M1 guardado al crear el viaje; null si no fue informado.
         conductorId:
           type: string
           nullable: true

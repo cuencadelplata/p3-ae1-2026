@@ -76,6 +76,7 @@ function viajeRespuestaLegacy(viaje, completadoAt) {
     return {
         id: viaje.id,
         clienteId: viaje.clienteId,
+        clientUserId: viaje.clientUserId ?? null,
         conductorId: viaje.conductorId ?? null,
         estado: viaje.estado,
         origen: viaje.origen,
