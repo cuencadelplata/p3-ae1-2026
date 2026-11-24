@@ -56,7 +56,7 @@ describe("RF-1.4 - Eventos de recuperación en RabbitMQ", () => {
     it("Publicar auth.credenciales_revocadas con el motivo", async () => {
         (globalThis as any).__mensajesRabbit.length = 0;
 
-        await publicarCredencialesRevocadas(20, "SOLICITUD_DEL_USUARIO", 1_800_000_000);
+        await publicarCredencialesRevocadas(20, "SOLICITUD_DEL_USUARIO", 1_800_000_000_750);
 
         const mensaje = (globalThis as any).__mensajesRabbit[0];
 
@@ -64,7 +64,8 @@ describe("RF-1.4 - Eventos de recuperación en RabbitMQ", () => {
         expect(mensaje.contenido.datos).toEqual({
             userId: 20,
             motivo: "SOLICITUD_DEL_USUARIO",
-            revocadasDesde: 1_800_000_000
+            revocadasDesde: 1_800_000_000,
+            revocadasDesdeMs: 1_800_000_000_750
         });
     });
 

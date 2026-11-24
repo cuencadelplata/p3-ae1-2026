@@ -22,7 +22,7 @@ export async function revokeCredentials(
     }
 
     try {
-        const revocadasDesde = await revocarCredenciales(
+        const revocadasDesdeMs = await revocarCredenciales(
             userId,
             "SOLICITUD_DEL_USUARIO"
         );
@@ -32,7 +32,9 @@ export async function revokeCredentials(
         res.status(200).json({
             message: "Credenciales revocadas. Iniciá sesión nuevamente",
             userId,
-            revocadasDesde
+            // En segundos, como antes; revocadasDesdeMs es el valor exacto.
+            revocadasDesde: Math.floor(revocadasDesdeMs / 1000),
+            revocadasDesdeMs
         });
     } catch (error) {
         console.error(error);

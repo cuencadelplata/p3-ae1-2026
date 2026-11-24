@@ -119,6 +119,71 @@ describe("RF-1.4 - POST /auth/revocar-credenciales", () => {
         expect(response.status).toBe(200);
     });
 
+    // Caso reportado por M8: "iat" está en segundos. Un token emitido justo antes de
+    // revocar y el del login siguiente pueden tener el mismo "iat".
+    it("Rechazar el token anterior y aceptar el del nuevo login aunque todo ocurra en el mismo segundo", async () => {
+        await redis.flushall();
+
+        const email = `revocacion-mismo-segundo-${Date.now()}-${Math.floor(Math.random() * 100000)}@test.com`;
+
+        await request(app)
+            .post("/auth/registrar-usuario")
+            .send({
+                nombre: "Ana",
+                apellido: "MismoSegundo",
+                dni: String(10_000_000 + Math.floor(Math.random() * 89_999_999)),
+                telefono: "11 5555 1234",
+                email,
+                password: "123456",
+                rol: "CLIENTE"
+            });
+
+        // Reloj congelado: login, revocación y nuevo login pasan en el mismo instante.
+        vi.useFakeTimers({ toFake: ["Date"], now: 1_800_000_000_400 });
+        try {
+            const primerLogin = await request(app)
+                .post("/auth/iniciar-sesion")
+                .send({ email, password: "123456" });
+
+            const revocacion = await request(app)
+                .post("/auth/revocar-credenciales")
+                .set("Authorization", `Bearer ${primerLogin.body.token}`);
+
+            const segundoLogin = await request(app)
+                .post("/auth/iniciar-sesion")
+                .send({ email, password: "123456" });
+
+            const tokenAnterior = primerLogin.body.token;
+            const tokenNuevo = segundoLogin.body.token;
+            const iatAnterior = (jwt.decode(tokenAnterior) as jwt.JwtPayload).iat;
+            const iatNuevo = (jwt.decode(tokenNuevo) as jwt.JwtPayload).iat;
+
+            const conAnterior = await request(app)
+                .get("/auth/validar-identidad-y-rol")
+                .set("Authorization", `Bearer ${tokenAnterior}`);
+
+            const conNuevo = await request(app)
+                .get("/auth/validar-identidad-y-rol")
+                .set("Authorization", `Bearer ${tokenNuevo}`);
+
+            expect(primerLogin.status).toBe(200);
+            expect(revocacion.status).toBe(200);
+            expect(segundoLogin.status).toBe(200);
+
+            // Los dos tokens y la revocación caen en el mismo segundo.
+            expect(iatAnterior).toBe(iatNuevo);
+            expect(revocacion.body.revocadasDesde).toBe(iatAnterior);
+
+            expect(conAnterior.status).toBe(401);
+            expect(conAnterior.body.error).toBe("Credencial revocada");
+
+            expect(conNuevo.status).toBe(200);
+            expect(conNuevo.body.valid).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it("Responder 503 si Redis está caído y no se puede guardar la revocación", async () => {
         const ahora = Math.floor(Date.now() / 1000);
 
