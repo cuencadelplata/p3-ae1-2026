@@ -75,7 +75,7 @@ async function findTrip(ride: RideRequest, passengerId: number, token: string, s
   for (const item of viajes) {
     if (Date.parse(item.fechaCreacion) < Date.parse(ride.createdAt)) break
     const detail = await request<Trip>('M6', `/api/viajes/${item.id}`, { token, signal })
-    if (detail.rideRequestId === ride.id) return detail
+    if (detail.rideRequestId === ride.id && !terminalTrip(detail.estado)) return detail
   }
 }
 
@@ -109,6 +109,8 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   const [searchPaused, setSearchPaused] = useState(false)
   const [verifiedTripId, setVerifiedTripId] = useState<string>()
   const [checkingExistingTrip, setCheckingExistingTrip] = useState(true)
+  const [existingTripError, setExistingTripError] = useState('')
+  const [lookupAttempt, setLookupAttempt] = useState(0)
   const [method, setMethod] = useState('efectivo')
   // Los datos de la tarjeta sólo viven en memoria: no se guardan en el navegador ni se mandan a M6.
   const [card, setCard] = useState<CardInput>(emptyCard)
@@ -178,13 +180,16 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   useEffect(() => {
     if (!canRestore || busy) return
 
+    setCheckingExistingTrip(true)
+    setExistingTripError('')
     return pollTrip(async (signal) => {
+      const lookupSignal = AbortSignal.any([signal, AbortSignal.timeout(10000)])
       try {
-        const active = await findActiveTrip(userId, token, signal)
+        const active = await findActiveTrip(userId, token, lookupSignal)
         if (signal.aborted) return false
         if (active) {
           const related = active.rideRequestId
-            ? await request<RideRequest>('M5', `/api/v1/ride-requests/${active.rideRequestId}`, { token, signal }).catch(() => undefined)
+            ? await request<RideRequest>('M5', `/api/v1/ride-requests/${active.rideRequestId}`, { token, signal: lookupSignal }).catch(() => undefined)
             : undefined
           if (signal.aborted) return false
           setSearchPaused(false)
@@ -194,11 +199,15 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
         }
         setCheckingExistingTrip(false)
         return false
-      } catch {
-        return !signal.aborted
+      } catch (err) {
+        if (!signal.aborted) {
+          setCheckingExistingTrip(false)
+          setExistingTripError(err instanceof Error ? err.message : 'No se pudo comprobar si tenés un viaje en curso.')
+        }
+        return false
       }
     })
-  }, [busy, canRestore, token, userId])
+  }, [busy, canRestore, token, userId, journey.key, lookupAttempt])
 
   useEffect(() => {
     if (!rideId || tripId || searchPaused) return
@@ -248,7 +257,18 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
         setJourney((previous) => previous.trip?.id === tripId
           ? { ...previous, trip: current, qr: current.estado === 'ARRIBADO' ? previous.qr : undefined }
           : previous)
-        if (current.estado === 'CANCELADO') return false
+        if (current.estado === 'CANCELADO') {
+          if (current.canceladoPor !== 'conductor' || !current.rideRequestId) return false
+          const reopened = await request<RideRequest>('M5', `/api/v1/ride-requests/${encodeURIComponent(current.rideRequestId)}`, { token, signal })
+          if (signal.aborted) return false
+          // Esperar al consumidor de RabbitMQ sin volver a seleccionar el viaje cancelado.
+          if (reopened.status === 'ASSIGNED' && reopened.assignedDriverId === current.conductorId) return true
+          setSearchPaused(false)
+          setJourney((previous) => previous.trip?.id === tripId
+            ? { ...previous, ride: reopened, trip: undefined, qr: undefined, payment: undefined, receipt: undefined }
+            : previous)
+          return false
+        }
         if (current.estado !== 'COMPLETADO') return true
 
         if (!hasPayment) {
@@ -343,6 +363,28 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
     }
   }
 
+  async function requestAnotherRide() {
+    // M6 ya cerró el viaje. Cerrar también su solicitud libera el candado del cliente en M5.
+    const cancelledRequestId = rideId ?? trip?.rideRequestId
+    if (trip?.estado === 'CANCELADO' && cancelledRequestId) {
+      const current = await request<RideRequest>('M5', `/api/v1/ride-requests/${encodeURIComponent(cancelledRequestId)}`, { token })
+      if (!closed(current.status)) {
+        const endpoint = current.status === 'ASSIGNED' ? 'cancel-assigned' : 'cancel'
+        try {
+          await request('M5', `/api/v1/ride-requests/${encodeURIComponent(cancelledRequestId)}/${endpoint}`, {
+            method: 'POST', token,
+            body: { actorType: 'CLIENT', reason: 'El pasajero solicita otro viaje después de la cancelación en M6' },
+          })
+        } catch (err) {
+          // Una respuesta perdida o un cierre concurrente pueden haber completado la operación.
+          const latest = await request<RideRequest>('M5', `/api/v1/ride-requests/${encodeURIComponent(cancelledRequestId)}`, { token }).catch(() => null)
+          if (!latest || !closed(latest.status)) throw err
+        }
+      }
+    }
+    reset()
+  }
+
   function reset() {
     setError('')
     setSearchPaused(false)
@@ -353,6 +395,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
 
   const started = trip?.estado === 'EN_CURSO'
   const completed = trip?.estado === 'COMPLETADO'
+  const replacingDriver = trip?.estado === 'CANCELADO' && trip.canceladoPor === 'conductor'
   const canceled = trip?.estado === 'CANCELADO'
   const step = started || completed ? 3 : trip ? 2 : ride ? 1 : 0
   const requestSeconds = ride?.expiresAt ? Math.max(0, Math.ceil((Date.parse(ride.expiresAt) - now) / 1000)) : 0
@@ -382,7 +425,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
             <aside className="ride-route" aria-label={planning ? '¿A dónde vamos?' : 'Recorrido del viaje'}>
               <h2><Route size={18} aria-hidden="true" /> {planning ? '¿A dónde vamos hoy?' : 'Tu recorrido'}</h2>
               {planning ? <TripPlanner draft={draft} onChange={setDraft} route={routeInfo} routeLoading={routeLoading}
-                pickMode={pickMode} onPickMode={setPickMode} disabled={locked || checkingExistingTrip} warning={problem} />
+                pickMode={pickMode} onPickMode={setPickMode} disabled={locked || checkingExistingTrip || Boolean(existingTripError)} warning={problem} />
                 : <>
                   <div className="ride-stop"><MapPin size={18} aria-hidden="true" /><div><small>Origen</small><p>{shown?.origin.address ?? trip?.origen}</p></div></div>
                   <div className="ride-stop"><Navigation size={18} aria-hidden="true" /><div><small>Destino</small><p>{shown?.destination.address ?? trip?.destino}</p></div></div>
@@ -402,8 +445,12 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
 
               {!ride && !trip && <>
                 <h2>Pedí un viaje</h2>
-                <p>{checkingExistingTrip ? 'Buscando si tenés un viaje en curso…' : 'Elegí el origen y el destino escribiendo la dirección o tocando el mapa. Al confirmar, buscamos autos disponibles cerca del origen.'}</p>
-                <button className="btn-primary" disabled={locked || checkingExistingTrip || locating || Boolean(problem)} onClick={() => void run('Creando la solicitud…', createRide)}>Pedir viaje ahora</button>
+                <p>{checkingExistingTrip ? 'Buscando si tenés un viaje en curso…' : existingTripError ? 'No pudimos comprobar si tenés un viaje activo. Reintentá antes de solicitar otro.' : 'Elegí el origen y el destino escribiendo la dirección o tocando el mapa. Al confirmar, buscamos autos disponibles cerca del origen.'}</p>
+                {existingTripError && <>
+                  <p role="alert">{existingTripError}</p>
+                  <button className="btn-ghost" disabled={locked || checkingExistingTrip} onClick={() => setLookupAttempt((attempt) => attempt + 1)}>Reintentar consulta de viaje</button>
+                </>}
+                <button className="btn-primary" disabled={locked || checkingExistingTrip || Boolean(existingTripError) || locating || Boolean(problem)} onClick={() => void run('Creando la solicitud…', createRide)}>Pedir viaje ahora</button>
               </>}
 
               {ride && !trip && <>
@@ -493,9 +540,14 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
                 {requestSeconds > 0 && <p className="ride-muted">Podés solicitar otro viaje con esta cuenta en {requestSeconds} s.</p>}
                 <button className="btn-ghost" disabled={locked || requestSeconds > 0} onClick={reset}>Hacer otro viaje</button>
               </>}
-              {canceled && <>
+              {replacingDriver && <>
+                <h2>Buscando otro conductor</h2>
+                <p role="status">Tu conductor canceló. Estamos retomando la búsqueda para tu recorrido.</p>
+                {error && <p role="alert">{error}</p>}
+              </>}
+              {canceled && !replacingDriver && <>
                 <h2>Viaje cancelado</h2>
-                <button className="btn-ghost" disabled={locked || requestSeconds > 0} onClick={reset}>Hacer otro viaje</button>
+                <button className="btn-ghost" disabled={locked} onClick={() => void run('Preparando otro viaje…', requestAnotherRide)}>Hacer otro viaje</button>
               </>}
             </section>
           </div>

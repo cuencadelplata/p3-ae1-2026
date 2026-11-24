@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { solicitarViaje } from '../../../src/rf-6.1-6.2-6.3/controllers/viajes.controller.js';
 import { mockRequest, mockResponse } from '../datos-prueba/mocks.js';
+import * as viajeRepo from '../../../src/rf-6.1-6.2-6.3/repositories/viaje.repository.js';
 import pool from '../../../src/rf-6.1-6.2-6.3/db/pool.js';
 
 vi.mock('../../../src/rf-6.1-6.2-6.3/services/qr.service.js', () => {
@@ -134,4 +135,24 @@ describe('RF-6.1: Solicitar Viaje - Estados del viaje', () => {
     expect(res2.data.id).toBe(res1.data.id);
     expect(res2.data.clientUserId).toBe(42);
   });
+  it.each(['cliente', 'conductor'] as const)('conserva idempotencia tras cancelación de %s y permite reemplazo solo por conductor', async (actor) => {
+    const body = { clienteId: 'cliente-reasignacion', clientUserId: 42, rideRequestId: 'ride-reasignacion', origen: 'A', destino: 'B' };
+    const send = async () => {
+      const req = mockRequest(body);
+      req.headers = { 'idempotency-key': 'ride-reasignacion' };
+      const res = mockResponse();
+      await solicitarViaje(req as any, res as any);
+      return res;
+    };
+    const original = await send();
+    await viajeRepo.cancelarSiCancelable(original.data.id, actor, 'Cancelación de prueba');
+    const replacement = await send();
+    expect(replacement.statusCode).toBe(actor === 'conductor' ? 201 : 200);
+    if (actor === 'conductor') expect(replacement.data.id).not.toBe(original.data.id);
+    else expect(replacement.data.id).toBe(original.data.id);
+    const retry = await send();
+    expect(retry.data.id).toBe(replacement.data.id);
+    expect((await viajeRepo.buscarPorId(original.data.id))?.canceladoPor).toBe(actor);
+  });
+
 });

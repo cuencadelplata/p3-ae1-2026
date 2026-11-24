@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { RideRequestService } from '../../src/services/ride-request.service';
 import { RabbitMQService } from '../../src/services/rabbitmq.service';
 import { DriverCancellationEvent } from '../../src/types/ride-request.types';
@@ -29,10 +29,12 @@ describe('Integración RabbitMQ - Cola despacho.reabrir (Cancelación por Conduc
       { driverId: 'drv_102', latitude: -34.607, longitude: -58.385, vehicleType: 'AUTO', available: true, distanceKm: 2.1, rating: 4.6 },
     ]);
 
-    rideRequestService = new RideRequestService(redisService, rabbitMQService, m4Client);
+    rideRequestService = new RideRequestService(redisService, rabbitMQService, m4Client, false);
+    jest.spyOn(rideRequestService as any, 'notifyM6TripAssigned').mockResolvedValue('trip-test');
   });
 
   afterEach(async () => {
+    jest.restoreAllMocks();
     delete process.env.M4_MOCK;
     m4Client.clearMockDrivers();
     await redisService.disconnect();
@@ -95,6 +97,40 @@ describe('Integración RabbitMQ - Cola despacho.reabrir (Cancelación por Conduc
     for (const offer of newPendingOffers) {
       expect(offer.driverId).not.toBe('conductor-789');
     }
+
+    // La oferta debe poder aceptarse antes de que venza el candado anterior (30 s).
+    const replacement = newPendingOffers[0];
+    const accepted = await rideRequestService.respondToOffer(replacement.id, replacement.driverId, {
+      action: 'ACCEPT', driverId: replacement.driverId
+    });
+    expect(accepted.requestStatus).toBe('ASSIGNED');
+    expect(accepted.assignedDriverId).toBe(replacement.driverId);
+    // La reasignación conserva la exclusividad frente a otro candidato.
+    const other = newPendingOffers.find((o) => o.driverId !== replacement.driverId);
+    expect(other).toBeDefined();
+    await expect(rideRequestService.respondToOffer(other!.id, other!.driverId, {
+      action: 'ACCEPT', driverId: other!.driverId
+    })).rejects.toThrow();
+
+  });
+
+  it('permite que otro conductor acepte cuando el primero solo rechazó la oferta', async () => {
+    const request = await rideRequestService.createRideRequest('cliente-rechazo', 'idemp-rechazo', {
+      origin: { latitude: -34.6037, longitude: -58.3816, address: 'Obelisco' },
+      destination: { latitude: -34.5885, longitude: -58.4045, address: 'Recoleta' },
+      vehicleType: 'AUTO'
+    });
+    const { offers } = await rideRequestService.sendOffersForRequest(request.id, 'cliente-rechazo', {
+      driverIds: ['conductor-789', 'drv_101'], ttlSeconds: 30
+    });
+    await rideRequestService.respondToOffer(offers[0].id, offers[0].driverId, {
+      action: 'REJECT', driverId: offers[0].driverId
+    });
+    const accepted = await rideRequestService.respondToOffer(offers[1].id, offers[1].driverId, {
+      action: 'ACCEPT', driverId: offers[1].driverId
+    });
+    expect(accepted.requestStatus).toBe('ASSIGNED');
+    expect(accepted.assignedDriverId).toBe('drv_101');
   });
 
   it('debe manejar graciosamente un viajeId inexistente sin arrojar errores', async () => {

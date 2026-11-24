@@ -57,7 +57,7 @@ let extensionSchemaPromise: Promise<void> | undefined;
  * Versión del esquema que crea ESQUEMA_SQL. Subirla cada vez que se cambie ese SQL, para que
  * las bases existentes lo vuelvan a aplicar una vez.
  */
-const ESQUEMA_VERSION = 1;
+const ESQUEMA_VERSION = 2;
 
 async function ensureExtensionSchema(): Promise<void> {
     extensionSchemaPromise ??= aplicarEsquema().catch((error: unknown) => {
@@ -121,6 +121,12 @@ const ESQUEMA_SQL = `
         ALTER TABLE viajes ADD COLUMN IF NOT EXISTS driver_user_id BIGINT;
         ALTER TABLE viajes ADD COLUMN IF NOT EXISTS ride_request_id VARCHAR(100);
         ALTER TABLE viajes ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(255);
+        ALTER TABLE viajes ADD COLUMN IF NOT EXISTS cancelado_por VARCHAR(20);
+        -- Recuperar el actor de cancelaciones anteriores desde el historial inmutable.
+        UPDATE viajes v SET cancelado_por = 'conductor'
+        WHERE v.estado = 'CANCELADO' AND v.cancelado_por IS NULL
+          AND EXISTS (SELECT 1 FROM viaje_transiciones t WHERE t.viaje_id = v.id
+            AND t.estado_nuevo = 'CANCELADO' AND t.detalle LIKE 'Cancelación de viaje por conductor%');
         -- RF-6.7: registro de viajes filtrado por conductor.
         CREATE INDEX IF NOT EXISTS viajes_conductor_id_fecha_idx
             ON viajes(conductor_id, fecha_creacion DESC, id DESC);
@@ -242,7 +248,9 @@ export async function buscarPorRideRequestId(rideRequestId?: string, idempotency
     if (filtros.length === 0) return null;
 
     const { rows } = await pool.query(
-        `SELECT * FROM viajes WHERE ${filtros.join(' OR ')} ORDER BY fecha_creacion DESC LIMIT 1`,
+        `SELECT * FROM viajes WHERE (${filtros.join(' OR ')})
+         AND NOT (estado = 'CANCELADO' AND COALESCE(cancelado_por, '') = 'conductor')
+         ORDER BY fecha_creacion DESC LIMIT 1`,
         params
     );
 
@@ -466,8 +474,8 @@ export async function cancelarSiCancelable(
             return null;
         }
         const { rows } = await client.query(
-            `UPDATE viajes SET estado = $1 WHERE id = $2 RETURNING *`,
-            [EstadoViaje.CANCELADO, id]
+            `UPDATE viajes SET estado = $1, cancelado_por = $3 WHERE id = $2 RETURNING *`,
+            [EstadoViaje.CANCELADO, id, actor]
         );
         const detalle = [
             'Cancelación de viaje',
@@ -767,6 +775,7 @@ function mapRow(row: any): Viaje {
         id: row.id,
         clienteId: row.cliente_id,
         clientUserId: toIntOrNull(row.client_user_id),
+        canceladoPor: row.cancelado_por ?? null,
         conductorId: row.conductor_id,
         driverUserId: toIntOrNull(row.driver_user_id),
         rideRequestId: row.ride_request_id ?? null,

@@ -213,7 +213,13 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
         }
         if (err instanceof FlowError && (err.status === 404 || err.status === 409)) {
           setOffer(null)
-          throw new Error('La oferta ya no está disponible. Te avisamos cuando llegue otra.')
+          if (err.code === 'REQUEST_ALREADY_ASSIGNED') {
+            throw new Error('M5 informa que la solicitud sigue asignada a otro conductor. Esperamos una nueva oferta.')
+          }
+          if (err.code === 'OFFER_EXPIRED') {
+            throw new Error('Venció el plazo de esta oferta. Te avisamos cuando llegue otra.')
+          }
+          throw new Error(err.message)
         }
         throw err
       }

@@ -78,6 +78,7 @@ function viajeRespuestaLegacy(viaje, completadoAt) {
         clienteId: viaje.clienteId,
         conductorId: viaje.conductorId ?? null,
         estado: viaje.estado,
+        canceladoPor: viaje.canceladoPor ?? null,
         origen: viaje.origen,
         destino: viaje.destino,
         fechaCreacion: viaje.fechaCreacion,
@@ -191,7 +192,7 @@ export const cancelarViaje = async (req, res) => {
             error: `No se puede cancelar un viaje en estado ${viajeExistente.estado}`,
         });
     }
-    // viaje.cancelado (trip.events) quedó en el outbox; se publica ahora o lo reintenta el relay.
+    // viaje.cancelado (M4) y TripCancelled (M8) quedaron en el outbox; se publican ahora o los reintenta el relay.
     void despacharEventosPendientes();
     return res.json(viajeRespuestaLegacy(viaje));
 };
