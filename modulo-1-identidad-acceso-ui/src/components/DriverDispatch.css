@@ -130,7 +130,7 @@
 .driver-trip-card dd { font-size: .85rem; overflow-wrap: anywhere; }
 .driver-trip-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); padding-top: .8rem; border-top: 1px solid var(--line); }
 .driver-trip-metrics dd { margin-top: .15rem; font-weight: 600; }
-.driver-offer-actions { justify-content: flex-end; margin-top: 1rem; }
+.driver-offer-actions { grid-column: 1 / -1; justify-content: flex-end; }
 .driver-offer-actions .btn-primary { width: auto; min-width: 10rem; }
 .driver-offer-actions button:disabled { opacity: .55; }
 
@@ -144,4 +144,5 @@
   .driver-trip-stops { grid-template-columns: 1fr; gap: .55rem; }
   .driver-offer-actions { display: grid; grid-template-columns: auto minmax(0, 1fr); }
   .driver-offer-actions .btn-primary { width: 100%; min-width: 0; }
+  .driver-offer-actions .btn-primary:only-child { grid-column: 1 / -1; }
 }

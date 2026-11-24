@@ -216,7 +216,7 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
       : online ? (trip && rideStatus[trip.estado]) || 'Buscando viajes' : 'Estás desconectado'
   const description = active ? 'La desconexión se habilita cuando el viaje termina o se cancela.'
     : pending ? 'Revisá el recorrido y confirmá si querés tomarlo.'
-      : online ? 'Estás disponible para recibir ofertas.' : 'Conectate para recibir ofertas en esta zona.'
+      : online ? 'Aceptar viaje se habilita cuando recibís una oferta.' : 'Conectate para recibir ofertas en esta zona.'
   const StatusIcon = active || (online && trip?.estado === 'COMPLETADO') ? CircleCheck : online ? Radar : Power
 
   return (
@@ -252,6 +252,11 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
         </button>
         {error && <p className="alert-error driver-error" role="alert">{error}</p>}
 
+        {online && !active && <div className="driver-offer-actions" role="group" aria-label="Responder a la oferta">
+          {pending && <button className="btn-ghost" disabled={Boolean(busy)} onClick={() => void respond(pending, 'reject')}>Rechazar</button>}
+          <button className="btn-primary" disabled={!pending || Boolean(busy)} onClick={() => pending && void respond(pending, 'accept')}>Aceptar viaje</button>
+        </div>}
+
         {showSummary && <div className="driver-trip-card">
           <div className="driver-trip-heading">
             <h3>{pending ? 'Detalles de la oferta' : 'Detalles del viaje'}</h3>
@@ -268,10 +273,6 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
             <div><dt>Distancia</dt><dd>{(finalFare?.distanciaKm ?? fare?.estimatedDistanceKm)?.toLocaleString('es-AR', { maximumFractionDigits: 1 })} km</dd></div>
             <div><dt>{finalFare ? 'Duración' : 'Duración estimada'}</dt><dd>{finalFare?.tiempoMinutos ?? fare?.estimatedDurationMin} min</dd></div>
           </dl>}
-          {pending && <div className="driver-offer-actions">
-            <button className="btn-ghost" disabled={Boolean(busy)} onClick={() => void respond(pending, 'reject')}>Rechazar</button>
-            <button className="btn-primary" disabled={Boolean(busy)} onClick={() => void respond(pending, 'accept')}>Aceptar viaje</button>
-          </div>}
         </div>}
 
         <div className="driver-details">
