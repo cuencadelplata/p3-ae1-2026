@@ -19,7 +19,7 @@
 
 services:
   m1-identidad-acceso:
-    image: "${M1_IMAGE:-matsir/m1-identidad-acceso:ae4-v1.0}"
+    image: "${M1_IMAGE:-matsir/m1-identidad-acceso:ae4-v1.1}"
     build:
       context: .
       dockerfile: Dockerfile
