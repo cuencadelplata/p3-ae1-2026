@@ -15,6 +15,16 @@ export const DELIVERY_QUEUE = 'm8.delivery.notification-requested';
 export const NOTIFICATION_REQUESTED_ROUTING_KEY = 'notification.requested';
 export const CONSUMER_ID = 'm8.delivery.notification-requested';
 
+export async function processPushEvent(rawEnvelope: EventEnvelope<unknown>, deliveryService: NotificationDeliveryService) {
+  const envelope = validateNotificationRequestedEnvelope(rawEnvelope);
+  // EventConsumer ya registró el mensaje en el Inbox técnico.
+  const result = await deliveryService.processNotificationRequest(envelope, { skipInboxClaim: true });
+  // Sin suscripción no hay un envío para reintentar. La ausencia queda registrada por RF8.7.
+  if (result.actionTaken === 'FAILED' && result.status !== 'FAILED_NO_DEVICE_TOKEN') {
+    throw new NonRetryableMessagingError(result.error ?? 'Push delivery permanently failed');
+  }
+}
+
 export interface RabbitMqDeliveryConsumerOptions {
   connection: ChannelModel;
   inboxStore: TechnicalInboxStore;
@@ -86,24 +96,8 @@ export class RabbitMqDeliveryConsumer {
       },
     });
 
-    // Registrar handler de negocio para NotificationRequested
-    this.consumer.registerHandler('NotificationRequested', async (rawEnvelope: EventEnvelope<any>) => {
-      // 1. Validar contrato formal M8 de sobre y datos
-      const envelope = validateNotificationRequestedEnvelope(rawEnvelope);
-
-      // 2. Procesar entrega PUSH delegada a RF8.7
-      // Se pasa skipInboxClaim: true porque EventConsumer de RF8.6 ya realizó el claim técnico en messaging.inbox_events
-      const result = await this.options.deliveryService.processNotificationRequest(envelope, {
-        skipInboxClaim: true,
-      });
-
-      // 3. Manejo de fallas permanentes: derivar inmediatamente a DLQ
-      if (result.actionTaken === 'FAILED') {
-        throw new NonRetryableMessagingError(
-          result.error ?? 'Push delivery permanently failed'
-        );
-      }
-    });
+    this.consumer.registerHandler('NotificationRequested', rawEnvelope =>
+      processPushEvent(rawEnvelope, this.options.deliveryService));
 
     await this.consumer.start(this.channel);
     if (channelClosed) throw new Error('El canal RabbitMQ se cerró durante el arranque de RF8.7.');

@@ -65,4 +65,4 @@ Remove-Item Env:E2E_RESERVA_PROGRAMADA, Env:METODO_PAGO
 
 La opción `tarjeta` requiere las credenciales de Mercado Pago TEST de M7. Sin `E2E_RESERVA_PROGRAMADA`, la suite conserva el recorrido de despacho inmediato.
 
-La suite informa por separado los incrementos en la DLQ de entrega Web Push porque las cuentas de prueba no registran dispositivos. La entrega al navegador se comprueba con una suscripción real.
+Las cuentas de esta suite carecen de suscripción Web Push. M8 registra el resultado de entrega sin dispositivo y confirma el mensaje sin enviarlo a la DLQ. Para comprobar la recepción en el navegador hace falta una suscripción Web Push activa.

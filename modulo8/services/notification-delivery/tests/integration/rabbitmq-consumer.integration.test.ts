@@ -6,9 +6,7 @@ process.env.NODE_ENV = 'test';
 import {
   EventConsumer,
   InMemoryTechnicalInbox,
-  NonRetryableMessagingError,
   buildQueueTopology,
-  type EventEnvelope,
 } from '@m8/shared';
 import { NotificationDeliveryService } from '../../src/services/notification-delivery.service.js';
 import { InMemoryMessagingInboxRepository } from '../../src/infrastructure/database/inbox.repository.js';
@@ -16,7 +14,7 @@ import { InMemoryDeliveryRepository } from '../../src/infrastructure/database/de
 import { InMemoryDeviceTokenRepository } from '../../src/infrastructure/database/device-token.repository.js';
 import { MockM2PreferencesClient } from '../../src/infrastructure/clients/m2-preferences.client.js';
 import { SandboxPushProvider } from '../../src/infrastructure/provider/sandbox-push-provider.js';
-import { validateNotificationRequestedEnvelope } from '../../src/domain/notification-requested.contract.js';
+import { processPushEvent } from '../../src/infrastructure/messaging/rabbitmq-delivery-consumer.js';
 
 test('Consumidor RabbitMQ / EventConsumer RF8.6 + RF8.7 Integración', async (t) => {
   const inboxStore = new InMemoryTechnicalInbox();
@@ -53,17 +51,7 @@ test('Consumidor RabbitMQ / EventConsumer RF8.6 + RF8.7 Integración', async (t)
     maxRetries: 3,
   });
 
-  consumer.registerHandler('NotificationRequested', async (rawEnvelope: EventEnvelope<any>) => {
-    const envelope = validateNotificationRequestedEnvelope(rawEnvelope);
-    const result = await deliveryService.processNotificationRequest(envelope, {
-      skipInboxClaim: true,
-    });
-    if (result.actionTaken === 'FAILED') {
-      throw new NonRetryableMessagingError(
-        result.error ?? 'Push delivery permanently failed'
-      );
-    }
-  });
+  consumer.registerHandler('NotificationRequested', rawEnvelope => processPushEvent(rawEnvelope, deliveryService));
 
   let ackCount = 0;
   let dlqPublished: { exchange: string; routingKey: string; content: string }[] = [];
@@ -198,7 +186,7 @@ test('Consumidor RabbitMQ / EventConsumer RF8.6 + RF8.7 Integración', async (t)
     assert.equal(dlqPublished[0]?.exchange, 'mobility.events.dlx');
   });
 
-  await t.test('Flujo 4: Usuario sin device token resulta en FAILED_NO_DEVICE_TOKEN y se envia a DLQ', async () => {
+  await t.test('Flujo 4: usuario sin dispositivo se registra y se confirma sin enviar a DLQ', async () => {
     const channel = createMockChannel();
     m2Client.setPreferences(202, { notificationsEnabled: true, pushEnabled: true });
     // Usuario 202 no tiene token
@@ -225,7 +213,11 @@ test('Consumidor RabbitMQ / EventConsumer RF8.6 + RF8.7 Integración', async (t)
     await consumer.processMessage(channel as any, amqpMsg as any);
 
     assert.equal(ackCount, 1);
-    assert.equal(dlqPublished.length, 1, 'Fallo permanente de falta de token va a DLQ');
+    assert.equal(dlqPublished.length, 0);
+    assert.equal(retryPublished.length, 0);
+    const delivery = await deliveryRepo.getByNotificationId(envelope.data.notificationId);
+    assert.equal(delivery?.status, 'FAILED_NO_DEVICE_TOKEN');
+    assert.equal(delivery?.attempts.length, 0);
   });
 
   await t.test('Flujo 5: Falla transitoria en M2 programa reintento en cola .retry', async () => {

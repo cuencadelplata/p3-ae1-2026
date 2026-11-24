@@ -438,15 +438,26 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     if (s.conductor) await pedir(M4, `/drivers/${s.conductor.userId}/location`, { method: 'DELETE', token: s.conductor.token }).catch(() => {});
   });
 
-  test('12. RabbitMQ: las colas de integración no acumulan errores', async (t) => {
+  test('11b. M8: soporte lista únicamente los tickets del usuario autenticado', async () => {
+    const ticketsPath = '/tickets';
+    const propio = await pedir(M8, ticketsPath, {
+      method: 'POST', token: s.pasajero.token, body: { tripId: s.tripId, motivo: 'Consulta E2E del pasajero' },
+    });
+    const ajeno = await pedir(M8, ticketsPath, {
+      method: 'POST', token: s.conductor.token, body: { tripId: s.tripId, motivo: 'Consulta E2E del conductor' },
+    });
+    assert.equal(propio.status, 201, mostrar(propio));
+    assert.equal(ajeno.status, 201, mostrar(ajeno));
+    const consulta = await pedir(M8, `${ticketsPath}/mios?tripId=${s.tripId}`, { token: s.pasajero.token });
+    assert.equal(consulta.status, 200, mostrar(consulta));
+    assert.deepEqual(consulta.data.map(ticket => ticket.id), [propio.data.id]);
+    assert.equal((await pedir(M8, ticketsPath, { token: s.pasajero.token })).status, 403);
+  });
+
+  test('12. RabbitMQ: ninguna cola de mensajes muertos creció', async () => {
     const despues = await colasMuertas();
-    // La suite usa cuentas sin suscripción Web Push real. RF8.7 puede
-    // registrar FAILED_NO_DEVICE_TOKEN en su propia DLQ aunque el viaje se complete.
-    const dlqPush = 'm8.delivery.notification-requested.dlq';
-    const nuevosPush = (despues[dlqPush] ?? 0) - (colasMuertasAntes[dlqPush] ?? 0);
-    if (nuevosPush > 0) t.diagnostic(`DLQ de entrega PUSH: +${nuevosPush}; la suite no registra dispositivos.`);
     const crecieron = Object.entries(despues)
-      .filter(([nombre, cantidad]) => nombre !== dlqPush && cantidad > (colasMuertasAntes[nombre] ?? 0))
+      .filter(([nombre, cantidad]) => cantidad > (colasMuertasAntes[nombre] ?? 0))
       .map(([nombre, cantidad]) => `${nombre}: ${colasMuertasAntes[nombre] ?? 0} → ${cantidad}`);
     assert.deepEqual(crecieron, [], `Colas de mensajes muertos con mensajes nuevos:\n${crecieron.join('\n')}`);
   });
