@@ -10,6 +10,7 @@
 #   M6_M7_URL, M6_M8_URL             URLs de M7 y M8 si cambian sus nombres de servicio
 #   M6_M3_URL                        URL de M3 en la red integrada
 #   M6_*_HOST_PORT                   puertos del host (tabla acordada: 15000-15002)
+#   M6_VIAJES_REPLICAS               instancias de la API de viajes detrás del balanceador (1 por defecto)
 #   RABBITMQ_USER, RABBITMQ_PASSWORD los mismos que usa el RabbitMQ compartido
 
 x-m6-imagen: &m6-imagen
@@ -26,11 +27,38 @@ x-m6-healthcheck: &m6-healthcheck
   start_period: 10s
 
 services:
+  # Balanceador: se queda con el nombre m6-viajes y el puerto 15000, así M2, M5, M8 y el
+  # resto de M6 siguen usando http://m6-viajes:3000 sin cambios. Reparte entre las
+  # instancias de m6-viajes-app (ver modulo6/balanceador/default.conf.template).
   m6-viajes:
-    <<: *m6-imagen
-    command: ["node", "--import", "./dist/src/observabilidad/telemetria.js", "dist/src/rf-6.1-6.2-6.3/index.js"]
+    image: nginx:1.27-alpine
     ports:
       - "${M6_VIAJES_HOST_PORT:-15000}:3000"
+    environment:
+      M6_UPSTREAM: m6-viajes-app:3000
+    volumes:
+      - ./balanceador/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      m6-viajes-app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - reservas-network
+    restart: unless-stopped
+
+  # API de viajes (RF-6.1 a 6.4 y 6.7). Sin puerto en el host para poder escalarla:
+  #   docker compose up -d --scale m6-viajes-app=4
+  # o con M6_VIAJES_REPLICAS=4 en el .env de la raíz.
+  m6-viajes-app:
+    <<: *m6-imagen
+    command: ["node", "--import", "./dist/src/observabilidad/telemetria.js", "dist/src/rf-6.1-6.2-6.3/index.js"]
+    deploy:
+      replicas: ${M6_VIAJES_REPLICAS:-1}
     environment:
       NODE_ENV: production
       PORT: "3000"

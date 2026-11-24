@@ -3,13 +3,29 @@
 // Trazas y logs: OTLP de los servicios M6 → Tempo y Loki locales.
 // Para enviar además a Grafana Cloud, usar config.cloud.alloy (ALLOY_CONFIG=config.cloud.alloy).
 
+// La API de viajes corre detrás de un balanceador y puede tener varias instancias:
+// se descubren por DNS (todas las IP de viajes-app) y se mide cada una por separado.
+discovery.dns "m6_viajes" {
+  names = ["viajes-app"]
+  type  = "A"
+  port  = 3000
+}
+
+prometheus.scrape "m6_viajes" {
+  job_name        = "m6"
+  scrape_interval = "15s"
+  scrape_timeout  = "5s"
+  metrics_path    = "/metrics"
+  targets         = discovery.dns.m6_viajes.targets
+  forward_to      = [prometheus.remote_write.local.receiver]
+}
+
 prometheus.scrape "m6" {
   job_name        = "m6"
   scrape_interval = "15s"
   scrape_timeout  = "5s"
   metrics_path    = "/metrics"
   targets = [
-    { "__address__" = "viajes:3000", "instance" = "viajes" },
     { "__address__" = "fachada:3000", "instance" = "fachada-rf-6.4-6.7" },
   ]
   forward_to = [prometheus.remote_write.local.receiver]
