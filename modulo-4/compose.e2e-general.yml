@@ -42,3 +42,20 @@ services:
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
+
+  # Contrato HTTP que consume M9; no ejecuta el servicio de reservas.
+  m4-e2e-contrato-m9:
+    image: node:22-alpine
+    profiles: [tests]
+    working_dir: /tests
+    volumes:
+      - ./modulo-4/tests/e2e:/tests:ro
+    environment:
+      M4_E2E_URL: http://m4-api:3004/api/v1
+    command: [node, --test, routes-m9.e2e.mjs]
+    networks:
+      - reservas-network
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true

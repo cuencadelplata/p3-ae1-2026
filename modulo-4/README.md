@@ -302,3 +302,42 @@ proveedor externo de M4: una prueba aprobada, cero fallidas y cero omitidas
 (2,24 segundos). Esta verificación es de API; no automatiza el navegador ni
 comprueba una pantalla de solicitud de viajes. La cuenta de prueba permanece
 en M1. Las funciones comunes de petición y login están en `tests/e2e/helpers.mjs`.
+
+### Contrato HTTP de rutas consumido por M9
+
+Base interna: `http://m4-api:3004`. Se mantienen sin Bearer:
+
+- `POST /api/v1/geocode` con `{address}` devuelve `latitude`, `longitude`,
+  `address` y `provider`.
+- `POST /api/v1/estimate` con `{origin: {latitude, longitude}, destination:
+  {latitude, longitude}}` devuelve `distanceKm` y `estimatedEtaMinutes`.
+
+Se acepta `Content-Type: application/json` y `x-correlation-id`. M9 transforma
+`estimatedEtaMinutes` a su campo interno `estimatedDurationMin`. La estimación
+usa Haversine (línea recta), redondea kilómetros a dos decimales y calcula minutos
+con velocidad media de 25 km/h y mínimo de un minuto. No es una ruta por calles
+ni un tiempo obtenido del tránsito.
+
+**Diferencia a acordar:** M9 valida `distanceKm > 0`, pero M4 devuelve cero para
+puntos idénticos o distancias que redondean a cero. M9 debe validar/rechazar esos
+recorridos con un error de entrada comprensible, o acordar aceptar cero. No se
+modificó el contrato ni se inventa una distancia positiva para esos casos.
+
+Con M4 real levantado y salida a Internet para el proveedor de mapas:
+
+```bash
+docker compose -f docker-compose.yml -f modulo-4/compose.e2e-general.yml \
+  --profile tests run --rm --no-deps m4-e2e-contrato-m9
+```
+
+Verificado el 24 de noviembre de 2026 dentro de Docker: dos pruebas aprobadas,
+cero fallidas y cero omitidas (2,72 segundos). Se hicieron las dos consultas de
+geocodificación externa y la estimación sin Bearer, con timeout de cinco segundos
+por llamada. También se comprobó el caso idéntico: cero kilómetros y un minuto.
+Las consultas al proveedor se espaciaron; esto no prueba las dos geocodificaciones
+simultáneas que hace el cliente de M9 ni garantiza disponibilidad/latencia futura.
+El timeout externo de M4 también es de cinco segundos, por lo que M9 podría
+agotar su espera antes de recibir un error de timeout de M4.
+
+Es una comprobación del contrato ofrecido por M4. No levanta M9 ni prueba todavía
+la creación/activación de reservas, el cálculo de tarifa en M7 o el despacho en M5.
