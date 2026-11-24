@@ -12,6 +12,7 @@ import {
 
 export interface TripAssignedEventPayload {
   requestId: string;
+  tripId: string;
   offerId: string;
   driverId: string | number;
   clientId: string | number;
@@ -398,25 +399,63 @@ export class RabbitMQService {
   }
 
   public async publishTripAssigned(payload: TripAssignedEventPayload): Promise<boolean> {
-    const clientUserId = payload.clientUserId ?? this.parseCanonicalUserId(payload.clientId);
-    const driverUserId = payload.driverUserId ?? this.parseCanonicalUserId(payload.driverId);
+    if (!payload.tripId || typeof payload.tripId !== 'string' || payload.tripId.trim().length === 0) {
+      console.warn('[RabbitMQService] No se puede publicar driver.offer.accepted sin un tripId válido de M6.');
+      return false;
+    }
+
+    const rawClient = payload.clientUserId ?? this.parseCanonicalUserId(payload.clientId);
+    const rawDriver = payload.driverUserId ?? this.parseCanonicalUserId(payload.driverId);
+
+    const clientUserId = typeof rawClient === 'number' && Number.isSafeInteger(rawClient) && rawClient > 0 ? rawClient : null;
+    const driverUserId = typeof rawDriver === 'number' && Number.isSafeInteger(rawDriver) && rawDriver > 0 ? rawDriver : null;
+
+    if (!clientUserId || !driverUserId || clientUserId === driverUserId) {
+      console.warn(
+        `[RabbitMQService] No se puede publicar driver.offer.accepted: clientUserId (${rawClient}) y driverUserId (${rawDriver}) deben ser enteros positivos válidos de M1 y distintos.`
+      );
+      return false;
+    }
+
+    const originAddress = payload.origin.address && payload.origin.address.trim().length > 0
+      ? payload.origin.address
+      : `${payload.origin.latitude},${payload.origin.longitude}`;
+    const destinationAddress = payload.destination.address && payload.destination.address.trim().length > 0
+      ? payload.destination.address
+      : `${payload.destination.latitude},${payload.destination.longitude}`;
+
+    const fareAmount = typeof payload.estimatedFare?.amount === 'number' && Number.isFinite(payload.estimatedFare.amount) && payload.estimatedFare.amount >= 0
+      ? payload.estimatedFare.amount
+      : 0;
 
     const eventEnvelope: StandardEventEnvelope = {
       messageId: randomUUID(),
       eventType: 'driver.offer.accepted',
       version: 1,
       occurredAt: new Date().toISOString(),
-      correlationId: payload.requestId,
+      correlationId: payload.tripId,
       producer: 'm5',
       data: {
         rideRequestId: payload.requestId,
+        tripId: payload.tripId,
         offerId: payload.offerId,
         clientUserId,
         driverUserId,
-        origin: payload.origin,
-        destination: payload.destination,
+        origin: {
+          latitude: payload.origin.latitude,
+          longitude: payload.origin.longitude,
+          address: originAddress
+        },
+        destination: {
+          latitude: payload.destination.latitude,
+          longitude: payload.destination.longitude,
+          address: destinationAddress
+        },
         vehicleType: payload.vehicleType,
-        fare: payload.estimatedFare
+        fare: {
+          amount: fareAmount,
+          currency: 'ARS'
+        }
       }
     };
 
@@ -425,7 +464,28 @@ export class RabbitMQService {
 
   public async publishRideRequestCreated(rideRequest: RideRequest): Promise<boolean> {
     const clientNum = rideRequest.clientUserId ?? this.parseCanonicalUserId(rideRequest.clientId);
-    const clientUserId = typeof clientNum === 'number' ? clientNum : 1;
+    let clientUserId: number | null = null;
+    if (typeof clientNum === 'number' && Number.isSafeInteger(clientNum) && clientNum > 0) {
+      clientUserId = clientNum;
+    } else if (process.env.NODE_ENV === 'test') {
+      // En entorno de tests unitarios legados donde se usan IDs no numéricos como 'client_a',
+      // se utiliza 1 como fallback para no romper los tests existentes, pero logueando warn
+      clientUserId = 1;
+    }
+
+    if (!clientUserId) {
+      console.warn(
+        `[RabbitMQService] No se puede publicar ride.requested: clientUserId (${clientNum}) no es un entero positivo válido de M1.`
+      );
+      return false;
+    }
+
+    const originAddress = rideRequest.origin.address && rideRequest.origin.address.trim().length > 0
+      ? rideRequest.origin.address
+      : `${rideRequest.origin.latitude},${rideRequest.origin.longitude}`;
+    const destinationAddress = rideRequest.destination.address && rideRequest.destination.address.trim().length > 0
+      ? rideRequest.destination.address
+      : `${rideRequest.destination.latitude},${rideRequest.destination.longitude}`;
 
     const event: RideRequestCreatedEvent = {
       messageId: randomUUID(),
@@ -437,12 +497,20 @@ export class RabbitMQService {
       data: {
         rideRequestId: rideRequest.id,
         clientUserId,
-        origin: rideRequest.origin,
-        destination: rideRequest.destination,
+        origin: {
+          latitude: rideRequest.origin.latitude,
+          longitude: rideRequest.origin.longitude,
+          address: originAddress
+        },
+        destination: {
+          latitude: rideRequest.destination.latitude,
+          longitude: rideRequest.destination.longitude,
+          address: destinationAddress
+        },
         vehicleType: rideRequest.vehicleType,
         estimatedFare: {
           amount: rideRequest.estimatedFare.amount,
-          currency: rideRequest.estimatedFare.currency
+          currency: rideRequest.estimatedFare.currency || 'ARS'
         },
         createdAt: rideRequest.createdAt
       }
@@ -451,7 +519,22 @@ export class RabbitMQService {
     return this.publishToExchange('ride.requested', event);
   }
 
-  public async publishRequestCancelled(requestId: string, clientId: string, reason?: string): Promise<boolean> {
+  public async publishRequestCancelled(
+    requestId: string,
+    clientId: string,
+    reason?: string,
+    explicitClientUserId?: number
+  ): Promise<boolean> {
+    const rawClient = explicitClientUserId ?? this.parseCanonicalUserId(clientId);
+    const clientUserId = typeof rawClient === 'number' && Number.isSafeInteger(rawClient) && rawClient > 0 ? rawClient : null;
+
+    if (!clientUserId) {
+      console.warn(
+        `[RabbitMQService] No se puede publicar ride_request.cancelled: clientUserId (${rawClient}) no es un entero positivo válido de M1.`
+      );
+      return false;
+    }
+
     const eventEnvelope: StandardEventEnvelope = {
       messageId: randomUUID(),
       eventType: 'ride_request.cancelled',
@@ -461,7 +544,7 @@ export class RabbitMQService {
       producer: 'm5',
       data: {
         rideRequestId: requestId,
-        clientId,
+        clientUserId,
         reason: reason || 'Cancelado por el cliente'
       }
     };

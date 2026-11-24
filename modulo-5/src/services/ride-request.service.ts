@@ -1284,27 +1284,8 @@ export class RideRequestService {
       }
     }
 
-    // 4. Publicación Asíncrona del Evento hacia M8 (Notificaciones) vía RabbitMQ
-    try {
-      await this.rabbitmqService.publishTripAssigned({
-        requestId: assignedRequest.id,
-        offerId: offer.id,
-        driverId: offer.driverId,
-        clientId: assignedRequest.clientId,
-        clientUserId: assignedRequest.clientUserId,
-        driverUserId: resolvedDriverUserId,
-        origin: assignedRequest.origin,
-        destination: assignedRequest.destination,
-        vehicleType: assignedRequest.vehicleType,
-        estimatedFare: assignedRequest.estimatedFare,
-        assignedAt: now.toISOString()
-      });
-    } catch (err) {
-      console.warn(`[RabbitMQ] Fallo al publicar asignación: ${(err as Error).message}`);
-    }
-
-    // 5. Integración HTTP con M6
-    await this.notifyM6TripAssigned(
+    // 4. Integración HTTP con M6: Crear y asignar viaje en M6 primero para obtener tripId
+    const tripId = await this.notifyM6TripAssigned(
       assignedRequest.clientId,
       assignedRequest.origin.address || `${assignedRequest.origin.latitude},${assignedRequest.origin.longitude}`,
       assignedRequest.destination.address || `${assignedRequest.destination.latitude},${assignedRequest.destination.longitude}`,
@@ -1313,6 +1294,33 @@ export class RideRequestService {
       assignedRequest.clientUserId,
       resolvedDriverUserId
     );
+
+    // 5. Publicación Asíncrona del Evento hacia M8 (Notificaciones) vía RabbitMQ
+    // Según contrato M5 -> M8 (17/11): solo se publica si M6 creó el viaje y devolvió tripId
+    if (tripId) {
+      try {
+        await this.rabbitmqService.publishTripAssigned({
+          requestId: assignedRequest.id,
+          tripId,
+          offerId: offer.id,
+          driverId: offer.driverId,
+          clientId: assignedRequest.clientId,
+          clientUserId: assignedRequest.clientUserId,
+          driverUserId: resolvedDriverUserId,
+          origin: assignedRequest.origin,
+          destination: assignedRequest.destination,
+          vehicleType: assignedRequest.vehicleType,
+          estimatedFare: assignedRequest.estimatedFare,
+          assignedAt: now.toISOString()
+        });
+      } catch (err) {
+        console.warn(`[RabbitMQ] Fallo al publicar asignación: ${(err as Error).message}`);
+      }
+    } else {
+      console.warn(
+        `[RabbitMQ] No se publicó evento driver.offer.accepted hacia M8 para solicitud ${assignedRequest.id}: no se obtuvo tripId de M6.`
+      );
+    }
 
     console.log(
       `[RF-5.4 / RF-5.5] Oferta ${offer.id} ACEPTADA por conductor ${offer.driverId}. Solicitud ${assignedRequest.id} ASIGNADA exclusivamente a ${offer.driverId}. Notificado M6 (HTTP) y M8 (RabbitMQ).`
@@ -1475,6 +1483,14 @@ export class RideRequestService {
         correlationId: `corr_${randomUUID()}`,
         timestamp: now.toISOString()
       });
+
+      // Publicar en exchange topic `mobility.events` con routing key `ride_request.cancelled` para M8
+      await this.rabbitmqService.publishRequestCancelled(
+        current.id,
+        current.clientId,
+        current.cancellationReason,
+        current.clientUserId
+      );
 
       // 8. Persistencia de auditoría inmutable (RNF-04)
       this.auditEvents.push({
