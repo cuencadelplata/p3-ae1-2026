@@ -145,9 +145,14 @@ export class InMemoryTicketRepository implements TicketRepository {
     return this.historial.filter(entrada => entrada.ticketId === ticketId).map(entrada => ({ ...entrada }));
   }
 
-  async listar({ tripId, estado, limit, despuesDe }: FiltroDeTickets): Promise<Ticket[]> {
+  async listar({ tripId, autor, estado, limit, despuesDe }: FiltroDeTickets): Promise<Ticket[]> {
+    const propios = autor === undefined ? undefined : new Set(
+      this.historial.filter(entrada => entrada.estadoAnterior === null && entrada.cambiadoPor === autor)
+        .map(entrada => entrada.ticketId),
+    );
     return this.tickets
       .filter(ticket => tripId === undefined || ticket.tripId === tripId)
+      .filter(ticket => propios === undefined || propios.has(ticket.id))
       .filter(ticket => estado === undefined || ticket.estado === estado)
       .sort((a, b) => compararPosicion(b, a))
       .filter(ticket => despuesDe === undefined || compararPosicion(ticket, despuesDe) < 0)

@@ -17,6 +17,7 @@ export default function TripHistory({ token, userId, onBack }: { token: string; 
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState('')
   const pending = useRef<{ tripId: string; reason: string; key: string } | null>(null)
+  const supportTitle = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
     const abort = new AbortController()
@@ -27,6 +28,10 @@ export default function TripHistory({ token, userId, onBack }: { token: string; 
       .finally(() => { if (!abort.signal.aborted) setBusy(false) })
     return () => abort.abort()
   }, [token, userId])
+
+  useEffect(() => {
+    if (selection) supportTitle.current?.focus()
+  }, [selection])
 
   async function perform(action: () => Promise<void>) {
     setError('')
@@ -43,8 +48,8 @@ export default function TripHistory({ token, userId, onBack }: { token: string; 
   }
 
   async function loadTickets(tripId: string) {
-    const response = await request<{ data: Ticket[] }>('M8', '/tickets?' + new URLSearchParams({ tripId }), { token })
-    setTickets(response.data)
+    const response = await request<Ticket[]>('M8', '/tickets/mios?' + new URLSearchParams({ tripId }), { token })
+    setTickets(response)
   }
 
   async function openSupport(trip: TripRecord) {
@@ -60,12 +65,12 @@ export default function TripHistory({ token, userId, onBack }: { token: string; 
     if (pending.current?.tripId !== tripId || pending.current.reason !== motivo) {
       pending.current = { tripId, reason: motivo, key: crypto.randomUUID() }
     }
-    const response = await request<{ data: Ticket }>('M8', '/tickets', {
+    const ticket = await request<Ticket>('M8', '/tickets', {
       method: 'POST', token, headers: { 'Idempotency-Key': pending.current.key }, body: { tripId, motivo },
     })
     pending.current = null
     setReason('')
-    setTickets((current) => [response.data, ...current.filter((item) => item.id !== response.data.id)])
+    setTickets((current) => [ticket, ...current.filter((item) => item.id !== ticket.id)])
   }
 
   return (
@@ -87,7 +92,7 @@ export default function TripHistory({ token, userId, onBack }: { token: string; 
         </li>)}
       </ul>
       {selection && <div className="mt-6 rounded-xl border border-[var(--line)] p-4">
-        <h2 className="font-semibold">Soporte · {selection.origen} → {selection.destino}</h2>
+        <h2 className="font-semibold" ref={supportTitle} tabIndex={-1}>Soporte · {selection.origen} → {selection.destino}</h2>
         <form className="ride-form mt-3" onSubmit={(event) => { event.preventDefault(); void perform(() => createTicket(selection.id)) }}>
           <label>Contanos qué pasó<textarea className="input-field" required value={reason} onChange={(event) => setReason(event.target.value)} /></label>
           <button className="btn-primary" type="submit" disabled={busy || !reason.trim()}>Crear consulta</button>

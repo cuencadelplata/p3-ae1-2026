@@ -28,6 +28,7 @@ export interface SupportAppDeps {
 // Rutas de tickets, relativas a /tickets.
 const TICKET_ROUTES = [
   { method: 'post', path: '/', handler: 'crearTicket', permiso: 'autenticado' },
+  { method: 'get', path: '/mios', handler: 'listarPropios', permiso: 'autenticado' },
   { method: 'get', path: '/:id', handler: 'obtenerTicket', permiso: 'operadorOCreador' },
   { method: 'patch', path: '/:id/estado', handler: 'actualizarEstado', permiso: 'operador' },
   { method: 'get', path: '/:id/historial', handler: 'obtenerHistorial', permiso: 'operadorOCreador' },

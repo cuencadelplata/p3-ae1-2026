@@ -37,10 +37,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// Las cinco rutas de /tickets, con un pedido que sería válido.
+// Rutas de /tickets, con un pedido que sería válido.
 const RUTAS: Array<[string, (a: Express) => request.Test]> = [
   ['POST /tickets', (a) => request(a).post('/tickets').send(PEDIDO)],
   ['GET /tickets', (a) => request(a).get('/tickets')],
+  ['GET /tickets/mios', (a) => request(a).get('/tickets/mios')],
   ['GET /tickets/:id', (a) => request(a).get('/tickets/x')],
   ['PATCH /tickets/:id/estado', (a) => request(a).patch('/tickets/x/estado').send({ estado: 'RESUELTO' })],
   ['GET /tickets/:id/historial', (a) => request(a).get('/tickets/x/historial')],
@@ -138,6 +139,19 @@ describe('autenticación con M1 habilitada: M1 no disponible (falla cerrado)', (
 });
 
 describe('autenticación con M1 habilitada: token válido', () => {
+  it('lista sólo tickets propios del viaje, aunque otro usuario haya creado uno en el mismo viaje', async () => {
+    const propio = await request(app).post('/tickets').set('Authorization', TOKEN).send(PEDIDO);
+    verificar.mockResolvedValueOnce({ userId: 7, role: 'CLIENTE' });
+    const ajeno = await request(app).post('/tickets').set('Authorization', TOKEN).send(PEDIDO);
+    const otroViaje = await request(app).post('/tickets').set('Authorization', TOKEN).send({ ...PEDIDO, tripId: 'trip-2' });
+    expect([propio.status, ajeno.status, otroViaje.status]).toEqual([201, 201, 201]);
+
+    const listado = await request(app).get('/tickets/mios').query({ tripId: PEDIDO.tripId }).set('Authorization', TOKEN);
+    expect(listado.status).toBe(200);
+    expect(listado.body).toEqual([propio.body]);
+    expect((await request(app).get('/tickets').set('Authorization', TOKEN)).status).toBe(403);
+  });
+
   it('reenvía a M1 la cabecera Authorization recibida', async () => {
     await request(app).get('/tickets').set('Authorization', TOKEN);
 

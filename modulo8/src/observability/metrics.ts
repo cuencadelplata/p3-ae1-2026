@@ -108,6 +108,9 @@ export function classifyM8Route(method: string, rawPathname: string): RouteClass
   if (pathname === '/tickets') {
     return { route: '/tickets', rf: 'RF8.5', ignored: false };
   }
+  if (pathname === '/tickets/mios') {
+    return { route: '/tickets/mios', rf: 'RF8.5', ignored: false };
+  }
   if (/^\/tickets\/[^/]+\/estado$/.test(pathname)) {
     return { route: '/tickets/:id/estado', rf: 'RF8.5', ignored: false };
   }

@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { invalidToken } from '../errors/support-error.js';
 import {
   leerActor,
   leerCambioDeEstado,
@@ -20,6 +21,13 @@ export interface SupportControllerDeps {
 
 // Los errores se lanzan como SupportError y los convierte supportErrorHandler.
 export function createSupportController({ ticketService }: SupportControllerDeps) {
+  async function listar(req: Request, res: Response, autor?: string) {
+    const consulta = leerConsultaDeTickets(req.query);
+    const { tickets, siguienteCursor } = await ticketService.listarTickets({ ...consulta, autor });
+    if (siguienteCursor) res.setHeader('X-Next-Cursor', siguienteCursor);
+    res.json(tickets);
+  }
+
   return {
 
     // Endpoint: POST /tickets
@@ -63,15 +71,13 @@ export function createSupportController({ ticketService }: SupportControllerDeps
 
     // Endpoint: GET /tickets?tripId=&estado=&limit=&cursor=
     async listarTodos(req: Request, res: Response) {
-      const consulta = leerConsultaDeTickets(req.query);
-      const { tickets, siguienteCursor } = await ticketService.listarTickets(consulta);
+      await listar(req, res);
+    },
 
-      // El cuerpo sigue siendo un array: el cursor de la página siguiente va
-      // en una cabecera, y sólo si hay más resultados.
-      if (siguienteCursor) {
-        res.setHeader('X-Next-Cursor', siguienteCursor);
-      }
-      res.json(tickets);
+    async listarPropios(req: Request, res: Response) {
+      const autor = res.locals.actor;
+      if (typeof autor !== 'string') throw invalidToken();
+      await listar(req, res, autor);
     },
   };
 }

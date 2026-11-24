@@ -26,6 +26,7 @@ export interface OpcionesDeNuevoTicket extends OpcionesDeCreacion {
 
 export interface ConsultaDeTickets {
   tripId?: string;
+  autor?: string;
   estado?: TicketStatus;
   limit?: number;
   cursor?: string;
@@ -188,6 +189,7 @@ export class TicketService {
     // Se pide uno de más para saber si hay otra página.
     const encontrados = await this.repository.listar({
       tripId: consulta.tripId,
+      autor: consulta.autor,
       estado: consulta.estado,
       limit: limit + 1,
       despuesDe,

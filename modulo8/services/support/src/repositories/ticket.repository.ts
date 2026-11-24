@@ -22,6 +22,7 @@ export interface PosicionDeListado {
 
 export interface FiltroDeTickets {
   tripId?: string;
+  autor?: string;
   estado?: TicketStatus;
   limit: number;
   // Devuelve sólo los tickets posteriores a esta posición en el orden del listado.
