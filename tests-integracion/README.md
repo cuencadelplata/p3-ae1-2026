@@ -10,7 +10,7 @@
 | 3 | M3 | Conductor habilitado con vehículo activo |
 | 4 | M4 | Ubicación del conductor publicada y disponible |
 | 5 | M9 (+ M1, M7) | Reserva programada con la identidad de M1 y la tarifa estimada por M7 |
-| 5b | M9 → M5 | Pendiente (ver abajo) |
+| 5b | M9 → M1 → M5 | El scheduler obtiene autorización delegada y crea una solicitud del cliente |
 | 6 | M5 (+ M4) | Pedido del pasajero, candidatos, oferta y aceptación del conductor |
 | 7 | M6 | M5 creó y asignó el viaje |
 | 8 | M6 + M8 + M4 | Arribo con QR de M8, inicio validado, el QR no se reutiliza, conductor ocupado en M4 |
@@ -27,12 +27,12 @@
    docker network create reservas-network
    ```
 
-2. En el `.env` de la raíz, además de las claves de cada módulo, agregar `ROUTE_RESOLVER_MODE=stub` para que M9 resuelva rutas.
+2. Completar las claves de cada módulo y `M9_DISPATCH_AUTH_TOKEN` en el `.env` raíz. Usar `ROUTE_RESOLVER_MODE=m4` para probar las rutas reales; `stub` solo valida la conexión con un recorrido simulado.
 3. Levantar el stack desde la raíz: `docker compose up -d --build`.
 4. Correr el test desde la raíz:
 
    ```sh
-   node --test tests-integracion/flujo-completo.e2e.mjs
+   node --env-file=.env --test tests-integracion/flujo-completo.e2e.mjs
    ```
 
 No necesita instalar dependencias. Cada corrida crea usuarios nuevos, así que se puede repetir.
@@ -50,6 +50,8 @@ docker run -d --name m8-m7-sandbox --network reservas-network -p 127.0.0.1:4020:
 
 y en el `.env` de la raíz apuntar `M6_M7_URL`, `M8_M7_PAYMENTS_URL`, `M7_URL` y `M7_BASE_URL` a `http://m8-m7-sandbox:4020`. Al correr el test, pasar `M7_URL=http://localhost:4020`. `UNREGISTERED_TRIPS=not_found` hace que responda como M7 cuando un viaje no tiene pago registrado.
 
-## Pendiente: activación de reservas (M9 → M5)
+## Activación de reservas (M9 → M1 → M5)
 
-M9 activa la reserva desde su scheduler, fuera de una petición del pasajero, y para pedir el viaje a M5 necesita un token delegado de M1 (`M9_DISPATCH_AUTH_URL`). M1 todavía no publica ese servicio, así que la activación responde `DELEGACION_NO_CONFIGURADA`. El paso queda marcado como pendiente (`todo`) hasta que exista.
+M9 activa la reserva desde su scheduler, fuera de una sesión del pasajero. Configurar una credencial privada `M9_DISPATCH_AUTH_TOKEN` en el `.env` raíz: Compose pasa la misma credencial a M1 y M9. El endpoint interno es `http://m1-identidad-acceso:3001/auth/token-delegado`. M1 emite un token de cinco minutos a nombre del cliente activo.
+
+El paso 5b verifica la creación automática de la solicitud. El paso 6 usa esa misma solicitud para buscar candidatos, enviar una oferta, aceptarla y comprobar que M9 queda ACTIVADA. La prueba inicia explícitamente las ofertas en M5; no demuestra que M5 las envíe automáticamente sin ese llamado.

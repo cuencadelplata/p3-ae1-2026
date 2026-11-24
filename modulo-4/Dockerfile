@@ -7,7 +7,7 @@ COPY tsconfig.json ./
 COPY src ./src
 COPY tests ./tests
 COPY openapi ./openapi
-RUN pnpm test
+RUN pnpm test --maxWorkers=1 --no-file-parallelism
 RUN pnpm run build
 
 FROM node:22-alpine

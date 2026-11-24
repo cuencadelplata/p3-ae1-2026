@@ -22,7 +22,7 @@ services:
       # M5 real no consume los eventos m9.reservas.* (solo lo hacía m5-stub):
       # la activación debe invocar POST /api/v1/ride-requests por REST.
       DISPATCH_MODE: ${DISPATCH_MODE:-rest}
-      M9_DISPATCH_AUTH_URL: ${M9_DISPATCH_AUTH_URL:-}
+      M9_DISPATCH_AUTH_URL: ${M9_DISPATCH_AUTH_URL:-http://m1-identidad-acceso:3001/auth/token-delegado}
       M9_DISPATCH_AUTH_TOKEN: ${M9_DISPATCH_AUTH_TOKEN:-}
       ACTIVATION_RECOVERY_TIMEOUT_MS: ${ACTIVATION_RECOVERY_TIMEOUT_MS:-120000}
       M5_SERVICE_TOKEN: ${M5_SERVICE_TOKEN:-}

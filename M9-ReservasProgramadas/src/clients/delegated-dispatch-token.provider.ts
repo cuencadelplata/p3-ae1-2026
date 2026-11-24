@@ -4,7 +4,7 @@ import type { DispatchTokenProvider } from './m5-dispatch.client.js';
 import { AppError } from '../errors/app.error.js';
 import { getRequestContext } from '../integration/request-context.js';
 
-// Contrato de delegacion pendiente de publicar por M1. No fabrica JWT ni conserva sesiones de pasajeros.
+// Token delegado emitido por M1. No fabrica JWT ni conserva sesiones de pasajeros.
 export class DelegatedDispatchTokenProvider implements DispatchTokenProvider {
   public constructor(
     private readonly endpoint: string | undefined,

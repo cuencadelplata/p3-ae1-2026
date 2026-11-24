@@ -14,11 +14,11 @@
 //   RabbitMQ (infraestructura de M9): ninguna cola de mensajes muertos crece durante la prueba.
 //
 // Requisitos: stack común levantado desde la raíz (docker compose up -d --build) con el .env
-// de la raíz y modulo7/.env. Para la reserva de M9 hace falta ROUTE_RESOLVER_MODE=stub en el
-// .env de la raíz (el valor por defecto, "blocked", no resuelve rutas).
+// de la raíz y modulo7/.env. Para M9 usar ROUTE_RESOLVER_MODE=m4 y configurar
+// M9_DISPATCH_AUTH_TOKEN, compartido con el emisor delegado de M1.
 //
 // Uso, desde la raíz del repositorio:
-//   node --test tests-integracion/flujo-completo.e2e.mjs
+//   node --env-file=.env --test tests-integracion/flujo-completo.e2e.mjs
 // Si M7 real no está disponible, el test sirve igual con el simulador de su contrato que trae M8
 // (modulo8/infra/m7-payments-sandbox), arrancado con UNREGISTERED_TRIPS=not_found para que responda
 // como M7: apuntar M6_M7_URL, M8_M7_PAYMENTS_URL, M7_URL y M7_BASE_URL del .env de la raíz a ese
@@ -173,6 +173,24 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     assert.ok(s.clienteM2, `M2 debe devolver el id del cliente: ${mostrar(perfil)}`);
   });
 
+  test('1b. M1: autorización delegada privada para el cliente activo', async () => {
+    assert.ok(process.env.M9_DISPATCH_AUTH_TOKEN, 'Ejecutar con node --env-file=.env --test para cargar M9_DISPATCH_AUTH_TOKEN');
+    const body = { clientId: String(s.pasajero.userId), audience: 'm5', scope: 'ride-requests:write' };
+    const sinCredencial = await pedir(M1, '/auth/token-delegado', { method: 'POST', body });
+    assert.equal(sinCredencial.status, 401);
+    const delegado = await pedir(M1, '/auth/token-delegado', { method: 'POST', token: process.env.M9_DISPATCH_AUTH_TOKEN, body });
+    assert.equal(delegado.status, 200, `M1 emisión delegada: HTTP ${delegado.status}`);
+    assert.equal(delegado.data.expires_in, 300);
+    const identidad = await pedir(M1, '/auth/validar-identidad-y-rol', { token: delegado.data.access_token });
+    assert.equal(identidad.status, 200);
+    assert.equal(String(identidad.data.userId), String(s.pasajero.userId));
+    const conductor = await pedir(M1, '/auth/token-delegado', {
+      method: 'POST', token: process.env.M9_DISPATCH_AUTH_TOKEN,
+      body: { ...body, clientId: String(s.conductor.userId) },
+    });
+    assert.equal(conductor.status, 403, 'M1 no debe delegar identidad de conductor como cliente');
+  });
+
   test('3. M3: conductor habilitado con vehículo activo', async () => {
     const { userId, token } = s.conductor;
     const alta = await pedir(M3_CONDUCTORES, '/api/conductores', { method: 'POST', token, body: { ciudad: 'Corrientes', tipovehiculo: 'auto' } });
@@ -195,6 +213,10 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     const publicada = await pedir(M4, `/drivers/${userId}/location`, { method: 'PUT', token, body: s.ubicacionConductor });
     assert.equal(publicada.status, 200, `M4 publicar ubicación: ${mostrar(publicada)}`);
     await conductorDisponibleEnM4(userId, true);
+    // La ubicación de M4 vence: mantenerla mientras espera el scheduler de M9.
+    s.heartbeat = setInterval(() => pedir(M4, `/drivers/${userId}/location`, {
+      method: 'PUT', token, body: s.ubicacionConductor,
+    }).catch(() => {}), 15000);
   });
 
   test('5. M9: el pasajero programa una reserva (M1 + tarifa de M7)', async () => {
@@ -207,24 +229,56 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     assert.equal(reserva.data.estado, 'PROGRAMADA');
     assert.equal(String(reserva.data.clienteId), String(s.pasajero.userId), 'M9 debe tomar el cliente de la sesión de M1');
     assert.ok(Number(reserva.data.tarifaEstimada) > 0, `M9 debe traer la tarifa estimada por M7: ${mostrar(reserva)}`);
+    // Usar las coordenadas reales resueltas por M4 también para el conductor y M6.
+    if (reserva.data.routeSnapshot) {
+      Object.assign(ORIGEN, reserva.data.routeSnapshot.origin);
+      Object.assign(DESTINO, reserva.data.routeSnapshot.destination);
+      s.ubicacionConductor = { ...s.ubicacionConductor, latitude: ORIGEN.latitude, longitude: ORIGEN.longitude };
+      const ubicada = await pedir(M4, `/drivers/${s.conductor.userId}/location`, {
+        method: 'PUT', token: s.conductor.token, body: s.ubicacionConductor,
+      });
+      assert.equal(ubicada.status, 200, `M4 ubicación en el origen real: ${mostrar(ubicada)}`);
+    }
     const consulta = await pedir(M9, `/reservas/${reserva.data.id}`, { token: s.pasajero.token });
     assert.equal(consulta.status, 200, `M9 consultar reserva: ${mostrar(consulta)}`);
     const cancelada = await pedir(M9, `/reservas/${reserva.data.id}`, { method: 'DELETE', token: s.pasajero.token });
     assert.ok([200, 204].includes(cancelada.status), `M9 cancelar reserva: ${mostrar(cancelada)}`);
   });
 
-  test('5b. M9 → M5: la reserva se activa y pide el viaje a M5', {
-    todo: 'El scheduler de M9 activa la reserva fuera de una petición del pasajero y necesita un token delegado de M1 (M9_DISPATCH_AUTH_URL) que M1 todavía no publica. Sin eso responde DELEGACION_NO_CONFIGURADA.',
-  }, () => {});
+  test('5b. M9 → M1 → M5: el scheduler despacha con identidad delegada', { timeout: 120000 }, async () => {
+    const creada = await pedir(M9, '/reservas', {
+      method: 'POST', token: s.pasajero.token,
+      body: { origen: ORIGEN.address, destino: DESTINO.address, vehiculo: 'AUTO', fechaHoraProgramada: new Date(Date.now() + 15000).toISOString() },
+    });
+    assert.equal(creada.status, 201, `M9 reserva para activación: ${mostrar(creada)}`);
+    s.reservaId = creada.data.id;
+    const limite = Date.now() + 90000;
+    let actual;
+    while (Date.now() < limite) {
+      await esperar(1000);
+      actual = await pedir(M9, `/reservas/${s.reservaId}`, { token: s.pasajero.token });
+      assert.equal(actual.status, 200, `M9 consulta durante activación: ${mostrar(actual)}`);
+      assert.notEqual(actual.data.estado, 'FALLIDA', `M9 activación fallida: ${mostrar(actual)}`);
+      if (actual.data.idSolicitud) break;
+    }
+    assert.ok(actual?.data.idSolicitud, 'M9 no despachó en 90 s: revisar M9_DISPATCH_AUTH_TOKEN, M1 y M5');
+    s.rideRequestId = actual.data.idSolicitud;
+    const solicitud = await pedir(M5, `/ride-requests/${s.rideRequestId}`, { token: s.pasajero.token });
+    assert.equal(solicitud.status, 200, `M5 consulta de solicitud delegada: ${mostrar(solicitud)}`);
+    assert.equal(String(solicitud.data.clientId), String(s.pasajero.userId));
+    assert.equal(solicitud.data.status, 'SEARCHING');
+    const ajena = await pedir(M9, `/reservas/${s.reservaId}`, { token: s.conductor.token });
+    assert.ok([403, 404].includes(ajena.status), 'Otro usuario no debe consultar la reserva');
+  });
 
   test('6. M5: el pasajero pide el viaje y el conductor acepta la oferta', async () => {
     const pasajero = s.pasajero;
     const conductor = s.conductor;
-    const solicitud = await pedir(M5, '/ride-requests', {
+    const solicitud = s.rideRequestId ? await pedir(M5, `/ride-requests/${s.rideRequestId}`, { token: pasajero.token }) : await pedir(M5, '/ride-requests', {
       method: 'POST', token: pasajero.token, headers: { 'Idempotency-Key': randomUUID() },
       body: { origin: ORIGEN, destination: DESTINO, vehicleType: 'AUTO' },
     });
-    assert.equal(solicitud.status, 201, `M5 solicitud de viaje: ${mostrar(solicitud)}`);
+    assert.equal(solicitud.status, s.rideRequestId ? 200 : 201, `M5 solicitud de viaje: ${mostrar(solicitud)}`);
     assert.equal(solicitud.data.status, 'SEARCHING');
     s.rideRequestId = solicitud.data.id;
 
@@ -247,6 +301,16 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     });
     assert.equal(aceptada.status, 200, `M5 aceptar oferta: ${mostrar(aceptada)}`);
     assert.equal(aceptada.data.requestStatus, 'ASSIGNED');
+    if (s.reservaId) {
+      let reserva;
+      const limite = Date.now() + 20000;
+      do {
+        await esperar(1000);
+        reserva = await pedir(M9, `/reservas/${s.reservaId}`, { token: pasajero.token });
+      } while (reserva.data?.estado !== 'ACTIVADA' && Date.now() < limite);
+      assert.equal(reserva.data?.estado, 'ACTIVADA', `M9 debe confirmar la asignación: ${mostrar(reserva)}`);
+      assert.equal(String(reserva.data.assignedDriverId), String(conductor.userId));
+    }
   });
 
   test('7. M6: M5 creó y asignó el viaje', async () => {
@@ -263,6 +327,7 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     const arribo = await pedir(M6, `/api/viajes/${s.tripId}/arribo`, { method: 'PUT', body: {} });
     assert.equal(arribo.status, 200, `M6 arribo: ${mostrar(arribo)}`);
     assert.ok(arribo.data.qr?.token, 'M8 debe emitir el QR del viaje');
+    clearInterval(s.heartbeat);
     const inicio = await pedir(M6, `/api/viajes/${s.tripId}/iniciar`, { method: 'POST', body: { codigoVerificacion: arribo.data.qr.token } });
     assert.equal(inicio.status, 200, `M6 inicio: ${mostrar(inicio)}`);
     const reuso = await pedir(M6, `/api/viajes/${s.tripId}/iniciar`, { method: 'POST', body: { codigoVerificacion: arribo.data.qr.token } });
@@ -318,6 +383,7 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
   });
 
   after(async () => {
+    clearInterval(s.heartbeat);
     if (s.conductor) await pedir(M4, `/drivers/${s.conductor.userId}/location`, { method: 'DELETE', token: s.conductor.token }).catch(() => {});
   });
 

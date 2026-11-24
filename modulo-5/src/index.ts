@@ -140,9 +140,9 @@ app.get(['/docs', '/reference'], (_req, res) => {
 // RF-5.1 (crear y consultar) protegido con autenticación (RNF-10)
 app.post('/api/v1/ride-requests', authenticate, rideRequestController.create);
 app.get('/api/v1/ride-requests/:requestId', authenticate, rideRequestController.getById);
-app.post('/api/v1/ride-requests/:requestId/cancel', rideRequestController.cancel);
+app.post('/api/v1/ride-requests/:requestId/cancel', authenticate, rideRequestController.cancel);
 app.post('/api/v1/ride-requests/:requestId/cancel-assigned', rideRequestController.cancelAssigned);
-app.delete('/api/v1/ride-requests/:requestId', rideRequestController.cancel);
+app.delete('/api/v1/ride-requests/:requestId', authenticate, rideRequestController.cancel);
 app.get('/api/v1/ride-requests/:requestId/audit', rideRequestController.getAuditLogs);
 app.post('/api/v1/ride-requests/:requestId/candidates', rideRequestController.searchCandidates);
 app.post('/api/v1/ride-requests/:requestId/offers', rideRequestController.sendOffers);

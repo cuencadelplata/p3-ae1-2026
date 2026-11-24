@@ -44,7 +44,7 @@ Los detalles de cada modulo (endpoints, variables, pruebas) estan en el README d
 [`tests-integracion/flujo-completo.e2e.mjs`](tests-integracion/flujo-completo.e2e.mjs) recorre un viaje completo con los servicios reales de los 9 modulos: registro, ubicacion del conductor, pedido, asignacion, inicio con QR, finalizacion, pago y comprobante.
 
 ```sh
-node --test tests-integracion/flujo-completo.e2e.mjs
+node --env-file=.env --test tests-integracion/flujo-completo.e2e.mjs
 ```
 
 Requisitos, opciones (pago con tarjeta, simulador de M7) y pasos pendientes en [`tests-integracion/README.md`](tests-integracion/README.md).
