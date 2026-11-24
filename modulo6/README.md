@@ -24,6 +24,15 @@ desde la raíz con `docker compose ps`.
 
 ### Entorno local y pruebas
 
+El balanceador obtiene sus DNS de `/etc/resolv.conf` mediante el entrypoint oficial
+de nginx. `/health` atraviesa el proxy hasta la API. La resolución DNS tiene un límite
+de 2 segundos y la consulta del healthcheck de 3 segundos, dentro del timeout de Docker
+de 5 segundos. El periodo inicial es de 30 segundos y se toleran 6 fallos consecutivos.
+Un mensaje `Connection refused while resolving` indica que el servidor DNS del
+contenedor está rechazando consultas. Se debe comprobar también el acceso directo
+al backend desde el contenedor y recrear los servicios de M6 en la red compartida
+después de corregir el DNS del entorno.
+
 Desde esta carpeta:
 
 ```sh

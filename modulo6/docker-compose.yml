@@ -7,17 +7,18 @@ services:
       - "${M6_VIAJES_HOST_PORT:-3000}:3000"
     environment:
       M6_UPSTREAM: viajes-app:3000
+      NGINX_ENTRYPOINT_LOCAL_RESOLVERS: "1"
     volumes:
       - ./balanceador/default.conf.template:/etc/nginx/templates/default.conf.template:ro
     depends_on:
       viajes-app:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      test: ["CMD", "wget", "-T", "3", "-qO-", "http://127.0.0.1:3000/health"]
       interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 5s
+      retries: 6
+      start_period: 30s
     restart: unless-stopped
 
   # API de viajes. Sin puerto en el host para poder escalarla:

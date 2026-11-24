@@ -5,11 +5,13 @@
 # Reparte las peticiones entre todas las instancias del servicio ${M6_UPSTREAM}, que se
 # escala con `docker compose up --scale <servicio>=N`.
 #
-# El nombre se resuelve con el DNS interno de Docker (127.0.0.11) en cada petición y con
+# El nombre se resuelve con los DNS de /etc/resolv.conf del contenedor y con
 # validez de 5 s: si se agregan o quitan instancias, nginx las ve sin reiniciarse.
-# La imagen oficial de nginx reemplaza ${M6_UPSTREAM} al arrancar (envsubst).
+# La imagen oficial obtiene NGINX_LOCAL_RESOLVERS con su entrypoint y sustituye
+# las variables al arrancar (envsubst).
 
-resolver 127.0.0.11 valid=5s ipv6=off;
+resolver ${NGINX_LOCAL_RESOLVERS} valid=5s ipv6=off;
+resolver_timeout 2s;
 
 server {
     listen 3000;
