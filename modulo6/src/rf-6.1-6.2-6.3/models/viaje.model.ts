@@ -19,6 +19,7 @@ export interface Viaje {
     rideRequestId?: string | null;
     idempotencyKey?: string | null;
     estado: EstadoViaje;
+    canceladoPor?: 'cliente' | 'conductor' | null;
     origen: string;
     destino: string;
     codigoVerificacion: string | null;

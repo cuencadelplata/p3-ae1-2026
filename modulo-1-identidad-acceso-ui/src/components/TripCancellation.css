@@ -1,0 +1,25 @@
+.trip-cancellation {
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  padding: 1.5rem;
+  border: 1px solid #d5dfdb;
+  border-radius: 1rem;
+  color: #173c34;
+  background: #fff;
+}
+.trip-cancellation::backdrop { background: rgb(10 25 21 / 55%); }
+.trip-cancellation h2 { margin-top: 0; }
+.trip-cancellation p { overflow-wrap: anywhere; }
+.trip-cancellation label { display: grid; gap: .5rem; font-weight: 600; }
+.trip-cancellation textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 6rem;
+  padding: .75rem;
+  border: 1px solid #8ca49b;
+  border-radius: .5rem;
+  font: inherit;
+  resize: vertical;
+}
+.trip-cancellation-actions { display: flex; flex-wrap: wrap; gap: .75rem; }

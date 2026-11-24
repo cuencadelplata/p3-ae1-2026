@@ -96,6 +96,7 @@ function viajeRespuestaLegacy(viaje: Viaje, completadoAt?: Date | null) {
         clientUserId: viaje.clientUserId ?? null,
         conductorId: viaje.conductorId ?? null,
         estado: viaje.estado,
+        canceladoPor: viaje.canceladoPor ?? null,
         origen: viaje.origen,
         destino: viaje.destino,
         fechaCreacion: viaje.fechaCreacion,
