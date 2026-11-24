@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, CarFront } from 'lucide-react'
+import { ArrowLeft, CarFront, CircleCheck, MapPin, Power, Radar } from 'lucide-react'
+import RideMap from './RideMap'
 import { destination, FlowError, origin, pollTrip, prepareDriver, publishDriverLocation, request } from '../rideFlowApi'
 import type { Account, Offer } from '../rideFlowApi'
 import './RideFlow.css'
+import './DriverDispatch.css'
 
 function isDemoOffer(offer: Offer) {
   return offer.status === 'PENDING' && offer.origin?.latitude === origin.latitude && offer.origin?.longitude === origin.longitude
@@ -73,22 +75,47 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
     }
   }
 
+  const status = busy ? 'Actualizando disponibilidad…' : assigned ? 'Viaje asignado' : online ? 'Buscando viajes' : 'Estás desconectado'
+  const StatusIcon = assigned ? CircleCheck : online ? Radar : Power
+
   return (
-    <div className="ride-flow max-w-xl">
-      <header className="ride-flow-header">
-        <button className="btn-ghost" disabled={busy || online} onClick={onBack}><ArrowLeft size={16} aria-hidden="true" /> Volver a mi cuenta</button>
-      </header>
-      <section className="glass ride-flow-panel ride-action" aria-label="Despacho del conductor">
-        <h1 className="display ride-flow-title">Disponibilidad del conductor</h1>
-        <p>{driver.nombre} {driver.apellido}{plate && ` · ${plate}`}</p>
-        <p>Esta sesión de prueba publica tu auto en {origin.address} para el recorrido hacia {destination.address} y acepta una oferta de viaje automáticamente.</p>
-        {error && <p className="alert-error" role="alert">{error}</p>}
-        {online && <p className="alert-success" role="status">Disponible. Esperando una oferta…</p>}
-        {assigned && <p className="alert-success" role="status">Oferta aceptada. Esperá a que el pasajero termine el viaje antes de volver a conectarte.</p>}
-        <button className="btn-primary inline-flex items-center gap-2" disabled={busy} onClick={() => void toggleAvailability()}>
-          <CarFront size={18} aria-hidden="true" /> {busy ? 'Actualizando disponibilidad…' : online ? 'Dejar de recibir ofertas' : 'Conectarme para aceptar una oferta'}
+    <main className="driver-dispatch">
+      <header className="driver-topbar">
+        <button className="driver-back" aria-label="Volver a mi cuenta" disabled={busy || online} onClick={onBack}>
+          <ArrowLeft size={19} aria-hidden="true" />
         </button>
+        <h1 className="display">Disponibilidad del conductor</h1>
+        <div className="driver-account" title={`${driver.nombre} ${driver.apellido}`}>
+          <span aria-hidden="true">{`${driver.nombre[0] ?? ''}${driver.apellido[0] ?? ''}`.toUpperCase()}</span>
+          <p>{driver.nombre} {driver.apellido}</p>
+        </div>
+      </header>
+
+      <div className="driver-map-frame">
+        <RideMap driverView showRoute={assigned} />
+        <div className="driver-map-label"><MapPin size={16} aria-hidden="true" /> Corrientes <span>Zona de prueba</span></div>
+      </div>
+
+      <section className="driver-console" aria-label="Disponibilidad y viajes">
+        <div className="driver-status" data-active={online || assigned}>
+          <div className="driver-status-icon"><StatusIcon size={24} aria-hidden="true" /></div>
+          <div role="status">
+            <h2>{status}</h2>
+            <p>{assigned ? 'Esperá a que el pasajero termine el viaje antes de volver a conectarte.'
+              : online ? 'Tu auto ya está disponible. La próxima oferta de prueba se acepta automáticamente.'
+                : 'Conectate para recibir una oferta de prueba en esta zona.'}</p>
+          </div>
+        </div>
+        {error && <p className="alert-error driver-error" role="alert">{error}</p>}
+        <button className="driver-toggle" data-online={online} disabled={busy} onClick={() => void toggleAvailability()}>
+          <Power size={19} aria-hidden="true" /> {online ? 'Desconectarme' : 'Conectarme'}
+        </button>
+        <div className="driver-details">
+          <CarFront size={17} aria-hidden="true" />
+          {plate ? <span>Auto de prueba <strong>{plate}</strong></span> : <span>Auto de prueba · {origin.address}</span>}
+          {assigned && <span className="driver-destination"><MapPin size={16} aria-hidden="true" /> {destination.address}</span>}
+        </div>
       </section>
-    </div>
+    </main>
   )
 }
