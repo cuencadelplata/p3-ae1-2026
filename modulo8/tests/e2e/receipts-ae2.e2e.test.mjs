@@ -119,7 +119,7 @@ after(async () => {
   });
 });
 
-test("/health/ready informa PostgreSQL, Redis, RabbitMQ, el autorizador fiscal y M7 disponibles", async () => {
+test("/health/ready informa PostgreSQL, Redis, RabbitMQ y M7 disponibles", async () => {
   const response = await fetch(`${RECEIPTS}/health/ready`, { headers: { "X-Correlation-Id": run } });
   const body = await response.json();
   const receipts = body.modules?.receipts ?? body;
@@ -127,7 +127,7 @@ test("/health/ready informa PostgreSQL, Redis, RabbitMQ, el autorizador fiscal y
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("x-correlation-id"), run);
   assert.equal(receipts.status, "ok");
-  for (const dependency of ["postgres", "redis", "rabbitmq", "fiscal", "payments"]) {
+  for (const dependency of ["postgres", "redis", "rabbitmq", "payments"]) {
     assert.equal(receipts.dependencies[dependency].status, "available", `${dependency} debe estar disponible`);
   }
 });

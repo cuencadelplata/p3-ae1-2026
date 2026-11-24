@@ -4,7 +4,6 @@ import express, { type Express } from 'express';
 import { env } from './config/env';
 import { isRedisReady } from './cache/redis';
 import { isDatabaseReady } from './db/pool';
-import { fiscalClient } from './integrations/fiscal-authorizer';
 import { paymentsClient } from './integrations/m7-payments';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
 import type { IdentityValidator } from './middlewares/auth.middleware';
@@ -29,7 +28,6 @@ export function createApp(options: AppOptions = {}): Express {
     postgres: isDatabaseReady,
     redis: isRedisReady,
     rabbitmq: async () => false,
-    fiscal: () => fiscalClient.isReachable(),
     payments: () => paymentsClient.isReachable(),
     ...options.checks,
   };
@@ -46,7 +44,7 @@ export function createApp(options: AppOptions = {}): Express {
 
   app.use(express.json({ limit: '256kb' }));
 
-  app.use('/health', createHealthRouter(checks, () => ({ fiscal: fiscalClient.circuitState() })));
+  app.use('/health', createHealthRouter(checks));
   app.get('/docs', (_req, res) => res.redirect(`${env.apiPrefix}/docs`));
 
   // Los PDF ya no se publican como archivos estaticos: la unica forma de

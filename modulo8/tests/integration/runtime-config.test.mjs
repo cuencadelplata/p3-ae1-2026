@@ -13,7 +13,6 @@ const configured = {
   M1_IDENTITY_URL: 'http://m1:4011/auth/validar-identidad-y-rol',
   M2_API_URL: 'http://m2:3002',
   M7_PAYMENTS_URL: 'http://m7:4020',
-  FISCAL_API_URL: 'http://fiscal:4010',
   M1_JWT_SECRET: 'private-value',
   M2_INTERNAL_API_KEY: 'private-value',
 };

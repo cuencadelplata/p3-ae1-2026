@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
 import { AppError } from '../errors/app-error';
-import { fiscalClient } from '../integrations/fiscal-authorizer';
 import { applyM7Amount, ensureAuthorized, paymentsClient } from '../integrations/m7-payments';
 import { buildReceiptIssuedEvent } from '../messaging/receipt-issued';
 import type { DeliveryChannel, DeliveryRecord, Receipt, ReceiptRequest } from '../models/receipt';
@@ -40,9 +39,8 @@ export interface IssueResult {
  * Errores que puede propagar ademas de los de la base:
  * - PaymentNotAuthorizedError: M7 no autoriza el pago (pendiente, sin
  *   registrar o rechazado). Solo el rechazo es definitivo.
- * - DependencyUnavailableError: M7 o el autorizador fiscal no responden, o el
- *   circuito del autorizador esta abierto. El pedido se puede repetir mas tarde.
- * - FiscalAuthorizationRejectedError: el autorizador rechazo el comprobante.
+ * - DependencyUnavailableError: M7 no responde. El pedido se puede repetir mas
+ *   tarde.
  */
 export async function issueReceipt(request: ReceiptRequest): Promise<IssueResult> {
   const existing = await repository.findByTripId(request.tripId);
@@ -68,16 +66,6 @@ export async function issueReceipt(request: ReceiptRequest): Promise<IssueResult
     ...request,
     fare,
     payment: { ...request.payment, method: payment.method, status: payment.status },
-  });
-
-  // La autorizacion se pide antes de generar el PDF porque el codigo va impreso
-  // en el documento. Si el autorizador no esta disponible, no se persiste nada
-  // y el pedido se puede repetir (idempotente por tripId en ambos lados).
-  receipt.fiscal = await fiscalClient.authorize({
-    tripId: receipt.tripId,
-    issuedAt: receipt.issuedAt,
-    currency: receipt.fare.currency,
-    total: receipt.fare.total,
   });
 
   const pdf = await renderReceiptPdf(receipt);

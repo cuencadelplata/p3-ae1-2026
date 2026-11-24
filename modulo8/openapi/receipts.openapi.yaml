@@ -10,8 +10,6 @@ info:
     - **RF-8.4:** Reenvío de comprobante (entrega simulada) y descarga mediante enlace temporal (Redis).
     - **Idempotencia (RNF-08/09):** un único comprobante por `tripId`, garantizado por una restricción
       `UNIQUE` de la base aun con varias réplicas del servicio.
-    - **Autorización fiscal (2.1.0):** antes de emitir, el comprobante se autoriza ante un servicio externo
-      (simulado), con timeout de 2 s y circuit breaker. El código queda en `fiscal` e impreso en el PDF.
     - **Pago verificado en M7 (2.2.0):** antes de emitir se consulta `GET /metodo-pago/{viajeId}` de M7.
       Solo un pago `autorizado` genera comprobante, y el medio de pago se toma de M7.
     - **Importe de M7 (2.3.0):** el total y la moneda del comprobante se toman de M7 cuando los informa.
@@ -20,11 +18,13 @@ info:
       (M1 no comparte nombres): el PDF muestra el número de usuario.
     - **Efectivo y transferencia (2.5.0):** se cobran fuera de la pasarela y M7 los deja `pendiente`; el
       comprobante se emite igual con `payment.status` `PENDIENTE`. La tarjeta sigue esperando la autorización.
+    - **Sin autorización fiscal (2.6.0):** el comprobante ya no pasa por un autorizador fiscal externo.
+      Los emitidos antes conservan el campo `fiscal`; los nuevos no lo traen.
     - **Dependencias caídas:** responden `503` con `Retry-After` (nunca `500`); el servicio sigue atendiendo.
 
     Los contratos asincrónicos (`payment.confirmed`, `trip.completed`, `receipt.issued`) y el contrato interno con Receipts
     Delivery están en `contracts/events/catalogo-eventos-v1.md`; no forman parte de esta API pública.
-  version: 2.5.0
+  version: 2.6.0
 servers:
   - url: http://localhost:3000/api/v1
     description: Aplicación única de M8
@@ -52,11 +52,6 @@ paths:
 
         **Idempotencia (RNF-08):** Si ya existe un comprobante para el `tripId` enviado, la API responde `200 OK`
         con los datos del comprobante vigente en lugar de duplicar el archivo. Si es nuevo responde `201 Created`.
-
-        **Autorización fiscal:** antes de generar el PDF se pide la autorización al autorizador fiscal externo
-        (timeout de 2 s, circuit breaker). Si no responde o su circuito está abierto, responde
-        `503 FISCAL_SERVICE_UNAVAILABLE` con `Retry-After` y no se persiste nada: el pedido se puede repetir.
-        Si lo rechaza, responde `422 FISCAL_AUTHORIZATION_REJECTED`.
 
         **Pago verificado en M7 (2.2.0):** M7 es la fuente de verdad del pago. Antes de emitir se consulta
         `GET /metodo-pago/{viajeId}` de M7 (timeout de 2 s):
@@ -153,9 +148,8 @@ paths:
                   timestamp: "2026-10-05T18:42:12.000Z"
         '422':
           description: |
-            Error de validación en los campos del comprobante (`VALIDATION_ERROR`), M7 rechazó el pago
-            (`PAYMENT_REJECTED`), o el autorizador fiscal rechazó el comprobante
-            (`FISCAL_AUTHORIZATION_REJECTED`, con el motivo en `details`).
+            Error de validación en los campos del comprobante (`VALIDATION_ERROR`) o M7 rechazó el pago
+            (`PAYMENT_REJECTED`).
           content:
             application/json:
               schema:
@@ -172,15 +166,6 @@ paths:
                       path: /api/v1/receipts
                       timestamp: "2026-10-05T18:42:12.000Z"
                       details: ["customer.fullName es obligatorio"]
-                rechazoFiscal:
-                  summary: Rechazo del autorizador fiscal
-                  value:
-                    error:
-                      code: FISCAL_AUTHORIZATION_REJECTED
-                      message: El autorizador fiscal rechazo el comprobante
-                      path: /api/v1/receipts
-                      timestamp: "2026-10-05T18:42:12.000Z"
-                      details: { code: AMOUNT_LIMIT_EXCEEDED, message: "El importe supera el maximo autorizable (10000000)" }
                 pagoRechazado:
                   summary: Pago rechazado por M7
                   value:
@@ -515,14 +500,14 @@ paths:
         - Salud
       summary: Disponibilidad del servicio y de cada dependencia
       description: |
-        Verifica PostgreSQL, Redis, RabbitMQ, el autorizador fiscal y la API de pagos de M7 (`payments`),
+        Verifica PostgreSQL, Redis, RabbitMQ y la API de pagos de M7 (`payments`),
         cada uno con un limite de 2 s,
         e informa el estado de los circuit breakers (`closed`, `open`, `half_open`).
 
         - `ok`: todas las dependencias disponibles.
         - `degraded` (200): falta Redis (no se generan enlaces temporales), RabbitMQ
-          (no se consumen pagos ni se publican eventos, que esperan en la bandeja de salida) o el
-          autorizador fiscal o M7 (no se emiten comprobantes nuevos; los pagos esperan en la cola).
+          (no se consumen pagos ni se publican eventos, que esperan en la bandeja de salida) o
+          M7 (no se emiten comprobantes nuevos; los pagos esperan en la cola).
           La API REST sigue funcionando.
         - `unavailable` (503): falta PostgreSQL, la unica dependencia critica. El proceso sigue vivo
           (`/health/live` en 200) y se recupera solo cuando la base vuelve.
@@ -549,10 +534,8 @@ paths:
                   postgres: { status: unavailable, critical: true }
                   redis: { status: available, critical: false }
                   rabbitmq: { status: available, critical: false }
-                  fiscal: { status: available, critical: false }
                   payments: { status: available, critical: false }
-                circuits:
-                  fiscal: closed
+                circuits: {}
 
   /health:
     servers:
@@ -602,8 +585,7 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     DependencyUnavailable:
       description: |
-        Una dependencia no está disponible: la base de datos (`DATABASE_UNAVAILABLE`), el autorizador
-        fiscal (`FISCAL_SERVICE_UNAVAILABLE`, sin respuesta o con el circuito abierto), la API de pagos
+        Una dependencia no está disponible: la base de datos (`DATABASE_UNAVAILABLE`), la API de pagos
         de M7 (`PAYMENTS_SERVICE_UNAVAILABLE`), o el generador de enlaces (`DOWNLOAD_LINKS_UNAVAILABLE`).
         El pedido se puede repetir después del tiempo indicado en `Retry-After`.
       headers:
@@ -618,8 +600,8 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
           example:
             error:
-              code: FISCAL_SERVICE_UNAVAILABLE
-              message: El autorizador fiscal no esta disponible (circuito abierto)
+              code: PAYMENTS_SERVICE_UNAVAILABLE
+              message: La API de pagos de M7 no esta disponible
               path: /api/v1/receipts
               timestamp: "2026-10-05T18:42:12.000Z"
 
@@ -671,7 +653,7 @@ components:
           example: 42
         dependencies:
           type: object
-          required: [postgres, redis, rabbitmq, fiscal, payments]
+          required: [postgres, redis, rabbitmq, payments]
           properties:
             postgres:
               $ref: '#/components/schemas/DependencyStatus'
@@ -679,18 +661,14 @@ components:
               $ref: '#/components/schemas/DependencyStatus'
             rabbitmq:
               $ref: '#/components/schemas/DependencyStatus'
-            fiscal:
-              $ref: '#/components/schemas/DependencyStatus'
             payments:
               $ref: '#/components/schemas/DependencyStatus'
         circuits:
           type: object
           description: Estado de cada circuit breaker del servicio.
-          properties:
-            fiscal:
-              type: string
-              enum: [closed, open, half_open]
-              example: closed
+          additionalProperties:
+            type: string
+            enum: [closed, open, half_open]
 
     ReceiptRequest:
       type: object
@@ -922,8 +900,8 @@ components:
     FiscalAuthorization:
       type: object
       description: |
-        Autorización otorgada por el autorizador fiscal externo (simulado). Ausente solo en comprobantes
-        emitidos antes de la versión 2.1.0.
+        Autorización fiscal de los comprobantes emitidos entre las versiones 2.1.0 y 2.5.0. Los
+        comprobantes nuevos no la traen.
       required: [authorizationCode, expiresOn, authorizedAt]
       properties:
         authorizationCode:

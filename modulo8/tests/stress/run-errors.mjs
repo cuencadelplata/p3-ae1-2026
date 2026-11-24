@@ -11,7 +11,7 @@ const envPath = path.join(moduleDir, '.env');
 const localEnv = existsSync(envPath) ? parse(readFileSync(envPath)) : {};
 const get = (name) => process.env[name] || localEnv[name] || '';
 const base = `http://127.0.0.1:${Number(get('M8_HOST_PORT') || 8000)}`;
-const fiscal = `http://127.0.0.1:${Number(get('FISCAL_HOST_PORT') || 4010)}`;
+const payments = `http://127.0.0.1:${Number(get('M7_HOST_PORT') || 4020)}`;
 const qrKey = get('QR_INTERNAL_API_KEY');
 if (!qrKey || qrKey.startsWith('replace-with-')) {
   console.error('Configurar QR_INTERNAL_API_KEY en modulo8/.env.');
@@ -55,14 +55,14 @@ await expect('RF8.2 segundo uso distinto', request(`${base}/qr/validate`, {
   method: 'POST', headers: { ...qrHeaders, 'Idempotency-Key': randomUUID() }, body: validation,
 }), 409);
 
-const originalModeResponse = await request(`${fiscal}/admin/mode`);
-assert.equal(originalModeResponse.status, 200, 'Fiscal sandbox debe estar accesible');
+const originalModeResponse = await request(`${payments}/admin/mode`);
+assert.equal(originalModeResponse.status, 200, 'El simulador de pagos del entorno aislado debe estar accesible');
 const originalMode = (await originalModeResponse.json()).mode;
 try {
-  await expect('Fiscal sandbox en modo caido', request(`${fiscal}/admin/mode`, {
+  await expect('Pagos en modo caido', request(`${payments}/admin/mode`, {
     method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ mode: 'down' }),
   }), 200);
-  const receiptTripId = `error-fiscal-${randomUUID()}`;
+  const receiptTripId = `error-pagos-${randomUUID()}`;
   const receipt = {
     tripId: receiptTripId,
     customer: { id: '91', fullName: 'Cliente Prueba', email: 'error@example.com' },
@@ -72,11 +72,11 @@ try {
     fare: { currency: 'ARS', total: 2500 },
     payment: { method: 'BILLETERA', status: 'APROBADO' },
   };
-  await expect('RF8.3 dependencia fiscal caida', request(`${base}/api/v1/receipts`, {
+  await expect('RF8.3 pagos de M7 caidos', request(`${base}/api/v1/receipts`, {
     method: 'POST', headers: jsonHeaders, body: JSON.stringify(receipt),
   }), 503);
 } finally {
-  await request(`${fiscal}/admin/mode`, {
+  await request(`${payments}/admin/mode`, {
     method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ mode: originalMode }),
   });
 }

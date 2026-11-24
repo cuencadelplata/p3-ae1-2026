@@ -9,9 +9,9 @@ import type { CircuitState } from '../resilience/circuit-breaker';
  *   dependencias, para que una caida de la base no provoque reinicios inutiles
  *   del contenedor.
  * - /health/ready (disponibilidad): informa cada dependencia. Responde 503 solo
- *   si falta una critica (PostgreSQL); si falta Redis, RabbitMQ o el
- *   autorizador fiscal responde 200 con estado degraded. Incluye ademas el
- *   estado de los circuit breakers del servicio.
+ *   si falta una critica (PostgreSQL); si falta Redis, RabbitMQ o la API de
+ *   pagos de M7 responde 200 con estado degraded. Incluye ademas el estado de
+ *   los circuit breakers del servicio.
  * - /health: alias de /health/ready, se conserva por compatibilidad con AE1.
  */
 export function createHealthRouter(

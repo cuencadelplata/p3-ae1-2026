@@ -3,7 +3,6 @@ import type { ErrorRequestHandler, RequestHandler } from 'express';
 import { isDatabaseUnavailable } from '../db/errors';
 import { AppError } from '../errors/app-error';
 import { DependencyUnavailableError } from '../errors/dependency-unavailable.error';
-import { FiscalAuthorizationRejectedError } from '../integrations/fiscal-authorizer';
 import { PaymentNotAuthorizedError } from '../integrations/m7-payments';
 import { createLogger, errorFields, errorMessage } from '../observability/logger';
 
@@ -73,18 +72,6 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
       res.setHeader('Retry-After', '5');
     }
     res.status(error.retryable ? 409 : 422).json(buildBody(error.code, error.message, req.originalUrl));
-    return;
-  }
-
-  if (error instanceof FiscalAuthorizationRejectedError) {
-    res
-      .status(422)
-      .json(
-        buildBody('FISCAL_AUTHORIZATION_REJECTED', 'El autorizador fiscal rechazo el comprobante', req.originalUrl, {
-          code: error.code,
-          message: error.message,
-        }),
-      );
     return;
   }
 

@@ -47,7 +47,7 @@ pnpm install --frozen-lockfile
 
 Si `.env` ya existe, no lo sobrescribas. Reemplazá los marcadores `replace-with-*` por valores privados: contraseñas de PostgreSQL y RabbitMQ y claves internas de QR, M1 y M2. `M8_RABBITMQ_URL` debe usar el usuario y contraseña configurados para el broker. **No subas `.env`, claves ni capturas de sus valores.** `.env.example` contiene sólo nombres y marcadores.
 
-El Compose local usa simuladores de M1, M2, M7 y del servicio fiscal. En la integración común sus URL se reemplazan por las de los servicios reales. Las conexiones se configuran por variables de entorno.
+El Compose local usa simuladores de M1, M2 y M7. En la integración común sus URL se reemplazan por las de los servicios reales. Las conexiones se configuran por variables de entorno.
 
 ## Despliegue local con Docker
 

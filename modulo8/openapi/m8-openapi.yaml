@@ -207,9 +207,9 @@ paths:
                 $ref: '#/components/schemas/ReceiptResponse'
         '400': { description: Solicitud inválida. }
         '409': { description: Pago pendiente o no registrado en M7; se puede reintentar después. }
-        '422': { description: Datos inválidos, pago rechazado o autorización fiscal rechazada. }
+        '422': { description: Datos inválidos o pago rechazado. }
         '500': { description: Error interno inesperado. }
-        '503': { description: M7, el autorizador fiscal o una dependencia requerida no disponible. }
+        '503': { description: M7 o una dependencia requerida no disponible. }
   /api/v1/receipts/{tripId}:
     get:
       tags: [Receipts]

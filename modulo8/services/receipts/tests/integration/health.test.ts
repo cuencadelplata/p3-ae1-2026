@@ -54,19 +54,8 @@ describe('Salud y trazabilidad (Integration HTTP + PostgreSQL + Redis)', () => {
     assert.deepEqual(body.dependencies['postgres'], { status: 'available', critical: true });
     assert.deepEqual(body.dependencies['redis'], { status: 'available', critical: false });
     assert.deepEqual(body.dependencies['rabbitmq'], { status: 'available', critical: false });
-    assert.deepEqual(body.dependencies['fiscal'], { status: 'available', critical: false });
-    assert.deepEqual(body.circuits, { fiscal: 'closed' });
-  });
-
-  it('sin el autorizador fiscal el servicio sigue disponible pero degradado', async () => {
-    const baseUrl = await start({ checks: { rabbitmq: up, fiscal: down } });
-
-    const res = await fetch(`${baseUrl}/health/ready`);
-    const body = (await res.json()) as ReadyBody;
-
-    assert.equal(res.status, 200);
-    assert.equal(body.status, 'degraded');
-    assert.deepEqual(body.dependencies['fiscal'], { status: 'unavailable', critical: false });
+    assert.equal(body.dependencies['fiscal'], undefined);
+    assert.deepEqual(body.circuits, {});
   });
 
   it('sin Redis o sin RabbitMQ el servicio sigue disponible pero degradado', async () => {
