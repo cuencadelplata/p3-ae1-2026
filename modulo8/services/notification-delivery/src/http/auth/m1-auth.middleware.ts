@@ -94,10 +94,9 @@ export function verifyJwtSignature(token: string, secret: string): boolean {
  *    - `exp`: si está presente en el payload, debe ser un timestamp Unix numérico en segundos
  *      y no estar vencido. Si expiró, se rechaza el token. Si M1_JWT_REQUIRE_EXP=true,
  *      la presencia de exp es obligatoria.
- * 2. Mecanismo Criptográfico (Integración Pendiente con M1):
- *    - El contrato funcional de claims fue confirmado con M1, pero el esquema de verificación
- *      criptográfica definitiva (distribución de secreto simétrico vs clave asimétrica/JWKS)
- *      sigue pendiente de confirmación formal por el equipo de M1.
+ * 2. Firma confirmada con M1:
+ *    - M1 firma los JWT con HS256 y M8 verifica la firma con el secreto compartido
+ *      `M1_JWT_SECRET`. M1 emite los claims `userId`, `role` y `exp`.
  *    - Política Fail-Closed: en producción (NODE_ENV=production), si no se configuró M1_JWT_SECRET,
  *      no se permite ningún bypass ni mecanismo ad-hoc: falla cerrado retornando null (401).
  *    - Se rechaza estrictamente cualquier token vencido o con firma no coincidente.

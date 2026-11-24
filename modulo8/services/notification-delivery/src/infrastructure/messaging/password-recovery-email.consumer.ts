@@ -41,7 +41,10 @@ export function parsePasswordRecoveryEvent(content: Buffer, routingKey?: string)
   } catch {
     throw new NonRetryableMessagingError('El evento de M1 no es JSON válido.');
   }
-  if (routingKey !== PASSWORD_RECOVERY_ROUTING_KEY || raw?.evento !== PASSWORD_RECOVERY_ROUTING_KEY) {
+  // RabbitMQ devuelve los reintentos por el exchange por defecto, con el
+  // nombre de la cola como routing key. El evento de M1 conserva su tipo.
+  const isRecoveryRoute = routingKey === PASSWORD_RECOVERY_ROUTING_KEY || routingKey === PASSWORD_RECOVERY_QUEUE;
+  if (!isRecoveryRoute || raw?.evento !== PASSWORD_RECOVERY_ROUTING_KEY) {
     throw new NonRetryableMessagingError('El evento no es auth.recuperacion_solicitada.');
   }
   if (raw.modulo !== 'M1' || typeof raw.id !== 'string' || !UUID_PATTERN.test(raw.id)) {

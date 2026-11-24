@@ -5,6 +5,7 @@ import { NonRetryableMessagingError } from '@m8/shared';
 import {
   buildPasswordRecoveryEmail,
   parsePasswordRecoveryEvent,
+  PASSWORD_RECOVERY_QUEUE,
   PASSWORD_RECOVERY_ROUTING_KEY,
 } from '../../src/infrastructure/messaging/password-recovery-email.consumer.js';
 
@@ -25,6 +26,17 @@ test('Correo de recuperación de M1', async (t) => {
     assert.equal(envelope.producer, 'm1');
     assert.equal(envelope.data.email, 'cliente@example.com');
     assert.equal(envelope.data.userId, 12);
+  });
+
+  await t.test('acepta el mismo evento cuando RabbitMQ lo devuelve a la cola principal', () => {
+    const envelope = parsePasswordRecoveryEvent(buffer(m1Event), PASSWORD_RECOVERY_QUEUE);
+    assert.equal(envelope.messageId, m1Event.id);
+    assert.equal(envelope.data.token, m1Event.datos.token);
+    const unrelatedEvent = { ...m1Event, evento: 'auth.credenciales_revocadas' };
+    assert.throws(
+      () => parsePasswordRecoveryEvent(buffer(unrelatedEvent), PASSWORD_RECOVERY_QUEUE),
+      NonRetryableMessagingError,
+    );
   });
 
   await t.test('rechaza eventos sin email válido, de otro módulo o con otra routing key', () => {
