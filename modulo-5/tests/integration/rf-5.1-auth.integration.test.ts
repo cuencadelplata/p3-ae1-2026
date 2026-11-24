@@ -156,6 +156,21 @@ describe('RF-5.1 — autenticación e idempotencia por cliente (HTTP)', () => {
     expect(res.body.code).toBe('IDEMPOTENCY_KEY_REUSED');
   });
 
+  it.each(['POST', 'DELETE'])('cancelación %s exige JWT y comprueba propiedad aunque se falsifique x-user-id', async (method) => {
+    const owner = unique('owner_cancel');
+    const created = await request(app).post('/api/v1/ride-requests')
+      .set('Authorization', `Bearer ${token(owner)}`)
+      .set('Idempotency-Key', unique('key')).send(validPayload);
+    expect(created.status).toBe(201);
+    const path = `/api/v1/ride-requests/${created.body.id}${method === 'POST' ? '/cancel' : ''}`;
+    const call = () => method === 'POST' ? request(app).post(path) : request(app).delete(path);
+    expect((await call().set('x-user-id', owner).send({})).status).toBe(401);
+    expect((await call().set('Authorization', `Bearer ${token(unique('intruso'))}`)
+      .set('x-user-id', owner).send({})).status).toBe(403);
+    expect((await call().set('Authorization', `Bearer ${token(owner)}`)
+      .set('x-user-id', 'identidad-falsa').send({})).status).toBe(200);
+  });
+
   it('RF-5.1 GET exige token y no deja leer la solicitud de otro cliente', async () => {
     const owner = unique('owner');
     const other = unique('other');

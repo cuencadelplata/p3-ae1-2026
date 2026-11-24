@@ -1,0 +1,460 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C4 · Nivel 3 — Componentes de M1 Identidad y acceso",
+    "locale": "es",
+    "output": "c4/c4-nivel3-componentes-m1.html",
+    "quality_profile": "showcase",
+    "parentHref": "c4-nivel2-contenedores.html",
+    "repository": {
+      "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
+      "provider": "github",
+      "revision": "687a636f0d66acc26bcde86dce442d4778e37dd8"
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "cols": 3,
+    "cellW": 196,
+    "cellH": 64,
+    "gapX": 150,
+    "gapY": 92
+  },
+  "components": [
+    {
+      "id": "clientes",
+      "type": "external",
+      "label": "Clientes de M1",
+      "sublabel": "M1 UI · M2…M9",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/src/routes/auth.routes.ts",
+          "line": 41,
+          "label": "ruta de validación"
+        }
+      ],
+      "row": 0,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "rutas",
+      "type": "backend",
+      "label": "Rutas /auth",
+      "sublabel": "registro · login · me · oauth2 · token delegado",
+      "explanation": "Express monta las rutas bajo /auth. Incluye /usuarios/:id/nombre para M8 (con X-Internal-Api-Key) y los paneles de demostración por rol.",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/src/app.ts",
+          "line": 73,
+          "label": "montaje"
+        },
+        {
+          "path": "modulo-1-identidad-acceso/src/routes/auth.routes.ts",
+          "line": 29,
+          "end_line": 124,
+          "label": "rutas"
+        }
+      ],
+      "row": 1,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "mw",
+      "type": "security",
+      "label": "Middlewares",
+      "sublabel": "JWT · revocación · clave interna · rate limit",
+      "explanation": "Verifican el JWT y su rol, rechazan credenciales revocadas, exigen X-Internal-Api-Key en rutas internas y limitan intentos de login por IP.",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/src/middleware/auth.middleware.ts",
+          "line": 10,
+          "label": "JWT y rol"
+        },
+        {
+          "path": "modulo-1-identidad-acceso/src/middleware/internal-api-key.middleware.ts",
+          "line": 6,
+          "label": "clave interna"
+        },
+        {
+          "path": "modulo-1-identidad-acceso/src/middleware/login-rate-limit.middleware.ts",
+          "line": 14,
+          "label": "rate limit"
+        }
+      ],
+      "row": 1,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "auth",
+      "type": "backend",
+      "label": "AuthService",
+      "sublabel": "registro, login y validación",
+      "explanation": "Solo se registran CLIENTE y CONDUCTOR; emite y valida el JWT con su rol.",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/src/services/auth.service.ts",
+          "line": 14,
+          "label": "servicio"
+        },
+        {
+          "path": "modulo-1-identidad-acceso/src/utils/auth.validators.ts",
+          "line": 9,
+          "label": "roles registrables"
+        }
+      ],
+      "row": 2,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "oauth",
+      "type": "backend",
+      "label": "OAuth2",
+      "sublabel": "adaptadores Google y Auth0",
+      "explanation": "Login federado. Rechaza crear cuentas OPERADOR por esta vía. Vincula la cuenta federada con el usuario local.",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/src/services/oauth2/oauth2.service.ts",
+          "line": 24,
+          "label": "servicio"
+        },
+        {
+          "path": "modulo-1-identidad-acceso/src/services/oauth2/oauth2.factory.ts",
+          "line": 9,
+          "label": "fábrica de proveedores"
+        }
+      ],
+      "row": 1,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "delegado",
+      "type": "backend",
+      "label": "Token delegado",
+      "sublabel": "para el despacho de M9",
+      "explanation": "Emite un token de corta vida para que M9 active reservas en M5 en nombre del pasajero.",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/src/services/delegated-token.service.ts",
+          "line": 19,
+          "label": "servicio"
+        },
+        {
+          "path": "modulo-1-identidad-acceso/src/routes/auth.routes.ts",
+          "line": 107,
+          "label": "ruta"
+        }
+      ],
+      "row": 2,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "revocacion",
+      "type": "backend",
+      "label": "Revocación y recuperación",
+      "sublabel": "revocar credenciales · reset de contraseña",
+      "explanation": "Revoca credenciales (aunque el token y la revocación ocurran en el mismo segundo) y genera tokens de recuperación de contraseña.",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/src/services/credential-revocation.service.ts",
+          "line": 12,
+          "label": "revocación"
+        },
+        {
+          "path": "modulo-1-identidad-acceso/src/services/password-recovery.service.ts",
+          "line": 39,
+          "label": "recuperación"
+        }
+      ],
+      "row": 2,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "semilla",
+      "type": "backend",
+      "label": "Operador semilla",
+      "sublabel": "crea el OPERADOR al arrancar",
+      "explanation": "Crea el usuario OPERADOR si no existe; email y contraseña configurables.",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/src/config/operador-semilla.ts",
+          "line": 15,
+          "label": "semilla"
+        }
+      ],
+      "row": 4,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "repos",
+      "type": "backend",
+      "label": "Repositorios",
+      "sublabel": "usuarios · tokens de recuperación",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/src/repositories/user.repository.ts",
+          "line": 12,
+          "label": "usuarios"
+        },
+        {
+          "path": "modulo-1-identidad-acceso/src/repositories/recovery-token.repository.ts",
+          "line": 5,
+          "label": "tokens"
+        }
+      ],
+      "row": 3,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "sqlite",
+      "type": "database",
+      "label": "identity.db",
+      "sublabel": "SQLite · usuarios y proveedores OAuth2",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/src/config/database.ts",
+          "line": 1,
+          "label": "driver"
+        },
+        {
+          "path": "modulo-1-identidad-acceso/src/config/database.ts",
+          "line": 30,
+          "label": "tabla usuarios"
+        }
+      ],
+      "row": 4,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": "intentos de login · revocaciones",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/src/services/login-attempts.service.ts",
+          "line": 18,
+          "label": "intentos por IP"
+        },
+        {
+          "path": "modulo-1-identidad-acceso/src/repositories/credential-revocation.repository.ts",
+          "line": 20,
+          "label": "revocaciones"
+        }
+      ],
+      "row": 3,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "pub",
+      "type": "backend",
+      "label": "Publicadores",
+      "sublabel": "eventos de autenticación y recuperación",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/src/messaging/auth.publisher.ts",
+          "line": 26,
+          "label": "auth"
+        },
+        {
+          "path": "modulo-1-identidad-acceso/src/messaging/recovery.publisher.ts",
+          "line": 34,
+          "label": "recuperación"
+        }
+      ],
+      "row": 3,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "rabbit",
+      "type": "messagebus",
+      "label": "RabbitMQ",
+      "sublabel": "m1.eventos · lo consume M8",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/src/config/rabbitmq.ts",
+          "line": 9,
+          "label": "exchange"
+        }
+      ],
+      "row": 4,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "idp",
+      "type": "external",
+      "label": "Google / Auth0",
+      "sublabel": "proveedores OAuth2",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/src/services/oauth2/adapters/google.adapter.ts",
+          "line": 69,
+          "label": "Google"
+        },
+        {
+          "path": "modulo-1-identidad-acceso/src/services/oauth2/adapters/auth0.adapter.ts",
+          "line": 73,
+          "label": "Auth0"
+        }
+      ],
+      "row": 0,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "clientes-rutas",
+      "from": "clientes",
+      "to": "rutas",
+      "label": "login · valida token y rol",
+      "variant": "emphasis"
+    },
+    {
+      "id": "rutas-mw",
+      "from": "rutas",
+      "to": "mw"
+    },
+    {
+      "id": "mw-auth",
+      "from": "mw",
+      "to": "auth"
+    },
+    {
+      "id": "mw-oauth",
+      "from": "mw",
+      "to": "oauth"
+    },
+    {
+      "id": "mw-delegado",
+      "from": "mw",
+      "to": "delegado"
+    },
+    {
+      "id": "mw-revocacion",
+      "from": "mw",
+      "to": "revocacion"
+    },
+    {
+      "id": "auth-repos",
+      "from": "auth",
+      "to": "repos"
+    },
+    {
+      "id": "oauth-idp",
+      "from": "oauth",
+      "to": "idp",
+      "label": "código → token (HTTPS)"
+    },
+    {
+      "id": "revocacion-redis",
+      "from": "revocacion",
+      "to": "redis",
+      "label": "marca revocadas"
+    },
+    {
+      "id": "semilla-repos",
+      "from": "semilla",
+      "to": "repos",
+      "label": "crea si no existe"
+    },
+    {
+      "id": "repos-sqlite",
+      "from": "repos",
+      "to": "sqlite",
+      "label": "SQL"
+    },
+    {
+      "id": "auth-pub",
+      "from": "auth",
+      "to": "pub",
+      "label": "login, IP bloqueada"
+    },
+    {
+      "id": "revocacion-pub",
+      "from": "revocacion",
+      "to": "pub",
+      "label": "recuperación"
+    },
+    {
+      "id": "pub-rabbit",
+      "from": "pub",
+      "to": "rabbit",
+      "label": "publica",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Roles",
+      "items": [
+        "CLIENTE y CONDUCTOR se registran solos",
+        "OPERADOR solo existe por la semilla: ni registro ni OAuth2 lo crean"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Fuera del diagrama",
+      "items": [
+        "/metrics, /health y /openapi.yaml",
+        "Paneles de demostración /admin-panel y /portal-conductor"
+      ]
+    }
+  ]
+}

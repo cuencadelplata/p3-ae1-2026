@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <meta name="generator" content="archify 3.3.0">
   <meta name="archify-reader-contract" content="declared-wide-v1">
-  <title>C4 · Nivel 2 — Contenedores de Movilidad Urbana · Diagrama</title>
+  <title>C4 · Nivel 3 — Componentes de M3 Conductores y vehículos · Diagrama</title>
   <script>
     // Resolve the theme before first paint so light-preference users don't
     // see a dark flash. The toolbar script below re-applies with UI state.
@@ -6166,19 +6166,19 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
            data-preset-badge-blueprint="PLANO / REV 01"
            data-preset-badge-editorial="EDITORIAL / NOTA DE CAMPO">
         <div class="pulse-dot"></div>
-        <h1>C4 · Nivel 2 — Contenedores de Movilidad Urbana</h1>
+        <h1>C4 · Nivel 3 — Componentes de M3 Conductores y vehículos</h1>
       </div>
     </div>
 
-    <script id="archify-explanations-data" type="application/json">{"m1":"Emite y valida tokens; M2, M3, M4 y M8 le consultan la identidad y el rol.","m2":"Perfil, estado de cuenta, historial de viajes, direcciones frecuentes y calificaciones. Entra por m2-gateway (nginx) que balancea dos réplicas; el worker consume eventos y publica el outbox. Abrí el nodo para ver el Nivel 3.","m6":"Publica el mismo hecho de viaje en tres exchanges, uno por consumidor: mobility.events (M2, M8), viajes.events (M3) y trip.events (M4)."}</script>
+    <script id="archify-explanations-data" type="application/json">{"gw":"Publica en RabbitMQ; si el circuito se abre, guarda el evento en Kafka y lo republica después."}</script>
 
-    <script id="archify-source-evidence-data" type="application/json">{"schemaVersion":1,"verified":true,"repository":{"url":"https://github.com/cuencadelplata/p3-ae1-2026","revision":"bd6e17f43689ec617bd57b73553225693e13b0c0","shortRevision":"bd6e17f","label":"cuencadelplata/p3-ae1-2026","href":"https://github.com/cuencadelplata/p3-ae1-2026/tree/bd6e17f43689ec617bd57b73553225693e13b0c0"},"referenceCount":21,"nodes":{"pasajero":[{"path":"m2/docker-compose.app.yml","line":127,"endLine":137,"href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/m2/docker-compose.app.yml#L127-L137"}],"conductor":[{"path":"modulo-3/compose.integracion.yml","line":94,"endLine":107,"href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/modulo-3/compose.integracion.yml#L94-L107"}],"m2web":[{"path":"m2/docker-compose.app.yml","line":127,"endLine":137,"label":"m2-client","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/m2/docker-compose.app.yml#L127-L137"},{"path":"m2/client/src/api.ts","line":9,"endLine":11,"label":"proxy /api","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/m2/client/src/api.ts#L9-L11"}],"m3web":[{"path":"modulo-3/compose.integracion.yml","line":94,"endLine":107,"href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/modulo-3/compose.integracion.yml#L94-L107"}],"m1":[{"path":"modulo-1-identidad-acceso/compose.integracion.yml","line":18,"endLine":30,"href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/modulo-1-identidad-acceso/compose.integracion.yml#L18-L30"}],"m2":[{"path":"m2/docker-compose.app.yml","line":42,"endLine":104,"label":"réplicas + gateway","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/m2/docker-compose.app.yml#L42-L104"},{"path":"m2/docker-compose.app.yml","line":118,"endLine":126,"label":"m2-worker","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/m2/docker-compose.app.yml#L118-L126"}],"m3":[{"path":"modulo-3/compose.integracion.yml","line":2,"endLine":21,"label":"m3-vehiculos","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/modulo-3/compose.integracion.yml#L2-L21"},{"path":"modulo-3/compose.integracion.yml","line":33,"endLine":63,"label":"m3-conductor-api","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/modulo-3/compose.integracion.yml#L33-L63"}],"m4":[{"path":"docker-compose.yml","line":14,"endLine":47,"href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/docker-compose.yml#L14-L47"}],"m5":[{"path":"modulo-5/compose.integracion.yml","line":16,"endLine":31,"href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/modulo-5/compose.integracion.yml#L16-L31"}],"m6":[{"path":"modulo6/compose.integracion.yml","line":29,"endLine":54,"href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/modulo6/compose.integracion.yml#L29-L54"},{"path":"modulo6/src/rf-6.1-6.2-6.3/services/eventos-viaje.service.ts","line":40,"endLine":42,"label":"exchanges por consumidor","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/modulo6/src/rf-6.1-6.2-6.3/services/eventos-viaje.service.ts#L40-L42"}],"m7":[{"path":"modulo7/compose.integracion.yml","line":2,"endLine":24,"href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/modulo7/compose.integracion.yml#L2-L24"}],"m8":[{"path":"modulo8/compose.integracion.yaml","line":6,"endLine":36,"href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/modulo8/compose.integracion.yaml#L6-L36"},{"path":"modulo8/services/notification-delivery/src/infrastructure/clients/m2-preferences.client.ts","line":25,"endLine":32,"label":"consulta preferencias a M2","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/modulo8/services/notification-delivery/src/infrastructure/clients/m2-preferences.client.ts#L25-L32"}],"m9":[{"path":"M9-ReservasProgramadas/docker-compose.yml","line":4,"endLine":35,"href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/M9-ReservasProgramadas/docker-compose.yml#L4-L35"}],"rabbit":[{"path":"M9-ReservasProgramadas/docker-compose.yml","line":147,"endLine":160,"href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/M9-ReservasProgramadas/docker-compose.yml#L147-L160"}],"nominatim":[{"path":"docker-compose.yml","line":35,"endLine":36,"href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/docker-compose.yml#L35-L36"}],"fiscal":[{"path":"modulo8/compose.integracion.yaml","line":34,"href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/bd6e17f43689ec617bd57b73553225693e13b0c0/modulo8/compose.integracion.yaml#L34"}]}}</script>
+    <script id="archify-source-evidence-data" type="application/json">{"schemaVersion":1,"verified":true,"repository":{"url":"https://github.com/cuencadelplata/p3-ae1-2026","revision":"687a636f0d66acc26bcde86dce442d4778e37dd8","shortRevision":"687a636","label":"cuencadelplata/p3-ae1-2026","href":"https://github.com/cuencadelplata/p3-ae1-2026/tree/687a636f0d66acc26bcde86dce442d4778e37dd8"},"referenceCount":23,"nodes":{"rutas":[{"path":"modulo-3/M3-Conductor/src/routes/conductorRoutes.js","line":30,"endLine":61,"label":"rutas","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/M3-Conductor/src/routes/conductorRoutes.js#L30-L61"},{"path":"modulo-3/M3-Conductor/src/infraestructure/m1Client.js","line":4,"label":"validación","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/M3-Conductor/src/infraestructure/m1Client.js#L4"}],"ctrl":[{"path":"modulo-3/M3-Conductor/src/controllers/conductoresController.js","line":1,"label":"conductores","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/M3-Conductor/src/controllers/conductoresController.js#L1"},{"path":"modulo-3/M3-Conductor/src/controllers/valoracionesController.js","line":1,"label":"valoraciones","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/M3-Conductor/src/controllers/valoracionesController.js#L1"}],"repo":[{"path":"modulo-3/M3-Conductor/src/repositories/conductorDBRepository.js","line":1,"label":"conductores","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/M3-Conductor/src/repositories/conductorDBRepository.js#L1"},{"path":"modulo-3/M3-Conductor/src/repositories/redisRepository.js","line":1,"label":"caché","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/M3-Conductor/src/repositories/redisRepository.js#L1"}],"gw":[{"path":"modulo-3/M3-Conductor/src/infraestructure/messagingGateway.js","line":38,"label":"publicación","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/M3-Conductor/src/infraestructure/messagingGateway.js#L38"},{"path":"modulo-3/M3-Conductor/src/infraestructure/kafkaFallback.js","line":23,"label":"respaldo","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/M3-Conductor/src/infraestructure/kafkaFallback.js#L23"}],"consumer":[{"path":"modulo-3/M3-Conductor/src/consumers/driverEventsConsumer.js","line":17,"label":"cola","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/M3-Conductor/src/consumers/driverEventsConsumer.js#L17"},{"path":"modulo-3/M3-Conductor/src/infraestructure/rabbitmq.topology.js","line":8,"label":"viaje.finalizado","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/M3-Conductor/src/infraestructure/rabbitmq.topology.js#L8"}],"vrutas":[{"path":"modulo-3/m3-vehiculos/src/vehiculos/vehiculo-routes.ts","line":16,"label":"vehículos","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/m3-vehiculos/src/vehiculos/vehiculo-routes.ts#L16"},{"path":"modulo-3/m3-vehiculos/src/documents/documents-routes.ts","line":15,"label":"documentos","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/m3-vehiculos/src/documents/documents-routes.ts#L15"},{"path":"modulo-3/m3-vehiculos/src/middlewares/idempotencia.ts","line":1,"label":"idempotencia","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/m3-vehiculos/src/middlewares/idempotencia.ts#L1"}],"vsvc":[{"path":"modulo-3/m3-vehiculos/src/vehiculos/vehiculo-service.ts","line":1,"label":"vehículos","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/m3-vehiculos/src/vehiculos/vehiculo-service.ts#L1"},{"path":"modulo-3/m3-vehiculos/src/documents/documents-service.ts","line":1,"label":"documentos","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/m3-vehiculos/src/documents/documents-service.ts#L1"}],"vev":[{"path":"modulo-3/m3-vehiculos/src/documents/documents.events.ts","line":16,"label":"publicación","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/m3-vehiculos/src/documents/documents.events.ts#L16"},{"path":"modulo-3/m3-vehiculos/src/documents/documents-consumers.ts","line":7,"label":"validación","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/m3-vehiculos/src/documents/documents-consumers.ts#L7"}],"supabase":[{"path":"modulo-3/M3-Conductor/src/config/SupabaseClient.js","line":4,"label":"conductor","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/M3-Conductor/src/config/SupabaseClient.js#L4"},{"path":"modulo-3/m3-vehiculos/src/config/supabaseClient.ts","line":1,"label":"vehículos","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/m3-vehiculos/src/config/supabaseClient.ts#L1"}],"redis":[{"path":"modulo-3/M3-Conductor/src/config/redisClient.js","line":1,"label":"conductor","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/M3-Conductor/src/config/redisClient.js#L1"},{"path":"modulo-3/m3-vehiculos/src/config/redisClient.ts","line":3,"label":"vehículos","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/m3-vehiculos/src/config/redisClient.ts#L3"}],"rabbit":[{"path":"modulo-3/M3-Conductor/src/config/rabbitmqClient.js","line":8,"label":"conductor","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/M3-Conductor/src/config/rabbitmqClient.js#L8"},{"path":"modulo-3/m3-vehiculos/src/config/rabbitClient.ts","line":6,"label":"vehículos","href":"https://github.com/cuencadelplata/p3-ae1-2026/blob/687a636f0d66acc26bcde86dce442d4778e37dd8/modulo-3/m3-vehiculos/src/config/rabbitClient.ts#L6"}]}}</script>
     <script id="archify-i18n-data" type="application/json">{"locale":"es","messages":{"viewer.kind.frontend":"Frontend","viewer.kind.backend":"Backend","viewer.kind.database":"Base de datos","viewer.kind.cloud":"Nube","viewer.kind.security":"Seguridad","viewer.kind.messagebus":"Bus de mensajes","viewer.kind.external":"Externo","viewer.kind.neutral":"Neutral","viewer.kind.node":"Nodo","viewer.kind.start":"Inicio","viewer.kind.active":"Activo","viewer.kind.waiting":"En espera","viewer.kind.decision":"Decisión","viewer.kind.success":"Éxito","viewer.kind.failure":"Fallo","viewer.toolbar.actions":"Acciones del diagrama","viewer.diagnosis.button":"Análisis de código","viewer.diagnosis.title":"Diagnóstico de arquitectura","viewer.diagnosis.local":"Integrado en Archify, se ejecuta en tu equipo","viewer.diagnosis.starMapTitle":"Mapa estelar radial","viewer.diagnosis.starMap":"Explora las dependencias entre archivos y funciones en un mapa estelar radial.","viewer.diagnosis.modelTitle":"Modelo 3D giratorio","viewer.diagnosis.model":"Gira un modelo 3D para ver cómo se conectan los módulos.","viewer.diagnosis.countsTitle":"Problemas por componente","viewer.diagnosis.counts":"Consulta cuántos problemas hay en cada componente del diagrama, las zonas con más dependencias, los ciclos y las dependencias que el diagrama no muestra.","viewer.diagnosis.findingsTitle":"Código fuente y correcciones con IA","viewer.diagnosis.findings":"Abre el código fuente de cada hallazgo y encárgale a una IA que lo corrija.","viewer.diagnosis.ask":"Pídele a tu asistente de IA:","viewer.diagnosis.prompt":"Usa Archify para crear un diagrama de arquitectura de este proyecto e iniciar el diagnóstico de arquitectura.","viewer.diagnosis.copy":"Copiar instrucción","viewer.theme.toggle.title":"Cambiar tema (T)","viewer.theme.toggle":"Cambiar tema de color","viewer.theme.dark":"Oscuro","viewer.theme.light":"Claro","viewer.preset.choose.title":"Elegir estilo visual (S alterna)","viewer.preset.choose":"Elegir estilo visual","viewer.preset.style":"Estilo","viewer.preset.menu":"Estilo visual","viewer.preset.identity":"Identidad visual","viewer.preset.cycles":"alterna","viewer.preset.classic":"Clásico","viewer.preset.classic.short":"Clásico","viewer.preset.classic.hint":"Predeterminado técnico estable","viewer.preset.flow":"Flujo de señal","viewer.preset.flow.short":"Flujo","viewer.preset.flow.hint":"Presentación con énfasis en el movimiento","viewer.preset.blueprint":"Plano","viewer.preset.blueprint.hint":"Revisión de ingeniería","viewer.preset.editorial":"Editorial","viewer.preset.editorial.hint":"Notas de publicación y lanzamiento","viewer.preset.badge.signalFlow":"FLUJO DE SEÑAL","viewer.preset.badge.blueprint":"PLANO / REV 01","viewer.preset.badge.editorial":"EDITORIAL / NOTA DE CAMPO","viewer.preset.badge.editorialPlate":"ARCHIFY / LÁMINA 04","viewer.preset.current":"Estilo visual: {style}. Elegir estilo visual","viewer.motion.live":"Activa","viewer.motion.still":"Fija","viewer.motion.pause":"Pausar animación","viewer.motion.resume":"Reanudar animación","viewer.motion.reduced":"Animación pausada por la preferencia de movimiento reducido","viewer.motion.hidden":"Animación pausada mientras esta página está oculta","viewer.motion.yielding":"Pausar animación; cediendo a {owner}","viewer.motion.yielding.title":"Vista previa en vivo activada · cediendo a {owner}","viewer.owner.route":"Sonda de ruta","viewer.owner.lens":"Lente semántico","viewer.owner.relationship":"Vista previa de relación","viewer.owner.intent":"Traza de intención","viewer.owner.focus":"enfoque semántico","viewer.owner.legend":"vista previa de la leyenda","viewer.owner.reader":"interacción del lector","viewer.present.enter":"Entrar al modo presentación","viewer.present.enter.title":"Modo presentación (F)","viewer.present.exit":"Salir del modo presentación","viewer.present.exit.title":"Salir del modo presentación (F o Escape)","viewer.present.present":"Presentar","viewer.present.exit.label":"Salir","viewer.export.button":"Exportar","viewer.export.button.title":"Exportar diagrama (E)","viewer.export.diagram":"Exportar diagrama","viewer.export.menu":"Exportar","viewer.export.subtitle":"Salidas portables y limpias","viewer.export.share":"Compartir","viewer.export.shareCard":"Tarjeta para compartir","viewer.export.routeShareCard":"Tarjeta de ruta para compartir","viewer.export.reachShareCard":"Tarjeta de alcance para compartir","viewer.export.copyDiagram":"Copiar diagrama","viewer.export.clipboardPng":"PNG al portapapeles","viewer.export.raster":"Imágenes rasterizadas","viewer.export.image":"Imagen","viewer.export.lossless":"Imagen sin pérdida","viewer.export.compact":"Imagen compacta","viewer.export.modern":"Imagen moderna","viewer.export.vectorMotion":"Vector y movimiento","viewer.export.vectorMotion.heading":"Vector y movimiento","viewer.export.editable":"Vector editable","viewer.export.svg.auto":"SVG · Auto","viewer.export.svg.auto.hint":"Coincide con el tema del host","viewer.export.svg.light":"SVG · Claro","viewer.export.svg.light.hint":"Siempre claro","viewer.export.svg.dark":"SVG · Oscuro","viewer.export.svg.dark.hint":"Siempre oscuro","viewer.export.motion6s":"Movimiento de 6 s","viewer.export.unsupported":"No compatible con este navegador","viewer.export.clipboardUnsupported":"Este navegador no admite escribir imágenes en el portapapeles","viewer.export.clipboardUnsupported.short":"Escritura de imágenes en el portapapeles no admitida en este navegador.","viewer.export.motionUnavailable":"Captura de movimiento no disponible en este navegador","viewer.export.webmUnavailable":"WebM no disponible en este navegador","viewer.export.failed":"Falló la exportación: {message}","viewer.export.unknownVariant":"Variante de tarjeta para compartir desconocida: {variant}","viewer.export.routeRequired":"Traza una ruta antes de exportar una tarjeta de ruta para compartir","viewer.export.reachRequired":"Traza el alcance definido antes de exportar una tarjeta de alcance para compartir","viewer.export.unknown":"desconocido","viewer.export.routeFailed":"Falló la exportación de la tarjeta de ruta para compartir: {message}","viewer.export.reachFailed":"Falló la exportación de la tarjeta de alcance para compartir: {message}","viewer.export.copyFailed":"Error al copiar: {message}","viewer.export.copiedPng":"PNG copiado al portapapeles","viewer.export.downloadedRoute":"Tarjeta de ruta para compartir descargada","viewer.export.downloadedReach":"Tarjeta de alcance para compartir descargada","viewer.export.downloadedWebm":"WebM descargado","viewer.export.recording":"Grabando 6 segundos de movimiento…","viewer.export.card.routeSummary.one":"Ruta: {source} → {target} · {count} paso","viewer.export.card.routeSummary.other":"Ruta: {source} → {target} · {count} pasos","viewer.export.card.reachSummary":"Alcance definido {direction} desde {origin} · {nodes} · {links} · máx {hops}","viewer.export.card.node.one":"{count} nodo","viewer.export.card.node.other":"{count} nodos","viewer.export.card.link.one":"{count} enlace","viewer.export.card.link.other":"{count} enlaces","viewer.export.card.hop.one":"{count} salto","viewer.export.card.hop.other":"{count} saltos","viewer.export.card.routeBadge":"ARCHIFY · RUTA · {hops}","viewer.export.card.reachBadge":"ARCHIFY · ALCANCE {direction}","viewer.export.direction.upstream":"Ascendente","viewer.export.direction.downstream":"Descendente","viewer.export.error.canvasUnavailable":"Lienzo no disponible para {label}","viewer.export.error.contextUnavailable":"Contexto de lienzo 2D no disponible para {label}","viewer.export.error.toBlobUnavailable":"canvas.toBlob no disponible para {label}","viewer.export.error.toBlobNull":"canvas.toBlob no devolvió datos para {label}","viewer.export.error.variantsCombined":"Las variantes de tarjeta para compartir no se pueden combinar","viewer.export.error.viewerState":"La exportación de la tarjeta para compartir no pudo quitar el estado temporal del visor","viewer.export.error.routeState":"La exportación de la tarjeta de ruta no pudo preservar la ruta resuelta de forma segura","viewer.export.error.reachState":"La exportación de la tarjeta de alcance no pudo preservar el alcance definido de forma segura","viewer.export.error.webmRequirements":"La exportación de movimiento WebM requiere una animación de traza y compatibilidad del navegador con MediaRecorder","viewer.export.error.mediaRecorder":"MediaRecorder falló","viewer.export.error.emptyWebm":"MediaRecorder produjo un WebM vacío","viewer.export.error.webmBackground":"No se pudo cargar el fondo SVG para la exportación WebM","viewer.guide.title":"Explorar este sistema","viewer.focus.selectedNodes":"{count} nodos seleccionados","viewer.guide.eyebrow":"Guía del diagrama","viewer.guide.close":"Cerrar la guía del diagrama","viewer.guide.inspecting":"Inspeccionando la semántica compilada","viewer.guide.actions":"Acciones de exploración del diagrama","viewer.guide.find":"Buscar cualquier nodo","viewer.guide.find.hint":"Busca por etiquetas, responsabilidades, tipos e IDs estables.","viewer.guide.route":"Trazar una ruta","viewer.guide.route.aria":"Trazar una ruta dirigida","viewer.guide.route.hint":"Pregunta cómo se conectan dos nodos semánticos en el sentido definido.","viewer.guide.map":"Ver todo el sistema","viewer.guide.map.hint":"Abre el Radar semántico con un viewport en vivo y nodos estables.","viewer.guide.lens":"Comparar tipos semánticos","viewer.guide.lens.hint":"Cuenta roles, revela su tráfico y compara enlaces directos definidos.","viewer.guide.present":"Entrar al modo presentación","viewer.guide.present.hint":"Dale al diagrama en vivo todo el viewport sin cambiar la exportación.","viewer.guide.shortcuts":"Atajos de teclado adicionales","viewer.guide.shortcut.export":"Exportar","viewer.guide.shortcut.theme":"Tema","viewer.guide.shortcut.style":"Estilo","viewer.guide.shortcut.reset":"Restablecer","viewer.guide.shortcut.zoomIn":"Acercar","viewer.guide.shortcut.zoomOut":"Alejar","viewer.guide.shortcut.close":"Cerrar","viewer.guide.credit":"¿Te resulta útil Archify? Una estrella en GitHub ayuda","viewer.guide.star":"Star","viewer.feedback.label":"Comentarios y apoyo","viewer.feedback.tagline":"Convierte cualquier idea que quieras entender, planificar o compartir en una visualización interactiva.","viewer.feedback.trigger":"Comentarios","viewer.feedback.issue":"Abrir un issue","viewer.feedback.issueHint":"Reportar un error o sugerencia","viewer.feedback.email":"Enviar correo","viewer.feedback.copyEmail":"Copiar correo","viewer.feedback.starPrompt":"Si Archify te ayudó","viewer.feedback.star":"Dar Star","viewer.feedback.starLabel":"Dar estrella a Archify en GitHub","viewer.feedback.starTitle":"Apoya a Archify en GitHub","viewer.feedback.starBody":"Cada estrella nos ayuda a seguir mejorándolo en abierto.","viewer.guide.facts":"{nodes} · {relationships}","viewer.guide.fact.node.one":"{count} nodo semántico","viewer.guide.fact.node.other":"{count} nodos semánticos","viewer.guide.fact.relationship.one":"{count} relación","viewer.guide.fact.relationship.other":"{count} relaciones","viewer.guide.open":"Abrir la guía del diagrama","viewer.finder.title":"Buscar un nodo","viewer.finder.close":"Cerrar el buscador de nodos","viewer.finder.placeholder":"Buscar etiquetas o IDs","viewer.finder.search":"Buscar nodos del diagrama","viewer.finder.results":"Nodos del diagrama","viewer.finder.empty":"No hay nodos coincidentes","viewer.finder.result.focus":"Enfocar {label}","viewer.finder.result.routeStart":"Elegir {label} como inicio de la ruta","viewer.finder.result.routeTarget":"Elegir {label} como destino de la ruta, {links}","viewer.finder.status.empty":"No hay nodos coincidentes","viewer.finder.status.count.one":"{count} nodo coincidente","viewer.finder.status.count.other":"{count} nodos coincidentes","viewer.finder.noun.nodes":"nodos","viewer.finder.link.one":"{count} enlace","viewer.finder.link.other":"{count} enlaces","viewer.finder.result.focus.one":"Enfocar {label}, {count} conexión relacionada","viewer.finder.result.focus.other":"Enfocar {label}, {count} conexiones relacionadas","viewer.finder.status.filtered":"{visible} de {available} {noun}","viewer.finder.status.all":"{available} {noun}","viewer.passport.eyebrow":"Pasaporte semántico","viewer.passport.metadata":"Metadatos del nodo","viewer.passport.evidence":"Evidencia de fuente verificada","viewer.passport.verified":"Fuente verificada","viewer.passport.verificationScope":"Verificado contra el Git local en la revisión fijada. No se ha comprobado el acceso remoto.","viewer.passport.payload":"Carga","viewer.passport.payload.role.request":"Solicitud","viewer.passport.payload.role.response":"Respuesta","viewer.passport.payload.role.flow":"Flujo","viewer.passport.payload.diff":"{added} añadidos · {removed} eliminados · {modified} cambiados · {unchanged} sin cambios","viewer.passport.payload.unchanged":"{count} campos sin cambios","viewer.passport.payload.sample":"Carga de ejemplo (solo lectura)","viewer.passport.payload.after":"Carga tras este cambio (solo lectura)","viewer.passport.payload.before":"Carga antes de este cambio (solo lectura)","viewer.passport.payload.field.added":"Añadido {path}: {after}","viewer.passport.payload.field.removed":"Eliminado {path}: {before}","viewer.passport.payload.field.modified":"Cambiado {path}: {before} → {after}","viewer.passport.payload.field.unchanged":"{path}: {after}","viewer.passport.reach":"Alcance definido","viewer.passport.reach.trace":"Trazar la alcanzabilidad definida","viewer.passport.upstream":"Ascendente","viewer.passport.downstream":"Descendente","viewer.passport.upstream.trace":"Trazar la alcanzabilidad definida ascendente","viewer.passport.downstream.trace":"Trazar la alcanzabilidad definida descendente","viewer.passport.close":"Cerrar el pasaporte semántico","viewer.passport.move":"Mover el pasaporte semántico. Arrastra, usa las flechas o pulsa Inicio para restablecer.","viewer.passport.copy":"Copiar enlace","viewer.passport.copy.focus":"Copiar enlace al nodo enfocado","viewer.passport.relations":"Relaciones","viewer.passport.relations.show":"Mostrar relaciones conectadas","viewer.passport.relations.hide":"Ocultar relaciones conectadas","viewer.passport.relations.list":"Relaciones conectadas","viewer.passport.copyRelation":"Copiar relación","viewer.passport.copyNode":"Copiar nodo","viewer.passport.copyPinned":"Copiar enlace a la relación fijada","viewer.passport.copySource":"Copiar enlace al nodo de origen","viewer.passport.copy.focused.success":"Enlace del nodo enfocado copiado","viewer.passport.copy.pinned.success":"Enlace de la relación fijada copiado","viewer.passport.copy.focused.failed":"No se pudo copiar el enlace del nodo enfocado","viewer.passport.copy.pinned.failed":"No se pudo copiar el enlace de la relación fijada","viewer.passport.relationship.none":"No hay relaciones conectadas","viewer.passport.relationship.count.one":"{count} relación","viewer.passport.relationship.count.other":"{count} relaciones","viewer.passport.relationship.show.one":"Mostrar {count} relación conectada","viewer.passport.relationship.show.other":"Mostrar {count} relaciones conectadas","viewer.passport.relationship.summary":"{out} salientes · {in} entrantes{loops}","viewer.passport.relationship.loops":" · {count} bucle","viewer.passport.relationship.explorer":"Explorador de relaciones directas","viewer.passport.relationship.help":"Usa las flechas para explorar las relaciones. Pulsa Enter o Espacio para fijar detalles; Escape las borra.","viewer.passport.relationship.loopsBack":"vuelve sobre sí mismo","viewer.passport.relationship.connectsTo":"conecta a","viewer.passport.relationship.connectsFrom":"conecta desde","viewer.passport.relationship.pinned":"Relación fijada · {from} → {to} · {label}","viewer.passport.relationship.inspect":"Inspeccionar relación {index} de {total}: {from} a {to}, {label}. Pulsa Enter para ver detalles.","viewer.passport.relationship.group.out":"Salientes","viewer.passport.relationship.group.in":"Entrantes","viewer.passport.relationship.group.loop":"Bucles propios","viewer.passport.relationship.row":"{group}: {relationship}, {neighbor}","viewer.passport.relationship.direction.out":"SAL →","viewer.passport.relationship.direction.in":"← ENT","viewer.passport.relationship.direction.loop":"BUCLE","viewer.passport.sourceCount.one":"{count} referencia de fuente verificada","viewer.passport.sourceCount.other":"{count} referencias de fuente verificadas","viewer.passport.repository.open":"Abrir la revisión verificada del repositorio {revision}","viewer.passport.source.open":"Abrir la fuente verificada {path} en la revisión {revision}","viewer.passport.source.openLink":"Abrir ↗","viewer.passport.reach.upstream.one":"Trazar {count} nodo definido ascendente","viewer.passport.reach.upstream.other":"Trazar {count} nodos definidos ascendentes","viewer.passport.reach.downstream.one":"Trazar {count} nodo definido descendente","viewer.passport.reach.downstream.other":"Trazar {count} nodos definidos descendentes","viewer.passport.reach.noUpstream":"No hay nodos definidos ascendentes","viewer.passport.reach.noDownstream":"No hay nodos definidos descendentes","viewer.passport.reach.status":"{direction} · {nodes} nodos · {links} enlaces · máx {hops} saltos","viewer.route.eyebrow":"Ruta","viewer.route.start":"Haz clic donde empieza la ruta","viewer.route.start.find":"Buscar inicio","viewer.route.start.find.aria":"Buscar un inicio de ruta","viewer.route.copy":"Copiar enlace","viewer.route.copy.aria":"Copiar enlace a la ruta trazada","viewer.route.clear":"Borrar","viewer.route.clear.aria":"Borrar la sonda de ruta","viewer.route.traced":"Ruta","viewer.route.pickTwo":"Haz clic en dos nodos del diagrama","viewer.route.pickOne":"Haz clic en un nodo del diagrama","viewer.route.controls":"Controles del recorrido de la ruta","viewer.route.previous":"Posición anterior de la ruta","viewer.route.play":"Reproducir el recorrido de la ruta","viewer.route.pause":"Pausar el recorrido de la ruta","viewer.route.replay":"Repetir el recorrido de la ruta","viewer.route.next":"Posición siguiente de la ruta","viewer.route.journey":"Recorrido","viewer.route.pause.label":"Pausar","viewer.route.replay.label":"Repetir","viewer.route.overview":"Vista general","viewer.route.overview.aria":"Mostrar la vista general completa de la ruta","viewer.route.instructions":"Haz clic en un inicio y luego en un final. La ruta sigue las flechas.","viewer.route.destination":"¿Dónde termina la ruta desde {label}?","viewer.route.destination.find":"Buscar destino","viewer.route.destination.find.aria":"Buscar un destino de ruta alcanzable","viewer.route.differentDestination":"Elige un destino diferente","viewer.route.distinct":"Elige dos nodos distintos.","viewer.route.unreachable":"No se llega a {label} desde aquí","viewer.route.unreachable.detail":"No se llega a {target} desde {source} siguiendo las flechas. Elige un nodo resaltado.","viewer.route.start.instructions":"Luego elige el final. Solo se iluminan los nodos alcanzables.","viewer.route.copy.success":"Enlace de la ruta trazada copiado","viewer.route.copy.failed":"No se pudo copiar el enlace de la ruta trazada","viewer.route.position":"Posición de la ruta {index} de {total}: {label}","viewer.route.step":"Paso {index} de {total} · {phase} · {label}","viewer.route.motionRequired":"El recorrido automático requiere la animación Activa","viewer.route.trigger.clear":"Borrar la ruta trazada","viewer.route.overview.status":"{nodes} · {hops} · ruta más corta","viewer.route.overview.node.one":"{count} nodo","viewer.route.overview.node.other":"{count} nodos","viewer.route.overview.hop.one":"{count} paso","viewer.route.overview.hop.other":"{count} pasos","viewer.route.phase.playing":"Reproduciendo","viewer.route.phase.complete":"Completo","viewer.route.phase.inspecting":"Inspeccionando","viewer.route.destination.count.one":"{count} nodo alcanzable está resaltado. Haz clic en él.","viewer.route.destination.count.other":"{count} nodos alcanzables están resaltados. Haz clic en uno.","viewer.route.noOutgoing":"Ninguna flecha sale de este nodo. Bórralo y elige otro inicio.","viewer.route.result.title":"{source} a {target}","viewer.route.finder.source.title":"Elegir el inicio de la ruta","viewer.route.finder.source.placeholder":"Buscar orígenes de ruta","viewer.route.finder.source.empty":"No hay orígenes de ruta coincidentes","viewer.route.finder.source.results":"Nodos que pueden iniciar una ruta","viewer.route.finder.source.noun":"orígenes de ruta","viewer.route.finder.source.badge":"inicio","viewer.route.finder.target.title":"Destino desde {label}","viewer.route.finder.target.placeholder":"Buscar destinos alcanzables","viewer.route.finder.target.empty":"No hay destinos alcanzables coincidentes","viewer.route.finder.target.results":"Destinos de ruta alcanzables","viewer.route.finder.target.noun":"destinos alcanzables","viewer.route.hop.one":"{count} salto","viewer.route.hop.other":"{count} saltos","viewer.lens.eyebrow":"Lente semántico","viewer.lens.title":"Comparar roles del sistema","viewer.lens.close":"Cerrar el lente semántico","viewer.lens.instruction":"Elige hasta dos tipos semánticos. Uno revela su tráfico real; dos comparan solo las relaciones directas definidas.","viewer.lens.kinds":"Tipos semánticos","viewer.lens.choose":"Elige un tipo para inspeccionar sus nodos y las relaciones que lo tocan.","viewer.lens.copy":"Copiar enlace al lente semántico","viewer.lens.clear":"Borrar el lente semántico","viewer.lens.open":"Abrir el lente semántico","viewer.lens.openActive":"Abrir el lente semántico activo","viewer.lens.legend":"Leyenda semántica","viewer.lens.legend.inspect.one":"Inspeccionar {label}, {count} nodo","viewer.lens.legend.inspect.other":"Inspeccionar {label}, {count} nodos","viewer.lens.kind.count.one":"{label}, {count} nodo","viewer.lens.kind.count.other":"{label}, {count} nodos","viewer.lens.compare.one":"{first} → {second}: {forward} · {second} → {first}: {reverse} · {count} relación directa","viewer.lens.compare.other":"{first} → {second}: {forward} · {second} → {first}: {reverse} · {count} relaciones directas","viewer.lens.single":"{nodes} · {relationships} · los pares conectados permanecen visibles","viewer.lens.node.one":"{count} nodo {label}","viewer.lens.node.other":"{count} nodos {label}","viewer.lens.relationship.one":"{count} relación en contacto","viewer.lens.relationship.other":"{count} relaciones en contacto","viewer.radar.title":"Radar semántico","viewer.radar.building":"Construyendo la vista general","viewer.radar.openFull":"Abrir el radar semántico completo","viewer.radar.open":"Abrir el radar","viewer.radar.close":"Cerrar el radar semántico","viewer.radar.surface":"Vista general del diagrama. Haz clic en un nodo para enfocarlo, o usa las flechas para desplazarte.","viewer.radar.click":"Clic en el nodo","viewer.radar.drag":"Arrastra para desplazar","viewer.radar.space":"El radar semántico necesita más espacio de MAPA.","viewer.radar.nodes":"Nodos del radar del diagrama semántico","viewer.radar.focus":"Enfocar {label} desde el Radar semántico","viewer.radar.status":"{count} nodos · {viewport}","viewer.radar.fullMap":"{count} nodos · mapa completo","viewer.radar.compacted":"Radar compactado para no tapar el Pasaporte semántico ni los controles de MAPA.","viewer.radar.cancelWaiting":"Cancelar la espera del radar semántico por más espacio de MAPA","viewer.radar.needsSpace":"El radar semántico necesita más espacio de MAPA visible","viewer.radar.viewport.full":"mapa completo","viewer.radar.viewport.width":"{percent}% de ancho","viewer.radar.viewport.scale":"{percent}% del viewport","viewer.nav.controls":"Controles de vista del diagrama","viewer.nav.route":"Trazar una ruta dirigida","viewer.nav.route.title":"Trazar ruta (R)","viewer.nav.route.short":"RUTA","viewer.nav.radar":"Abrir el radar semántico","viewer.nav.radar.title":"Radar semántico (M)","viewer.nav.radar.short":"MAPA","viewer.nav.lens":"Abrir el lente semántico","viewer.nav.lens.title":"Lente semántico (L)","viewer.nav.lens.short":"LENTE","viewer.nav.find":"Buscar un nodo","viewer.nav.find.title":"Buscar un nodo (/)","viewer.outline.title":"Índice de nodos","viewer.rail.show":"Notas e índice","viewer.rail.controls":"Panel lateral","viewer.rail.collapse":"Contraer panel lateral","viewer.rail.bottom":"Mover el panel debajo","viewer.rail.right":"Mover el panel al lado","viewer.nav.guide":"Abrir la guía del diagrama","viewer.nav.guide.title":"Guía del diagrama (?)","viewer.nav.zoomOut":"Alejar","viewer.nav.zoomOut.title":"Alejar (-)","viewer.nav.reset":"Restablecer la vista del diagrama","viewer.nav.reset.title":"Restablecer vista (0)","viewer.nav.read":"LEER","viewer.nav.zoomIn":"Acercar","viewer.nav.zoomIn.title":"Acercar (+)","viewer.nav.camera":"{hint}. Restablecer la vista del diagrama","viewer.nav.camera.title":"{semantic}{hint} · restablecer vista (0)","viewer.nav.camera.semantic":"Cámara semántica activa · ","viewer.nav.level.map":"MAPA","viewer.nav.level.read":"LEER","viewer.nav.level.full":"COMPLETO","viewer.nav.level.auto":"AUTO","viewer.nav.detail.map":"Acerca para revelar las etiquetas de relación y el contexto de los nodos","viewer.nav.detail.read":"Acerca de nuevo para revelar etiquetas y anotaciones","viewer.nav.detail.full":"Detalle completo del diagrama","viewer.intent.summary":"{label}. {out} salientes, {in} entrantes{loops}. {total} conexiones. Pulsa Enter para ver detalles.","viewer.intent.loops":", {count} bucle propio","viewer.common.copied":"Copiado","viewer.common.copyFailed":"Error al copiar","viewer.common.copyLink":"Copiar enlace","viewer.common.clear":"Borrar","viewer.common.close":"Cerrar","viewer.passport.explain":"Explicar","viewer.passport.explain.show":"Mostrar la explicación de este nodo","viewer.passport.explanation":"Explicación","viewer.passport.explanation.back":"Explicación de {label}. Activar para volver al pasaporte","viewer.passport.explanation.backLink":"Volver al pasaporte","viewer.passport.drilldowns":"Diagramas secundarios","viewer.passport.drilldowns.list":"Abrir un diagrama secundario","viewer.passport.drilldowns.hint":"Ctrl+clic o doble clic abre la primera entrada","viewer.passport.drilldowns.open":"Abrir {label}","viewer.passport.back":"Volver al diagrama principal","viewer.passport.back.aria":"Volver al diagrama principal","viewer.nav.back":"Volver","viewer.nav.back.title":"Volver al diagrama principal"}}</script>
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read"
          data-preset-badge-editorial-plate="ARCHIFY / LÁMINA 04">
-      <svg viewBox="0 0 1075 828" role="img" lang="es" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="classic" data-parent-href="c4-nivel1-contexto.html" data-quality-profile="showcase" data-node-ui="" data-reader-fit="intrinsic-height" data-reader-min-text="7.5" data-reader-primary-text="14">
-        <title id="archify-diagram-title">C4 · Nivel 2 — Contenedores de Movilidad Urbana</title>
+      <svg viewBox="0 0 888 836" role="img" lang="es" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="classic" data-parent-href="c4-nivel2-contenedores.html" data-quality-profile="showcase" data-node-ui="" data-reader-fit="intrinsic-height" data-reader-min-text="7.5" data-reader-primary-text="14">
+        <title id="archify-diagram-title">C4 · Nivel 3 — Componentes de M3 Conductores y vehículos</title>
         <desc id="archify-diagram-description">Un diagrama de arquitectura generado por Archify.</desc>
         <!-- Definitions -->
         <defs>
@@ -6228,420 +6228,245 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
         <!-- Connection paths (before components for correct z-order) -->
         <g data-graph-role="automatic-crossover" style="--step:0">
-          <path data-graph-role="automatic-crossover-underlay" d="M 350 108 L 350 176" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="pasajero" data-edge-to="m2web" data-edge-label="usa" data-edge-key="0" data-edge-id="pas-web" data-composition-points="350,108;350,176" data-composition-crossover="halo" data-composition-independent="true" d="M 350 108 L 350 176" class="a-emphasis" data-animate="edge" style="--step:0" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 444 144 L 444 160 Q 444 168 436 168 L 268 168 Q 260 168 260 160 L 260 120 Q 260 112 252 112 L 236 112" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="clientes" data-edge-to="rutas" data-edge-label="HTTP · estado del conductor" data-edge-key="0" data-edge-id="clientes-rutas" data-composition-points="444,144;444,168;260,168;260,112;236,112" data-composition-crossover="halo" data-composition-independent="true" d="M 444 144 L 444 160 Q 444 168 436 168 L 268 168 Q 260 168 260 160 L 260 120 Q 260 112 252 112 L 236 112" class="a-emphasis" data-animate="edge" style="--step:0" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:1">
-          <path data-graph-role="automatic-crossover-underlay" d="M 350 236 L 350 304" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m2web" data-edge-to="m2" data-edge-label="/api/v1 (HTTP)" data-edge-key="1" data-edge-id="web-m2" data-composition-points="350,236;350,304" data-composition-crossover="halo" data-composition-independent="true" d="M 350 236 L 350 304" class="a-emphasis" data-animate="edge" style="--step:1" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 542 112 L 742 112 Q 750 112 750 120 L 750 236" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="clientes" data-edge-to="vrutas" data-edge-label="vehículo activo" data-edge-key="1" data-edge-id="clientes-vrutas" data-composition-points="542,112;750,112;750,236" data-composition-crossover="halo" data-composition-independent="true" d="M 542 112 L 742 112 Q 750 112 750 120 L 750 236" class="a-default" data-animate="edge" style="--step:1" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:2">
-          <path data-graph-role="automatic-crossover-underlay" d="M 534 108 L 534 176" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="conductor" data-edge-to="m3web" data-edge-label="usa" data-edge-key="2" data-edge-id="con-web" data-composition-points="534,108;534,176" data-composition-crossover="halo" data-composition-independent="true" d="M 534 108 L 534 176" class="a-default" data-animate="edge" style="--step:2" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 138 144 L 138 236" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="rutas" data-edge-to="ctrl" data-edge-key="2" data-edge-id="rutas-ctrl" data-composition-points="138,144;138,236" data-composition-crossover="halo" data-composition-independent="true" d="M 138 144 L 138 236" class="a-default" data-animate="edge" style="--step:2" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:3">
-          <path data-graph-role="automatic-crossover-underlay" d="M 599 236 L 599 310" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m3web" data-edge-to="m3" data-edge-label="HTTP" data-edge-key="3" data-edge-id="web-m3" data-composition-points="599,236;599,310" data-composition-crossover="halo" data-composition-independent="true" d="M 599 236 L 599 310" class="a-default" data-animate="edge" style="--step:3" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 145 300 L 145 392" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="ctrl" data-edge-to="repo" data-edge-key="3" data-edge-id="ctrl-repo" data-composition-points="145,300;145,392" data-composition-crossover="halo" data-composition-independent="true" d="M 145 300 L 145 392" class="a-default" data-animate="edge" style="--step:3" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:4">
-          <path data-graph-role="automatic-crossover-underlay" d="M 343 376 L 343 408 Q 343 416 351 416 L 518 416 Q 526 416 526 424 L 526 646 Q 526 654 534 654 L 559 654 Q 567 654 567 662 L 567 700" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m2" data-edge-to="m1" data-edge-label="valida token" data-edge-key="4" data-edge-id="m2-m1" data-composition-points="343,376;343,416;526,416;526,654;567,654;567,700" data-composition-crossover="halo" data-composition-independent="true" d="M 343 376 L 343 408 Q 343 416 351 416 L 518 416 Q 526 416 526 424 L 526 646 Q 526 654 534 654 L 559 654 Q 567 654 567 662 L 567 700" class="a-security" data-animate="edge" style="--step:4" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 131 300 L 131 381 Q 131 389 123 389 L 45 389 Q 37 389 37 397 L 37 516 Q 37 524 45 524 L 130 524 Q 138 524 138 532 L 138 548" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="ctrl" data-edge-to="gw" data-edge-label="eventos de conductor" data-edge-key="4" data-edge-id="ctrl-gw" data-composition-points="131,300;131,389;37,389;37,524;138,524;138,548" data-composition-crossover="halo" data-composition-independent="true" d="M 131 300 L 131 381 Q 131 389 123 389 L 45 389 Q 37 389 37 397 L 37 516 Q 37 524 45 524 L 130 524 Q 138 524 138 532 L 138 548" class="a-default" data-animate="edge" style="--step:4" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:5">
-          <path data-graph-role="automatic-crossover-underlay" d="M 613 370 L 613 561 Q 613 569 605 569 L 547 569 Q 539 569 539 577 L 539 668 Q 539 676 547 676 L 573 676 Q 581 676 581 684 L 581 700" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m3" data-edge-to="m1" data-edge-label="valida token" data-edge-key="5" data-edge-id="m3-m1" data-composition-points="613,370;613,569;539,569;539,676;581,676;581,700" data-composition-crossover="halo" data-composition-independent="true" d="M 613 370 L 613 561 Q 613 569 605 569 L 547 569 Q 539 569 539 577 L 539 668 Q 539 676 547 676 L 573 676 Q 581 676 581 684 L 581 700" class="a-security" data-animate="edge" style="--step:5" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 236 431 L 346 431" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="repo" data-edge-to="supabase" data-edge-label="SQL" data-edge-key="5" data-edge-id="repo-supabase" data-composition-points="236,431;346,431" data-composition-crossover="halo" data-composition-independent="true" d="M 236 431 L 346 431" class="a-default" data-animate="edge" style="--step:5" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:6">
-          <path data-graph-role="automatic-crossover-underlay" d="M 816 609 L 800 609 Q 792 609 792 617 L 792 722 Q 792 730 784 730 L 674 730" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m4" data-edge-to="m1" data-edge-label="valida token" data-edge-key="6" data-edge-id="m4-m1" data-composition-points="816,609;792,609;792,730;674,730" data-composition-crossover="halo" data-composition-independent="true" d="M 816 609 L 800 609 Q 792 609 792 617 L 792 722 Q 792 730 784 730 L 674 730" class="a-security" data-animate="edge" style="--step:6" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 236 417 L 252 417 Q 260 417 260 409 L 260 276 Q 260 268 268 268 L 346 268" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="repo" data-edge-to="redis" data-edge-label="caché" data-edge-key="6" data-edge-id="repo-redis" data-composition-points="236,417;260,417;260,268;346,268" data-composition-crossover="halo" data-composition-independent="true" d="M 236 417 L 252 417 Q 260 417 260 409 L 260 276 Q 260 268 268 268 L 346 268" class="a-default" data-animate="edge" style="--step:6" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:7">
-          <path data-graph-role="automatic-crossover-underlay" d="M 478 616 L 484 616 Q 490 616 490 622 L 490 700" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m8" data-edge-to="m1" data-edge-label="valida identidad y rol" data-edge-key="7" data-edge-id="m8-m1" data-composition-points="478,616;490,616;490,700" data-composition-crossover="halo" data-composition-independent="true" d="M 478 616 L 484 616 Q 490 616 490 622 L 490 700" class="a-security" data-animate="edge" style="--step:7" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 236 580 L 346 580" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="gw" data-edge-to="rabbit" data-edge-label="publica" data-edge-key="7" data-edge-id="gw-rabbit" data-composition-points="236,580;346,580" data-composition-crossover="halo" data-composition-independent="true" d="M 236 580 L 346 580" class="a-dashed" data-animate="edge" style="--step:7" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:8">
-          <path data-graph-role="automatic-crossover-underlay" d="M 446 340 L 492 340 Q 500 340 500 348 L 500 365 Q 500 373 508 373 L 831 373 Q 839 373 839 381 L 839 540 Q 839 548 847 548 L 895.5 548 Q 903.5 548 903.5 556 L 903.5 572" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m2" data-edge-to="m4" data-edge-label="geocodifica" data-edge-key="8" data-edge-id="m2-m4" data-composition-points="446,340;500,340;500,373;839,373;839,548;903.5,548;903.5,572" data-composition-crossover="halo" data-composition-independent="true" d="M 446 340 L 492 340 Q 500 340 500 348 L 500 365 Q 500 373 508 373 L 831 373 Q 839 373 839 381 L 839 540 Q 839 548 847 548 L 895.5 548 Q 903.5 548 903.5 556 L 903.5 572" class="a-default" data-animate="edge" style="--step:8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 444 612 L 444 704" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="rabbit" data-edge-to="consumer" data-edge-label="viaje.finalizado" data-edge-key="8" data-edge-id="rabbit-consumer" data-composition-points="444,612;444,704" data-composition-crossover="halo" data-composition-independent="true" d="M 444 612 L 444 704" class="a-dashed" data-animate="edge" style="--step:8" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:9">
-          <path data-graph-role="automatic-crossover-underlay" d="M 315 376 L 315 444" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m2" data-edge-to="m6" data-edge-label="viajes del cliente" data-edge-key="9" data-edge-id="m2-m6" data-composition-points="315,376;315,444" data-composition-crossover="halo" data-composition-independent="true" d="M 315 376 L 315 444" class="a-default" data-animate="edge" style="--step:9" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 750 300 L 750 392" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="vrutas" data-edge-to="vsvc" data-edge-key="9" data-edge-id="vrutas-vsvc" data-composition-points="750,300;750,392" data-composition-crossover="halo" data-composition-independent="true" d="M 750 300 L 750 392" class="a-default" data-animate="edge" style="--step:9" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:10">
-          <path data-graph-role="automatic-crossover-underlay" d="M 357 572 L 357 534 Q 357 526 349 526 L 215.60000000000002 526 Q 207.60000000000002 526 207.60000000000002 518 L 207.60000000000002 348 Q 207.60000000000002 340 215.60000000000002 340 L 254 340" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m8" data-edge-to="m2" data-edge-label="preferencias de notificación" data-edge-key="10" data-edge-id="m8-m2" data-composition-points="357,572;357,526;207.60000000000002,526;207.60000000000002,340;254,340" data-composition-crossover="halo" data-composition-independent="true" d="M 357 572 L 357 534 Q 357 526 349 526 L 215.60000000000002 526 Q 207.60000000000002 526 207.60000000000002 518 L 207.60000000000002 348 Q 207.60000000000002 340 215.60000000000002 340 L 254 340" class="a-default" data-animate="edge" style="--step:10" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 652 424 L 542 424" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="vsvc" data-edge-to="supabase" data-edge-label="SQL" data-edge-key="10" data-edge-id="vsvc-supabase" data-composition-points="652,424;542,424" data-composition-crossover="halo" data-composition-independent="true" d="M 652 424 L 542 424" class="a-default" data-animate="edge" style="--step:10" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:11">
-          <path data-graph-role="automatic-crossover-underlay" d="M 935 220 L 995 220 Q 1003 220 1003 228 L 1003 572" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m5" data-edge-to="m4" data-edge-label="ubicaciones" data-edge-key="11" data-edge-id="m5-m4" data-composition-points="935,220;1003,220;1003,572" data-composition-crossover="halo" data-composition-independent="true" d="M 935 220 L 995 220 Q 1003 220 1003 228 L 1003 572" class="a-default" data-animate="edge" style="--step:11" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 652 275 L 542 275" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="vrutas" data-edge-to="redis" data-edge-label="idempotencia" data-edge-key="11" data-edge-id="vrutas-redis" data-composition-points="652,275;542,275" data-composition-crossover="halo" data-composition-independent="true" d="M 652 275 L 542 275" class="a-default" data-animate="edge" style="--step:11" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:12">
-          <path data-graph-role="automatic-crossover-underlay" d="M 759 206 L 743 206 Q 735 206 735 214 L 735 449.5 Q 735 457.5 727 457.5 L 487 457.5 Q 479 457.5 479 465.5 L 479 466 Q 479 474 471 474 L 455 474" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m5" data-edge-to="m6" data-edge-label="viajes" data-edge-key="12" data-edge-id="m5-m6" data-composition-points="759,206;735,206;735,457.5;479,457.5;479,474;455,474" data-composition-crossover="halo" data-composition-independent="true" d="M 759 206 L 743 206 Q 735 206 735 214 L 735 449.5 Q 735 457.5 727 457.5 L 487 457.5 Q 479 457.5 479 465.5 L 479 466 Q 479 474 471 474 L 455 474" class="a-default" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 750 456 L 750 548" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="vsvc" data-edge-to="vev" data-edge-key="12" data-edge-id="vsvc-vev" data-composition-points="750,456;750,548" data-composition-crossover="halo" data-composition-independent="true" d="M 750 456 L 750 548" class="a-default" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:13">
-          <path data-graph-role="automatic-crossover-underlay" d="M 455 488 L 909.5 488 Q 917.5 488 917.5 496 L 917.5 572" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m6" data-edge-to="m4" data-edge-label="ubicación" data-edge-key="13" data-edge-id="m6-m4" data-composition-points="455,488;917.5,488;917.5,572" data-composition-crossover="halo" data-composition-independent="true" d="M 455 488 L 909.5 488 Q 917.5 488 917.5 496 L 917.5 572" class="a-default" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        </g>
-        <g data-graph-role="automatic-crossover" style="--step:14">
-          <path data-graph-role="automatic-crossover-underlay" d="M 245 474 L 138 474 Q 130 474 130 482 L 130 700" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m6" data-edge-to="m7" data-edge-label="tarifa" data-edge-key="14" data-edge-id="m6-m7" data-composition-points="245,474;130,474;130,700" data-composition-crossover="halo" data-composition-independent="true" d="M 245 474 L 138 474 Q 130 474 130 482 L 130 700" class="a-default" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        </g>
-        <g data-graph-role="automatic-crossover" style="--step:15">
-          <path data-graph-role="automatic-crossover-underlay" d="M 343 504 L 343 572" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m6" data-edge-to="m8" data-edge-label="QR / comprobante" data-edge-key="15" data-edge-id="m6-m8" data-composition-points="343,504;343,572" data-composition-crossover="halo" data-composition-independent="true" d="M 343 504 L 343 572" class="a-default" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        </g>
-        <g data-graph-role="automatic-crossover" style="--step:16">
-          <path data-graph-role="automatic-crossover-underlay" d="M 222 616 L 216 616 Q 210 616 210 622 L 210 700" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m8" data-edge-to="m7" data-edge-label="pagos" data-edge-key="16" data-edge-id="m8-m7" data-composition-points="222,616;210,616;210,700" data-composition-crossover="halo" data-composition-independent="true" d="M 222 616 L 216 616 Q 210 616 210 622 L 210 700" class="a-default" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        </g>
-        <g data-graph-role="automatic-crossover" style="--step:17">
-          <path data-graph-role="automatic-crossover-underlay" d="M 775 108 L 775 176" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m9" data-edge-to="m5" data-edge-label="despacho (stub en compose)" data-edge-key="17" data-edge-id="m9-m5" data-composition-points="775,108;775,176" data-composition-crossover="halo" data-composition-independent="true" d="M 775 108 L 775 176" class="a-dashed" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        </g>
-        <g data-graph-role="automatic-crossover" style="--step:18">
-          <path data-graph-role="automatic-crossover-underlay" d="M 658 78 L 642 78 Q 634 78 634 70 L 634 53 Q 634 45 626 45 L 191.14999999999998 45 Q 183.14999999999998 45 183.14999999999998 53 L 183.14999999999998 623.5 Q 183.14999999999998 631.5 175.14999999999998 631.5 L 152 631.5 Q 144 631.5 144 639.5 L 144 700" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m9" data-edge-to="m7" data-edge-label="tarifa (stub en compose)" data-edge-key="18" data-edge-id="m9-m7" data-composition-points="658,78;634,78;634,45;183.14999999999998,45;183.14999999999998,631.5;144,631.5;144,700" data-composition-crossover="halo" data-composition-independent="true" d="M 658 78 L 642 78 Q 634 78 634 70 L 634 53 Q 634 45 626 45 L 191.14999999999998 45 Q 183.14999999999998 45 183.14999999999998 53 L 183.14999999999998 623.5 Q 183.14999999999998 631.5 175.14999999999998 631.5 L 152 631.5 Q 144 631.5 144 639.5 L 144 700" class="a-dashed" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        </g>
-        <g data-graph-role="automatic-crossover" style="--step:19">
-          <path data-graph-role="automatic-crossover-underlay" d="M 917.5 632 L 917.5 700" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m4" data-edge-to="nominatim" data-edge-label="geocodifica (HTTPS)" data-edge-key="19" data-edge-id="m4-nom" data-composition-points="917.5,632;917.5,700" data-composition-crossover="halo" data-composition-independent="true" d="M 917.5 632 L 917.5 700" class="a-default" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        </g>
-        <g data-graph-role="automatic-crossover" style="--step:20">
-          <path data-graph-role="automatic-crossover-underlay" d="M 350 632 L 350 700" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m8" data-edge-to="fiscal" data-edge-label="comprobantes" data-edge-key="20" data-edge-id="m8-fis" data-composition-points="350,632;350,700" data-composition-crossover="halo" data-composition-independent="true" d="M 350 632 L 350 700" class="a-default" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        </g>
-        <g data-graph-role="automatic-crossover" style="--step:21">
-          <path data-graph-role="automatic-crossover-underlay" d="M 357 504 L 357 520 Q 357 528 365 528 L 531 528 Q 539 528 539 536 L 539 540 Q 539 548 547 548 L 632 548 Q 640 548 640 556 L 640 572" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m6" data-edge-to="rabbit" data-edge-label="publica eventos de viaje" data-edge-key="21" data-edge-id="m6-mq" data-composition-points="357,504;357,528;539,528;539,548;640,548;640,572" data-composition-crossover="halo" data-composition-independent="true" d="M 357 504 L 357 520 Q 357 528 365 528 L 531 528 Q 539 528 539 536 L 539 540 Q 539 548 547 548 L 632 548 Q 640 548 640 556 L 640 572" class="a-dashed" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        </g>
-        <g data-graph-role="automatic-crossover" style="--step:22">
-          <path data-graph-role="automatic-crossover-underlay" d="M 654 572 L 654 556 Q 654 548 662 548 L 690 548 Q 698 548 698 540 L 698 408 Q 698 400 690 400 L 379 400 Q 371 400 371 392 L 371 376" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="rabbit" data-edge-to="m2" data-edge-label="trip.completed" data-edge-key="22" data-edge-id="mq-m2" data-composition-points="654,572;654,548;698,548;698,400;371,400;371,376" data-composition-crossover="halo" data-composition-independent="true" d="M 654 572 L 654 556 Q 654 548 662 548 L 690 548 Q 698 548 698 540 L 698 408 Q 698 400 690 400 L 379 400 Q 371 400 371 392 L 371 376" class="a-dashed" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        </g>
-        <g data-graph-role="automatic-crossover" style="--step:23">
-          <path data-graph-role="automatic-crossover-underlay" d="M 647 632 L 647 648 Q 647 656 639 656 L 510 656 Q 502 656 502 648 L 502 603 Q 502 595 494 595 L 478 595" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="rabbit" data-edge-to="m8" data-edge-label="trip.completed" data-edge-key="23" data-edge-id="mq-m8" data-composition-points="647,632;647,656;502,656;502,595;478,595" data-composition-crossover="halo" data-composition-independent="true" d="M 647 632 L 647 648 Q 647 656 639 656 L 510 656 Q 502 656 502 648 L 502 603 Q 502 595 494 595 L 478 595" class="a-dashed" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        </g>
-        <g data-graph-role="automatic-crossover" style="--step:24">
-          <path data-graph-role="automatic-crossover-underlay" d="M 668 572 L 668 479 Q 668 471 660 471 L 635 471 Q 627 471 627 463 L 627 370" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="rabbit" data-edge-to="m3" data-edge-label="viaje.finalizado" data-edge-key="24" data-edge-id="mq-m3" data-composition-points="668,572;668,471;627,471;627,370" data-composition-crossover="halo" data-composition-independent="true" d="M 668 572 L 668 479 Q 668 471 660 471 L 635 471 Q 627 471 627 463 L 627 370" class="a-dashed" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        </g>
-        <g data-graph-role="automatic-crossover" style="--step:25">
-          <path data-graph-role="automatic-crossover-underlay" d="M 752 595 L 816 595" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="rabbit" data-edge-to="m4" data-edge-label="trip.events" data-edge-key="25" data-edge-id="mq-m4" data-composition-points="752,595;816,595" data-composition-crossover="halo" data-composition-independent="true" d="M 752 595 L 816 595" class="a-dashed" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        </g>
-        <g data-graph-role="automatic-crossover" style="--step:26">
-          <path data-graph-role="automatic-crossover-underlay" d="M 357 376 L 357 433 Q 357 441 365 441 L 510 441 Q 518 441 518 449 L 518 601 Q 518 609 526 609 L 542 609" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="m2" data-edge-to="rabbit" data-edge-label="FavoriteAddressChanged.v1" data-edge-key="26" data-edge-id="m2-mq" data-composition-points="357,376;357,441;518,441;518,609;542,609" data-composition-crossover="halo" data-composition-independent="true" d="M 357 376 L 357 433 Q 357 441 365 441 L 510 441 Q 518 441 518 449 L 518 601 Q 518 609 526 609 L 542 609" class="a-dashed" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 652 580 L 542 580" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="vev" data-edge-to="rabbit" data-edge-label="documento registrado" data-edge-key="13" data-edge-id="vev-rabbit" data-composition-points="652,580;542,580" data-composition-crossover="halo" data-composition-independent="true" d="M 652 580 L 542 580" class="a-dashed" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
         </g>
 
         <!-- Components -->
-        <g id="node-pasajero" data-node-id="pasajero" data-node-label="Pasajero" tabindex="0" role="button" aria-label="Enfocar Pasajero, Navegador, Componente de arquitectura" aria-pressed="false" data-node-kind="external" data-node-sublabel="Navegador" data-node-context="Componente de arquitectura">
-          <title>Pasajero · Navegador · Componente de arquitectura</title>
-          <rect x="290" y="48" width="120" height="60" rx="8" class="c-mask"/>
-          <rect x="290" y="48" width="120" height="60" rx="8" class="c-external" data-animate="node" style="--step:0" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(296 54) scale(0.6875)">
+        <g id="node-clientes" data-node-id="clientes" data-node-label="Web del conductor y módulos" tabindex="0" role="button" aria-label="Enfocar Web del conductor y módulos, M3 Web · M4, M6, M8, Componente de arquitectura" aria-pressed="false" data-node-kind="external" data-node-sublabel="M3 Web · M4, M6, M8" data-node-context="Componente de arquitectura">
+          <title>Web del conductor y módulos · M3 Web · M4, M6, M8 · Componente de arquitectura</title>
+          <rect x="346" y="80" width="196" height="64" rx="8" class="c-mask"/>
+          <rect x="346" y="80" width="196" height="64" rx="8" class="c-external" data-animate="node" style="--step:0" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(352 86) scale(0.6875)">
             <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
             <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="350" y="76" class="t-primary" font-size="14" font-weight="600" text-anchor="middle">Pasajero</text>
-        <text data-detail="context" x="350" y="92" class="t-muted" font-size="10.5" text-anchor="middle">Navegador</text>
+          <text data-node-label="" data-detail-anchor="" x="444" y="110" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Web del conductor y módulos</text>
+        <text data-detail="context" x="444" y="126" class="t-muted" font-size="10.5" text-anchor="middle">M3 Web · M4, M6, M8</text>
         </g>
 
-        <g id="node-conductor" data-node-id="conductor" data-node-label="Conductor" tabindex="0" role="button" aria-label="Enfocar Conductor, Navegador, Componente de arquitectura" aria-pressed="false" data-node-kind="external" data-node-sublabel="Navegador" data-node-context="Componente de arquitectura">
-          <title>Conductor · Navegador · Componente de arquitectura</title>
-          <rect x="474" y="48" width="120" height="60" rx="8" class="c-mask"/>
-          <rect x="474" y="48" width="120" height="60" rx="8" class="c-external" data-animate="node" style="--step:2" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(480 54) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="534" y="76" class="t-primary" font-size="13.3" font-weight="600" text-anchor="middle">Conductor</text>
-        <text data-detail="context" x="534" y="92" class="t-muted" font-size="10.5" text-anchor="middle">Navegador</text>
-        </g>
-
-        <g id="node-m2web" data-node-id="m2web" data-node-label="M2 Web del cliente" tabindex="0" role="button" aria-label="Enfocar M2 Web del cliente, React + nginx · :11001, Componente de arquitectura" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="React + nginx · :11001" data-node-context="Componente de arquitectura">
-          <title>M2 Web del cliente · React + nginx · :11001 · Componente de arquitectura</title>
-          <rect x="261" y="176" width="178" height="60" rx="8" class="c-mask"/>
-          <rect x="261" y="176" width="178" height="60" rx="8" class="c-frontend" data-animate="node" style="--step:1" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(267 182) scale(0.6875)">
-            <rect x="2" y="3" width="12" height="10" rx="2"/>
-            <path d="M2 6.5h12"/>
-            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
-            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="350" y="204" class="t-primary" font-size="12" font-weight="600" text-anchor="middle">M2 Web del cliente</text>
-        <text data-detail="context" x="350" y="220" class="t-muted" font-size="10.5" text-anchor="middle">React + nginx · :11001</text>
-        </g>
-
-        <g id="node-m3web" data-node-id="m3web" data-node-label="M3 Web del conductor" tabindex="0" role="button" aria-label="Enfocar M3 Web del conductor, nginx · :4000, Componente de arquitectura" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="nginx · :4000" data-node-context="Componente de arquitectura">
-          <title>M3 Web del conductor · nginx · :4000 · Componente de arquitectura</title>
-          <rect x="503" y="176" width="192" height="60" rx="8" class="c-mask"/>
-          <rect x="503" y="176" width="192" height="60" rx="8" class="c-frontend" data-animate="node" style="--step:3" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(509 182) scale(0.6875)">
-            <rect x="2" y="3" width="12" height="10" rx="2"/>
-            <path d="M2 6.5h12"/>
-            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
-            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="599" y="204" class="t-primary" font-size="12" font-weight="600" text-anchor="middle">M3 Web del conductor</text>
-        <text data-detail="context" x="599" y="220" class="t-muted" font-size="10.5" text-anchor="middle">nginx · :4000</text>
-        </g>
-
-        <g id="node-m1" data-node-id="m1" data-node-label="M1 Identidad y acceso" tabindex="0" role="button" aria-label="Enfocar M1 Identidad y acceso, Node · :10000, Componente de arquitectura" aria-pressed="false" data-node-kind="security" data-node-sublabel="Node · :10000" data-node-context="Componente de arquitectura">
-          <title>M1 Identidad y acceso · Node · :10000 · Componente de arquitectura</title>
-          <rect x="474" y="700" width="200" height="60" rx="8" class="c-mask"/>
-          <rect x="474" y="700" width="200" height="60" rx="8" class="c-security" data-animate="node" style="--step:5" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(480 706) scale(0.6875)">
-            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
-            <path d="m5.8 8 1.5 1.5 3-3"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="574" y="728" class="t-primary" font-size="12" font-weight="600" text-anchor="middle">M1 Identidad y acceso</text>
-        <text data-detail="context" x="574" y="744" class="t-muted" font-size="10.5" text-anchor="middle">Node · :10000</text>
-        </g>
-
-<a class="archify-drilldown-link" data-archify-drilldown="1" href="c4-nivel3-componentes-m2.html" aria-label="M2 Clientes">
-                <g id="node-m2" data-node-id="m2" data-node-label="M2 Clientes" tabindex="0" role="button" aria-label="Enfocar M2 Clientes, API (2 réplicas) + worker · :11000, Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel="API (2 réplicas) + worker · :11000" data-node-tag="nuestro módulo" data-node-context="Componente de arquitectura" data-node-drilldowns="[{&quot;href&quot;:&quot;c4-nivel3-componentes-m2.html&quot;,&quot;label&quot;:&quot;M2 Clientes&quot;}]" data-emphasis="">
-          <title>M2 Clientes · API (2 réplicas) + worker · :11000 · Componente de arquitectura · nuestro módulo</title>
-          <rect x="254" y="304" width="192" height="72" rx="8" class="c-mask"/>
-          <rect x="254" y="304" width="192" height="72" rx="8" class="c-backend" data-animate="node" style="--step:2" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(260 310) scale(0.6875)">
+        <g id="node-rutas" data-node-id="rutas" data-node-label="Rutas de conductor" tabindex="0" role="button" aria-label="Enfocar Rutas de conductor, conductor · valoraciones · valida en M1, Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel="conductor · valoraciones · valida en M1" data-node-context="Componente de arquitectura">
+          <title>Rutas de conductor · conductor · valoraciones · valida en M1 · Componente de arquitectura</title>
+          <rect x="40" y="80" width="196" height="64" rx="8" class="c-mask"/>
+          <rect x="40" y="80" width="196" height="64" rx="8" class="c-backend" data-animate="node" style="--step:1" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(46 86) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="350" y="338" class="t-primary" font-size="14" font-weight="600" text-anchor="middle">M2 Clientes</text>
-        <text data-detail="context" x="350" y="354" class="t-muted" font-size="9" text-anchor="middle">API (2 réplicas) + worker · :11000</text>
-        <text data-detail="fine" x="350" y="368" class="t-backend" font-size="7" text-anchor="middle">nuestro módulo</text>
-          <g class="archify-drilldown-mark" data-detail="fine" transform="translate(435 365)" aria-hidden="true">
-          <circle r="6" class="archify-drilldown-mark-disc"/>
-          <path d="M-1.8 -1.6 L2.4 0 L-1.8 1.6" fill="none" class="archify-drilldown-mark-arrow"/>
+          <text data-node-label="" data-detail-anchor="" x="138" y="110" class="t-primary" font-size="13.7" font-weight="600" text-anchor="middle">Rutas de conductor</text>
+        <text data-detail="context" x="138" y="126" class="t-muted" font-size="8" text-anchor="middle">conductor · valoraciones · valida en M1</text>
         </g>
-        </g>
-        </a>
 
-        <g id="node-m3" data-node-id="m3" data-node-label="M3 Conductores y vehículos" tabindex="0" role="button" aria-label="Enfocar M3 Conductores y vehículos, conductor-api + vehículos, Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel="conductor-api + vehículos" data-node-context="Componente de arquitectura">
-          <title>M3 Conductores y vehículos · conductor-api + vehículos · Componente de arquitectura</title>
-          <rect x="510" y="310" width="220" height="60" rx="8" class="c-mask"/>
-          <rect x="510" y="310" width="220" height="60" rx="8" class="c-backend" data-animate="node" style="--step:4" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(516 316) scale(0.6875)">
+        <g id="node-ctrl" data-node-id="ctrl" data-node-label="Controllers" tabindex="0" role="button" aria-label="Enfocar Controllers, conductores · valoraciones · notificaciones, Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel="conductores · valoraciones · notificaciones" data-node-context="Componente de arquitectura">
+          <title>Controllers · conductores · valoraciones · notificaciones · Componente de arquitectura</title>
+          <rect x="40" y="236" width="196" height="64" rx="8" class="c-mask"/>
+          <rect x="40" y="236" width="196" height="64" rx="8" class="c-backend" data-animate="node" style="--step:3" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(46 242) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="620" y="338" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">M3 Conductores y vehículos</text>
-        <text data-detail="context" x="620" y="354" class="t-muted" font-size="9" text-anchor="middle">conductor-api + vehículos</text>
+          <text data-node-label="" data-detail-anchor="" x="138" y="266" class="t-primary" font-size="14" font-weight="600" text-anchor="middle">Controllers</text>
+        <text data-detail="context" x="138" y="282" class="t-muted" font-size="7.2" text-anchor="middle">conductores · valoraciones · notificaciones</text>
         </g>
 
-        <g id="node-m4" data-node-id="m4" data-node-label="M4 Ubicación" tabindex="0" role="button" aria-label="Enfocar M4 Ubicación, geocodificación y posiciones · :3004, Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel="geocodificación y posiciones · :3004" data-node-context="Componente de arquitectura">
-          <title>M4 Ubicación · geocodificación y posiciones · :3004 · Componente de arquitectura</title>
-          <rect x="816" y="572" width="203" height="60" rx="8" class="c-mask"/>
-          <rect x="816" y="572" width="203" height="60" rx="8" class="c-backend" data-animate="node" style="--step:6" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(822 578) scale(0.6875)">
+        <g id="node-repo" data-node-id="repo" data-node-label="Repositorios" tabindex="0" role="button" aria-label="Enfocar Repositorios, conductores (Supabase) · caché (Redis), Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel="conductores (Supabase) · caché (Redis)" data-node-context="Componente de arquitectura">
+          <title>Repositorios · conductores (Supabase) · caché (Redis) · Componente de arquitectura</title>
+          <rect x="40" y="392" width="196" height="64" rx="8" class="c-mask"/>
+          <rect x="40" y="392" width="196" height="64" rx="8" class="c-backend" data-animate="node" style="--step:4" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(46 398) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="917.5" y="600" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">M4 Ubicación</text>
-        <text data-detail="context" x="917.5" y="616" class="t-muted" font-size="9" text-anchor="middle">geocodificación y posiciones · :3004</text>
+          <text data-node-label="" data-detail-anchor="" x="138" y="422" class="t-primary" font-size="14" font-weight="600" text-anchor="middle">Repositorios</text>
+        <text data-detail="context" x="138" y="438" class="t-muted" font-size="8.2" text-anchor="middle">conductores (Supabase) · caché (Redis)</text>
         </g>
 
-        <g id="node-m5" data-node-id="m5" data-node-label="M5 Despacho" tabindex="0" role="button" aria-label="Enfocar M5 Despacho, asignación de conductor · :3005, Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel="asignación de conductor · :3005" data-node-context="Componente de arquitectura">
-          <title>M5 Despacho · asignación de conductor · :3005 · Componente de arquitectura</title>
-          <rect x="759" y="176" width="176" height="60" rx="8" class="c-mask"/>
-          <rect x="759" y="176" width="176" height="60" rx="8" class="c-backend" data-animate="node" style="--step:11" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(765 182) scale(0.6875)">
+        <g id="node-gw" data-node-id="gw" data-node-label="Messaging gateway" tabindex="0" role="button" aria-label="Enfocar Messaging gateway, circuit breaker · respaldo en Kafka, Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel="circuit breaker · respaldo en Kafka" data-node-context="Componente de arquitectura">
+          <title>Messaging gateway · circuit breaker · respaldo en Kafka · Componente de arquitectura</title>
+          <rect x="40" y="548" width="196" height="64" rx="8" class="c-mask"/>
+          <rect x="40" y="548" width="196" height="64" rx="8" class="c-backend" data-animate="node" style="--step:5" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(46 554) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="847" y="204" class="t-primary" font-size="14" font-weight="600" text-anchor="middle">M5 Despacho</text>
-        <text data-detail="context" x="847" y="220" class="t-muted" font-size="9" text-anchor="middle">asignación de conductor · :3005</text>
+          <text data-node-label="" data-detail-anchor="" x="138" y="578" class="t-primary" font-size="14" font-weight="600" text-anchor="middle">Messaging gateway</text>
+        <text data-detail="context" x="138" y="594" class="t-muted" font-size="8.9" text-anchor="middle">circuit breaker · respaldo en Kafka</text>
         </g>
 
-        <g id="node-m6" data-node-id="m6" data-node-label="M6 Viajes" tabindex="0" role="button" aria-label="Enfocar M6 Viajes, ciclo de vida del viaje · :15000, Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel="ciclo de vida del viaje · :15000" data-node-context="Componente de arquitectura">
-          <title>M6 Viajes · ciclo de vida del viaje · :15000 · Componente de arquitectura</title>
-          <rect x="245" y="444" width="210" height="60" rx="8" class="c-mask"/>
-          <rect x="245" y="444" width="210" height="60" rx="8" class="c-backend" data-animate="node" style="--step:10" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(251 450) scale(0.6875)">
+        <g id="node-consumer" data-node-id="consumer" data-node-label="m3-conductor-consumer" tabindex="0" role="button" aria-label="Enfocar m3-conductor-consumer, eventos de conductor y viaje.finalizado, Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel="eventos de conductor y viaje.finalizado" data-node-context="Componente de arquitectura">
+          <title>m3-conductor-consumer · eventos de conductor y viaje.finalizado · Componente de arquitectura</title>
+          <rect x="346" y="704" width="196" height="64" rx="8" class="c-mask"/>
+          <rect x="346" y="704" width="196" height="64" rx="8" class="c-backend" data-animate="node" style="--step:9" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(352 710) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="350" y="472" class="t-primary" font-size="14" font-weight="600" text-anchor="middle">M6 Viajes</text>
-        <text data-detail="context" x="350" y="488" class="t-muted" font-size="10.5" text-anchor="middle">ciclo de vida del viaje · :15000</text>
+          <text data-node-label="" data-detail-anchor="" x="444" y="734" class="t-primary" font-size="11.7" font-weight="600" text-anchor="middle">m3-conductor-consumer</text>
+        <text data-detail="context" x="444" y="750" class="t-muted" font-size="8" text-anchor="middle">eventos de conductor y viaje.finalizado</text>
         </g>
 
-        <g id="node-m7" data-node-id="m7" data-node-label="M7 Tarifas y pagos" tabindex="0" role="button" aria-label="Enfocar M7 Tarifas y pagos, :17000, Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel=":17000" data-node-context="Componente de arquitectura">
-          <title>M7 Tarifas y pagos · :17000 · Componente de arquitectura</title>
-          <rect x="48" y="700" width="178" height="60" rx="8" class="c-mask"/>
-          <rect x="48" y="700" width="178" height="60" rx="8" class="c-backend" data-animate="node" style="--step:12" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(54 706) scale(0.6875)">
+        <g id="node-vrutas" data-node-id="vrutas" data-node-label="Rutas de vehículos" tabindex="0" role="button" aria-label="Enfocar Rutas de vehículos, /vehiculos · /documentos · idempotencia, Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel="/vehiculos · /documentos · idempotencia" data-node-context="Componente de arquitectura">
+          <title>Rutas de vehículos · /vehiculos · /documentos · idempotencia · Componente de arquitectura</title>
+          <rect x="652" y="236" width="196" height="64" rx="8" class="c-mask"/>
+          <rect x="652" y="236" width="196" height="64" rx="8" class="c-backend" data-animate="node" style="--step:2" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(658 242) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="137" y="728" class="t-primary" font-size="12" font-weight="600" text-anchor="middle">M7 Tarifas y pagos</text>
-        <text data-detail="context" x="137" y="744" class="t-muted" font-size="10.5" text-anchor="middle">:17000</text>
+          <text data-node-label="" data-detail-anchor="" x="750" y="266" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Rutas de vehículos</text>
+        <text data-detail="context" x="750" y="282" class="t-muted" font-size="8" text-anchor="middle">/vehiculos · /documentos · idempotencia</text>
         </g>
 
-        <g id="node-m8" data-node-id="m8" data-node-label="M8 Notificaciones y comprobantes" tabindex="0" role="button" aria-label="Enfocar M8 Notificaciones y comprobantes, :18000, Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel=":18000" data-node-context="Componente de arquitectura">
-          <title>M8 Notificaciones y comprobantes · :18000 · Componente de arquitectura</title>
-          <rect x="222" y="572" width="256" height="60" rx="8" class="c-mask"/>
-          <rect x="222" y="572" width="256" height="60" rx="8" class="c-backend" data-animate="node" style="--step:7" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(228 578) scale(0.6875)">
+        <g id="node-vsvc" data-node-id="vsvc" data-node-label="Servicios de vehículos" tabindex="0" role="button" aria-label="Enfocar Servicios de vehículos, vehículos y documentación, Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel="vehículos y documentación" data-node-context="Componente de arquitectura">
+          <title>Servicios de vehículos · vehículos y documentación · Componente de arquitectura</title>
+          <rect x="652" y="392" width="196" height="64" rx="8" class="c-mask"/>
+          <rect x="652" y="392" width="196" height="64" rx="8" class="c-backend" data-animate="node" style="--step:10" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(658 398) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="350" y="600" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">M8 Notificaciones y comprobantes</text>
-        <text data-detail="context" x="350" y="616" class="t-muted" font-size="10.5" text-anchor="middle">:18000</text>
+          <text data-node-label="" data-detail-anchor="" x="750" y="422" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Servicios de vehículos</text>
+        <text data-detail="context" x="750" y="438" class="t-muted" font-size="9" text-anchor="middle">vehículos y documentación</text>
         </g>
 
-        <g id="node-m9" data-node-id="m9" data-node-label="M9 Reservas programadas" tabindex="0" role="button" aria-label="Enfocar M9 Reservas programadas, API + scheduler, Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel="API + scheduler" data-node-context="Componente de arquitectura">
-          <title>M9 Reservas programadas · API + scheduler · Componente de arquitectura</title>
-          <rect x="658" y="48" width="214" height="60" rx="8" class="c-mask"/>
-          <rect x="658" y="48" width="214" height="60" rx="8" class="c-backend" data-animate="node" style="--step:12" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(664 54) scale(0.6875)">
+        <g id="node-vev" data-node-id="vev" data-node-label="Eventos de vehículos" tabindex="0" role="button" aria-label="Enfocar Eventos de vehículos, publica y valida documentos, Componente de arquitectura" aria-pressed="false" data-node-kind="backend" data-node-sublabel="publica y valida documentos" data-node-context="Componente de arquitectura">
+          <title>Eventos de vehículos · publica y valida documentos · Componente de arquitectura</title>
+          <rect x="652" y="548" width="196" height="64" rx="8" class="c-mask"/>
+          <rect x="652" y="548" width="196" height="64" rx="8" class="c-backend" data-animate="node" style="--step:12" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(658 554) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="765" y="76" class="t-primary" font-size="12" font-weight="600" text-anchor="middle">M9 Reservas programadas</text>
-        <text data-detail="context" x="765" y="92" class="t-muted" font-size="10.5" text-anchor="middle">API + scheduler</text>
+          <text data-node-label="" data-detail-anchor="" x="750" y="578" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Eventos de vehículos</text>
+        <text data-detail="context" x="750" y="594" class="t-muted" font-size="10.5" text-anchor="middle">publica y valida documentos</text>
         </g>
 
-        <g id="node-rabbit" data-node-id="rabbit" data-node-label="RabbitMQ" tabindex="0" role="button" aria-label="Enfocar RabbitMQ, broker compartido (lo define M9), Componente de arquitectura" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="broker compartido (lo define M9)" data-node-context="Componente de arquitectura">
-          <title>RabbitMQ · broker compartido (lo define M9) · Componente de arquitectura</title>
-          <rect x="542" y="572" width="210" height="60" rx="8" class="c-mask"/>
-          <rect x="542" y="572" width="210" height="60" rx="8" class="c-messagebus" data-animate="node" style="--step:12" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(548 578) scale(0.6875)">
+        <g id="node-supabase" data-node-id="supabase" data-node-label="Supabase" tabindex="0" role="button" aria-label="Enfocar Supabase, conductores y vehículos, Componente de arquitectura" aria-pressed="false" data-node-kind="database" data-node-sublabel="conductores y vehículos" data-node-context="Componente de arquitectura">
+          <title>Supabase · conductores y vehículos · Componente de arquitectura</title>
+          <rect x="346" y="392" width="196" height="64" rx="8" class="c-mask"/>
+          <rect x="346" y="392" width="196" height="64" rx="8" class="c-database" data-animate="node" style="--step:6" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(352 398) scale(0.6875)">
+            <ellipse cx="8" cy="4" rx="5" ry="2"/>
+            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="444" y="422" class="t-primary" font-size="14" font-weight="600" text-anchor="middle">Supabase</text>
+        <text data-detail="context" x="444" y="438" class="t-muted" font-size="9" text-anchor="middle">conductores y vehículos</text>
+        </g>
+
+        <g id="node-redis" data-node-id="redis" data-node-label="Redis" tabindex="0" role="button" aria-label="Enfocar Redis, caché e idempotencia, Componente de arquitectura" aria-pressed="false" data-node-kind="database" data-node-sublabel="caché e idempotencia" data-node-context="Componente de arquitectura">
+          <title>Redis · caché e idempotencia · Componente de arquitectura</title>
+          <rect x="346" y="236" width="196" height="64" rx="8" class="c-mask"/>
+          <rect x="346" y="236" width="196" height="64" rx="8" class="c-database" data-animate="node" style="--step:7" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(352 242) scale(0.6875)">
+            <ellipse cx="8" cy="4" rx="5" ry="2"/>
+            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="444" y="266" class="t-primary" font-size="14" font-weight="600" text-anchor="middle">Redis</text>
+        <text data-detail="context" x="444" y="282" class="t-muted" font-size="9" text-anchor="middle">caché e idempotencia</text>
+        </g>
+
+        <g id="node-rabbit" data-node-id="rabbit" data-node-label="RabbitMQ" tabindex="0" role="button" aria-label="Enfocar RabbitMQ, m3.conductores.events · m3.eventos · viajes.events, Componente de arquitectura" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="m3.conductores.events · m3.eventos · viajes.events" data-node-context="Componente de arquitectura">
+          <title>RabbitMQ · m3.conductores.events · m3.eventos · viajes.events · Componente de arquitectura</title>
+          <rect x="346" y="548" width="196" height="64" rx="8" class="c-mask"/>
+          <rect x="346" y="548" width="196" height="64" rx="8" class="c-messagebus" data-animate="node" style="--step:8" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(352 554) scale(0.6875)">
             <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
             <circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
             <circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
             <circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="647" y="600" class="t-primary" font-size="14" font-weight="600" text-anchor="middle">RabbitMQ</text>
-        <text data-detail="context" x="647" y="616" class="t-muted" font-size="10.5" text-anchor="middle">broker compartido (lo define M9)</text>
-        </g>
-
-        <g id="node-nominatim" data-node-id="nominatim" data-node-label="Nominatim" tabindex="0" role="button" aria-label="Enfocar Nominatim, OpenStreetMap, Componente de arquitectura" aria-pressed="false" data-node-kind="external" data-node-sublabel="OpenStreetMap" data-node-context="Componente de arquitectura">
-          <title>Nominatim · OpenStreetMap · Componente de arquitectura</title>
-          <rect x="857.5" y="700" width="120" height="60" rx="8" class="c-mask"/>
-          <rect x="857.5" y="700" width="120" height="60" rx="8" class="c-external" data-animate="node" style="--step:12" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(863.5 706) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="917.5" y="728" class="t-primary" font-size="13.3" font-weight="600" text-anchor="middle">Nominatim</text>
-        <text data-detail="context" x="917.5" y="744" class="t-muted" font-size="10.5" text-anchor="middle">OpenStreetMap</text>
-        </g>
-
-        <g id="node-fiscal" data-node-id="fiscal" data-node-label="API fiscal" tabindex="0" role="button" aria-label="Enfocar API fiscal, sandbox, Componente de arquitectura" aria-pressed="false" data-node-kind="external" data-node-sublabel="sandbox" data-node-context="Componente de arquitectura">
-          <title>API fiscal · sandbox · Componente de arquitectura</title>
-          <rect x="290" y="700" width="120" height="60" rx="8" class="c-mask"/>
-          <rect x="290" y="700" width="120" height="60" rx="8" class="c-external" data-animate="node" style="--step:12" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(296 706) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="350" y="728" class="t-primary" font-size="12" font-weight="600" text-anchor="middle">API fiscal</text>
-        <text data-detail="context" x="350" y="744" class="t-muted" font-size="10.5" text-anchor="middle">sandbox</text>
+          <text data-node-label="" data-detail-anchor="" x="444" y="578" class="t-primary" font-size="14" font-weight="600" text-anchor="middle">RabbitMQ</text>
+        <text data-detail="context" x="444" y="594" class="t-muted" font-size="6.2" text-anchor="middle">m3.conductores.events · m3.eventos · viajes.events</text>
         </g>
 
         <!-- Connection labels -->
-        <g data-detail="context" data-edge-from="pasajero" data-edge-to="m2web" data-edge-label="usa" data-edge-key="0" data-edge-id="pas-web">
-          <rect x="314" y="135" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="329" y="145" class="t-edge-emphasis" font-size="10" font-weight="500" text-anchor="middle">usa</text>
+        <g data-detail="context" data-edge-from="clientes" data-edge-to="rutas" data-edge-label="HTTP · estado del conductor" data-edge-key="0" data-edge-id="clientes-rutas">
+          <rect x="282.2" y="148" width="139.6" height="14" rx="3" class="c-mask"/>
+          <text x="352" y="158" class="t-edge-emphasis" font-size="10" font-weight="500" textLength="135.6" lengthAdjust="spacingAndGlyphs" text-anchor="middle">HTTP · estado del conductor</text>
         </g>
-        <g data-detail="context" data-edge-from="m2web" data-edge-to="m2" data-edge-label="/api/v1 (HTTP)" data-edge-key="1" data-edge-id="web-m2">
-          <rect x="266.79999999999995" y="263" width="77.2" height="14" rx="3" class="c-mask"/>
-          <text x="305.4" y="273" class="t-edge-emphasis" font-size="10" font-weight="500" textLength="73.2" lengthAdjust="spacingAndGlyphs" text-anchor="middle">/api/v1 (HTTP)</text>
+        <g data-detail="context" data-edge-from="clientes" data-edge-to="vrutas" data-edge-label="vehículo activo" data-edge-key="1" data-edge-id="clientes-vrutas">
+          <rect x="709" y="154" width="82" height="14" rx="3" class="c-mask"/>
+          <text x="750" y="164" class="t-edge-default" font-size="8" text-anchor="middle">vehículo activo</text>
         </g>
-        <g data-detail="context" data-edge-from="conductor" data-edge-to="m3web" data-edge-label="usa" data-edge-key="2" data-edge-id="con-web">
-          <rect x="498" y="135" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="513" y="145" class="t-edge-default" font-size="10" font-weight="500" text-anchor="middle">usa</text>
+
+
+        <g data-detail="context" data-edge-from="ctrl" data-edge-to="gw" data-edge-label="eventos de conductor" data-edge-key="4" data-edge-id="ctrl-gw">
+          <rect x="31" y="369" width="106" height="14" rx="3" class="c-mask"/>
+          <text x="84" y="379" class="t-edge-default" font-size="10" font-weight="500" textLength="102" lengthAdjust="spacingAndGlyphs" text-anchor="middle">eventos de conductor</text>
         </g>
-        <g data-detail="context" data-edge-from="m3web" data-edge-to="m3" data-edge-label="HTTP" data-edge-key="3" data-edge-id="web-m3">
-          <rect x="563" y="266" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="578" y="276" class="t-edge-default" font-size="10" font-weight="500" text-anchor="middle">HTTP</text>
+        <g data-detail="context" data-edge-from="repo" data-edge-to="supabase" data-edge-label="SQL" data-edge-key="5" data-edge-id="repo-supabase">
+          <rect x="276" y="411" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="291" y="421" class="t-edge-default" font-size="10" font-weight="500" text-anchor="middle">SQL</text>
         </g>
-        <g data-detail="context" data-edge-from="m2" data-edge-to="m1" data-edge-label="valida token" data-edge-key="4" data-edge-id="m2-m1">
-          <rect x="528" y="498.25" width="67.6" height="14" rx="3" class="c-mask"/>
-          <text x="561.8" y="508.25" class="t-edge-security" font-size="10" font-weight="500" textLength="63.599999999999994" lengthAdjust="spacingAndGlyphs" text-anchor="middle">valida token</text>
+        <g data-detail="context" data-edge-from="repo" data-edge-to="redis" data-edge-label="caché" data-edge-key="6" data-edge-id="repo-redis">
+          <rect x="243" y="322.5" width="34" height="14" rx="3" class="c-mask"/>
+          <text x="260" y="332.5" class="t-edge-default" font-size="8" text-anchor="middle">caché</text>
         </g>
-        <g data-detail="context" data-edge-from="m3" data-edge-to="m1" data-edge-label="valida token" data-edge-key="5" data-edge-id="m3-m1">
-          <rect x="539.4000000000001" y="412.75" width="67.6" height="14" rx="3" class="c-mask"/>
-          <text x="573.2" y="422.75" class="t-edge-security" font-size="10" font-weight="500" textLength="63.599999999999994" lengthAdjust="spacingAndGlyphs" text-anchor="middle">valida token</text>
+        <g data-detail="context" data-edge-from="gw" data-edge-to="rabbit" data-edge-label="publica" data-edge-key="7" data-edge-id="gw-rabbit">
+          <rect x="269.2" y="560" width="43.6" height="14" rx="3" class="c-mask"/>
+          <text x="291" y="570" class="t-edge-dashed" font-size="10" font-weight="500" textLength="39.6" lengthAdjust="spacingAndGlyphs" text-anchor="middle">publica</text>
         </g>
-        <g data-detail="context" data-edge-from="m4" data-edge-to="m1" data-edge-label="valida token" data-edge-key="6" data-edge-id="m4-m1">
-          <rect x="758.2" y="649.5" width="67.6" height="14" rx="3" class="c-mask"/>
-          <text x="792" y="659.5" class="t-edge-security" font-size="10" font-weight="500" textLength="63.599999999999994" lengthAdjust="spacingAndGlyphs" text-anchor="middle">valida token</text>
+        <g data-detail="context" data-edge-from="rabbit" data-edge-to="consumer" data-edge-label="viaje.finalizado" data-edge-key="8" data-edge-id="rabbit-consumer">
+          <rect x="351.20000000000005" y="651" width="86.8" height="14" rx="3" class="c-mask"/>
+          <text x="394.6" y="661" class="t-edge-dashed" font-size="10" font-weight="500" textLength="82.8" lengthAdjust="spacingAndGlyphs" text-anchor="middle">viaje.finalizado</text>
         </g>
-        <g data-detail="context" data-edge-from="m8" data-edge-to="m1" data-edge-label="valida identidad y rol" data-edge-key="7" data-edge-id="m8-m1">
-          <rect x="368.4" y="651" width="115.6" height="14" rx="3" class="c-mask"/>
-          <text x="426.2" y="661" class="t-edge-security" font-size="10" font-weight="500" textLength="111.6" lengthAdjust="spacingAndGlyphs" text-anchor="middle">valida identidad y rol</text>
+
+        <g data-detail="context" data-edge-from="vsvc" data-edge-to="supabase" data-edge-label="SQL" data-edge-key="10" data-edge-id="vsvc-supabase">
+          <rect x="582" y="404" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="597" y="414" class="t-edge-default" font-size="10" font-weight="500" text-anchor="middle">SQL</text>
         </g>
-        <g data-detail="context" data-edge-from="m2" data-edge-to="m4" data-edge-label="geocodifica" data-edge-key="8" data-edge-id="m2-m4">
-          <rect x="765.225" y="353" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="796.625" y="363" class="t-edge-default" font-size="10" font-weight="500" textLength="58.8" lengthAdjust="spacingAndGlyphs" text-anchor="middle">geocodifica</text>
+        <g data-detail="context" data-edge-from="vrutas" data-edge-to="redis" data-edge-label="idempotencia" data-edge-key="11" data-edge-id="vrutas-redis">
+          <rect x="563.2" y="255" width="67.6" height="14" rx="3" class="c-mask"/>
+          <text x="597" y="265" class="t-edge-default" font-size="10" font-weight="500" textLength="63.599999999999994" lengthAdjust="spacingAndGlyphs" text-anchor="middle">idempotencia</text>
         </g>
-        <g data-detail="context" data-edge-from="m2" data-edge-to="m6" data-edge-label="viajes del cliente" data-edge-key="9" data-edge-id="m2-m6">
-          <rect x="216.60000000000002" y="403" width="96.39999999999999" height="14" rx="3" class="c-mask"/>
-          <text x="264.8" y="413" class="t-edge-default" font-size="10" font-weight="500" textLength="92.39999999999999" lengthAdjust="spacingAndGlyphs" text-anchor="middle">viajes del cliente</text>
-        </g>
-        <g data-detail="context" data-edge-from="m8" data-edge-to="m2" data-edge-label="preferencias de notificación" data-edge-key="10" data-edge-id="m8-m2">
-          <rect x="363" y="542" width="144.4" height="14" rx="3" class="c-mask"/>
-          <text x="435.2" y="552" class="t-edge-default" font-size="8" text-anchor="middle">preferencias de notificación</text>
-        </g>
-        <g data-detail="context" data-edge-from="m5" data-edge-to="m4" data-edge-label="ubicaciones" data-edge-key="11" data-edge-id="m5-m4">
-          <rect x="971.6" y="376" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="1003" y="386" class="t-edge-default" font-size="10" font-weight="500" textLength="58.8" lengthAdjust="spacingAndGlyphs" text-anchor="middle">ubicaciones</text>
-        </g>
-        <g data-detail="context" data-edge-from="m5" data-edge-to="m6" data-edge-label="viajes" data-edge-key="12" data-edge-id="m5-m6">
-          <rect x="741" y="324.75" width="38.8" height="14" rx="3" class="c-mask"/>
-          <text x="760.4" y="334.75" class="t-edge-default" font-size="10" font-weight="500" textLength="34.8" lengthAdjust="spacingAndGlyphs" text-anchor="middle">viajes</text>
-        </g>
-        <g data-detail="context" data-edge-from="m6" data-edge-to="m4" data-edge-label="ubicación" data-edge-key="13" data-edge-id="m6-m4">
-          <rect x="890.9" y="510" width="53.199999999999996" height="14" rx="3" class="c-mask"/>
-          <text x="917.5" y="520" class="t-edge-default" font-size="8" text-anchor="middle">ubicación</text>
-        </g>
-        <g data-detail="context" data-edge-from="m6" data-edge-to="m7" data-edge-label="tarifa" data-edge-key="14" data-edge-id="m6-m7">
-          <rect x="110.6" y="567" width="38.8" height="14" rx="3" class="c-mask"/>
-          <text x="130" y="577" class="t-edge-default" font-size="10" font-weight="500" textLength="34.8" lengthAdjust="spacingAndGlyphs" text-anchor="middle">tarifa</text>
-        </g>
-        <g data-detail="context" data-edge-from="m6" data-edge-to="m8" data-edge-label="QR / comprobante" data-edge-key="15" data-edge-id="m6-m8">
-          <rect x="250.20000000000002" y="548" width="86.8" height="14" rx="3" class="c-mask"/>
-          <text x="293.6" y="558" class="t-edge-default" font-size="10" font-weight="500" textLength="82.8" lengthAdjust="spacingAndGlyphs" text-anchor="middle">QR / comprobante</text>
-        </g>
-        <g data-detail="context" data-edge-from="m8" data-edge-to="m7" data-edge-label="pagos" data-edge-key="16" data-edge-id="m8-m7">
-          <rect x="193" y="638" width="34" height="14" rx="3" class="c-mask"/>
-          <text x="210" y="648" class="t-edge-default" font-size="10" font-weight="500" text-anchor="middle">pagos</text>
-        </g>
-        <g data-detail="context" data-edge-from="m9" data-edge-to="m5" data-edge-label="despacho (stub en compose)" data-edge-key="17" data-edge-id="m9-m5">
-          <rect x="634.2" y="135" width="134.8" height="14" rx="3" class="c-mask"/>
-          <text x="701.6" y="145" class="t-edge-dashed" font-size="10" font-weight="500" textLength="130.8" lengthAdjust="spacingAndGlyphs" text-anchor="middle">despacho (stub en compose)</text>
-        </g>
-        <g data-detail="context" data-edge-from="m9" data-edge-to="m7" data-edge-label="tarifa (stub en compose)" data-edge-key="18" data-edge-id="m9-m7">
-          <rect x="345.975" y="25" width="125.19999999999999" height="14" rx="3" class="c-mask"/>
-          <text x="408.575" y="35" class="t-edge-dashed" font-size="10" font-weight="500" textLength="121.19999999999999" lengthAdjust="spacingAndGlyphs" text-anchor="middle">tarifa (stub en compose)</text>
-        </g>
-        <g data-detail="context" data-edge-from="m4" data-edge-to="nominatim" data-edge-label="geocodifica (HTTPS)" data-edge-key="19" data-edge-id="m4-nom">
-          <rect x="923.5" y="659" width="101.2" height="14" rx="3" class="c-mask"/>
-          <text x="974.1" y="669" class="t-edge-default" font-size="10" font-weight="500" textLength="97.2" lengthAdjust="spacingAndGlyphs" text-anchor="middle">geocodifica (HTTPS)</text>
-        </g>
-        <g data-detail="context" data-edge-from="m8" data-edge-to="fiscal" data-edge-label="comprobantes" data-edge-key="20" data-edge-id="m8-fis">
-          <rect x="276.4" y="659" width="67.6" height="14" rx="3" class="c-mask"/>
-          <text x="310.2" y="669" class="t-edge-default" font-size="10" font-weight="500" textLength="63.599999999999994" lengthAdjust="spacingAndGlyphs" text-anchor="middle">comprobantes</text>
-        </g>
-        <g data-detail="context" data-edge-from="m6" data-edge-to="rabbit" data-edge-label="publica eventos de viaje" data-edge-key="21" data-edge-id="m6-mq">
-          <rect x="385.4" y="521" width="125.19999999999999" height="14" rx="3" class="c-mask"/>
-          <text x="448" y="531" class="t-edge-dashed" font-size="10" font-weight="500" textLength="121.19999999999999" lengthAdjust="spacingAndGlyphs" text-anchor="middle">publica eventos de viaje</text>
-        </g>
-        <g data-detail="context" data-edge-from="rabbit" data-edge-to="m2" data-edge-label="trip.completed" data-edge-key="22" data-edge-id="mq-m2">
-          <rect x="704" y="504" width="77.2" height="14" rx="3" class="c-mask"/>
-          <text x="742.6" y="514" class="t-edge-dashed" font-size="10" font-weight="500" textLength="73.2" lengthAdjust="spacingAndGlyphs" text-anchor="middle">trip.completed</text>
-        </g>
-        <g data-detail="context" data-edge-from="rabbit" data-edge-to="m8" data-edge-label="trip.completed" data-edge-key="23" data-edge-id="mq-m8">
-          <rect x="649.7891891891902" y="649" width="77.2" height="14" rx="3" class="c-mask"/>
-          <text x="688.3891891891902" y="659" class="t-edge-dashed" font-size="10" font-weight="500" textLength="73.2" lengthAdjust="spacingAndGlyphs" text-anchor="middle">trip.completed</text>
-        </g>
-        <g data-detail="context" data-edge-from="rabbit" data-edge-to="m3" data-edge-label="viaje.finalizado" data-edge-key="24" data-edge-id="mq-m3">
-          <rect x="633" y="382" width="86.8" height="14" rx="3" class="c-mask"/>
-          <text x="676.4" y="392" class="t-edge-dashed" font-size="10" font-weight="500" textLength="82.8" lengthAdjust="spacingAndGlyphs" text-anchor="middle">viaje.finalizado</text>
-        </g>
-        <g data-detail="context" data-edge-from="rabbit" data-edge-to="m4" data-edge-label="trip.events" data-edge-key="25" data-edge-id="mq-m4">
-          <rect x="752.6" y="554" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="784" y="564" class="t-edge-dashed" font-size="10" font-weight="500" textLength="58.8" lengthAdjust="spacingAndGlyphs" text-anchor="middle">trip.events</text>
-        </g>
-        <g data-detail="context" data-edge-from="m2" data-edge-to="rabbit" data-edge-label="FavoriteAddressChanged.v1" data-edge-key="26" data-edge-id="m2-mq">
-          <rect x="363" y="425.875" width="130" height="14" rx="3" class="c-mask"/>
-          <text x="428" y="435.875" class="t-edge-dashed" font-size="10" font-weight="500" textLength="126" lengthAdjust="spacingAndGlyphs" text-anchor="middle">FavoriteAddressChanged.v1</text>
+
+        <g data-detail="context" data-edge-from="vev" data-edge-to="rabbit" data-edge-label="documento registrado" data-edge-key="13" data-edge-id="vev-rabbit">
+          <rect x="544" y="560" width="106" height="14" rx="3" class="c-mask"/>
+          <text x="597" y="570" class="t-edge-dashed" font-size="10" font-weight="500" textLength="102" lengthAdjust="spacingAndGlyphs" text-anchor="middle">documento registrado</text>
         </g>
 
         <!-- Boundary labels (foreground masks keep routes out of titles) -->
@@ -6649,26 +6474,22 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
         <!-- Legend -->
         <g data-legend="" data-legend-bridge="">
-          <text x="40" y="792" class="t-primary" font-size="12" font-weight="650">Leyenda</text>
-          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="Frontend" data-legend-x="40" data-legend-baseline="812" data-legend-width="93">
-            <rect x="40" y="803" width="16" height="10" rx="2.5" class="c-frontend" stroke-width="1"/>
-            <text x="62" y="812" class="t-muted" font-size="10" font-weight="500">Frontend</text>
+          <text x="40" y="800" class="t-primary" font-size="12" font-weight="650">Leyenda</text>
+          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="Backend" data-legend-x="40" data-legend-baseline="820" data-legend-width="87">
+            <rect x="40" y="811" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
+            <text x="62" y="820" class="t-muted" font-size="10" font-weight="500">Backend</text>
           </g>
-          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="Backend" data-legend-x="155" data-legend-baseline="812" data-legend-width="87">
-            <rect x="155" y="803" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
-            <text x="177" y="812" class="t-muted" font-size="10" font-weight="500">Backend</text>
+          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="Base de datos" data-legend-x="149" data-legend-baseline="820" data-legend-width="124">
+            <rect x="149" y="811" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
+            <text x="171" y="820" class="t-muted" font-size="10" font-weight="500">Base de datos</text>
           </g>
-          <g data-legend-semantic-kind="security" data-legend-kind="security" data-legend-label="Seguridad" data-legend-x="264" data-legend-baseline="812" data-legend-width="99">
-            <rect x="264" y="803" width="16" height="10" rx="2.5" class="c-security" stroke-width="1"/>
-            <text x="286" y="812" class="t-muted" font-size="10" font-weight="500">Seguridad</text>
+          <g data-legend-semantic-kind="messagebus" data-legend-kind="messagebus" data-legend-label="Bus de mensajes" data-legend-x="295" data-legend-baseline="820" data-legend-width="136">
+            <rect x="295" y="811" width="16" height="10" rx="2.5" class="c-messagebus" stroke-width="1"/>
+            <text x="317" y="820" class="t-muted" font-size="10" font-weight="500">Bus de mensajes</text>
           </g>
-          <g data-legend-semantic-kind="messagebus" data-legend-kind="messagebus" data-legend-label="Bus de mensajes" data-legend-x="385" data-legend-baseline="812" data-legend-width="136">
-            <rect x="385" y="803" width="16" height="10" rx="2.5" class="c-messagebus" stroke-width="1"/>
-            <text x="407" y="812" class="t-muted" font-size="10" font-weight="500">Bus de mensajes</text>
-          </g>
-          <g data-legend-semantic-kind="external" data-legend-kind="external" data-legend-label="Externo" data-legend-x="543" data-legend-baseline="812" data-legend-width="87">
-            <rect x="543" y="803" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
-            <text x="565" y="812" class="t-muted" font-size="10" font-weight="500">Externo</text>
+          <g data-legend-semantic-kind="external" data-legend-kind="external" data-legend-label="Externo" data-legend-x="453" data-legend-baseline="820" data-legend-width="87">
+            <rect x="453" y="811" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
+            <text x="475" y="820" class="t-muted" font-size="10" font-weight="500">Externo</text>
           </g>
         </g>
       </svg>
@@ -6872,25 +6693,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     <div class="cards">
       <div class="card">
         <div class="card-header">
-          <div class="card-dot violet"></div>
-          <h3>Infraestructura compartida</h3>
-        </div>
-        <ul>
-          <li>RabbitMQ y Redis son comunes a todo el stack (los define M9)</li>
-          <li>Cada módulo tiene su propia PostgreSQL: no hay SQL entre módulos</li>
-          <li>Líneas punteadas = asíncrono por RabbitMQ</li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
           <div class="card-dot amber"></div>
           <h3>Observaciones</h3>
         </div>
         <ul>
-          <li>FavoriteAddressChanged.v1 de M2 no tiene consumidor en el stack real (solo la bandeja simulada)</li>
-          <li>M9 apunta a stubs de M5 y M7 dentro de su compose</li>
-          <li>M6 usa un simulador de M3 por defecto (m6-sim-m3)</li>
+          <li>Sin SUPABASE_URL, el conductor opera sin base persistente</li>
+          <li>Kafka es solo respaldo cuando RabbitMQ no acepta mensajes</li>
+          <li>M8 consume los documentos registrados de m3.eventos</li>
         </ul>
       </div>
     </div>

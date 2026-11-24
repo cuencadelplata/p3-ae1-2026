@@ -1,0 +1,320 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C4 · Nivel 3 — Componentes de M5 Solicitud y despacho",
+    "locale": "es",
+    "output": "c4/c4-nivel3-componentes-m5.html",
+    "quality_profile": "showcase",
+    "parentHref": "c4-nivel2-contenedores.html",
+    "repository": {
+      "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
+      "provider": "github",
+      "revision": "687a636f0d66acc26bcde86dce442d4778e37dd8"
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "cols": 3,
+    "cellW": 196,
+    "cellH": 64,
+    "gapX": 110,
+    "gapY": 92
+  },
+  "components": [
+    {
+      "id": "clientes",
+      "type": "external",
+      "label": "Pasajero, conductor y M9",
+      "sublabel": "piden viajes y responden ofertas",
+      "row": 0,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "rutas",
+      "type": "backend",
+      "label": "Rutas de despacho",
+      "sublabel": "ride-requests · offers · candidatos",
+      "sources": [
+        {
+          "path": "modulo-5/src/index.ts",
+          "line": 141,
+          "end_line": 160,
+          "label": "rutas"
+        }
+      ],
+      "row": 1,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "Middleware de autenticación",
+      "sublabel": "valida con M1 · requireConductor",
+      "sources": [
+        {
+          "path": "modulo-5/src/middleware/auth.middleware.ts",
+          "line": 5,
+          "label": "validación"
+        }
+      ],
+      "row": 1,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "svc",
+      "type": "backend",
+      "label": "RideRequestService",
+      "sublabel": "solicitud, candidatos, ofertas y asignación",
+      "explanation": "Núcleo del módulo: estima la tarifa, busca conductores cercanos, envía ofertas y, al aceptarse, crea y asigna el viaje en M6.",
+      "sources": [
+        {
+          "path": "modulo-5/src/services/ride-request.service.ts",
+          "line": 33,
+          "label": "servicio"
+        }
+      ],
+      "row": 2,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "m4c",
+      "type": "backend",
+      "label": "Cliente M4",
+      "sublabel": "conductores cercanos",
+      "sources": [
+        {
+          "path": "modulo-5/src/services/m4-client.service.ts",
+          "line": 34,
+          "label": "cliente"
+        }
+      ],
+      "row": 2,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "db",
+      "type": "backend",
+      "label": "DbService",
+      "sublabel": "solicitudes, ofertas y auditoría",
+      "sources": [
+        {
+          "path": "modulo-5/src/services/db.service.ts",
+          "line": 1,
+          "label": "servicio"
+        }
+      ],
+      "row": 3,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "mq",
+      "type": "backend",
+      "label": "RabbitMQService",
+      "sublabel": "colas de ofertas · eventos de despacho",
+      "sources": [
+        {
+          "path": "modulo-5/src/services/rabbitmq.service.ts",
+          "line": 73,
+          "label": "colas"
+        },
+        {
+          "path": "modulo-5/src/services/rabbitmq.service.ts",
+          "line": 76,
+          "label": "exchange"
+        }
+      ],
+      "row": 2,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ],
+      "explanation": "Publica ride.requested, driver.offer.accepted y ride_request.cancelled en mobility.events, y usa las colas dispatch.offers, dispatch.cancelled y despacho.reabrir."
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "m5-postgres",
+      "sublabel": "dispatch_db",
+      "row": 4,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": "estado efímero",
+      "sources": [
+        {
+          "path": "modulo-5/src/services/redis.service.ts",
+          "line": 30,
+          "label": "cliente"
+        }
+      ],
+      "row": 4,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "rabbit",
+      "type": "messagebus",
+      "label": "RabbitMQ",
+      "sublabel": "mobility.events · dispatch.offers · despacho.reabrir",
+      "row": 3,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "m4",
+      "type": "external",
+      "label": "M4 Ubicación",
+      "sublabel": "otro módulo",
+      "row": 1,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "otros",
+      "type": "external",
+      "label": "M6 Viajes y M7 Tarifas",
+      "sublabel": "otros módulos",
+      "sources": [
+        {
+          "path": "modulo-5/src/services/ride-request.service.ts",
+          "line": 1017,
+          "label": "asigna conductor"
+        },
+        {
+          "path": "modulo-5/src/services/ride-request.service.ts",
+          "line": 318,
+          "label": "estimación"
+        }
+      ],
+      "row": 3,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "clientes-rutas",
+      "from": "clientes",
+      "to": "rutas",
+      "label": "/api/v1",
+      "variant": "emphasis"
+    },
+    {
+      "id": "rutas-auth",
+      "from": "rutas",
+      "to": "auth"
+    },
+    {
+      "id": "auth-svc",
+      "from": "auth",
+      "to": "svc"
+    },
+    {
+      "id": "svc-m4c",
+      "from": "svc",
+      "to": "m4c"
+    },
+    {
+      "id": "m4c-m4",
+      "from": "m4c",
+      "to": "m4",
+      "label": "cercanos (HTTP)"
+    },
+    {
+      "id": "svc-otros",
+      "from": "svc",
+      "to": "otros",
+      "label": "tarifa (M7) · viaje (M6)"
+    },
+    {
+      "id": "svc-db",
+      "from": "svc",
+      "to": "db"
+    },
+    {
+      "id": "db-pg",
+      "from": "db",
+      "to": "pg",
+      "label": "SQL"
+    },
+    {
+      "id": "svc-redis",
+      "from": "svc",
+      "to": "redis"
+    },
+    {
+      "id": "svc-mq",
+      "from": "svc",
+      "to": "mq"
+    },
+    {
+      "id": "mq-rabbit",
+      "from": "mq",
+      "to": "rabbit",
+      "label": "eventos de despacho",
+      "variant": "dashed"
+    },
+    {
+      "id": "rabbit-mq",
+      "from": "rabbit",
+      "to": "mq",
+      "label": "despacho.reabrir (M6)",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Eventos",
+      "items": [
+        "Publica en mobility.events lo que consume M8 para notificar",
+        "Consume despacho.reabrir cuando M6 cancela con conductor asignado"
+      ]
+    }
+  ]
+}

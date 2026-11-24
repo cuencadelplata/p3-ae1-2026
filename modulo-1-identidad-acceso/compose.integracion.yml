@@ -76,7 +76,6 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: "http://localhost:${M1_HOST_PORT:-10000}"
-        VITE_FLOW_SANDBOX_PAYMENT: "${VITE_FLOW_SANDBOX_PAYMENT:-false}"
         # Clave pública de prueba de Mercado Pago (la misma MP_PUBLIC_KEY de modulo7/.env).
         VITE_MP_PUBLIC_KEY: "${MP_PUBLIC_KEY:-}"
     ports:

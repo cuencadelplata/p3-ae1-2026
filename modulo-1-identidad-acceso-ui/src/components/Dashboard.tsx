@@ -210,6 +210,10 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
               <button className="btn-secondary" onClick={() => setVerHistorial(true)}>Historial de viajes</button>
             </div>}
 
+            {(perfil.rol === 'CLIENTE' || perfil.rol === 'CONDUCTOR') && (
+              <a className="btn-secondary mt-3 inline-flex" href="/push">Notificaciones del navegador</a>
+            )}
+
             <p className="eyebrow mt-10">Mis datos</p>
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               {[

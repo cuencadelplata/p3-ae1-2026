@@ -10,7 +10,7 @@
 | 3 | M3 | Conductor habilitado con vehículo activo |
 | 4 | M4 | Ubicación del conductor publicada y disponible |
 | 5 | M9 (+ M1, M7) | Reserva programada con la identidad de M1 y la tarifa estimada por M7 |
-| 5b | M9 → M5 | Pendiente (ver abajo) |
+| 5b | M9 → M1 → M5 | El scheduler obtiene autorización delegada, crea la solicitud y M5 emite la oferta |
 | 6 | M5 (+ M4) | Pedido del pasajero, candidatos, oferta y aceptación del conductor |
 | 7 | M6 | M5 creó y asignó el viaje |
 | 8 | M6 + M8 + M4 | Arribo con QR de M8, inicio validado, el QR no se reutiliza, conductor ocupado en M4 |
@@ -27,12 +27,12 @@
    docker network create reservas-network
    ```
 
-2. En el `.env` de la raíz, además de las claves de cada módulo, agregar `ROUTE_RESOLVER_MODE=stub` para que M9 resuelva rutas.
+2. Completar las claves de cada módulo y `M9_DISPATCH_AUTH_TOKEN` en el `.env` raíz. Usar `ROUTE_RESOLVER_MODE=m4` para probar las rutas reales; `stub` solo valida la conexión con un recorrido simulado.
 3. Levantar el stack desde la raíz: `docker compose up -d --build`.
 4. Correr el test desde la raíz:
 
    ```sh
-   node --test tests-integracion/flujo-completo.e2e.mjs
+   node --env-file=.env --test tests-integracion/flujo-completo.e2e.mjs
    ```
 
 No necesita instalar dependencias. Cada corrida crea usuarios nuevos, así que se puede repetir.
@@ -50,7 +50,7 @@ docker run -d --name m8-m7-sandbox --network reservas-network -p 127.0.0.1:4020:
 
 y en el `.env` de la raíz apuntar `M6_M7_URL`, `M8_M7_PAYMENTS_URL`, `M7_URL` y `M7_BASE_URL` a `http://m8-m7-sandbox:4020`. Al correr el test, pasar `M7_URL=http://localhost:4020`. `UNREGISTERED_TRIPS=not_found` hace que responda como M7 cuando un viaje no tiene pago registrado.
 
-## Pendiente: activación de reservas (M9 → M5)
+## Activación de reservas (M9 → M1 → M5)
 
 M9 activa la reserva desde su scheduler. Configurá `M9_DISPATCH_AUTH_URL=http://m1-identidad-acceso:3001/auth/token-delegado` y la credencial privada `M9_DISPATCH_AUTH_TOKEN` que comparten M1 y M9. M9 usa el token delegado para crear la solicitud y pedirle a M5 que envíe la oferta.
 

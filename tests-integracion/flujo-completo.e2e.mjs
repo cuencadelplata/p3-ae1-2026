@@ -14,11 +14,11 @@
 //   RabbitMQ (infraestructura de M9): ninguna cola de mensajes muertos crece durante la prueba.
 //
 // Requisitos: stack común levantado desde la raíz (docker compose up -d --build) con el .env
-// de la raíz y modulo7/.env. Para la reserva de M9 hace falta ROUTE_RESOLVER_MODE=stub en el
-// .env de la raíz (el valor por defecto, "blocked", no resuelve rutas).
+// de la raíz y modulo7/.env. Para M9 usar ROUTE_RESOLVER_MODE=m4 y configurar
+// M9_DISPATCH_AUTH_TOKEN, compartido con el emisor delegado de M1.
 //
 // Uso, desde la raíz del repositorio:
-//   node --test tests-integracion/flujo-completo.e2e.mjs
+//   node --env-file=.env --test tests-integracion/flujo-completo.e2e.mjs
 // Si M7 real no está disponible, el test sirve igual con el simulador de su contrato que trae M8
 // (modulo8/infra/m7-payments-sandbox), arrancado con UNREGISTERED_TRIPS=not_found para que responda
 // como M7: apuntar M6_M7_URL, M8_M7_PAYMENTS_URL, M7_URL y M7_BASE_URL del .env de la raíz a ese
@@ -174,6 +174,24 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     assert.ok(s.clienteM2, `M2 debe devolver el id del cliente: ${mostrar(perfil)}`);
   });
 
+  test('1b. M1: autorización delegada privada para el cliente activo', async () => {
+    assert.ok(process.env.M9_DISPATCH_AUTH_TOKEN, 'Ejecutar con node --env-file=.env --test para cargar M9_DISPATCH_AUTH_TOKEN');
+    const body = { clientId: String(s.pasajero.userId), audience: 'm5', scope: 'ride-requests:write' };
+    const sinCredencial = await pedir(M1, '/auth/token-delegado', { method: 'POST', body });
+    assert.equal(sinCredencial.status, 401);
+    const delegado = await pedir(M1, '/auth/token-delegado', { method: 'POST', token: process.env.M9_DISPATCH_AUTH_TOKEN, body });
+    assert.equal(delegado.status, 200, `M1 emisión delegada: HTTP ${delegado.status}`);
+    assert.equal(delegado.data.expires_in, 300);
+    const identidad = await pedir(M1, '/auth/validar-identidad-y-rol', { token: delegado.data.access_token });
+    assert.equal(identidad.status, 200);
+    assert.equal(String(identidad.data.userId), String(s.pasajero.userId));
+    const conductor = await pedir(M1, '/auth/token-delegado', {
+      method: 'POST', token: process.env.M9_DISPATCH_AUTH_TOKEN,
+      body: { ...body, clientId: String(s.conductor.userId) },
+    });
+    assert.equal(conductor.status, 403, 'M1 no debe delegar identidad de conductor como cliente');
+  });
+
   test('3. M3: conductor habilitado con vehículo activo', async () => {
     const { userId, token } = s.conductor;
     const alta = await pedir(M3_CONDUCTORES, '/api/conductores', { method: 'POST', token, body: { ciudad: 'Corrientes', tipovehiculo: 'auto' } });
@@ -196,6 +214,10 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     const publicada = await pedir(M4, `/drivers/${userId}/location`, { method: 'PUT', token, body: s.ubicacionConductor });
     assert.equal(publicada.status, 200, `M4 publicar ubicación: ${mostrar(publicada)}`);
     await conductorDisponibleEnM4(userId, true);
+    // La ubicación de M4 vence: mantenerla mientras espera el scheduler de M9.
+    s.heartbeat = setInterval(() => pedir(M4, `/drivers/${userId}/location`, {
+      method: 'PUT', token, body: s.ubicacionConductor,
+    }).catch(() => {}), 15000);
   });
 
   test('5. M9: el pasajero programa una reserva (M1 + tarifa de M7)', async () => {
@@ -208,6 +230,16 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     assert.equal(reserva.data.estado, 'PROGRAMADA');
     assert.equal(String(reserva.data.clienteId), String(s.pasajero.userId), 'M9 debe tomar el cliente de la sesión de M1');
     assert.ok(Number(reserva.data.tarifaEstimada) > 0, `M9 debe traer la tarifa estimada por M7: ${mostrar(reserva)}`);
+    // Usar las coordenadas reales resueltas por M4 también para el conductor y M6.
+    if (reserva.data.routeSnapshot) {
+      Object.assign(ORIGEN, reserva.data.routeSnapshot.origin);
+      Object.assign(DESTINO, reserva.data.routeSnapshot.destination);
+      s.ubicacionConductor = { ...s.ubicacionConductor, latitude: ORIGEN.latitude, longitude: ORIGEN.longitude };
+      const ubicada = await pedir(M4, `/drivers/${s.conductor.userId}/location`, {
+        method: 'PUT', token: s.conductor.token, body: s.ubicacionConductor,
+      });
+      assert.equal(ubicada.status, 200, `M4 ubicación en el origen real: ${mostrar(ubicada)}`);
+    }
     const consulta = await pedir(M9, `/reservas/${reserva.data.id}`, { token: s.pasajero.token });
     assert.equal(consulta.status, 200, `M9 consultar reserva: ${mostrar(consulta)}`);
     const cancelada = await pedir(M9, `/reservas/${reserva.data.id}`, { method: 'DELETE', token: s.pasajero.token });
@@ -221,9 +253,10 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     const geocode = await pedir(M4, '/geocode', { method: 'POST', body: { address: origen } });
     assert.equal(geocode.status, 200, `M4 geocodificación: ${mostrar(geocode)}`);
     s.origenProgramado = geocode.data;
+    s.ubicacionConductor = { latitude: geocode.data.latitude, longitude: geocode.data.longitude, vehicleType: 'AUTO', available: true };
     const ubicacion = await pedir(M4, `/drivers/${s.conductor.userId}/location`, {
       method: 'PUT', token: s.conductor.token,
-      body: { latitude: geocode.data.latitude, longitude: geocode.data.longitude, vehicleType: 'AUTO', available: true },
+      body: s.ubicacionConductor,
     });
     assert.equal(ubicacion.status, 200, `M4 ubicación de prueba: ${mostrar(ubicacion)}`);
     const creada = await pedir(M9, '/reservas', {
@@ -236,6 +269,8 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     assert.equal(creada.status, 201, `M9 programar despacho: ${mostrar(creada)}`);
     assert.equal(creada.data.estado, 'PROGRAMADA');
     s.reservaProgramada = creada.data.id;
+    const ajena = await pedir(M9, `/reservas/${s.reservaProgramada}`, { token: s.conductor.token });
+    assert.ok([403, 404].includes(ajena.status), 'Otro usuario no debe consultar la reserva');
     let consulta;
     const limite = Date.now() + 45_000;
     while (Date.now() < limite) {
@@ -252,6 +287,7 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
           s.rideRequestId = consulta.data.idSolicitud;
           const solicitud = await pedir(M5, `/ride-requests/${s.rideRequestId}`, { token: s.pasajero.token });
           assert.equal(solicitud.status, 200, `M5 consultar el recorrido: ${mostrar(solicitud)}`);
+          assert.equal(String(solicitud.data.clientId), String(s.pasajero.userId));
           s.recorridoProgramado = { origen: solicitud.data.origin, destino: solicitud.data.destination };
           return;
         }
@@ -301,7 +337,10 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
         const actual = await pedir(M9, `/reservas/${s.reservaProgramada}`, { token: pasajero.token });
         assert.equal(actual.status, 200, `M9 consultar asignación: ${mostrar(actual)}`);
         estado = actual.data.estado;
-        if (estado === 'ACTIVADA') break;
+        if (estado === 'ACTIVADA') {
+          assert.equal(String(actual.data.assignedDriverId), String(conductor.userId));
+          break;
+        }
         await esperar(500);
       } while (Date.now() < limite);
       assert.equal(estado, 'ACTIVADA');
@@ -319,6 +358,7 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
   });
 
   test('8. M6 + M8: arribo con QR e inicio validado; M4 marca al conductor ocupado', async () => {
+    clearInterval(s.heartbeat);
     const arribo = await pedir(M6, `/api/viajes/${s.tripId}/arribo`, { method: 'PUT', token: s.pasajero.token, body: {} });
     assert.equal(arribo.status, 200, `M6 arribo: ${mostrar(arribo)}`);
     assert.ok(arribo.data.qr?.token, 'M8 debe emitir el QR del viaje');
@@ -387,6 +427,7 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
   });
 
   after(async () => {
+    clearInterval(s.heartbeat);
     if (s.reservaProgramada) {
       const path = `/reservas/${s.reservaProgramada}`;
       const reserva = await pedir(M9, path, { token: s.pasajero.token }).catch(() => null);

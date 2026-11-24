@@ -1,0 +1,357 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C4 · Nivel 3 — Componentes de M6 Viajes",
+    "locale": "es",
+    "output": "c4/c4-nivel3-componentes-m6.html",
+    "quality_profile": "showcase",
+    "parentHref": "c4-nivel2-contenedores.html",
+    "repository": {
+      "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
+      "provider": "github",
+      "revision": "687a636f0d66acc26bcde86dce442d4778e37dd8"
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "cols": 3,
+    "cellW": 196,
+    "cellH": 64,
+    "gapX": 150,
+    "gapY": 92
+  },
+  "components": [
+    {
+      "id": "clientes",
+      "type": "external",
+      "label": "M2, M5 y M8",
+      "sublabel": "crean, asignan y consultan viajes",
+      "row": 0,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "rutas",
+      "type": "backend",
+      "label": "Rutas de viajes",
+      "sublabel": "nginx :15000 · viajes · clientes · conductores",
+      "sources": [
+        {
+          "path": "modulo6/src/rf-6.1-6.2-6.3/routes/viajes.routes.ts",
+          "line": 24,
+          "end_line": 43,
+          "label": "viajes"
+        },
+        {
+          "path": "modulo6/src/rf-6.1-6.2-6.3/routes/clientes.routes.ts",
+          "line": 6,
+          "label": "clientes"
+        }
+      ],
+      "row": 1,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "ctrl",
+      "type": "backend",
+      "label": "ViajesController",
+      "sublabel": "solicitar · asignar · finalizar",
+      "sources": [
+        {
+          "path": "modulo6/src/rf-6.1-6.2-6.3/controllers/viajes.controller.ts",
+          "line": 1,
+          "label": "controller"
+        }
+      ],
+      "row": 2,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ],
+      "explanation": "Ciclo de vida del viaje: solicitar, asignar conductor, registrar arribo, iniciar con QR, finalizar y cancelar."
+    },
+    {
+      "id": "fin",
+      "type": "backend",
+      "label": "Finalización",
+      "sublabel": "distancia (M4) y pago (M7)",
+      "sources": [
+        {
+          "path": "modulo6/src/rf-6.1-6.2-6.3/services/finalizacion.service.ts",
+          "line": 143,
+          "label": "M4"
+        },
+        {
+          "path": "modulo6/src/rf-6.1-6.2-6.3/services/finalizacion.service.ts",
+          "line": 114,
+          "label": "M7"
+        }
+      ],
+      "row": 3,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "qr",
+      "type": "backend",
+      "label": "QrService",
+      "sublabel": "genera y valida el QR en M8",
+      "sources": [
+        {
+          "path": "modulo6/src/rf-6.1-6.2-6.3/services/qr.service.ts",
+          "line": 54,
+          "label": "generar"
+        },
+        {
+          "path": "modulo6/src/rf-6.1-6.2-6.3/services/qr.service.ts",
+          "line": 68,
+          "label": "validar"
+        }
+      ],
+      "row": 4,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "cond",
+      "type": "backend",
+      "label": "ConductorService",
+      "sublabel": "estado del conductor en M3",
+      "sources": [
+        {
+          "path": "modulo6/src/rf-6.1-6.2-6.3/services/conductor.service.ts",
+          "line": 6,
+          "label": "consulta"
+        }
+      ],
+      "row": 2,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "ViajeRepository",
+      "sublabel": "viajes, transiciones y outbox",
+      "sources": [
+        {
+          "path": "modulo6/src/rf-6.1-6.2-6.3/repositories/viaje.repository.ts",
+          "line": 177,
+          "label": "outbox"
+        }
+      ],
+      "row": 2,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "ev",
+      "type": "backend",
+      "label": "EventosViaje",
+      "sublabel": "publica el outbox en 3 exchanges",
+      "sources": [
+        {
+          "path": "modulo6/src/rf-6.1-6.2-6.3/services/eventos-viaje.service.ts",
+          "line": 51,
+          "end_line": 53,
+          "label": "exchanges"
+        }
+      ],
+      "row": 3,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "satelites",
+      "type": "backend",
+      "label": "Cancelación y fachada",
+      "sublabel": ":15001 · :15002 · RF-6.4 a 6.7",
+      "explanation": "m6-cancelacion cancela viajes y publica despacho.reabrir; m6-fachada expone consultas. Ambos llaman a la API de viajes por el gateway.",
+      "sources": [
+        {
+          "path": "modulo6/src/rf-6.5-6.6/service-server.ts",
+          "line": 2,
+          "label": "servidor"
+        },
+        {
+          "path": "modulo6/src/rf-6.5-6.6/rabbitmq.ts",
+          "line": 20,
+          "label": "reabre despacho"
+        },
+        {
+          "path": "modulo6/src/rf-6.4-6.7/server.ts",
+          "line": 6,
+          "label": "servidor"
+        }
+      ],
+      "row": 0,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "m6-tripdb",
+      "sublabel": "PostgreSQL",
+      "sources": [
+        {
+          "path": "modulo6/src/rf-6.1-6.2-6.3/db/pool.ts",
+          "line": 1,
+          "label": "pool"
+        }
+      ],
+      "row": 1,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "rabbit",
+      "type": "messagebus",
+      "label": "RabbitMQ",
+      "sublabel": "mobility.events · viajes.events · trip.events",
+      "row": 4,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "otros",
+      "type": "external",
+      "label": "M3, M4, M7 y M8",
+      "sublabel": "otros módulos",
+      "row": 3,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "clientes-rutas",
+      "from": "clientes",
+      "to": "rutas",
+      "label": "HTTP",
+      "variant": "emphasis"
+    },
+    {
+      "id": "rutas-ctrl",
+      "from": "rutas",
+      "to": "ctrl"
+    },
+    {
+      "id": "ctrl-fin",
+      "from": "ctrl",
+      "to": "fin"
+    },
+    {
+      "id": "ctrl-qr",
+      "from": "ctrl",
+      "to": "qr"
+    },
+    {
+      "id": "ctrl-cond",
+      "from": "ctrl",
+      "to": "cond"
+    },
+    {
+      "id": "ctrl-repo",
+      "from": "ctrl",
+      "to": "repo"
+    },
+    {
+      "id": "fin-otros",
+      "from": "fin",
+      "to": "otros",
+      "label": "distancia (M4) · tarifa y pago (M7)"
+    },
+    {
+      "id": "qr-otros",
+      "from": "qr",
+      "to": "otros",
+      "label": "QR (M8)"
+    },
+    {
+      "id": "cond-otros",
+      "from": "cond",
+      "to": "otros",
+      "label": "estado (M3)"
+    },
+    {
+      "id": "repo-db",
+      "from": "repo",
+      "to": "db",
+      "label": "SQL"
+    },
+    {
+      "id": "repo-ev",
+      "from": "repo",
+      "to": "ev",
+      "label": "outbox"
+    },
+    {
+      "id": "ev-rabbit",
+      "from": "ev",
+      "to": "rabbit",
+      "label": "trip.completed · viaje.finalizado · trip.events",
+      "variant": "dashed"
+    },
+    {
+      "id": "satelites-rutas",
+      "from": "satelites",
+      "to": "rutas",
+      "label": "cancela y consulta"
+    },
+    {
+      "id": "satelites-rabbit",
+      "from": "satelites",
+      "to": "rabbit",
+      "label": "despacho.reabrir",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Eventos por consumidor",
+      "items": [
+        "mobility.events → M2 y M8 (trip.completed, trip.cancelled)",
+        "viajes.events → M3 (viaje.finalizado)",
+        "trip.events → M4"
+      ]
+    }
+  ]
+}
