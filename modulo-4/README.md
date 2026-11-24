@@ -183,3 +183,28 @@ con M1, M4, M5 y sus dependencias del Compose general. Para esta ejecución se
 usaron una red propia y puertos 13001, 13004 y 13005, con JWT compartido generado
 localmente y validación de autenticación habilitada. Resultado: 1 prueba aprobada,
 0 fallidas. El recorrido termina en la búsqueda de candidatos de M5.
+
+### Verificación opcional del ciclo de viaje con M6
+
+Agregar M6_E2E_URL a las variables del comando E2E, por ejemplo
+M6_E2E_URL=http://localhost:15000. Este segundo caso crea y asigna un viaje
+directamente en M6, registra el arribo, obtiene un QR real de M8 y lo valida al
+iniciar. Luego comprueba que M4 recibe el evento RabbitMQ y retira al conductor
+de nearby. Finalmente solicita la finalización y espera que M4 lo vuelva a
+ofrecer como disponible. Este caso requiere M6, M8 y M7 operativos. La aceptación
+de una oferta desde M5 corresponde a un recorrido adicional.
+
+Resultado del 24 de noviembre de 2026:
+- PR #66 fusionado y recorrido M1-M4-M5 aprobado.
+- M6 con su base y M8 con su base levantaron usando el Compose común.
+- Se configuraron claves internas locales de M2 y QR para el arranque de M8.
+- Arribo con QR real, inicio del viaje y cambio de disponibilidad en M4 aprobados.
+- M3 no estaba levantado. M6 permitió el arribo por su comportamiento de resiliencia.
+- Finalización bloqueada por M7: su imagen aylen0/m7-tarifas-ae2:latest se reinicia
+  con "Falta la variable de entorno DATABASE_URL". En Apple Silicon también
+  requiere plataforma linux/amd64.
+- M7 exige además M7_API_KEY y MP_ACCESS_TOKEN según su configuración. Se necesita
+  su entorno de prueba válido antes de repetir la finalización completa.
+
+Las claves privadas del entorno están fuera de Git. El test opcional mantiene
+el fallo visible cuando M6 no puede finalizar por una dependencia no disponible.
