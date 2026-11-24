@@ -178,7 +178,7 @@ export default function () {
     console.log("\n🚗 Asignando conductor en M6...");
 
     // RF-6.2: asignar conductor
-    const resAsignar = http.patch(
+    const resAsignar = http.post(
       `${M6_VIAJES_URL}/api/viajes/${encodeURIComponent(viajeId)}/asignar`,
       JSON.stringify({ conductorId }),
       { headers: H_JSON }
