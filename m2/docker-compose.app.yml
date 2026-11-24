@@ -1,0 +1,164 @@
+# Módulo 2 (Clientes) para la app integrada del grupo (stack movilidad-urbana).
+# Esquema acordado: RabbitMQ y Redis compartidos, base de datos propia por módulo,
+# una imagen por módulo. Este archivo NO levanta Redis ni RabbitMQ: usa los "redis" y
+# "rabbitmq" del stack común (hoy definidos por M9), en la red reservas-network.
+# m2-gateway (alias m2-api), las réplicas m2-api-1/m2-api-2 y m2-worker se unen a esa red;
+# m2-db queda solo en la red interna de M2.
+#
+# Uso desde el compose raíz:
+#   include:
+#     - path: ./m2/docker-compose.app.yml
+#
+# Para desarrollo aislado de M2 seguir usando m2/docker-compose.yml.
+# Todos los servicios llevan el prefijo m2- para no chocar con los de otros módulos.
+
+x-m2-app: &m2-app
+  image: ${M2_API_IMAGE:-leangau/integration-m2-ae2:api}
+  # Por defecto se usa la imagen publicada en Docker Hub (la publica el CI en cada merge a main,
+  # ver .github/workflows/ci-grupo05.yml). Para traer la última: docker compose pull.
+  # Para probar con el código local: docker compose up --build (build es relativo a m2/).
+  build: .
+  restart: unless-stopped
+
+x-m2-env: &m2-env
+  DATABASE_URL: postgresql://postgres:${M2_POSTGRES_PASSWORD:-postgres}@m2-db:5432/profiles?schema=public&connection_limit=10&connect_timeout=3&pool_timeout=5
+  # Infraestructura compartida (definida en el compose raíz)
+  REDIS_URL: ${M2_REDIS_URL:-redis://redis:6379}
+  # Mismas variables que el resto del stack (M4, M6, M9): un cambio de credenciales aplica a todos.
+  RABBITMQ_URL: ${M2_RABBITMQ_URL:-amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672}
+  # Otros módulos, por nombre de servicio dentro de reservas-network
+  M6_BASE_URL: ${M2_M6_BASE_URL:-http://m6-viajes:3000}
+  # M4 real del compose raíz (servicio m4-api): POST /api/v1/geocode
+  M4_BASE_URL: ${M2_M4_BASE_URL:-http://m4-api:3004}
+  INTEGRATION_SECRET: ${M2_INTEGRATION_SECRET:-integration-dev}
+  CACHE_TTL_SECONDS: ${M2_CACHE_TTL_SECONDS:-60}
+  CHECKPOINT_DISABLE: "1"
+  PRISMA_HIDE_UPDATE_MESSAGE: "1"
+
+services:
+  # Alta disponibilidad (RNF-15): dos réplicas intercambiables de la API detrás de m2-gateway.
+  # Postgres, Redis y RabbitMQ son compartidos, así que cualquiera atiende cualquier pedido.
+  # No publican puertos ni usan el nombre m2-api: a M2 se entra siempre por el gateway.
+  m2-api-1: &m2-api-replica
+    <<: *m2-app
+    environment:
+      <<: *m2-env
+      PORT: 3000
+      DB_HOST: m2-db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: ${M2_POSTGRES_PASSWORD:-postgres}
+      DB_NAME: profiles
+      # M1 real (servicio m1-identidad-acceso de modulo-1-identidad-acceso/compose.integracion.yml).
+      M1_SERVICE_URL: ${M2_M1_SERVICE_URL:-http://m1-identidad-acceso:3001}
+      # Soporte todavía no expone penalizaciones por usuario: se usa el stub interno de M2.
+      # STUBS_ENABLED solo queda por ese stub (el de M1 sigue montado pero M2 no lo usa).
+      STUBS_ENABLED: ${M2_STUBS_ENABLED:-true}
+      SOPORTE_SERVICE_URL: ${M2_SOPORTE_SERVICE_URL:-http://localhost:3000/__stubs/soporte}
+      # M6 real (servicio m6-viajes de modulo6/compose.integracion.yml)
+      M6_SERVICE_URL: ${M2_M6_SERVICE_URL:-http://m6-viajes:3000}
+      SOPORTE_SECRET_KEY: ${M2_SOPORTE_SECRET_KEY:-secret-m2}
+      STATUS_SECRET_KEY: ${M2_STATUS_SECRET_KEY:-secret-status}
+      # Clave que M8 envía en x-api-key a /internal/preferences (= M2_INTERNAL_API_KEY de M8)
+      INTERNAL_API_KEY: ${M2_INTERNAL_API_KEY:-internal-dev}
+      PENALIZACIONES_TEMPORAL: "2"
+      PENALIZACIONES_PERMANENTE: "3"
+    # reservas-network: para llamar a M1, M6 y M4 (salientes). Los entrantes llegan por el gateway.
+    networks: [default, reservas-network]
+    depends_on:
+      m2-db:
+        condition: service_healthy
+      m2-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  m2-api-2: *m2-api-replica
+
+  # Punto de entrada único de M2: reparte entre las réplicas y saca de rotación la que cae.
+  # Conserva el contrato con los demás módulos: nombre m2-api y puerto 3000 en la red común
+  # (M8 llama a http://m2-api:3000) y 11000 en el host.
+  m2-gateway:
+    image: nginx:1.27.5-alpine
+    restart: always
+    ports:
+      - "127.0.0.1:${M2_API_PORT:-11000}:3000"
+    volumes:
+      - ./integrated/gateway.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      default:
+        aliases: [m2-api]
+      reservas-network:
+        aliases: [m2-api]
+    # Arranca con una réplica sana; la otra se suma a la rotación cuando responde.
+    depends_on:
+      m2-api-1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  m2-migrate:
+    <<: *m2-app
+    restart: "no"
+    environment: *m2-env
+    command: ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
+    depends_on:
+      m2-db:
+        condition: service_healthy
+
+  # Consume eventos de mobility.events y publica el outbox de M2.
+  # Reintenta la conexión a RabbitMQ y Redis sola, así que no depende de ellos acá
+  # (están definidos en el compose raíz, fuera de este archivo).
+  m2-worker:
+    <<: *m2-app
+    environment: *m2-env
+    command: ["node", "dist/worker.js"]
+    networks: [default, reservas-network]
+    depends_on:
+      m2-migrate:
+        condition: service_completed_successfully
+
+  m2-client:
+    image: ${M2_CLIENT_IMAGE:-leangau/integration-m2-ae2:client}
+    restart: unless-stopped
+    ports:
+      - "${M2_CLIENT_PORT:-11001}:80"
+    volumes:
+      # La imagen apunta a http://api:3000; acá va a m2-api (alias del gateway).
+      - ./integrated/client.conf:/etc/nginx/conf.d/app.conf:ro
+    depends_on:
+      - m2-gateway
+
+  # Base de datos propia de M2 (no compartida con otros módulos)
+  m2-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: profiles
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${M2_POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - ./docker/init-db:/docker-entrypoint-initdb.d:ro
+      - m2_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d profiles"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  m2_postgres_data:
+
+# Red del stack común (la define M9). Al declararla con el mismo nombre, Compose la une
+# a la existente en lugar de crear otra.
+networks:
+  reservas-network:
+    # Igual que en M9 y M6: Compose exige que las redes importadas con include
+    # tengan la misma definición; con {} el compose raíz falla ("conflicts with imported resource").
+    driver: bridge

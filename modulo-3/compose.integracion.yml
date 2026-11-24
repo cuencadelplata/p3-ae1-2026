@@ -1,0 +1,133 @@
+services:
+  m3-vehiculos:
+    build:
+      context: ./m3-vehiculos
+      dockerfile: Dockerfile
+    image: m3-vehiculos
+    container_name: m3-vehiculos
+    restart: unless-stopped
+    env_file:
+      - path: ./m3-vehiculos/.env.docker
+        required: false
+    environment:
+      PORT: 8083
+      M1_URL: "${M1_URL:-http://m1-identidad-acceso:3001}"
+      JWT_SECRET: "${M1_JWT_SECRET:-${JWT_SECRET:?Configurar M1_JWT_SECRET o JWT_SECRET con la misma clave privada para todos los modulos}}"
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672
+      OTEL_SERVICE_NAME: m3-vehiculos-service
+      # El collector es opcional: habilitar solo cuando este desplegado.
+      OTEL_SDK_DISABLED: "${M3_OTEL_SDK_DISABLED:-true}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${M3_OTEL_ENDPOINT:-http://alloy:4318}"
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    networks:
+      reservas-network:
+        aliases:
+          - m3-vehiculos
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  m3-conductor-api:
+    build:
+      context: ./M3-Conductor
+      dockerfile: Dockerfile
+    image: m3-conductor-api
+    container_name: m3-conductor-api
+    restart: unless-stopped
+    env_file:
+      - path: ./M3-Conductor/.env
+        required: false
+    environment:
+      PORT: 3000
+      M1_URL: "${M1_URL:-http://m1-identidad-acceso:3001}"
+      JWT_SECRET: "${M1_JWT_SECRET:-${JWT_SECRET:?Configurar M1_JWT_SECRET o JWT_SECRET con la misma clave privada para todos los modulos}}"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_TTL_HABILITADO: ${REDIS_TTL_HABILITADO:-300}
+      REDIS_TTL_DISPONIBLE: ${REDIS_TTL_DISPONIBLE:-60}
+      REDIS_CONNECT_TIMEOUT_MS: ${REDIS_CONNECT_TIMEOUT_MS:-1000}
+      REDIS_COMMAND_TIMEOUT_MS: ${REDIS_COMMAND_TIMEOUT_MS:-500}
+      REDIS_HEALTHCHECK_INTERVAL_MS: ${REDIS_HEALTHCHECK_INTERVAL_MS:-10000}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-m9}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-m9-local}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: m3.conductores.events
+      OTEL_SERVICE_NAME: m3-conductor-service
+      # El collector es opcional: habilitar solo cuando este desplegado.
+      OTEL_SDK_DISABLED: "${M3_OTEL_SDK_DISABLED:-true}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${M3_OTEL_ENDPOINT:-http://alloy:4318}"
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "5000:3000"
+    networks:
+      reservas-network:
+        aliases:
+          - m3-conductor-api
+          - m3-api
+      # Nginx usa "api" solo dentro de esta red privada, nunca en la compartida.
+      m3-frontend-network:
+        aliases: [api]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  m3-conductor-consumer:
+    build:
+      context: ./M3-Conductor
+      dockerfile: Dockerfile
+    container_name: m3-conductor-consumer
+    restart: unless-stopped
+    command: ["npm", "run", "consumer"]
+    environment:
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: m3.conductores.events
+      RABBITMQ_EXAMPLE_QUEUE: m3.ejemplo.driver-events
+    networks:
+      - reservas-network
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      m3-conductor-api:
+        condition: service_started
+
+  m3-conductor-frontend:
+    build:
+      context: ./M3-Conductor
+      dockerfile: Dockerfile.client
+    container_name: m3-conductor-frontend
+    restart: unless-stopped
+    ports:
+      - "4000:80"
+    networks:
+      - m3-frontend-network
+    depends_on:
+      m3-conductor-api:
+        condition: service_healthy
+
+networks:
+  reservas-network:
+    driver: bridge
+  m3-frontend-network:
+    driver: bridge
+    internal: true

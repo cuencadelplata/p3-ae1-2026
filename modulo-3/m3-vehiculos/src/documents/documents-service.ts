@@ -1,0 +1,105 @@
+import {
+  CaraDocumento,
+  TipoDocumento,
+  type Documento,
+} from "./documents-model.js";
+
+import type {
+  DocumentoRequestDTO,
+  DocumentoParaInsertar,
+} from "./documents-dto.js";
+import {
+  insertarDocumento,
+  listarDocumentosPorConductor,
+  buscarDocumentoDeConductor,
+} from "./documents-repository.js";
+import { buscarVehiculoDeConductor } from "../vehiculos/vehiculo-repository.js";
+import { AppError } from "../errors/AppError.js";
+import { publicarDocumentoRegistrado } from "./documents.events.js";
+
+export async function registrarDocumento(
+  driverId: string,
+  datos: DocumentoRequestDTO,
+): Promise<Documento> {
+  const tipo = String(datos.tipoDocumento).toUpperCase();
+  const tiposValidos = Object.values(TipoDocumento) as string[];
+  if (!/^\d+$/.test(driverId)) {
+    throw new AppError("driverId debe ser el userId numérico de M1", 400);
+  }
+  if (!tiposValidos.includes(tipo)) {
+    throw new AppError("Tipo de documento inválido");
+  }
+
+  if (!datos.numeroDocumento)
+    throw new AppError("Falta el número de documento");
+  if (!datos.archivoUrl) throw new AppError("Falta la URL del archivo");
+
+  const fecha = new Date(datos.fechaVencimiento);
+  if (isNaN(fecha.getTime()) || fecha <= new Date()) {
+    throw new AppError("La fecha de vencimiento tiene que ser futura");
+  }
+
+  const requiereVehiculo =
+    tipo === "SEGURO_VEHICULO" || tipo === "CEDULA_VEHICULO";
+
+  if (requiereVehiculo && !datos.vehicleId) {
+    throw new AppError(`El documento ${tipo} necesita un vehicleId`);
+  }
+  if (!requiereVehiculo && datos.vehicleId) {
+    throw new AppError("La licencia de conducir no va asociada a un vehículo");
+  }
+
+  // Frente / dorso: opcional, solo para la licencia y la cédula del vehículo
+  const llevaCara =
+    tipo === TipoDocumento.LICENCIA_CONDUCIR ||
+    tipo === TipoDocumento.CEDULA_VEHICULO;
+  let cara: CaraDocumento | null = null;
+  if (datos.cara !== undefined && datos.cara !== null && datos.cara !== "") {
+    const valor = String(datos.cara).toUpperCase();
+    if (!llevaCara) {
+      throw new AppError(
+        "Solo la licencia y la cédula del vehículo llevan cara (FRENTE/DORSO)",
+      );
+    }
+    if (!(Object.values(CaraDocumento) as string[]).includes(valor)) {
+      throw new AppError("La cara tiene que ser FRENTE o DORSO");
+    }
+    cara = valor as CaraDocumento;
+  }
+
+  if (datos.vehicleId) {
+    const vehiculo = await buscarVehiculoDeConductor(driverId, datos.vehicleId);
+    if (!vehiculo) {
+      throw new AppError("El vehículo no existe o no es de este conductor", 404);
+    }
+  }
+
+  const payload: DocumentoParaInsertar = {
+    driverId,
+    vehicleId: datos.vehicleId || null,
+    tipoDocumento: tipo as TipoDocumento,
+    numeroDocumento: datos.numeroDocumento.trim(),
+    fechaVencimiento: fecha.toISOString().split("T")[0]!,
+    archivoUrl: datos.archivoUrl.trim(),
+    cara,
+  };
+
+  const documento = await insertarDocumento(payload);
+
+  // si falla la publicación, no debe romper el registro del documento.
+  publicarDocumentoRegistrado(documento).catch((err) =>
+    console.error("No se pudo publicar evento de documento:", err),
+  );
+
+  return documento;
+}
+
+export async function listarDocumentos(driverId: string) {
+  return listarDocumentosPorConductor(driverId);
+}
+
+export async function obtenerDocumento(driverId: string, documentId: string) {
+  const documento = await buscarDocumentoDeConductor(driverId, documentId);
+  if (!documento) throw new AppError("Documento no encontrado", 404);
+  return documento;
+}

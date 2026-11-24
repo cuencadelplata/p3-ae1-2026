@@ -1,0 +1,47 @@
+services:
+  m7-api:
+    image: aylen0/m7-tarifas-ae2:latest
+    ports:
+      - "17000:3000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672
+      REDIS_URL: redis://redis:6379
+      CARGO_CANCELACION_URL: http://m7-api:3000
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - reservas-network
+    restart: on-failure
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "17001:5672"
+      - "17002:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+    networks:
+      - reservas-network
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - reservas-network
+
+networks:
+  reservas-network:
+    driver: bridge

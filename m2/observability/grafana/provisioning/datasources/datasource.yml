@@ -1,0 +1,10 @@
+# Grafana local: fuente de datos = Prometheus local (respaldo de Grafana Cloud).
+apiVersion: 1
+datasources:
+  - name: Prometheus local
+    uid: prometheus-local
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

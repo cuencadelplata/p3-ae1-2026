@@ -1,0 +1,68 @@
+# Composición ADICIONAL de observabilidad (AE4). No reemplaza docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up --build -d
+#   (o desde la raíz: npm run obs:up)
+#
+# Agrega Grafana Alloy y activa OpenTelemetry en M9 y en los stubs. Sin este archivo, el
+# inicio normal no cambia (OTEL_ENABLED=false) y no requiere cuenta de Grafana Cloud.
+# Requiere observability/.env.grafana-cloud (copiar desde grafana-cloud.env.example).
+
+x-otel-common: &otel-common
+  OTEL_ENABLED: 'true'
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
+  DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:-local-docker}
+  # Muestreo de trazas para ejecutar carga en el mismo equipo que la aplicación.
+  # Métricas y logs se conservan completos. Usar 1 para capturar todas las trazas
+  # en una demostración de poco tráfico; el contexto W3C conserva la decisión.
+  OTEL_TRACES_SAMPLER_RATIO: ${OTEL_TRACES_SAMPLER_RATIO:-0.1}
+  # 15 s: resolución suficiente para paneles y alertas de 1–5 min sin multiplicar muestras.
+  OTEL_METRIC_EXPORT_INTERVAL_MS: ${OTEL_METRIC_EXPORT_INTERVAL_MS:-15000}
+
+services:
+  alloy:
+    image: grafana/alloy:v1.21.3
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    env_file:
+      - path: ./observability/.env.grafana-cloud
+        required: true
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data
+    expose:
+      - '4318'
+    ports:
+      # UI de depuración de Alloy (grafo de componentes), solo en localhost.
+      - '127.0.0.1:${ALLOY_UI_PORT:-12345}:12345'
+    networks:
+      - reservas-network
+    restart: unless-stopped
+
+  m9-reservas:
+    image: m9-reservas-programadas:ae4-observabilidad
+    environment:
+      <<: *otel-common
+      OTEL_SERVICE_NAME: m9-reservas
+    depends_on:
+      alloy:
+        condition: service_started
+
+  m5-stub:
+    image: m9-reservas-programadas:ae4-observabilidad
+    environment:
+      <<: *otel-common
+      OTEL_SERVICE_NAME: m5-stub
+      OTEL_LOGS_ENABLED: 'false'
+
+  m7-stub:
+    image: m9-reservas-programadas:ae4-observabilidad
+    environment:
+      <<: *otel-common
+      OTEL_SERVICE_NAME: m7-stub
+      OTEL_LOGS_ENABLED: 'false'
+
+volumes:
+  alloy-data:

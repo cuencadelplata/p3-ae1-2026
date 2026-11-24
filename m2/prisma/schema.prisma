@@ -1,0 +1,83 @@
+// Prisma Schema para Módulo 2 (Clientes) - RF-2.4 Calificación del Conductor
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Calificacion {
+  id          String   @id @default(uuid())
+  viajeId     String   @unique @map("viaje_id")
+  clienteId   String   @map("cliente_id")
+  conductorId String   @map("conductor_id")
+  puntuacion  Int
+  comentario  String?  @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([clienteId])
+  @@index([conductorId])
+  @@map("calificaciones")
+}
+
+
+model Direccion {
+  id String @id @default(uuid())
+  clienteId String
+  tipo String
+  clave String
+  etiqueta String? @db.VarChar(60)
+  direccion String @db.VarChar(250)
+  latitud Float?
+  longitud Float?
+  favorita Boolean @default(false)
+  usos Int @default(0)
+  ultimoUso DateTime?
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([clienteId, tipo, clave])
+  @@index([clienteId, ultimoUso])
+}
+model RevisionCliente {
+  clienteId String @id
+  version Int @default(0)
+}
+model Idempotencia {
+  id String @id
+  hash String
+  respuesta Json
+  estado Int
+  createdAt DateTime @default(now())
+}
+model Inbox {
+  id String @id
+  createdAt DateTime @default(now())
+}
+model ViajeProcesado {
+  viajeId String @id
+  createdAt DateTime @default(now())
+}
+model Outbox {
+  id String @id @default(uuid())
+  tipo String
+  payload Json
+  correlationId String
+  createdAt DateTime @default(now())
+  publicadoAt DateTime?
+  @@index([publicadoAt, createdAt])
+}
+
+model ViajeReciente {
+  viajeId String @id
+  clienteId String
+  origen Json
+  destino Json
+  fechaViaje DateTime
+  fechaReferencia String
+  createdAt DateTime @default(now())
+  @@index([clienteId, fechaViaje])
+}

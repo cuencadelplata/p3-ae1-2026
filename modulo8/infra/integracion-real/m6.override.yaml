@@ -1,0 +1,30 @@
+# Override para el docker-compose.yml de M6 (modulo6/), usado sólo para
+# levantarlo junto a M8 en la misma máquina.
+#
+# Cambia los puertos publicados en el host que chocan con M8 y configura la
+# llamada de M6 al QR real de M8. No modifica las imagenes ni el codigo de M6.
+# Dentro de su red los servicios siguen en sus puertos de siempre.
+services:
+  viajes:
+    ports: !override
+      - "${M6_VIAJES_HOST_PORT:-13000}:3000"
+    environment:
+      # El contenedor M8 se une a la red de M6 desde compose.integracion-real.yaml.
+      M8_URL: http://m8-app:3000
+      # M6 debe leer esta variable y enviar su valor en x-api-key a las rutas QR.
+      M8_QR_API_KEY: "${QR_INTERNAL_API_KEY:?QR_INTERNAL_API_KEY must be configured}"
+
+  cancelacion:
+    ports: !reset []
+
+  fachada:
+    ports: !reset []
+
+  tripdb:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  rabbitmq:
+    ports: !reset []

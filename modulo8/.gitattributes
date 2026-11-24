@@ -1,0 +1,2 @@
+# Los scripts que ejecuta PostgreSQL en Docker necesitan saltos de línea LF.
+infra/postgres/init/*.sh text eol=lf

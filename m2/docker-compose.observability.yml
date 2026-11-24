@@ -1,0 +1,118 @@
+# Observabilidad de M2: Alloy envía las métricas a Grafana Cloud y, como respaldo ante cortes
+# de internet, a un Prometheus + Grafana locales. k6 corre las pruebas de carga.
+# Se usa encima del compose principal, desde m2/:
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d --build
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml run --rm k6 run /scripts/smoke.js
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml run --rm k6 run /scripts/carga.js
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml run --rm k6 run /scripts/direcciones.js   (RF-2.2)
+# (En Git Bash, anteponer MSYS_NO_PATHCONV=1 a los "run".)
+#
+# Tablero:  Grafana Cloud (con internet)  |  http://localhost:3001 (local, sin login, siempre)
+# Alloy:    http://localhost:12345 (estado de cada componente)
+#
+# Sin las credenciales GRAFANA_CLOUD_* en .env, Alloy arranca igual: el envío a Cloud falla,
+# pero el respaldo local recibe todo.
+services:
+  # Construye M2 con el código local: la imagen de Docker Hub no tiene las métricas de RF-2.2.
+  # Por eso este compose se levanta con --build.
+  api:
+    build: .
+  migrate:
+    build: .
+  worker:
+    build: .
+  m6-sim:
+    build: .
+
+  alloy:
+    image: grafana/alloy:v1.9.0
+    container_name: p3-alloy
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    environment:
+      GRAFANA_CLOUD_PROM_URL: ${GRAFANA_CLOUD_PROM_URL:-http://grafana-cloud-sin-configurar.invalid/api/prom/push}
+      GRAFANA_CLOUD_PROM_USER: ${GRAFANA_CLOUD_PROM_USER:-sin-configurar}
+      GRAFANA_CLOUD_API_KEY: ${GRAFANA_CLOUD_API_KEY:-sin-configurar}
+      # Etiqueta origen: identifica la máquina que envía (por defecto, el nombre del equipo en Windows)
+      M2_ORIGEN: ${M2_ORIGEN:-${COMPUTERNAME:-sin-nombre}}
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # WAL de Alloy. Durante un corte, mientras Alloy siga corriendo, lo pendiente se reenvía
+      # a Cloud al volver internet. Si se recrea el contenedor en pleno corte, ese tramo no se
+      # reenvía a Cloud (Alloy no reenvía muestras anteriores a su arranque), pero sigue en el
+      # Prometheus local. Por eso: no reiniciar Alloy durante un corte.
+      - alloy_data:/var/lib/alloy/data
+    ports:
+      - "127.0.0.1:12345:12345"
+    depends_on:
+      api:
+        condition: service_healthy
+      prometheus:
+        condition: service_started
+
+  # Respaldo local: recibe de Alloy por remote write (no lee la API por su cuenta)
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: p3-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:59090:9090"
+
+  # Grafana local con el mismo tablero que Grafana Cloud. Acceso anónimo de solo lectura;
+  # para editar: usuario admin, contraseña GRAFANA_LOCAL_ADMIN_PASSWORD (por defecto "admin").
+  grafana:
+    image: grafana/grafana:11.6.0
+    container_name: p3-grafana
+    restart: unless-stopped
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_LOCAL_ADMIN_PASSWORD:-admin}
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/m2-dashboard.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/m2-dashboard.json:/var/lib/grafana/dashboards/m2-dashboard.json:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      - prometheus
+
+  k6:
+    image: grafana/k6:1.0.0
+    profiles: ["k6"]
+    environment:
+      M2_URL: http://api:3000
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-internal-dev}
+      # direcciones.js publica TripCompleted por el simulador de M6
+      M6_SIM_URL: http://m6-sim:4000
+      INTEGRATION_SECRET: ${INTEGRATION_SECRET:-integration-dev}
+      K6_OUT: experimental-prometheus-rw
+      K6_PROMETHEUS_RW_SERVER_URL: http://alloy:9999/api/v1/metrics/write
+      K6_PROMETHEUS_RW_TREND_STATS: "p(95),p(99),avg,max"
+      # Al terminar la prueba, marca las series como finalizadas para que no queden "colgadas" en los paneles
+      K6_PROMETHEUS_RW_STALE_MARKERS: "true"
+    volumes:
+      - ./load/k6:/scripts:ro
+    depends_on:
+      - alloy
+
+volumes:
+  alloy_data:
+  prometheus_data:
+  grafana_data:

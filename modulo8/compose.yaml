@@ -1,0 +1,147 @@
+services:
+  m8-app:
+    image: "${M8_IMAGE:-modulo-8-m8-app:local}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:${M8_HOST_PORT:-8000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      PUBLIC_BASE_URL: "http://localhost:${M8_HOST_PORT:-8000}"
+      NOTIFICATIONS_DATABASE_URL: "postgres://m8_notifications:${NOTIFICATIONS_DB_PASSWORD:?NOTIFICATIONS_DB_PASSWORD must be configured}@postgres:5432/${POSTGRES_DB:-m8}"
+      M3_CONDUCTOR_BASE_URL: "${M3_CONDUCTOR_BASE_URL:-}"
+      M3_VEHICLES_BASE_URL: "${M3_VEHICLES_BASE_URL:-}"
+      DELIVERY_DATABASE_URL: "postgres://m8_notification_delivery:${DELIVERY_DB_PASSWORD:?DELIVERY_DB_PASSWORD must be configured}@postgres:5432/${POSTGRES_DB:-m8}"
+      RECEIPTS_DATABASE_URL: "postgres://m8_receipts:${RECEIPTS_DB_PASSWORD:?RECEIPTS_DB_PASSWORD must be configured}@postgres:5432/${POSTGRES_DB:-m8}"
+      SUPPORT_DATABASE_URL: "postgres://m8_support:${SUPPORT_DB_PASSWORD:?SUPPORT_DB_PASSWORD must be configured}@postgres:5432/${POSTGRES_DB:-m8}"
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: "${M8_RABBITMQ_URL:?M8_RABBITMQ_URL must be configured}"
+      QR_TTL_SECONDS: "${QR_TTL_SECONDS:-300}"
+      QR_EXPIRED_GRACE_SECONDS: "${QR_EXPIRED_GRACE_SECONDS:-3600}"
+      QR_INTERNAL_API_KEY: "${QR_INTERNAL_API_KEY:?QR_INTERNAL_API_KEY must be configured}"
+      RECEIPT_LINK_TTL_SECONDS: "${RECEIPT_LINK_TTL_SECONDS:-900}"
+      M1_IDENTITY_URL: "${M1_IDENTITY_URL:-http://m1-identity-sandbox:4011/auth/validar-identidad-y-rol}"
+      M1_TIMEOUT_MS: "${M1_TIMEOUT_MS:-2000}"
+      M1_JWT_SECRET: "${M1_JWT_SECRET:?M1_JWT_SECRET must be configured}"
+      M2_API_URL: "${M2_API_URL:-http://m2-preferences-sandbox:4012}"
+      M2_TIMEOUT_MS: "${M2_TIMEOUT_MS:-3000}"
+      M2_INTERNAL_API_KEY: "${M2_INTERNAL_API_KEY:?M2_INTERNAL_API_KEY must be configured}"
+      M7_PAYMENTS_URL: "${M7_PAYMENTS_URL:-http://m7-payments-sandbox:4020}"
+      M7_API_KEY: "${M7_API_KEY:-}"
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      m1-identity-sandbox:
+        condition: service_healthy
+      m2-preferences-sandbox:
+        condition: service_healthy
+
+  m2-preferences-sandbox:
+    image: node:24-alpine
+    working_dir: /app
+    command: ["node", "server.mjs"]
+    volumes:
+      - ./infra/m2-preferences-sandbox:/app:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4012/internal/preferences/42').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+  m1-identity-sandbox:
+    build:
+      context: ./infra/m1-identity-sandbox
+    environment:
+      PORT: "4011"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4011/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  m7-payments-sandbox:
+    build:
+      context: ./infra/m7-payments-sandbox
+    ports:
+      - "127.0.0.1:${M7_HOST_PORT:-4020}:4020"
+    environment:
+      M7_MODE: "${M7_MODE:-normal}"
+      UNREGISTERED_TRIPS: "${M7_UNREGISTERED_TRIPS:-autorizado}"
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: "${RABBITMQ_USER:?RABBITMQ_USER must be configured}"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be configured}"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-m8}"
+      POSTGRES_USER: "${POSTGRES_USER:-m8_admin}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be configured}"
+      RECEIPTS_DB_PASSWORD: "${RECEIPTS_DB_PASSWORD:?RECEIPTS_DB_PASSWORD must be configured}"
+      NOTIFICATIONS_DB_PASSWORD: "${NOTIFICATIONS_DB_PASSWORD:?NOTIFICATIONS_DB_PASSWORD must be configured}"
+      NOTIFICATIONS_TEST_DB_NAME: "${NOTIFICATIONS_TEST_DB_NAME:-m8_notifications_test}"
+      SUPPORT_DB_PASSWORD: "${SUPPORT_DB_PASSWORD:?SUPPORT_DB_PASSWORD must be configured}"
+      DELIVERY_DB_PASSWORD: "${DELIVERY_DB_PASSWORD:?DELIVERY_DB_PASSWORD must be configured}"
+    volumes:
+      - m8-postgres:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  alloy:
+    profiles: [observability]
+    image: grafana/alloy:v1.22.0
+    ports:
+      - "127.0.0.1:12345:12345"
+    volumes:
+      - ./infra/observability/config.alloy:/etc/alloy/config.alloy:ro
+    environment:
+      GRAFANA_CLOUD_REMOTE_WRITE_URL: "${GRAFANA_CLOUD_REMOTE_WRITE_URL:-}"
+      GRAFANA_CLOUD_USER: "${GRAFANA_CLOUD_USER:-}"
+      GRAFANA_CLOUD_TOKEN: "${GRAFANA_CLOUD_TOKEN:-}"
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy/config.alloy
+    restart: unless-stopped
+    depends_on:
+      - m8-app
+
+volumes:
+  m8-postgres:
+    name: m8-postgres

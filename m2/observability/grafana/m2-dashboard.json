@@ -1,0 +1,772 @@
+{
+  "title": "M2 Clientes",
+  "uid": "m2-clientes",
+  "description": "Métricas generales de M2 (tráfico y errores, latencia p95, estado de dependencias), métricas de negocio de RF-2.2 Direcciones frecuentes y resultados de k6. Fuente: Alloy → Grafana Cloud.",
+  "tags": [
+    "m2",
+    "clientes",
+    "k6"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 3,
+  "refresh": "30s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Fuente de datos",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {}
+      },
+      {
+        "name": "origen",
+        "label": "Origen",
+        "description": "Máquina que envía las métricas (etiqueta origen de Alloy, M2_ORIGEN).",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${ds}"
+        },
+        "query": {
+          "query": "label_values(m2_http_requests_total{modulo=\"m2\"}, origen)",
+          "refId": "origen"
+        },
+        "definition": "label_values(m2_http_requests_total{modulo=\"m2\"}, origen)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "sort": 1,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      },
+      {
+        "name": "requisito",
+        "label": "Requisito",
+        "description": "Filtra los paneles 1 y 2 por las rutas de cada RF de M2.",
+        "type": "custom",
+        "query": "Todos : .*,RF-2.1 Perfil y preferencias : /v1/customers|/v1/customers/me|/v1/customers/:id|/internal/preferences/:userId,RF-2.2 Direcciones : /api/v1/(direcciones|geocodificacion).*,RF-2.3 Historial de viajes : /v1/customers/:id/trips,RF-2.4 Calificaciones : (/api/v1)?/calificaciones.*,RF-2.5 Estado de cuenta : /v1/customers/:id/status",
+        "current": {
+          "text": "Todos",
+          "value": ".*"
+        },
+        "options": [],
+        "includeAll": false,
+        "multi": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Métricas del módulo",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "1. Tráfico y errores (pedidos/s por código)",
+      "description": "m2_http_requests_total: pedidos por segundo agrupados por código HTTP. Los 5xx indican errores del módulo.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status_code) (rate(m2_http_requests_total{modulo=\"m2\", origen=~\"$origen\", route=~\"$requisito\"}[$__rate_interval]))",
+          "legendFormat": "{{status_code}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "2. Latencia p95 por ruta",
+      "description": "m2_http_request_duration_seconds: el 95 % de los pedidos tardó menos que este valor. La línea roja es 1,8 s, el plazo acordado con M8 para /internal/preferences/:userId.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1.8
+              }
+            ]
+          },
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(m2_http_request_duration_seconds_bucket{modulo=\"m2\", origen=~\"$origen\", route=~\"$requisito\", route!~\"unmatched|/__stubs.*|/metrics\"}[$__rate_interval])))",
+          "legendFormat": "{{route}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "state-timeline",
+      "title": "3. Estado de las dependencias",
+      "description": "m2_circuit_state: circuit breaker de cada dependencia. closed = normal; open = M2 dejó de llamarla y responde degradado; half_open = probando si volvió.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "options": {
+        "showValue": "auto",
+        "mergeValues": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "closed",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "half_open",
+                  "color": "yellow",
+                  "index": 1
+                },
+                "2": {
+                  "text": "open",
+                  "color": "red",
+                  "index": 2
+                },
+                "3": {
+                  "text": "isolated",
+                  "color": "purple",
+                  "index": 3
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              },
+              {
+                "color": "purple",
+                "value": 3
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (dependency) (m2_circuit_state{modulo=\"m2\", origen=~\"$origen\", state=\"half_open\"}) * 1 + max by (dependency) (m2_circuit_state{modulo=\"m2\", origen=~\"$origen\", state=\"open\"}) * 2 + max by (dependency) (m2_circuit_state{modulo=\"m2\", origen=~\"$origen\", state=\"isolated\"}) * 3",
+          "legendFormat": "{{dependency}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Alta disponibilidad",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "panels": []
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Pedidos por réplica",
+      "description": "Pedidos/s que atiende cada réplica de la API detrás del gateway (instance=api / api-2). Si una réplica cae, su línea baja a 0 y la otra absorbe el tráfico.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (rate(m2_http_requests_total{modulo=\"m2\", origen=~\"$origen\", route!~\"/metrics|/health.*\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "RF-2.2 Direcciones frecuentes",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      }
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "4. Altas, ediciones y bajas de favoritas por resultado",
+      "description": "m2_direcciones_operaciones_total: cada operación sobre una favorita y cómo terminó. ok = se aplicó; replay = repetición con la misma Idempotency-Key (no duplica); duplicada, conflicto_version (412), conflicto_concurrente (409), no_encontrada = rechazos de negocio.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (operacion, resultado) (increase(m2_direcciones_operaciones_total{modulo=\"m2\", origen=~\"$origen\"}[$__rate_interval]))",
+          "legendFormat": "{{operacion}} · {{resultado}}"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "5. Idempotencia y concurrencia (en el rango elegido)",
+      "description": "Evidencia de RNF-08/RNF-09. Repeticiones absorbidas = pedidos repetidos que no generaron una segunda escritura. Reintentos de transacción = choques serializables resueltos solos. Conflictos agotados = choques que llegaron al cliente como 409.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(m2_direcciones_operaciones_total{modulo=\"m2\", origen=~\"$origen\", resultado=\"replay\"}[$__range]))",
+          "legendFormat": "Repeticiones absorbidas (replay)"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(increase(m2_direcciones_operaciones_total{modulo=\"m2\", origen=~\"$origen\", resultado=\"conflicto_idempotencia\"}[$__range]))",
+          "legendFormat": "Clave reusada con otros datos"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(increase(m2_direcciones_operaciones_total{modulo=\"m2\", origen=~\"$origen\", resultado=\"conflicto_version\"}[$__range]))",
+          "legendFormat": "Conflictos de versión (412)"
+        },
+        {
+          "refId": "D",
+          "expr": "sum(increase(m2_direcciones_reintentos_transaccion_total{modulo=\"m2\", origen=~\"$origen\", resultado=\"reintento\"}[$__range]))",
+          "legendFormat": "Reintentos de transacción"
+        },
+        {
+          "refId": "E",
+          "expr": "sum(increase(m2_direcciones_reintentos_transaccion_total{modulo=\"m2\", origen=~\"$origen\", resultado=\"agotado\"}[$__range]))",
+          "legendFormat": "Conflictos agotados (409)"
+        },
+        {
+          "refId": "F",
+          "expr": "sum(increase(m2_direcciones_viajes_recientes_total{modulo=\"m2\", origen=~\"$origen\", resultado=\"duplicado\"}[$__range]))",
+          "legendFormat": "Viajes duplicados ignorados"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value_and_name",
+        "colorMode": "none",
+        "graphMode": "none",
+        "orientation": "horizontal"
+      }
+    },
+    {
+      "id": 22,
+      "type": "gauge",
+      "title": "6. Aciertos de caché de direcciones",
+      "description": "m2_direcciones_cache_total: porcentaje de listas de direcciones servidas desde Redis (hit) en el rango. bypass = Redis caído; la lista se sirve igual desde PostgreSQL.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 6,
+        "x": 0,
+        "y": 29
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "noValue": "sin lecturas",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 0.8
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(m2_direcciones_cache_total{modulo=\"m2\", origen=~\"$origen\", resultado=\"hit\"}[$__range])) / sum(increase(m2_direcciones_cache_total{modulo=\"m2\", origen=~\"$origen\"}[$__range]))",
+          "legendFormat": "Aciertos"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "7. Calidad de las sugerencias",
+      "description": "m2_direcciones_sugerencias_total y m2_direcciones_sugerencias_candidatos: qué parte de las sugerencias ofrece el regreso B → A y qué parte llega vacía (sin ninguna dirección para elegir).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 6,
+        "x": 6,
+        "y": 29
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 0,
+          "noValue": "sin sugerencias"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(m2_direcciones_sugerencias_total{modulo=\"m2\", origen=~\"$origen\", regreso=\"si\"}[$__range])) / sum(increase(m2_direcciones_sugerencias_total{modulo=\"m2\", origen=~\"$origen\"}[$__range]))",
+          "legendFormat": "Con regreso B → A"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(increase(m2_direcciones_sugerencias_candidatos_bucket{modulo=\"m2\", origen=~\"$origen\", le=\"0\"}[$__range])) / sum(increase(m2_direcciones_sugerencias_candidatos_count{modulo=\"m2\", origen=~\"$origen\"}[$__range]))",
+          "legendFormat": "Vacías"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value_and_name",
+        "colorMode": "none",
+        "graphMode": "none",
+        "orientation": "horizontal"
+      }
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "8. Viajes completados que alimentan las recientes",
+      "description": "m2_direcciones_viajes_recientes_total por vía (rest = importación manual, evento_m2/evento_m6 = TripCompleted por RabbitMQ) y resultado. duplicado = el mismo viaje llegó otra vez y no se contó dos veces.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 29
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (via, resultado) (increase(m2_direcciones_viajes_recientes_total{modulo=\"m2\", origen=~\"$origen\"}[$__rate_interval]))",
+          "legendFormat": "{{via}} · {{resultado}}"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "9. Mensajes consumidos por el worker",
+      "description": "m2_mensajes_consumidos_total: mensajes de RabbitMQ por cola y resultado. reintento = vuelve a la cola .retry; dlq = agotó los 3 reintentos; contrato_invalido = el mensaje no cumple el esquema y va directo a la DLQ.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (cola, resultado) (rate(m2_mensajes_consumidos_total{modulo=\"m2\", origen=~\"$origen\"}[$__rate_interval]))",
+          "legendFormat": "{{cola}} · {{resultado}}"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "type": "timeseries",
+      "title": "10. Outbox hacia M8 (FavoriteAddressChanged)",
+      "description": "m2_outbox_pendientes: eventos guardados que todavía no salieron a RabbitMQ (si crece, el worker o RabbitMQ están caídos). m2_outbox_demora_segundos: p95 del tiempo entre el cambio de la favorita y su publicación.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 8,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Demora p95"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(m2_outbox_pendientes{modulo=\"m2\", origen=~\"$origen\"})",
+          "legendFormat": "Pendientes"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(m2_outbox_demora_segundos_bucket{modulo=\"m2\", origen=~\"$origen\"}[$__rate_interval])))",
+          "legendFormat": "Demora p95"
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "type": "timeseries",
+      "title": "11. Geocodificación con M4",
+      "description": "m2_geocodificacion_duracion_segundos: latencia p95 de las búsquedas en M4 y porcentaje que falla (el cliente recibe 503 MAPS_UNAVAILABLE).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fallas"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(m2_geocodificacion_duracion_segundos_bucket{modulo=\"m2\", origen=~\"$origen\"}[$__rate_interval])))",
+          "legendFormat": "Latencia p95"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(m2_geocodificacion_duracion_segundos_count{modulo=\"m2\", origen=~\"$origen\", resultado=\"error\"}[$__rate_interval])) / sum(rate(m2_geocodificacion_duracion_segundos_count{modulo=\"m2\", origen=~\"$origen\"}[$__rate_interval]))",
+          "legendFormat": "Fallas"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Pruebas de carga (k6)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Usuarios virtuales de k6",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 48
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (testid) (k6_vus{modulo=\"m2\", origen=~\"$origen\"})",
+          "legendFormat": "{{testid}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Latencia p95 vista por k6",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 48
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (testid, name) (k6_http_req_duration_p95{modulo=\"m2\", origen=~\"$origen\", name!=\"setup\"})",
+          "legendFormat": "{{testid}} {{name}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Pedidos fallidos según k6",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 48
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{testid}}",
+          "expr": "1 - (sum by (testid) (rate(k6_http_reqs_total{modulo=\"m2\", origen=~\"$origen\", name!=\"setup\", expected_response=\"true\"}[$__rate_interval])) / sum by (testid) (rate(k6_http_reqs_total{modulo=\"m2\", origen=~\"$origen\", name!=\"setup\"}[$__rate_interval])))"
+        }
+      ],
+      "description": "Porcentaje de pedidos de k6 con respuesta no esperada: 1 - exitosos / total (expected_response). Marca 0 % cuando no hay fallas. No incluye el setup."
+    }
+  ]
+}

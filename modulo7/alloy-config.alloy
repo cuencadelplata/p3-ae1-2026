@@ -1,0 +1,36 @@
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+loki.source.docker "m7_logs" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.docker.containers.targets
+  forward_to = [loki.write.grafana_cloud.receiver]
+}
+
+loki.write "grafana_cloud" {
+  endpoint {
+    url = "https://logs-prod-024.grafana.net/loki/api/v1/push"
+    basic_auth {
+      username = "1883301"
+      password = env("GRAFANA_LOGS_TOKEN")
+    }
+  }
+}
+
+prometheus.scrape "m7" {
+  targets         = [{ __address__ = "modulo7-m7-api-1:3000" }]
+  scrape_interval = "15s"
+  metrics_path    = "/metrics"
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = "https://prometheus-prod-40-prod-sa-east-1.grafana.net/api/prom/push"
+    basic_auth {
+      username = "3775266"
+      password = env("GRAFANA_METRICS_TOKEN")
+    }
+  }
+}

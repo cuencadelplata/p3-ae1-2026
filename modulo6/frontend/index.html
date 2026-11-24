@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#173c34">
+    <title>M6 Viajes | Operaciones</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="M6 Viajes, inicio">
+        <span class="brand-mark">M6</span>
+        <span class="brand-name">VIAJES<span> / OPERACIONES</span></span>
+      </a>
+      <div class="topbar-right">
+        <span class="api-status"><span class="status-dot"></span>API M6</span>
+        <button class="button button-quiet" id="refresh-button" type="button" title="Actualizar viajes">
+          Actualizar
+        </button>
+      </div>
+    </header>
+
+    <main class="shell">
+      <section class="page-heading">
+        <div>
+          <p class="eyebrow">CICLO DE VIDA · RF-6.1 / 6.2 / 6.3</p>
+          <h1>Panel de viajes</h1>
+        </div>
+        <div class="summary" aria-label="Resumen de viajes">
+          <div class="summary-item"><strong id="count-active">0</strong><span>En curso</span></div>
+          <div class="summary-item"><strong id="count-waiting">0</strong><span>Esperando</span></div>
+          <div class="summary-item"><strong id="count-total">0</strong><span>En pantalla</span></div>
+        </div>
+      </section>
+
+      <div class="workspace">
+        <aside class="request-panel">
+          <div class="section-heading">
+            <span class="step-number">01</span>
+            <div><p class="eyebrow">NUEVO RECORRIDO</p><h2>Solicitar viaje</h2></div>
+          </div>
+
+          <form id="request-form" class="form-stack">
+            <label for="client-id">Cliente</label>
+            <input id="client-id" name="clienteId" autocomplete="off" required value="cliente-demo-001">
+
+            <label for="origin">Punto de partida</label>
+            <input id="origin" name="origen" autocomplete="street-address" placeholder="Dirección de origen" required>
+
+            <label for="destination">Destino</label>
+            <input id="destination" name="destino" autocomplete="street-address" placeholder="Dirección de destino" required>
+
+            <button class="button button-primary" type="submit">Crear solicitud <span aria-hidden="true">↗</span></button>
+          </form>
+
+          <div class="panel-rule"></div>
+          <p class="panel-note">La asignación manual está disponible para probar el flujo mientras se integra el despacho de M5.</p>
+        </aside>
+
+        <section class="operations" aria-label="Operaciones de viajes">
+          <div class="list-heading">
+            <div><p class="eyebrow">SEGUIMIENTO</p><h2>Viajes del cliente</h2></div>
+            <label class="client-filter" for="filter-client">ID cliente
+              <input id="filter-client" autocomplete="off" value="cliente-demo-001">
+            </label>
+          </div>
+
+          <div class="content-grid">
+            <section class="trip-list-panel" aria-label="Lista de viajes">
+              <div class="list-meta"><span id="list-caption">Sin viajes cargados</span><span class="list-arrow">ID / ESTADO</span></div>
+              <div id="trip-list" class="trip-list" aria-live="polite"></div>
+              <div id="empty-state" class="empty-state">
+                <span class="empty-mark">—</span>
+                <h3>No hay viajes para mostrar</h3>
+                <p>Creá una solicitud o revisá el ID de cliente.</p>
+              </div>
+            </section>
+
+            <section id="trip-detail" class="detail-panel" aria-live="polite">
+              <div class="detail-empty">
+                <span class="detail-index">02 / 03</span>
+                <p>Seleccioná un viaje para ver sus datos y continuar el recorrido.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+    </main>
+    <footer class="footer"><span>M6 · Gestión del ciclo de vida</span><span>Entorno de integración</span></footer>
+  </body>
+</html>

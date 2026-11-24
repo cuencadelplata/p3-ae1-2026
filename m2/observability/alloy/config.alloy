@@ -1,0 +1,103 @@
+// Grafana Alloy: intermediario entre M2 y Grafana Cloud.
+// Flujo: scrape (API) y receive_http (k6) → relabel (filtra y etiqueta) → remote_write (Grafana Cloud).
+// Las credenciales salen de variables de entorno (GRAFANA_CLOUD_*), cargadas desde m2/.env.
+
+// 1. Lee las métricas de cada réplica de la API de M2 y del worker cada 15 s.
+//    Sin alta disponibilidad solo existe "api"; con docker-compose.ha.yml también "api-2".
+//    En el stack integrado (docker-compose.app.yml) la API son dos réplicas, m2-api-1 y m2-api-2,
+//    detrás de m2-gateway (alias m2-api). Se lee cada réplica, no el gateway: por el gateway
+//    cada scrape caería en una réplica distinta y los contadores se mezclarían.
+//    Si un nombre no resuelve, simplemente no hay objetivo (no queda una réplica "caída" falsa).
+discovery.dns "m2_api" {
+  names            = ["api", "api-2", "m2-api-1", "m2-api-2"]
+  type             = "A"
+  port             = 3000
+  refresh_interval = "15s"
+}
+
+//    El worker (RabbitMQ + outbox de RF-2.2) no tiene API: expone solo /metrics en el puerto 9464.
+discovery.dns "m2_worker" {
+  names            = ["worker", "m2-worker"]
+  type             = "A"
+  port             = 9464
+  refresh_interval = "15s"
+}
+
+//    Cada réplica se identifica por su nombre de servicio (instance="api" / "api-2" / "worker"),
+//    así sus contadores no se mezclan.
+discovery.relabel "m2_api" {
+  targets = array.concat(discovery.dns.m2_api.targets, discovery.dns.m2_worker.targets)
+
+  rule {
+    source_labels = ["__meta_dns_name"]
+    target_label  = "instance"
+  }
+  rule {
+    target_label = "job"
+    replacement  = "m2-clientes"
+  }
+}
+
+prometheus.scrape "m2_api" {
+  targets         = discovery.relabel.m2_api.output
+  metrics_path    = "/metrics"
+  scrape_interval = "15s"
+  forward_to      = [prometheus.relabel.m2.receiver]
+}
+
+// 2. Recibe las métricas que manda k6 (-o experimental-prometheus-rw).
+//    URL para k6: http://alloy:9999/api/v1/metrics/write
+prometheus.receive_http "k6" {
+  http {
+    listen_address = "0.0.0.0"
+    listen_port    = 9999
+  }
+  forward_to = [prometheus.relabel.m2.receiver]
+}
+
+// 3. Deja solo las series de M2 y de k6 y les agrega modulo="m2",
+//    así no se mezclan si el stack de Grafana Cloud es compartido entre módulos.
+prometheus.relabel "m2" {
+  rule {
+    source_labels = ["__name__"]
+    regex         = "m2_.*|k6_.*|up"
+    action        = "keep"
+  }
+  rule {
+    target_label = "modulo"
+    replacement  = "m2"
+  }
+  // Máquina que envía (M2_ORIGEN). Sin esta etiqueta, dos máquinas mandando al mismo
+  // stack generan series idénticas que se pisan e inflan los paneles.
+  rule {
+    target_label = "origen"
+    replacement  = coalesce(sys.env("M2_ORIGEN"), constants.hostname)
+  }
+  // Cada muestra va a los dos destinos; cada uno tiene su propia cola y su WAL.
+  forward_to = [
+    prometheus.remote_write.grafana_cloud.receiver,
+    prometheus.remote_write.local.receiver,
+  ]
+}
+
+// 4. Envía a Grafana Cloud. Sin credenciales válidas, o durante un corte de internet,
+//    este paso falla y reintenta; lo pendiente queda en el WAL y se envía cuando vuelve la
+//    conexión, siempre que Alloy no se reinicie en el medio. Los otros pasos siguen andando.
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_CLOUD_PROM_URL")
+
+    basic_auth {
+      username = sys.env("GRAFANA_CLOUD_PROM_USER")
+      password = sys.env("GRAFANA_CLOUD_API_KEY")
+    }
+  }
+}
+
+// 5. Respaldo local: Prometheus en Docker, consultado por el Grafana local
+//    (http://localhost:3001). Funciona sin internet.
+prometheus.remote_write "local" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}

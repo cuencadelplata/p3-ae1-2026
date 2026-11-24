@@ -1,0 +1,38 @@
+name: M9 - Tests
+
+on:
+  push:
+    paths:
+      - 'M9-ReservasProgramadas/**'
+      - '.github/workflows/test.yml'
+  pull_request:
+    paths:
+      - 'M9-ReservasProgramadas/**'
+      - '.github/workflows/test.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: M9-ReservasProgramadas
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: M9-ReservasProgramadas/package-lock.json
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run test:coverage
+      - name: Guardar cobertura de M9
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m9-coverage
+          path: M9-ReservasProgramadas/coverage/
+          if-no-files-found: ignore
+          retention-days: 7

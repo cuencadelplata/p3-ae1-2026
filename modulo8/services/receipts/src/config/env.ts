@@ -1,0 +1,158 @@
+import dotenv from 'dotenv';
+
+dotenv.config({ quiet: true });
+
+function readText(name: string, fallback: string): string {
+  const raw = process.env[name];
+  return raw === undefined || raw.trim() === '' ? fallback : raw.trim();
+}
+
+function readRequiredText(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Falta la variable de entorno ${name}.`);
+  }
+  return value;
+}
+
+function readPort(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+    throw new Error(`La variable de entorno ${name} debe ser un puerto valido (1-65535). Valor recibido: "${raw}"`);
+  }
+  return parsed;
+}
+
+function readPositiveInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`La variable de entorno ${name} debe ser un entero positivo. Valor recibido: "${raw}"`);
+  }
+  return parsed;
+}
+
+// Normaliza a la forma "/segmento" para que las rutas montadas no dependan de como
+// se escriba la variable en el .env.
+function readPathPrefix(name: string, fallback: string): string {
+  const value = readText(name, fallback).replace(/\/+$/, '');
+  return value.startsWith('/') ? value : `/${value}`;
+}
+
+const port = readPort('PORT', 3008);
+
+export const env = {
+  nodeEnv: readText('NODE_ENV', 'development'),
+  serviceName: 'm8-documentos',
+  serviceVersion: readText('SERVICE_VERSION', '2.6.0'),
+  port,
+
+  /** Prefijo de la API REST versionada. */
+  apiPrefix: readPathPrefix('API_PREFIX', '/api/v1'),
+
+  /** URL base usada para construir los enlaces de descarga devueltos por la API. */
+  publicBaseUrl: readText('PUBLIC_BASE_URL', `http://localhost:${port}`).replace(/\/+$/, ''),
+
+  /** Origenes permitidos por CORS. "*" habilita cualquier origen. */
+  corsOrigin: readText('CORS_ORIGIN', '*'),
+
+  /**
+   * Conexion a PostgreSQL con el rol propio del servicio, que solo tiene
+   * permisos sobre el esquema "receipts" (RNF-04).
+   */
+  databaseUrl: readRequiredText('RECEIPTS_DATABASE_URL'),
+
+  /** Redis guarda solo datos efimeros: los enlaces temporales de descarga. */
+  redisUrl: readText('REDIS_URL', 'redis://localhost:6379'),
+
+  /** Vigencia de un enlace temporal de descarga del PDF, en segundos. */
+  receiptLinkTtlSeconds: readPositiveInt('RECEIPT_LINK_TTL_SECONDS', 900),
+
+  /** Mensajeria segun el catalogo de eventos v1 (modulo8/contracts/events). */
+  rabbitmqUrl: readText('RABBITMQ_URL', ''),
+  eventsExchange: readText('EVENTS_EXCHANGE', 'mobility.events'),
+  deadLetterExchange: readText('EVENTS_DEAD_LETTER_EXCHANGE', 'mobility.events.dlx'),
+  paymentConfirmedQueue: readText('PAYMENT_CONFIRMED_QUEUE', 'm8.receipts.payment-confirmed'),
+  /** Cola propia de receipts para el TripCompleted que publica M6 al finalizar un viaje. */
+  tripCompletedQueue: readText('TRIP_COMPLETED_QUEUE', 'm8.receipts.trip-completed'),
+
+  /** Mensajes que el consumidor procesa a la vez antes de confirmar. */
+  consumerPrefetch: readPositiveInt('CONSUMER_PREFETCH', 5),
+
+  /** Reintentos ante fallos transitorios antes de enviar el mensaje a la DLQ. */
+  consumerMaxRetries: readPositiveInt('CONSUMER_MAX_RETRIES', 3),
+
+  /** Espera entre reintentos, en milisegundos. */
+  consumerRetryDelayMs: readPositiveInt('CONSUMER_RETRY_DELAY_MS', 5000),
+
+  /** Espera entre revisiones de la bandeja de salida de eventos, en milisegundos. */
+  outboxPollIntervalMs: readPositiveInt('OUTBOX_POLL_INTERVAL_MS', 1000),
+
+  /** Eventos que se publican por revision de la bandeja de salida. */
+  outboxBatchSize: readPositiveInt('OUTBOX_BATCH_SIZE', 20),
+
+  /** Espera entre intentos de preparar el esquema si PostgreSQL no esta disponible al arrancar. */
+  databaseStartupRetryMs: readPositiveInt('DATABASE_STARTUP_RETRY_MS', 3000),
+
+  /**
+   * API de pagos de M7 (GET /metodo-pago/{viajeId}), fuente de verdad del estado
+   * del pago. Simulada en modulo8/infra/m7-payments-sandbox.
+   */
+  m7PaymentsUrl: readText('M7_PAYMENTS_URL', 'http://localhost:4020').replace(/\/+$/, ''),
+
+  /** Clave compartida con M7 real. El sandbox local no exige autenticacion. */
+  m7ApiKey: readText('M7_API_KEY', ''),
+
+  /** Tiempo maximo de espera de una consulta a M7, en milisegundos. */
+  m7TimeoutMs: readPositiveInt('M7_TIMEOUT_MS', 2000),
+
+  /**
+   * API de viajes de M6 (GET /api/viajes). Con el evento TripCompleted, receipts
+   * le pide a M6 el recorrido del viaje. Vacia: no se consume TripCompleted.
+   */
+  m6TripsUrl: readText('M6_TRIPS_URL', '').replace(/\/+$/, ''),
+
+  /** Tiempo maximo de espera de una consulta a M6, en milisegundos. */
+  m6TimeoutMs: readPositiveInt('M6_TIMEOUT_MS', 2000),
+
+  /** API de conductores de M3 (GET /api/conductores/{userId}). */
+  m3ConductorUrl: readText('M3_CONDUCTOR_BASE_URL', '').replace(/\/+$/, ''),
+
+  /** API de vehiculos de M3 (GET /api/v1/drivers/{userId}/vehicles). */
+  m3VehiclesUrl: readText('M3_VEHICLES_BASE_URL', '').replace(/\/+$/, ''),
+
+  /** Tiempo maximo de espera de una consulta a M3, en milisegundos. */
+  m3TimeoutMs: readPositiveInt('M3_TIMEOUT_MS', 2000),
+
+  /** Datos de presentacion del emisor dentro del PDF. */
+  issuerName: readText('RECEIPT_ISSUER_NAME', 'Plataforma de Movilidad Urbana'),
+  issuerTeam: readText('RECEIPT_ISSUER_TEAM', 'Grupo 14 - Modulo 8'),
+  timezone: readText('RECEIPT_TIMEZONE', 'America/Argentina/Buenos_Aires'),
+  locale: readText('RECEIPT_LOCALE', 'es-AR'),
+
+  /** RF-8.4 (Lucas Cremaschi): TTL para la cache de metadatos en Redis (segundos). */
+  receiptCacheTtlSeconds: readPositiveInt('RECEIPT_CACHE_TTL_SECONDS', 300),
+
+  /** RF-8.4: TTL del lock distribuido de reenvio en Redis (milisegundos). */
+  resendLockTtlMs: readPositiveInt('RESEND_LOCK_TTL_MS', 5000),
+
+  /** RF-8.4: Maximo de solicitudes de reenvio permitidas por ventana (rate limiting). */
+  resendRateLimitMax: readPositiveInt('RESEND_RATE_LIMIT_MAX', 3),
+
+  /** RF-8.4: Ventana de tiempo para el rate limiting de reenvios, en segundos. */
+  resendRateLimitWindowSeconds: readPositiveInt('RESEND_RATE_LIMIT_WINDOW_SECONDS', 60),
+
+  /**
+   * RF-8.4 / M1: endpoint canÃ³nico que valida el Bearer recibido del usuario.
+   * No se configura una clave compartida ni un mecanismo M2M no acordado.
+   */
+  m1IdentityUrl: readText('M1_IDENTITY_URL', '').replace(/\/+$/, ''),
+  m1TimeoutMs: readPositiveInt('M1_TIMEOUT_MS', 2000),
+} as const;

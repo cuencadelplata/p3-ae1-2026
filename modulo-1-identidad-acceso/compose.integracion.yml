@@ -1,0 +1,82 @@
+# M1 (Identidad y Acceso) dentro del stack común `movilidad-urbana`.
+#
+# Lo incluye el docker-compose.yml de la raíz. No trae Redis ni RabbitMQ propios:
+# usa los compartidos que define M9 (`redis:6379` y `rabbitmq:5672`) y la red
+# `reservas-network`. Los otros módulos llaman a M1 por su nombre de servicio:
+#   http://m1-identidad-acceso:3001
+# Para desarrollo y tests aislados se sigue usando modulo-1-identidad-acceso/docker-compose.yml.
+#
+# Variables (en el .env de la raíz, nunca en Git):
+#   M1_JWT_SECRET      secreto del JWT; el mismo que usa M8 para validar los tokens de M1
+#   M1_NODE_ENV        development (por defecto) o production. En production M1 no arranca
+#                      sin un M1_JWT_SECRET seguro (fail-closed)
+#   M1_HOST_PORT       puerto del host (por defecto 10000, solo en 127.0.0.1)
+#   M1_IMAGE           imagen a usar (por defecto la versión de la AE4 publicada en Docker Hub)
+#   RABBITMQ_USER, RABBITMQ_PASSWORD   los mismos que usa el RabbitMQ compartido
+#   M1_UI_PORT         puerto de la interfaz de M1 (por defecto 5173). Es la dirección de retorno
+#                      registrada en Google y Auth0: si se cambia, hay que registrarla también ahí
+#   M1_UI_IMAGE        imagen de la interfaz (por defecto se construye desde modulo-1-identidad-acceso-ui)
+
+services:
+  m1-identidad-acceso:
+    image: "${M1_IMAGE:-matsir/m1-identidad-acceso:ae4-v1.0}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:${M1_HOST_PORT:-10000}:3001"
+    environment:
+      NODE_ENV: "${M1_NODE_ENV:-development}"
+      PORT: "3001"
+      JWT_SECRET: "${M1_JWT_SECRET:-${JWT_SECRET:?Configurar M1_JWT_SECRET o JWT_SECRET con la misma clave privada para todos los modulos}}"
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: "amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672"
+      LOGIN_MAX_INTENTOS: "${M1_LOGIN_MAX_INTENTOS:-5}"
+      LOGIN_VENTANA_SEGUNDOS: "${M1_LOGIN_VENTANA_SEGUNDOS:-60}"
+      RECUPERACION_TTL_SEGUNDOS: "${M1_RECUPERACION_TTL_SEGUNDOS:-900}"
+      GOOGLE_CLIENT_ID: "${M1_GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${M1_GOOGLE_CLIENT_SECRET:-}"
+      AUTH0_DOMAIN: "${M1_AUTH0_DOMAIN:-}"
+      AUTH0_CLIENT_ID: "${M1_AUTH0_CLIENT_ID:-}"
+      AUTH0_CLIENT_SECRET: "${M1_AUTH0_CLIENT_SECRET:-}"
+    volumes:
+      - m1-identity-data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - reservas-network
+    restart: unless-stopped
+
+  # Interfaz web de M1 (React + nginx). La abre el navegador en http://localhost:5173
+  # y desde ahí llama a M1 en http://localhost:10000.
+  m1-ui:
+    image: "${M1_UI_IMAGE:-m1-identidad-acceso-ui:local}"
+    build:
+      context: ../modulo-1-identidad-acceso-ui
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: "http://localhost:${M1_HOST_PORT:-10000}"
+    ports:
+      - "${M1_UI_PORT:-5173}:80"
+    depends_on:
+      m1-identidad-acceso:
+        condition: service_healthy
+    networks:
+      - reservas-network
+    restart: unless-stopped
+
+networks:
+  reservas-network:
+    driver: bridge
+
+volumes:
+  m1-identity-data:
