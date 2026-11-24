@@ -214,7 +214,7 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
   });
 
   test('5b. M9 → M5: la reserva se activa y pide el viaje a M5', {
-    todo: 'El scheduler de M9 activa la reserva fuera de una petición del pasajero y necesita un token delegado de M1 (M9_DISPATCH_AUTH_URL) que M1 todavía no publica. Sin eso responde DELEGACION_NO_CONFIGURADA.',
+    todo: 'El despacho automático requiere configurar el emisor de M1 y la credencial compartida de M9. Este E2E cubre el alta de la reserva y el despacho inmediato en pasos separados.',
   }, () => {});
 
   test('6. M5: el pasajero pide el viaje y el conductor acepta la oferta', async () => {

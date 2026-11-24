@@ -52,4 +52,4 @@ y en el `.env` de la raíz apuntar `M6_M7_URL`, `M8_M7_PAYMENTS_URL`, `M7_URL` y
 
 ## Pendiente: activación de reservas (M9 → M5)
 
-M9 activa la reserva desde su scheduler, fuera de una petición del pasajero, y para pedir el viaje a M5 necesita un token delegado de M1 (`M9_DISPATCH_AUTH_URL`). M1 todavía no publica ese servicio, así que la activación responde `DELEGACION_NO_CONFIGURADA`. El paso queda marcado como pendiente (`todo`) hasta que exista.
+M9 activa la reserva desde su scheduler, fuera de una petición del pasajero, y para pedir el viaje a M5 necesita un token delegado de M1 (`M9_DISPATCH_AUTH_URL`). M1 publica `POST /auth/token-delegado`. Configurá `M9_DISPATCH_AUTH_URL=http://m1-identidad-acceso:3001/auth/token-delegado` y la credencial privada `M9_DISPATCH_AUTH_TOKEN` que comparten M1 y M9. El test actual comprueba el alta de la reserva y el despacho inmediato por separado. La hora de activación automática queda fuera de esa corrida.
