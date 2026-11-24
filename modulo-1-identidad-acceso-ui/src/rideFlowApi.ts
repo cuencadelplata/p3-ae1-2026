@@ -33,6 +33,9 @@ export interface Trip {
   rideRequestId: string
   conductorId: string
   estado: string
+  origen: string
+  destino: string
+  fechaCreacion: string
 }
 export interface QR {
   token: string
@@ -44,6 +47,16 @@ export interface Payment {
   estadoPago: string
   viaje: { total: number; moneda: string; metodoPago: string }
 }
+export interface TripFinalization {
+  paymentId: string
+  estadoPago: string
+  total: number
+  moneda: string
+  metodoPago: string
+  distanciaKm: number
+  tiempoMinutos: number
+}
+export type TripRecord = Omit<Trip, 'rideRequestId'> & { finalizacion?: TripFinalization | null }
 export interface Receipt {
   receiptNumber: string
   driver: { vehicle: { plate: string } }
@@ -77,6 +90,7 @@ export async function request<T>(service: Service, path: string, options: Option
   try {
     response = await fetch(`${base}${path}`, {
       method,
+      ...(method === 'GET' && { cache: 'no-store' }),
       headers: {
         ...(body && { 'Content-Type': 'application/json' }),
         ...(token && { Authorization: `Bearer ${token}` }),

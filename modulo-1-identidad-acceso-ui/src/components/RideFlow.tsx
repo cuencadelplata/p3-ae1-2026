@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, CarFront, CircleCheck, CreditCard, MapPin, Navigation, QrCode, Route } from 'lucide-react'
 import RideMap from './RideMap'
 import { destination, ensurePassenger, FlowError, origin, pollTrip, request, sandboxPayment } from '../rideFlowApi'
-import type { Account, Payment, QR, Receipt, RideRequest, Trip } from '../rideFlowApi'
+import type { Account, Payment, QR, Receipt, RideRequest, Trip, TripRecord } from '../rideFlowApi'
 import './RideFlow.css'
 
 interface Journey {
@@ -10,7 +10,6 @@ interface Journey {
   ride?: RideRequest
   trip?: Trip
   qr?: QR
-  started?: boolean
   payment?: Payment
   receipt?: Receipt
 }
@@ -25,8 +24,8 @@ function readJourney(key: string): Journey {
     const saved = sessionStorage.getItem(key)
     if (saved) {
       // Conserva el viaje y elimina la sesión secundaria guardada por la versión anterior.
-      const { key: id, ride, trip, qr, started, payment, receipt } = JSON.parse(saved) as Journey
-      return { key: id, ride, trip, qr, started, payment, receipt }
+      const { key: id, ride, trip, qr, payment, receipt } = JSON.parse(saved) as Journey
+      return { key: id, ride, trip, qr, payment, receipt }
     }
   } catch {
     return newJourney()
@@ -45,6 +44,15 @@ async function findTrip(ride: RideRequest, passengerId: number, token: string, s
   }
 }
 
+async function completedPayment(trip: Trip, userId: number, token: string, signal: AbortSignal): Promise<Payment | undefined> {
+  const filters = new URLSearchParams({ clienteId: String(userId), estado: 'COMPLETADO', limit: '100' })
+  if (trip.conductorId) filters.set('conductorId', trip.conductorId)
+  const { viajes } = await request<{ viajes: TripRecord[] }>('M6', `/api/viajes?${filters}`, { token, signal })
+  const result = viajes.find((item) => item.id === trip.id)?.finalizacion
+  if (!result) return
+  return { paymentId: result.paymentId, estadoPago: result.estadoPago, viaje: result }
+}
+
 export default function RideFlow({ passenger, onBack }: { passenger: Account; onBack: () => void }) {
   const { token, userId } = passenger
   const storageKey = `movilidad.viaje.${userId}`
@@ -52,11 +60,13 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [searchPaused, setSearchPaused] = useState(false)
+  const [verifiedTripId, setVerifiedTripId] = useState<string>()
   const [method, setMethod] = useState(sandboxPayment ? 'tarjeta' : 'efectivo')
   const [now, setNow] = useState(Date.now)
-  const { ride, trip, qr, started, payment, receipt } = journey
+  const { ride, trip, qr, payment, receipt } = journey
   const rideId = ride?.id
   const tripId = trip?.id
+  const hasPayment = Boolean(payment)
 
   useEffect(() => {
     sessionStorage.setItem(storageKey, JSON.stringify(journey))
@@ -106,14 +116,51 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
     })
   }, [rideId, tripId, searchPaused, token, userId])
 
+  useEffect(() => {
+    if (!tripId || busy) return
+
+    return pollTrip(async (signal) => {
+      try {
+        const current = await request<Trip>('M6', `/api/viajes/${tripId}`, { token, signal })
+        if (signal.aborted) return false
+        setVerifiedTripId(current.id)
+        setJourney((previous) => ({ ...previous, trip: current, qr: current.estado === 'ARRIBADO' ? previous.qr : undefined }))
+        if (current.estado === 'CANCELADO') return false
+        if (current.estado !== 'COMPLETADO') return true
+
+        if (!hasPayment) {
+          const savedPayment = await completedPayment(current, userId, token, signal)
+          if (savedPayment && !signal.aborted) setJourney((previous) => ({ ...previous, payment: savedPayment }))
+        }
+        return false
+      } catch {
+        return !signal.aborted
+      }
+    })
+  }, [tripId, busy, hasPayment, token, userId])
+
   const update = (values: Partial<Journey>) => setJourney((current) => ({ ...current, ...values }))
 
-  async function run(label: string, task: () => Promise<void>) {
+  function recordTransition(estado: string, qr?: QR, payment?: Payment) {
+    setJourney((previous) => ({
+      ...previous, trip: previous.trip && { ...previous.trip, estado }, qr,
+      ...(payment && { payment }),
+    }))
+  }
+
+  async function run(label: string, task: () => Promise<void>, advancedStates?: string[]) {
     setError('')
     setBusy(label)
     try {
       await task()
     } catch (err) {
+      if (tripId && advancedStates) {
+        const current = await request<Trip>('M6', `/api/viajes/${tripId}`, { token }).catch(() => null)
+        if (current && [...advancedStates, 'COMPLETADO', 'CANCELADO'].includes(current.estado)) {
+          update({ trip: current, qr: undefined })
+          return
+        }
+      }
       setError(err instanceof Error ? err.message : 'El paso no se completó. Volvé a intentar.')
     } finally {
       setBusy('')
@@ -132,19 +179,14 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   }
 
   async function prepareStart(id: string) {
-    const result = await request<{ qr: QR }>('M6', `/api/viajes/${id}/arribo`, { method: 'PUT', token, body: {} })
+    const result = await request<{ qr: QR; viaje: Pick<Trip, 'estado'> }>('M6', `/api/viajes/${id}/arribo`, { method: 'PUT', token, body: {} })
     setNow(Date.now())
-    update({ qr: result.qr })
+    recordTransition(result.viaje.estado, result.qr)
   }
 
   async function startTrip(id: string, code: string) {
-    try {
-      await request('M6', `/api/viajes/${id}/iniciar`, { method: 'POST', token, body: { codigoVerificacion: code } })
-    } catch (err) {
-      const current = await request<Trip>('M6', `/api/viajes/${id}`, { token }).catch(() => null)
-      if (current?.estado.toUpperCase() !== 'EN_CURSO') throw err
-    }
-    update({ started: true, qr: undefined })
+    const { viaje } = await request<{ viaje: Pick<Trip, 'estado'> }>('M6', `/api/viajes/${id}/iniciar`, { method: 'POST', token, body: { codigoVerificacion: code } })
+    recordTransition(viaje.estado)
   }
 
   async function finish(id: string) {
@@ -155,7 +197,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
         ...(method === 'tarjeta' && sandboxPayment && { pago: { token: 'viaje-demo-sandbox', paymentMethodId: 'visa', email: passenger.email } }),
       },
     })
-    update({ payment: result })
+    recordTransition('COMPLETADO', undefined, result)
   }
 
   async function readReceipt(id: string) {
@@ -174,12 +216,16 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
     setJourney(newJourney())
   }
 
-  const step = started ? 3 : trip ? 2 : ride ? 1 : 0
+  const started = trip?.estado === 'EN_CURSO'
+  const completed = trip?.estado === 'COMPLETADO'
+  const canceled = trip?.estado === 'CANCELADO'
+  const step = started || completed ? 3 : trip ? 2 : ride ? 1 : 0
   const requestSeconds = ride?.expiresAt ? Math.max(0, Math.ceil((Date.parse(ride.expiresAt) - now) / 1000)) : 0
   const requestClosed = ride && closed(ride.status)
   const assigned = ride?.status === 'ASSIGNED'
   const qrExpired = qr && Date.parse(qr.expiresAt) <= now
   const locked = Boolean(busy)
+  const checkingTrip = Boolean(tripId && verifiedTripId !== tripId && !completed && !canceled)
 
   return (
     <div className="ride-flow ride-flow-wide">
@@ -191,7 +237,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
         <h1 className="display ride-flow-title">Tu viaje</h1>
         <ol className="ride-steps" aria-label="Etapas del viaje">
           {steps.map((label, index) => <li key={label} aria-current={index === step ? 'step' : undefined}>
-            {index < step || payment ? <CircleCheck size={17} aria-label="Completado" /> : <span aria-hidden="true">{index + 1}</span>}
+            {index < step || completed ? <CircleCheck size={17} aria-label="Completado" /> : <span aria-hidden="true">{index + 1}</span>}
             {label}
           </li>)}
         </ol>
@@ -203,12 +249,13 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
               <div className="ride-stop"><MapPin size={18} aria-hidden="true" /><div><small>Origen</small><p>{origin.address}</p></div></div>
               <div className="ride-stop"><Navigation size={18} aria-hidden="true" /><div><small>Destino</small><p>{destination.address}</p></div></div>
               <div className="ride-vehicle"><CarFront size={18} aria-hidden="true" /><span>Auto{(trip?.conductorId || ride?.assignedDriverId) && ` · Conductor #${trip?.conductorId ?? ride?.assignedDriverId}`}</span></div>
-              {ride?.estimatedFare && !payment && <p className="ride-muted mt-2 text-sm">Estimación {money(ride.estimatedFare.amount, ride.estimatedFare.currency)}</p>}
+              {ride?.estimatedFare && !completed && !canceled && <p className="ride-muted mt-2 text-sm">Estimación {money(ride.estimatedFare.amount, ride.estimatedFare.currency)}</p>}
             </aside>
 
             <section className="ride-action" aria-label="Paso actual" aria-busy={locked}>
               {error && <p className="alert-error" role="alert">{error}</p>}
               {busy && <p className="ride-muted" role="status">{busy}</p>}
+              {checkingTrip && <p className="ride-muted" role="status">Consultando el estado del viaje…</p>}
 
               {!ride && <>
                 <h2>Pedí un viaje</h2>
@@ -224,17 +271,17 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
                 {requestClosed && <button className="btn-primary" onClick={reset}>Volver a solicitar</button>}
               </>}
 
-              {trip && !started && <>
+              {trip && !checkingTrip && !started && !completed && !canceled && <>
                 <h2>{qr ? 'Validá el inicio' : 'Tu conductor está asignado'}</h2>
                 {qr && <div className="ride-qr"><img src={qr.qrDataUrl} alt="QR de verificación del viaje" /><p><QrCode size={16} aria-hidden="true" /> {qrExpired ? 'El QR venció.' : 'QR listo para validar.'}</p></div>}
                 {!qr || qrExpired
-                  ? <button className="btn-primary" disabled={locked} onClick={() => void run('Solicitando QR…', () => prepareStart(trip.id))}>{qr ? 'Renovar QR' : 'Preparar inicio del viaje'}</button>
-                  : <button className="btn-primary" disabled={locked} onClick={() => void run('Validando QR…', () => startTrip(trip.id, qr.token))}>Iniciar viaje</button>}
+                  ? <button className="btn-primary" disabled={locked} onClick={() => void run('Solicitando QR…', () => prepareStart(trip.id), ['EN_CURSO'])}>{qr ? 'Renovar QR' : 'Preparar inicio del viaje'}</button>
+                  : <button className="btn-primary" disabled={locked} onClick={() => void run('Validando QR…', () => startTrip(trip.id, qr.token), ['EN_CURSO'])}>Iniciar viaje</button>}
               </>}
 
-              {trip && started && !payment && <>
+              {trip && !checkingTrip && started && <>
                 <h2>Viaje en curso</h2>
-                <form className="ride-form" onSubmit={(event) => { event.preventDefault(); void run('Calculando la tarifa y registrando el pago…', () => finish(trip.id)) }}>
+                <form className="ride-form" onSubmit={(event) => { event.preventDefault(); void run('Calculando la tarifa y registrando el pago…', () => finish(trip.id), []) }}>
                   <label>Medio de pago<select className="input-field" disabled={locked} value={method} onChange={(event) => setMethod(event.target.value)}>
                     <option value="efectivo">Efectivo</option>
                     {sandboxPayment && <option value="tarjeta">Tarjeta de prueba</option>}
@@ -244,14 +291,23 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
                 </form>
               </>}
 
-              {payment && trip && <>
+              {completed && trip && <>
                 <h2>Viaje finalizado</h2>
-                <div className="ride-total"><CreditCard size={22} aria-hidden="true" /><strong>{money(payment.viaje.total, payment.viaje.moneda)}</strong></div>
-                <p>{payment.estadoPago === 'autorizado' ? 'Pago autorizado' : 'Pago en efectivo pendiente de cobro'}</p>
-                <dl className="ride-result"><dt>Identificador del pago</dt><dd>{payment.paymentId}</dd><dt>Identificador del viaje</dt><dd>{trip.id}</dd></dl>
+                {payment && <>
+                  <div className="ride-total"><CreditCard size={22} aria-hidden="true" /><strong>{money(payment.viaje.total, payment.viaje.moneda)}</strong></div>
+                  <p>{payment.estadoPago === 'autorizado' ? 'Pago autorizado' : 'Pago en efectivo pendiente de cobro'}</p>
+                </>}
+                <dl className="ride-result">
+                  {payment && <><dt>Identificador del pago</dt><dd>{payment.paymentId}</dd></>}
+                  <dt>Identificador del viaje</dt><dd>{trip.id}</dd>
+                </dl>
                 {receipt ? <p className="alert-success">Comprobante emitido {receipt.receiptNumber} · Patente {receipt.driver.vehicle.plate}</p>
                   : <button className="btn-primary" disabled={locked} onClick={() => void run('Consultando comprobante…', () => readReceipt(trip.id))}>Ver comprobante</button>}
                 {requestSeconds > 0 && <p className="ride-muted">Podés solicitar otro viaje con esta cuenta en {requestSeconds} s.</p>}
+                <button className="btn-ghost" disabled={locked || requestSeconds > 0} onClick={reset}>Hacer otro viaje</button>
+              </>}
+              {canceled && <>
+                <h2>Viaje cancelado</h2>
                 <button className="btn-ghost" disabled={locked || requestSeconds > 0} onClick={reset}>Hacer otro viaje</button>
               </>}
             </section>

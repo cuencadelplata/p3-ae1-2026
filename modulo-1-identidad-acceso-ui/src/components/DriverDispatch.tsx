@@ -2,25 +2,16 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, CarFront, CircleCheck, Clock3, LockKeyhole, MapPin, Navigation, Power, Radar } from 'lucide-react'
 import RideMap from './RideMap'
 import { destination, FlowError, origin, pollTrip, prepareDriver, publishDriverLocation, request } from '../rideFlowApi'
-import type { Account, Offer, Trip } from '../rideFlowApi'
+import type { Account, Offer, Trip, TripRecord } from '../rideFlowApi'
 import './RideFlow.css'
 import './DriverDispatch.css'
-
-interface DriverTrip {
-  id: string
-  estado: string
-  origen: string
-  destino: string
-  fechaCreacion: string
-  finalizacion?: { total: number; moneda: string; distanciaKm: number; tiempoMinutos: number } | null
-}
 
 interface Assignment {
   offer?: Offer
   tripId?: string
 }
 
-const isActive = (trip: DriverTrip) => trip.estado !== 'COMPLETADO' && trip.estado !== 'CANCELADO'
+const isActive = (trip: TripRecord) => trip.estado !== 'COMPLETADO' && trip.estado !== 'CANCELADO'
 const currency = (total: number, moneda: string) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: moneda }).format(total)
 const rideStatus: Record<string, string> = {
   CONDUCTOR_EN_CAMINO: 'En camino al origen',
@@ -42,19 +33,24 @@ function driverOffers(userId: number, token: string, signal?: AbortSignal) {
   return request<{ offers: Offer[] }>('M5', `/api/v1/drivers/${userId}/offers`, { token, signal })
 }
 
-async function driverTrip(userId: number, token: string, assignment: Assignment | null, signal?: AbortSignal) {
-  const { viajes } = await request<{ viajes: DriverTrip[] }>('M6', `/api/viajes?conductorId=${userId}`, { token, signal })
-  const active = viajes.find(isActive)
-  if (active) return active
+async function driverTrip(userId: number, token: string, assignment: Assignment | null, signal?: AbortSignal): Promise<TripRecord | null> {
+  const path = `/api/viajes?conductorId=${userId}`
   if (assignment?.tripId) {
-    return viajes.find((item) => item.id === assignment.tripId) ?? null
+    const current = await request<Trip>('M6', `/api/viajes/${assignment.tripId}`, { token, signal })
+    if (current.estado !== 'COMPLETADO') return current
+
+    const records = await request<{ viajes: TripRecord[] }>('M6', `${path}&estado=COMPLETADO`, { token, signal }).catch(() => null)
+    return { ...current, finalizacion: records?.viajes.find((item) => item.id === current.id)?.finalizacion }
   }
-  if (assignment?.offer) {
-    for (const item of viajes) {
-      if (Date.parse(item.fechaCreacion) < Date.parse(assignment.offer.createdAt)) break
-      const detail = await request<Trip>('M6', `/api/viajes/${item.id}`, { token, signal })
-      if (detail.rideRequestId === assignment.offer.requestId) return item
-    }
+
+  const { viajes } = await request<{ viajes: TripRecord[] }>('M6', path, { token, signal })
+  for (const item of viajes) {
+    const offer = assignment?.offer
+    const mayMatch = offer && Date.parse(item.fechaCreacion) >= Date.parse(offer.createdAt)
+    if (!isActive(item) && !mayMatch) continue
+
+    const detail = await request<Trip>('M6', `/api/viajes/${item.id}`, { token, signal })
+    if (isActive(detail) || (offer && detail.rideRequestId === offer.requestId)) return { ...detail, finalizacion: item.finalizacion }
   }
   return null
 }
@@ -68,7 +64,7 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
   const [plate, setPlate] = useState('')
   const [offer, setOffer] = useState<Offer | null>(null)
   const [assignment, setAssignment] = useState(() => readAssignment(storageKey))
-  const [trip, setTrip] = useState<DriverTrip | null>(null)
+  const [trip, setTrip] = useState<TripRecord | null>(null)
   const [completedOffer, setCompletedOffer] = useState<Offer | null>(null)
   const [error, setError] = useState('')
   const [now, setNow] = useState(Date.now)
@@ -102,6 +98,7 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
           if (assignment?.tripId !== current.id) setAssignment({ ...assignment, tripId: current.id })
         } else if (current && assignment) {
           setTrip(current)
+          setOnline(true)
           setCompletedOffer(assignment.offer ?? null)
           setAssignment(null)
         }
