@@ -346,7 +346,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
       method: 'POST', token,
       body: {
         origen: recorrido.origin, destino: recorrido.destination, tipoVehiculo: recorrido.vehicleType.toLowerCase(),
-        horaFin: trip.destinoConfirmadoAt, metodoPago: method,
+        horaFin: trip.destinoConfirmadoAt, metodoPago: method, gestionarPago: true,
         ...(pago && { pago }),
       },
     })

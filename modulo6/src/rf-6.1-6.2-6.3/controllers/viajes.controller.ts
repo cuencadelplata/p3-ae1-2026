@@ -12,6 +12,7 @@ import {
     ErrorServicioFinalizacion,
     type CoordenadasFinalizacion,
     type DatosFinalizacion,
+    type DatosPagoTarjeta,
 } from '../services/finalizacion.service.js';
 import { despacharEventosPendientes } from '../services/eventos-viaje.service.js';
 import { logger } from '../../observabilidad/logger.js';
@@ -301,6 +302,23 @@ function validarDatosFinalizacion(input: unknown, inicio: Date): DatosFinalizaci
 /** Tolerancia ante relojes desincronizados entre la app del conductor y el servidor. */
 const MARGEN_RELOJ_MS = 2 * 60_000;
 
+// M7 autoriza tarjetas con Mercado Pago: la app del cliente tokeniza la tarjeta y M6
+// sólo reenvía el token. Estos datos no se persisten ni se registran en logs (RNF-23).
+function validarDatosPagoTarjeta(value: unknown): DatosPagoTarjeta {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new ErrorValidacionFinalizacion('El pago con tarjeta requiere pago.token, pago.paymentMethodId y pago.email');
+    }
+    const { token, paymentMethodId, email } = value as Record<string, unknown>;
+    if (
+        typeof token !== 'string' || !token.trim() ||
+        typeof paymentMethodId !== 'string' || !paymentMethodId.trim() ||
+        typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
+    ) {
+        throw new ErrorValidacionFinalizacion('El pago con tarjeta requiere pago.token, pago.paymentMethodId y un pago.email válido');
+    }
+    return { token: token.trim(), paymentMethodId: paymentMethodId.trim(), email: email.trim() };
+}
+
 export const confirmarDestino = async (req: Request, res: Response): Promise<any> => {
     try {
         const id = String(req.params.id);
@@ -350,12 +368,33 @@ export const finalizarViaje = async (req: Request, res: Response): Promise<any> 
     };
 
     try {
+        const gestionarPago = req.body?.gestionarPago === true;
+        if (gestionarPago) {
+            const viaje = await viajeRepo.buscarPorId(id);
+            if (!viaje) {
+                registrar('no_encontrado');
+                return res.status(404).json({ error: 'Viaje no encontrado' });
+            }
+            if (!process.env.M6_QR_IDENTITY_URL) {
+                registrar('identidad_no_disponible');
+                return res.status(503).json({ error: 'Validación de participantes no disponible' });
+            }
+            if (!await autorizarQr(req, res, viaje, 'CLIENTE')) {
+                registrar('pago_no_autorizado');
+                return;
+            }
+        }
         const result = await viajeRepo.finalizarSiEnCurso(id, async (viaje, inicio) => {
             if (process.env.M6_QR_IDENTITY_URL && !viaje.destinoConfirmadoAt) {
                 throw new ErrorDestinoPendiente('Esperá a que el conductor confirme la llegada al destino.');
             }
             const body = viaje.destinoConfirmadoAt ? { ...req.body, horaFin: viaje.destinoConfirmadoAt.toISOString() } : req.body;
             const data = validarDatosFinalizacion(body, inicio);
+            if (gestionarPago) {
+                data.pagoAplicacion = data.metodoPago === 'tarjeta' && req.body.pago !== undefined
+                    ? { tarjeta: validarDatosPagoTarjeta(req.body.pago) }
+                    : {};
+            }
             return ejecutarServiciosFinalizacion(viaje, data, inicio);
         });
         if (result.kind === 'not-found') {
