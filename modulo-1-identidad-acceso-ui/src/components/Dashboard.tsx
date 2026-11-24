@@ -16,6 +16,7 @@ import {
   Route,
 } from 'lucide-react'
 import { API_URL } from '../api'
+import DriverDispatch from './DriverDispatch'
 import RideFlow from './RideFlow'
 
 interface DashboardProps {
@@ -146,6 +147,9 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   if (verViaje && perfil?.rol === 'CLIENTE') {
     return <RideFlow key={perfil.userId} passenger={{ ...perfil, token }} onBack={() => setVerViaje(false)} />
   }
+  if (verViaje && perfil?.rol === 'CONDUCTOR') {
+    return <DriverDispatch key={perfil.userId} driver={{ ...perfil, token }} onBack={() => setVerViaje(false)} />
+  }
 
   return (
     <div className="w-full max-w-3xl">
@@ -186,9 +190,9 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
               </div>
             </div>
 
-            {perfil.rol === 'CLIENTE' && (
+            {(perfil.rol === 'CLIENTE' || perfil.rol === 'CONDUCTOR') && (
               <button className="btn-primary mt-6 inline-flex items-center gap-2" onClick={() => setVerViaje(true)}>
-                <Route className="w-4 h-4" aria-hidden="true" /> Abrir flujo de viaje
+                <Route className="w-4 h-4" aria-hidden="true" /> {perfil.rol === 'CLIENTE' ? 'Pedir un viaje' : 'Abrir despacho de prueba'}
               </button>
             )}
 

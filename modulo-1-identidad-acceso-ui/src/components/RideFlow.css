@@ -2,6 +2,8 @@
   width: min(100%, 60rem);
 }
 
+.ride-flow-wide { width: min(100%, 72rem); }
+
 .ride-flow-header {
   display: flex;
   flex-wrap: wrap;
@@ -63,10 +65,31 @@
 
 .ride-columns {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-  gap: clamp(1rem, 4vw, 2.5rem);
+  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+  gap: clamp(1rem, 3vw, 1.75rem);
   align-items: start;
 }
+
+.ride-sidebar { display: grid; gap: 1.3rem; min-width: 0; }
+
+.ride-map {
+  isolation: isolate;
+  z-index: 0;
+  height: clamp(26rem, 56vh, 36rem);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: #181b21;
+}
+
+.ride-map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) saturate(.28) brightness(.8); }
+.ride-map .leaflet-tooltip, .ride-map .leaflet-control-zoom a {
+  background: #13151a;
+  border-color: #424650;
+  color: var(--text);
+}
+
+.ride-map.leaflet-container .leaflet-control-attribution { background: #13151a; color: var(--text-soft); }
+.ride-map .leaflet-control-attribution a { color: var(--accent); }
 
 .ride-route {
   background: #13151a;
@@ -86,9 +109,8 @@
 .ride-route svg, .ride-total svg { color: var(--accent); flex: none; }
 
 .ride-stop { display: flex; gap: .65rem; margin-top: 1.2rem; }
-.ride-stop small, .ride-driver, .ride-muted, .ride-result dt { color: var(--text-soft); }
-.ride-stop p, .ride-driver { font-size: .85rem; }
-.ride-driver { margin-top: .5rem; }
+.ride-stop small, .ride-muted, .ride-result dt { color: var(--text-soft); }
+.ride-stop p { font-size: .85rem; }
 .ride-vehicle { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1.2rem; }
 
 .ride-action, .ride-form { display: grid; gap: .85rem; justify-items: start; min-width: 0; }
@@ -103,8 +125,12 @@
 .ride-result { font-size: .8rem; overflow-wrap: anywhere; max-width: 100%; }
 .ride-result dd + dt { margin-top: .55rem; }
 
-@media (max-width: 640px) {
+@media (max-width: 760px) {
   .ride-columns { grid-template-columns: 1fr; }
+  .ride-map { height: 19rem; }
+}
+
+@media (max-width: 640px) {
   .ride-steps li { flex-direction: column; align-items: center; font-size: .72rem; }
 }
 

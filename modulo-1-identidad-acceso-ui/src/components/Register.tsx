@@ -6,12 +6,11 @@ import { API_URL } from '../api'
 interface RegisterProps {
   onRegisterSuccess: (token: string) => void
   onSwitchToLogin: () => void
-  fixedRole?: 'CLIENTE' | 'CONDUCTOR'
 }
 
 type UserRole = 'CLIENTE' | 'CONDUCTOR' | 'OPERADOR'
 
-export default function Register({ onRegisterSuccess, onSwitchToLogin, fixedRole }: RegisterProps) {
+export default function Register({ onRegisterSuccess, onSwitchToLogin }: RegisterProps) {
   const [name, setName] = useState('')
   const [surname, setSurname] = useState('')
   const [dni, setDni] = useState('')
@@ -19,7 +18,7 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin, fixedRole
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [role, setRole] = useState<UserRole>(fixedRole ?? 'CLIENTE')
+  const [role, setRole] = useState<UserRole>('CLIENTE')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -150,7 +149,7 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin, fixedRole
           <div>
             <label className="field-label">Tipo de usuario</label>
             <div className="grid grid-cols-2 gap-2.5">
-              {roles.filter((option) => !fixedRole || option.value === fixedRole).map((r) => (
+              {roles.map((r) => (
                 <button
                   key={r.value}
                   type="button"

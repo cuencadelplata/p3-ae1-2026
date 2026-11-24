@@ -1,5 +1,3 @@
-import { API_URL } from './api'
-
 export const origin = { latitude: -27.4692, longitude: -58.8306, address: 'Av. 3 de Abril 1050, Corrientes' }
 export const destination = { latitude: -27.4459, longitude: -58.7619, address: 'Aeropuerto Internacional Corrientes' }
 export const sandboxPayment = import.meta.env.VITE_FLOW_SANDBOX_PAYMENT === 'true'
@@ -17,10 +15,14 @@ export interface RideRequest {
   id: string
   status: string
   expiresAt: string
+  assignedDriverId?: string | null
+  estimatedFare?: { amount: number; currency: string }
 }
 export interface Offer {
   id: string
-  expiresAt: string
+  status: string
+  origin: typeof origin
+  destination: typeof destination
 }
 export interface Trip {
   id: string
@@ -45,24 +47,28 @@ export interface Receipt {
 
 export class FlowError extends Error {
   readonly status: number
+  readonly code?: string
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.status = status
+    this.code = code
   }
 }
 
-type Service = 'M1' | 'M2' | 'M3' | 'M3-vehiculos' | 'M4' | 'M5' | 'M6' | 'M8'
+type Service = 'M2' | 'M3' | 'M3-vehiculos' | 'M4' | 'M5' | 'M6' | 'M8'
 interface Options {
   method?: 'POST' | 'PUT' | 'PATCH'
   body?: object
   token?: string
   headers?: Record<string, string>
+  signal?: AbortSignal
 }
 
 export async function request<T>(service: Service, path: string, options: Options = {}): Promise<T> {
-  const { method = 'GET', body, token, headers } = options
-  const base = service === 'M1' ? API_URL : `/flujo-api/${service.toLowerCase()}`
+  const { method = 'GET', body, token, headers, signal } = options
+  const base = `/flujo-api/${service.toLowerCase()}`
+  const timeout = AbortSignal.timeout(35_000)
   let response: Response
   try {
     response = await fetch(`${base}${path}`, {
@@ -73,7 +79,7 @@ export async function request<T>(service: Service, path: string, options: Option
         ...headers,
       },
       body: body && JSON.stringify(body),
-      signal: AbortSignal.timeout(35_000),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     })
   } catch {
     throw new FlowError(`No se pudo conectar con ${service}. Volvé a intentar.`, 0)
@@ -82,15 +88,25 @@ export async function request<T>(service: Service, path: string, options: Option
   const data = await response.json().catch(() => null)
   if (!response.ok || data === null) {
     const detail = data?.message || data?.error?.message || data?.error?.code || data?.error
-    throw new FlowError(`${service} (${response.status})${typeof detail === 'string' ? ` · ${detail}` : ' · Respuesta inesperada'}`, response.status)
+    throw new FlowError(`${service} (${response.status})${typeof detail === 'string' ? ` · ${detail}` : ' · Respuesta inesperada'}`, response.status, data?.code)
   }
   return data as T
 }
 
-export async function driverAccount(token: string): Promise<Account> {
-  const identity = await request<Identity>('M1', '/auth/me', { token })
-  if (identity.rol !== 'CONDUCTOR') throw new Error('Ingresá con una cuenta de conductor.')
-  return { ...identity, token }
+export function pollTrip(task: (signal: AbortSignal) => Promise<boolean>) {
+  const controller = new AbortController()
+  let timer: number
+  const tick = async () => {
+    if (await task(controller.signal) && !controller.signal.aborted) {
+      timer = window.setTimeout(tick, 2000)
+    }
+  }
+  // Un solo ciclo por pantalla, aun cuando React vuelve a montar el efecto en desarrollo.
+  timer = window.setTimeout(tick, 0)
+  return () => {
+    window.clearTimeout(timer)
+    controller.abort()
+  }
 }
 
 export async function ensurePassenger(token: string) {
@@ -142,8 +158,11 @@ export async function prepareDriver(driver: Account) {
     await request('M3-vehiculos', `${vehiclesPath}/${encodeURIComponent(car.id)}/activar`, { method: 'PATCH', token })
   }
 
-  await request('M4', `/api/v1/drivers/${driver.userId}/location`, {
-    method: 'PUT', token, body: { latitude: origin.latitude, longitude: origin.longitude, vehicleType: 'AUTO', available: true },
-  })
   return car.patente
+}
+
+export function publishDriverLocation(driverId: number, token: string, available: boolean, signal?: AbortSignal) {
+  return request('M4', `/api/v1/drivers/${driverId}/location`, {
+    method: 'PUT', token, signal, body: { latitude: origin.latitude, longitude: origin.longitude, vehicleType: 'AUTO', available },
+  })
 }

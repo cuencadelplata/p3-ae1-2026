@@ -22,16 +22,16 @@ El recorrido usa el stack común. Abrí [la interfaz de M1](http://localhost:517
 
 Para ver un pago **autorizado de prueba**, configurá el simulador de M7 de esa guía con `UNREGISTERED_TRIPS=not_found`. Asegurate de que `M6_M7_URL` y `M8_M7_PAYMENTS_URL` del stack apunten al simulador. Agregá `VITE_FLOW_SANDBOX_PAYMENT=true` al `.env` raíz y reconstruí `m1-ui`. Si cambiaste las URL de M7 con el stack corriendo, recreá también los servicios `m6-viajes-app` y `m8-app` para que tomen la configuración nueva. Con el M7 real, dejá desactivada la tarjeta de prueba y usá **Efectivo** para registrar el pago pendiente de cobro.
 
-1. Abrí **Crear una cuenta**, elegí **Cliente**, registrate con un correo y DNI de prueba, e ingresá con esa cuenta. Si ya tenés una cuenta de cliente de prueba, usá **Iniciar sesión**.
-2. En **Tu cuenta**, elegí **Abrir flujo de viaje**. Ingresá como conductor con otra cuenta o elegí **Crear cuenta de conductor** y usá otro correo y DNI. La sesión del pasajero sigue abierta.
-3. Presioná **Preparar conductor de prueba**. La pantalla da de alta al conductor si hace falta, habilita un perfil pendiente para la demo, activa un auto y publica su ubicación en el origen. El recorrido predefinido va de avenida 3 de Abril al aeropuerto de Corrientes.
-4. Como pasajero, presioná **Solicitar viaje**. Si falta su perfil, se crea en ese paso. Luego elegí **Buscar conductor y enviar oferta**.
-5. Presioná **Aceptar oferta como conductor** antes de que venza la cuenta regresiva. Si venció, usá **Volver a enviar oferta**. Si también venció la solicitud, usá **Renovar solicitud**. Si todavía falta la asignación, presioná **Consultar viaje asignado**.
-6. Elegí **Marcar arribo y generar QR**. Cuando aparezca el QR del pasajero, usá **Validar QR e iniciar viaje**. Si venció, elegí **Renovar QR**.
-7. Seleccioná **Tarjeta de prueba** si activaste el simulador, o **Efectivo** para dejar registrado un cobro presencial. Presioná **Finalizar y registrar pago**. La pantalla muestra el total, el estado y el identificador devueltos por los servicios.
-8. Elegí **Ver comprobante**. Si sigue en emisión, volvé a consultarlo tras unos segundos. Cuando termine la cuenta regresiva de M5, **Hacer otro viaje** inicia otro recorrido con el mismo conductor.
+1. Iniciá sesión como **Cliente**. Para registrar un cliente nuevo, elegí **Crear una cuenta** y usá un correo y DNI de prueba.
+2. En **Tu cuenta**, elegí **Pedir un viaje**. El mapa muestra el recorrido predefinido de avenida 3 de Abril al aeropuerto de Corrientes.
+3. Presioná **Solicitar viaje**. M5 envía ofertas a los autos disponibles cerca del origen y asigna el viaje al primero que acepta. La pantalla se actualiza automáticamente. Si la solicitud vence, podés usar **Volver a solicitar**.
+4. Cuando aparezca **Tu conductor está asignado**, elegí **Preparar inicio del viaje** para generar el QR y luego **Iniciar viaje** para validarlo. Si el QR vence, usá **Renovar QR**.
+5. Elegí **Tarjeta de prueba** con el simulador o **Efectivo** para registrar un cobro presencial pendiente. Presioná **Finalizar y registrar pago** para ver el total y el estado.
+6. Elegí **Ver comprobante**. Si sigue en emisión, volvé a consultarlo tras unos segundos. Pasado el tiempo de espera, **Hacer otro viaje** abre una nueva solicitud.
 
-La pestaña conserva el avance si recargás y volvés a **Abrir flujo de viaje**. El flujo es una demo local de viaje inmediato con ruta fija. Para desarrollar con Vite y el stack común ya levantado, ejecutá `npm run dev -- --port 5174` desde esta carpeta con `VITE_API_URL=http://localhost:10000` en su `.env.local`. Agregá ahí `VITE_FLOW_SANDBOX_PAYMENT=true` para seleccionar la tarjeta del simulador. El proxy local usa los puertos publicados por defecto en el stack.
+El pasajero usa su propia cuenta durante todo el recorrido. Para una demo local sin conductores disponibles, conectá un conductor desde **otra sesión de navegador** (perfil distinto o ventana de incógnito). Entrá en M1 como **Conductor**, abrí **Tu cuenta → Abrir despacho de prueba** y elegí **Conectarme para aceptar una oferta**. Dejá ese panel abierto. Publica un auto disponible en el origen y acepta automáticamente una oferta para el recorrido de prueba. Para otra demo, volvé a conectar al conductor cuando termine el viaje anterior.
+
+La pestaña del pasajero conserva el avance si recargás y volvés a **Pedir un viaje**. Para desarrollar con Vite y el stack común ya levantado, ejecutá `npm run dev -- --port 5174` desde esta carpeta con `VITE_API_URL=http://localhost:10000` en su `.env.local`. Agregá ahí `VITE_FLOW_SANDBOX_PAYMENT=true` para seleccionar la tarjeta del simulador. El proxy local usa los puertos publicados por defecto en el stack.
 
 ## Qué pide a M1 cada pantalla
 
