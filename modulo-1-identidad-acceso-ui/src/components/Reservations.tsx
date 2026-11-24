@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import { request } from '../rideFlowApi'
+import { FlowError, request } from '../rideFlowApi'
 import './RideFlow.css'
 
 interface Reservation {
@@ -22,7 +22,11 @@ function localTime(iso: string) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
 }
 
-export default function Reservations({ token, onBack }: { token: string; onBack: () => void }) {
+export default function Reservations({ token, onBack, onOpenTrip }: {
+  token: string
+  onBack: () => void
+  onOpenTrip: () => void
+}) {
   const [page, setPage] = useState(1)
   const [rows, setRows] = useState<Reservation[]>([])
   const [draft, setDraft] = useState(empty)
@@ -35,12 +39,26 @@ export default function Reservations({ token, onBack }: { token: string; onBack:
 
   useEffect(() => {
     const abort = new AbortController()
+    let nextRefresh: ReturnType<typeof setTimeout>
     setLoading(true)
-    request<{ reservas: Reservation[] }>('M9', '/reservas?page=' + page + '&pageSize=' + pageSize, { token, signal: abort.signal })
-      .then(({ reservas }) => { if (!abort.signal.aborted) setRows(reservas) })
-      .catch((cause: Error) => { if (!abort.signal.aborted) setError(cause.message) })
-      .finally(() => { if (!abort.signal.aborted) setLoading(false) })
-    return () => abort.abort()
+    async function refresh() {
+      try {
+        const { reservas } = await request<{ reservas: Reservation[] }>('M9', '/reservas?page=' + page + '&pageSize=' + pageSize, { token, signal: abort.signal })
+        if (!abort.signal.aborted) setRows(reservas)
+      } catch (cause) {
+        if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : 'No se pudieron consultar las reservas.')
+      } finally {
+        if (!abort.signal.aborted) {
+          setLoading(false)
+          nextRefresh = setTimeout(refresh, 5000)
+        }
+      }
+    }
+    void refresh()
+    return () => {
+      abort.abort()
+      clearTimeout(nextRefresh)
+    }
   }, [page, revision, token])
 
   function clear() {
@@ -56,7 +74,11 @@ export default function Reservations({ token, onBack }: { token: string; onBack:
       if (firstPage) setPage(1)
       setRevision((value) => value + 1)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No se pudo actualizar la reserva.')
+      if (cause instanceof FlowError && cause.code === 'SERVICIO_EXTERNO_RECURSO_NO_ENCONTRADO' && cause.message.includes('M4')) {
+        setError('No encontramos una de las direcciones. Revisá el nombre de la calle y agregá la ciudad y la provincia.')
+      } else {
+        setError(cause instanceof Error ? cause.message : 'No se pudo actualizar la reserva.')
+      }
     } finally {
       setBusy(false)
     }
@@ -92,8 +114,8 @@ export default function Reservations({ token, onBack }: { token: string; onBack:
       <form className="ride-form mt-6" onSubmit={(event) => void save(event)}>
         <h2 className="eyebrow">{editing ? 'Editar reserva' : 'Programar un viaje'}</h2>
         <fieldset className="grid gap-3" disabled={busy}>
-          <label>Origen<input className="input-field" value={draft.origen} maxLength={500} required onChange={(event) => setDraft({ ...draft, origen: event.target.value })} /></label>
-          <label>Destino<input className="input-field" value={draft.destino} maxLength={500} required onChange={(event) => setDraft({ ...draft, destino: event.target.value })} /></label>
+          <label>Origen<input className="input-field" placeholder="Calle, altura, ciudad y provincia" value={draft.origen} maxLength={500} required onChange={(event) => setDraft({ ...draft, origen: event.target.value })} /></label>
+          <label>Destino<input className="input-field" placeholder="Calle, altura, ciudad y provincia" value={draft.destino} maxLength={500} required onChange={(event) => setDraft({ ...draft, destino: event.target.value })} /></label>
           <label>Fecha y hora<input className="input-field" type="datetime-local" value={draft.horario} required onChange={(event) => setDraft({ ...draft, horario: event.target.value })} /></label>
           <label>Vehículo<select className="input-field" value={draft.vehiculo} onChange={(event) => setDraft({ ...draft, vehiculo: event.target.value })}><option value="AUTO">Auto</option><option value="MOTO">Moto</option></select></label>
           <button className="btn-primary" type="submit">{editing ? 'Guardar cambios' : 'Programar viaje'}</button>
@@ -107,8 +129,9 @@ export default function Reservations({ token, onBack }: { token: string; onBack:
           {rows.map((row) => <li key={row.id} className="rounded-xl border border-[var(--line)] p-4">
             <p className="font-semibold">{row.origen} → {row.destino}</p>
             <p>{new Date(row.fechaHoraProgramada).toLocaleString('es-AR')} · {row.vehiculo === 'AUTO' ? 'Auto' : 'Moto'}</p>
-            <p className="ride-muted">{states[row.estado]}</p>
+            <p className="ride-muted" aria-live="polite">{states[row.estado]}</p>
             {row.tarifaEstimada !== null && row.moneda && <p>Estimado {new Intl.NumberFormat('es-AR', { style: 'currency', currency: row.moneda }).format(row.tarifaEstimada)}</p>}
+            {row.estado === 'ACTIVADA' && <button className="btn-ghost mt-2" onClick={onOpenTrip}>Ver viaje activo</button>}
             {row.estado === 'PROGRAMADA' && <div className="mt-2 flex flex-wrap gap-2">
               <button className="btn-ghost" disabled={busy} onClick={() => beginEdit(row)}>Editar</button>
               <button className="btn-ghost" disabled={busy} onClick={() => {

@@ -148,7 +148,10 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
     return <TripHistory token={token} userId={perfil.userId} onBack={() => setVerHistorial(false)} />
   }
   if (verReservas && perfil?.rol === 'CLIENTE') {
-    return <Reservations token={token} onBack={() => setVerReservas(false)} />
+    return <Reservations token={token} onBack={() => setVerReservas(false)} onOpenTrip={() => {
+      setVerReservas(false)
+      setVerViaje(true)
+    }} />
   }
   if (verViaje && perfil?.rol === 'CLIENTE') {
     return <RideFlow key={perfil.userId} passenger={{ ...perfil, token }} onBack={() => setVerViaje(false)} />

@@ -31,8 +31,9 @@ auto activo en M3. Para recibir ofertas, permite la ubicación del navegador.
    viaje está en curso, el mapa muestra la última posición compartida por el
    navegador del conductor. En el destino, el conductor confirma la llegada
    y M6 habilita el pago del pasajero.
-3. Para habilitar tarjeta, configurá MP_PUBLIC_KEY con la clave pública que
-   corresponde al mismo entorno de Mercado Pago que usa M7 y reconstruí m1-ui.
+3. Para habilitar tarjeta, agregá `MP_PUBLIC_KEY` al archivo que pasás al Compose
+   común con `--env-file`. Usá la clave pública del mismo entorno de Mercado Pago
+   configurado en M7 y reconstruí `m1-ui`.
    El navegador envía los datos a Mercado Pago para tokenizar el pago.
 4. Cuando M8 emita el comprobante, el cliente puede descargar el PDF al
    finalizar o desde «Historial de viajes». Desde el historial también puede

@@ -5,7 +5,7 @@ import express from 'express';
 import path from 'path';
 import { RideRequestService } from './services/ride-request.service';
 import { RideRequestController } from './controllers/ride-request.controller';
-import { authenticate, requireConductor } from './middleware/auth.middleware';
+import { authenticate, requireAuth, requireConductor } from './middleware/auth.middleware';
 import { TelemetryService } from './services/telemetry.service';
 
 const app = express();
@@ -145,7 +145,7 @@ app.post('/api/v1/ride-requests/:requestId/cancel-assigned', rideRequestControll
 app.delete('/api/v1/ride-requests/:requestId', rideRequestController.cancel);
 app.get('/api/v1/ride-requests/:requestId/audit', rideRequestController.getAuditLogs);
 app.post('/api/v1/ride-requests/:requestId/candidates', rideRequestController.searchCandidates);
-app.post('/api/v1/ride-requests/:requestId/offers', rideRequestController.sendOffers);
+app.post('/api/v1/ride-requests/:requestId/offers', requireAuth, rideRequestController.sendOffers);
 app.get('/api/v1/ride-requests/:requestId/offers', rideRequestController.getOffers);
 
 // Alias de compatibilidad e interoperabilidad para clientes que consultan viajes por ID

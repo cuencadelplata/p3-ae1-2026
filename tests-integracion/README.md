@@ -52,4 +52,17 @@ y en el `.env` de la raíz apuntar `M6_M7_URL`, `M8_M7_PAYMENTS_URL`, `M7_URL` y
 
 ## Pendiente: activación de reservas (M9 → M5)
 
-M9 activa la reserva desde su scheduler, fuera de una petición del pasajero, y para pedir el viaje a M5 necesita un token delegado de M1 (`M9_DISPATCH_AUTH_URL`). M1 publica `POST /auth/token-delegado`. Configurá `M9_DISPATCH_AUTH_URL=http://m1-identidad-acceso:3001/auth/token-delegado` y la credencial privada `M9_DISPATCH_AUTH_TOKEN` que comparten M1 y M9. El test actual comprueba el alta de la reserva y el despacho inmediato por separado. La hora de activación automática queda fuera de esa corrida.
+M9 activa la reserva desde su scheduler. Configurá `M9_DISPATCH_AUTH_URL=http://m1-identidad-acceso:3001/auth/token-delegado` y la credencial privada `M9_DISPATCH_AUTH_TOKEN` que comparten M1 y M9. M9 usa el token delegado para crear la solicitud y pedirle a M5 que envíe la oferta.
+
+Para probar **reserva programada → oferta → viaje → comprobante**, levantá M5 y M9 con las imágenes construidas desde este código y ejecutá desde la raíz en PowerShell.
+
+```powershell
+$env:E2E_RESERVA_PROGRAMADA = '1'
+$env:METODO_PAGO = 'tarjeta'
+node --env-file=.\modulo8\.env.integracion --test .\tests-integracion\flujo-completo.e2e.mjs
+Remove-Item Env:E2E_RESERVA_PROGRAMADA, Env:METODO_PAGO
+```
+
+La opción `tarjeta` requiere las credenciales de Mercado Pago TEST de M7. Sin `E2E_RESERVA_PROGRAMADA`, la suite conserva el recorrido de despacho inmediato.
+
+La suite informa por separado los incrementos en la DLQ de entrega Web Push porque las cuentas de prueba no registran dispositivos. La entrega al navegador se comprueba con una suscripción real.

@@ -45,6 +45,7 @@ const M9 = url('M9_URL', 'http://localhost:3000');
 const RABBITMQ_ADMIN = url('RABBITMQ_ADMIN_URL', 'http://localhost:15672');
 const RABBITMQ_AUTH = Buffer.from(`${process.env.RABBITMQ_USER || 'm9'}:${process.env.RABBITMQ_PASSWORD || 'm9-local'}`).toString('base64');
 const METODO_PAGO = process.env.METODO_PAGO || 'efectivo';
+const RESERVA_PROGRAMADA = process.env.E2E_RESERVA_PROGRAMADA === '1';
 const ESPERA_COMPROBANTE_MS = Number(process.env.ESPERA_COMPROBANTE_MS || 60000);
 
 // Corrientes: el conductor espera en el centro y el pasajero viaja al aeropuerto.
@@ -90,8 +91,8 @@ async function sesionM1(rol, nombre) {
   return { token: login.data.token, userId: Number(identidad.data.userId) };
 }
 
-async function conductorDisponibleEnM4(driverId, esperado) {
-  const query = new URLSearchParams({ latitude: String(ORIGEN.latitude), longitude: String(ORIGEN.longitude), vehicleType: 'AUTO', radiusKm: '1' });
+async function conductorDisponibleEnM4(driverId, esperado, ubicacion = ORIGEN) {
+  const query = new URLSearchParams({ latitude: String(ubicacion.latitude), longitude: String(ubicacion.longitude), vehicleType: 'AUTO', radiusKm: '1' });
   for (let intento = 0; intento < 30; intento += 1) {
     const r = await pedir(M4, `/drivers/nearby?${query}`);
     assert.equal(r.status, 200, `M4 búsqueda de conductores: ${mostrar(r)}`);
@@ -213,40 +214,98 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     assert.ok([200, 204].includes(cancelada.status), `M9 cancelar reserva: ${mostrar(cancelada)}`);
   });
 
-  test('5b. M9 → M5: la reserva se activa y pide el viaje a M5', {
-    todo: 'El despacho automático requiere configurar el emisor de M1 y la credencial compartida de M9. Este E2E cubre el alta de la reserva y el despacho inmediato en pasos separados.',
-  }, () => {});
+  test('5b. M9 → M5: la reserva programada genera una oferta sin intervención del pasajero', {
+    skip: !RESERVA_PROGRAMADA,
+  }, async () => {
+    const origen = 'Brasil 200, Corrientes Capital, Argentina';
+    const geocode = await pedir(M4, '/geocode', { method: 'POST', body: { address: origen } });
+    assert.equal(geocode.status, 200, `M4 geocodificación: ${mostrar(geocode)}`);
+    s.origenProgramado = geocode.data;
+    const ubicacion = await pedir(M4, `/drivers/${s.conductor.userId}/location`, {
+      method: 'PUT', token: s.conductor.token,
+      body: { latitude: geocode.data.latitude, longitude: geocode.data.longitude, vehicleType: 'AUTO', available: true },
+    });
+    assert.equal(ubicacion.status, 200, `M4 ubicación de prueba: ${mostrar(ubicacion)}`);
+    const creada = await pedir(M9, '/reservas', {
+      method: 'POST', token: s.pasajero.token,
+      body: {
+        origen, destino: 'Lavalle 50, Corrientes Capital, Argentina', vehiculo: 'AUTO',
+        fechaHoraProgramada: new Date(Date.now() + 12_000).toISOString(),
+      },
+    });
+    assert.equal(creada.status, 201, `M9 programar despacho: ${mostrar(creada)}`);
+    assert.equal(creada.data.estado, 'PROGRAMADA');
+    s.reservaProgramada = creada.data.id;
+    let consulta;
+    const limite = Date.now() + 45_000;
+    while (Date.now() < limite) {
+      consulta = await pedir(M9, `/reservas/${s.reservaProgramada}`, { token: s.pasajero.token });
+      assert.equal(consulta.status, 200, `M9 estado de la reserva: ${mostrar(consulta)}`);
+      assert.notEqual(consulta.data.estado, 'FALLIDA', 'M9 debe despachar con un conductor disponible');
+      if (consulta.data.idSolicitud) {
+        const ofertas = await pedir(M5, `/drivers/${s.conductor.userId}/offers`, { token: s.conductor.token });
+        assert.equal(ofertas.status, 200, `M5 consultar ofertas: ${mostrar(ofertas)}`);
+        const oferta = ofertas.data.offers.find((oferta) =>
+          oferta.requestId === consulta.data.idSolicitud && oferta.status === 'PENDING');
+        if (oferta) {
+          s.ofertaProgramada = oferta;
+          s.rideRequestId = consulta.data.idSolicitud;
+          const solicitud = await pedir(M5, `/ride-requests/${s.rideRequestId}`, { token: s.pasajero.token });
+          assert.equal(solicitud.status, 200, `M5 consultar el recorrido: ${mostrar(solicitud)}`);
+          s.recorridoProgramado = { origen: solicitud.data.origin, destino: solicitud.data.destination };
+          return;
+        }
+      }
+      await esperar(1000);
+    }
+    assert.fail(`M9 no generó la oferta a tiempo: ${mostrar(consulta)}`);
+  });
 
   test('6. M5: el pasajero pide el viaje y el conductor acepta la oferta', async () => {
     const pasajero = s.pasajero;
     const conductor = s.conductor;
-    const solicitud = await pedir(M5, '/ride-requests', {
-      method: 'POST', token: pasajero.token, headers: { 'Idempotency-Key': randomUUID() },
-      body: { origin: ORIGEN, destination: DESTINO, vehicleType: 'AUTO' },
-    });
-    assert.equal(solicitud.status, 201, `M5 solicitud de viaje: ${mostrar(solicitud)}`);
-    assert.equal(solicitud.data.status, 'SEARCHING');
-    s.rideRequestId = solicitud.data.id;
+    let oferta = s.ofertaProgramada;
+    if (!RESERVA_PROGRAMADA) {
+      const solicitud = await pedir(M5, '/ride-requests', {
+        method: 'POST', token: pasajero.token, headers: { 'Idempotency-Key': randomUUID() },
+        body: { origin: ORIGEN, destination: DESTINO, vehicleType: 'AUTO' },
+      });
+      assert.equal(solicitud.status, 201, `M5 solicitud de viaje: ${mostrar(solicitud)}`);
+      assert.equal(solicitud.data.status, 'SEARCHING');
+      s.rideRequestId = solicitud.data.id;
 
-    const candidatos = await pedir(M5, `/ride-requests/${s.rideRequestId}/candidates`, {
-      method: 'POST', token: pasajero.token, headers: { 'X-User-Id': String(pasajero.userId) }, body: { radiusKm: 1, maxCandidates: 5 },
-    });
-    assert.equal(candidatos.status, 200, `M5 búsqueda de candidatos: ${mostrar(candidatos)}`);
-    assert.ok(candidatos.data.candidates.some((c) => String(c.driverId) === String(conductor.userId)), 'M5 debe encontrar al conductor publicado en M4');
+      const candidatos = await pedir(M5, `/ride-requests/${s.rideRequestId}/candidates`, {
+        method: 'POST', token: pasajero.token, headers: { 'X-User-Id': String(pasajero.userId) }, body: { radiusKm: 1, maxCandidates: 5 },
+      });
+      assert.equal(candidatos.status, 200, `M5 búsqueda de candidatos: ${mostrar(candidatos)}`);
+      assert.ok(candidatos.data.candidates.some((c) => String(c.driverId) === String(conductor.userId)), 'M5 debe encontrar al conductor publicado en M4');
 
-    const ofertas = await pedir(M5, `/ride-requests/${s.rideRequestId}/offers`, {
-      method: 'POST', token: pasajero.token, headers: { 'X-User-Id': String(pasajero.userId) },
-      body: { driverIds: [String(conductor.userId)], ttlSeconds: 45 },
-    });
-    assert.equal(ofertas.status, 201, `M5 envío de ofertas: ${mostrar(ofertas)}`);
-    const oferta = (ofertas.data.offers ?? ofertas.data)[0];
-    assert.ok(oferta?.id, `M5 debe devolver la oferta: ${mostrar(ofertas)}`);
+      const ofertas = await pedir(M5, `/ride-requests/${s.rideRequestId}/offers`, {
+        method: 'POST', token: pasajero.token,
+        body: { driverIds: [String(conductor.userId)], ttlSeconds: 45 },
+      });
+      assert.equal(ofertas.status, 201, `M5 envío de ofertas: ${mostrar(ofertas)}`);
+      oferta = (ofertas.data.offers ?? ofertas.data)[0];
+    }
+    assert.ok(oferta?.id, 'M5 debe devolver una oferta para el conductor de prueba');
 
     const aceptada = await pedir(M5, `/offers/${oferta.id}/accept`, {
       method: 'POST', token: conductor.token, headers: { 'X-User-Id': String(conductor.userId) }, body: {},
     });
     assert.equal(aceptada.status, 200, `M5 aceptar oferta: ${mostrar(aceptada)}`);
     assert.equal(aceptada.data.requestStatus, 'ASSIGNED');
+    if (s.reservaProgramada) {
+      let estado;
+      const limite = Date.now() + 15_000;
+      do {
+        const actual = await pedir(M9, `/reservas/${s.reservaProgramada}`, { token: pasajero.token });
+        assert.equal(actual.status, 200, `M9 consultar asignación: ${mostrar(actual)}`);
+        estado = actual.data.estado;
+        if (estado === 'ACTIVADA') break;
+        await esperar(500);
+      } while (Date.now() < limite);
+      assert.equal(estado, 'ACTIVADA');
+    }
   });
 
   test('7. M6: M5 creó y asignó el viaje', async () => {
@@ -267,7 +326,7 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     assert.equal(inicio.status, 200, `M6 inicio: ${mostrar(inicio)}`);
     const reuso = await pedir(M6, `/api/viajes/${s.tripId}/iniciar`, { method: 'POST', token: s.conductor.token, body: { codigoVerificacion: arribo.data.qr.token } });
     assert.notEqual(reuso.status, 200, 'El QR de M8 no debe servir dos veces');
-    await conductorDisponibleEnM4(s.conductor.userId, false);
+    await conductorDisponibleEnM4(s.conductor.userId, false, s.origenProgramado);
   });
 
   test(`9. M6 + M4 + M7: finalización y pago (${METODO_PAGO}); M4 libera al conductor`, async () => {
@@ -277,7 +336,8 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
       token: s.pasajero.token,
       method: 'POST',
       body: {
-        origen: ORIGEN, destino: DESTINO, tipoVehiculo: 'auto', horaFin: new Date().toISOString(), metodoPago: METODO_PAGO, gestionarPago: true,
+        ...(s.recorridoProgramado ?? { origen: ORIGEN, destino: DESTINO }),
+        tipoVehiculo: 'auto', horaFin: new Date().toISOString(), metodoPago: METODO_PAGO, gestionarPago: true,
         ...(METODO_PAGO === 'tarjeta' ? { pago: await pagoConTarjeta() } : {}),
       },
     });
@@ -289,7 +349,7 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     // Tarjeta: M7 la autoriza en Mercado Pago. Efectivo y transferencia se cobran fuera de la
     // pasarela y M7 los deja pendientes.
     assert.equal(fin.data.estadoPago, METODO_PAGO === 'tarjeta' ? 'autorizado' : 'pendiente');
-    await conductorDisponibleEnM4(s.conductor.userId, true);
+    await conductorDisponibleEnM4(s.conductor.userId, true, s.origenProgramado);
   });
 
   test('10. M8: comprobante emitido a partir de TripCompleted', async () => {
@@ -308,6 +368,12 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     assert.equal(datos.driver.vehicle.plate, s.patente, 'M8 debe tomar la patente de M3');
     assert.equal(datos.fare.total, s.total);
     assert.equal(datos.payment.method, METODO_PAGO.toUpperCase());
+    const pdf = await fetch(`${M8}/api/v1/receipts/${s.tripId}/pdf`, {
+      headers: { authorization: `Bearer ${s.pasajero.token}` },
+      signal: AbortSignal.timeout(15_000),
+    });
+    assert.equal(pdf.status, 200);
+    assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
   });
 
   test('11. M6 + M2: historial de transiciones completo y viaje visible en M2', async () => {
@@ -321,13 +387,25 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
   });
 
   after(async () => {
+    if (s.reservaProgramada) {
+      const path = `/reservas/${s.reservaProgramada}`;
+      const reserva = await pedir(M9, path, { token: s.pasajero.token }).catch(() => null);
+      if (reserva?.data?.estado === 'PROGRAMADA') {
+        await pedir(M9, path, { method: 'DELETE', token: s.pasajero.token }).catch(() => {});
+      }
+    }
     if (s.conductor) await pedir(M4, `/drivers/${s.conductor.userId}/location`, { method: 'DELETE', token: s.conductor.token }).catch(() => {});
   });
 
-  test('12. RabbitMQ: ninguna cola de mensajes muertos creció', async () => {
+  test('12. RabbitMQ: las colas de integración no acumulan errores', async (t) => {
     const despues = await colasMuertas();
+    // La suite usa cuentas sin suscripción Web Push real. RF8.7 puede
+    // registrar FAILED_NO_DEVICE_TOKEN en su propia DLQ aunque el viaje se complete.
+    const dlqPush = 'm8.delivery.notification-requested.dlq';
+    const nuevosPush = (despues[dlqPush] ?? 0) - (colasMuertasAntes[dlqPush] ?? 0);
+    if (nuevosPush > 0) t.diagnostic(`DLQ de entrega PUSH: +${nuevosPush}; la suite no registra dispositivos.`);
     const crecieron = Object.entries(despues)
-      .filter(([nombre, cantidad]) => cantidad > (colasMuertasAntes[nombre] ?? 0))
+      .filter(([nombre, cantidad]) => nombre !== dlqPush && cantidad > (colasMuertasAntes[nombre] ?? 0))
       .map(([nombre, cantidad]) => `${nombre}: ${colasMuertasAntes[nombre] ?? 0} → ${cantidad}`);
     assert.deepEqual(crecieron, [], `Colas de mensajes muertos con mensajes nuevos:\n${crecieron.join('\n')}`);
   });

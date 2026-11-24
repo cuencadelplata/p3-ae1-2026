@@ -88,6 +88,7 @@ const cancellationResponseSchema = z.object({
 export interface DispatchClient {
   createRequest(input: CreateRideRequestInput): Promise<M5RideRequest>;
   getRequest(requestId: string, clienteId?: string): Promise<M5RideRequest>;
+  sendOffers?(requestId: string, clienteId: string): Promise<void>;
   cancelRequest(requestId: string, reason?: string, clienteId?: string): Promise<M5RideRequest>;
 }
 
@@ -152,6 +153,35 @@ export class M5DispatchClient implements DispatchClient {
       method: 'GET',
       headers: { authorization, ...this.correlationHeader() },
     });
+  }
+
+  public async sendOffers(requestId: string, clienteId: string): Promise<void> {
+    const authorization = await this.requireAuthorization(clienteId);
+    const response = await fetchWithTimeout(
+      'M5',
+      new URL(`/api/v1/ride-requests/${encodeURIComponent(requestId)}/offers`, this.baseUrl),
+      {
+        method: 'POST',
+        headers: {
+          authorization,
+          'content-type': 'application/json',
+          ...this.correlationHeader(),
+        },
+        body: JSON.stringify({ ttlSeconds: 30 }),
+      },
+      this.timeoutMs,
+      'send_offers',
+    );
+    if (response.ok) return;
+
+    const error = (await response.json().catch(() => null)) as { code?: string } | null;
+    // Consultar otra vez el estado: M5 puede haber actualizado la solicitud durante el despacho.
+    if (
+      (response.status === 404 && error?.code === 'NO_DRIVERS_AVAILABLE') ||
+      (response.status === 409 &&
+        ['DUPLICATE_OFFERS', 'INVALID_REQUEST_STATE', 'REQUEST_EXPIRED'].includes(error?.code ?? ''))
+    ) return;
+    throw ExternalServiceError.fromHttpStatus('M5', response.status);
   }
 
   public async cancelRequest(

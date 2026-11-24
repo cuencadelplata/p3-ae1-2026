@@ -119,8 +119,8 @@ export async function request<T>(service: Service, path: string, options: Option
   const response = await fetchService(service, path, options)
   const data = await response.json().catch(() => null)
   if (!response.ok || data === null) {
-    const detail = data?.message || data?.error?.message || data?.error?.code || data?.error
-    throw new FlowError(`${service} (${response.status})${typeof detail === 'string' ? ` · ${detail}` : ' · Respuesta inesperada'}`, response.status, data?.code)
+    const detail = data?.message || data?.error?.message || data?.error?.mensaje || data?.error?.code || data?.error
+    throw new FlowError(`${service} (${response.status})${typeof detail === 'string' ? ` · ${detail}` : ' · Respuesta inesperada'}`, response.status, data?.code ?? data?.error?.code ?? data?.error?.codigo)
   }
   return data as T
 }

@@ -8,6 +8,7 @@ import { destination, DriverSessionExpired, FlowError, origin, pollTrip, prepare
 import type { Account, Offer, Trip, TripRecord } from '../rideFlowApi'
 import './RideFlow.css'
 import TripClock from './TripClock'
+import DriverVehicles from './DriverVehicles'
 import './DriverDispatch.css'
 
 type QRDetector = new (options: { formats: string[] }) => { detect(image: ImageBitmap): Promise<{ rawValue: string }[]> }
@@ -69,6 +70,7 @@ export default function DriverDispatch({ driver, onBack, onSessionExpired }: { d
   const [ready, setReady] = useState(false)
   const [busy, setBusy] = useState('')
   const [plate, setPlate] = useState('')
+  const [showVehicles, setShowVehicles] = useState(false)
   const [offer, setOffer] = useState<Offer | null>(null)
   const [assignment, setAssignment] = useState(() => readAssignment(storageKey))
   const [trip, setTrip] = useState<TripRecord | null>(null)
@@ -229,6 +231,7 @@ export default function DriverDispatch({ driver, onBack, onSessionExpired }: { d
         return
       }
 
+      vehicle.current = ''
       await ensureVehicle()
       setDriverLocation(await publishDriverLocation(userId, token, true))
       setTrip(null)
@@ -382,6 +385,15 @@ export default function DriverDispatch({ driver, onBack, onSessionExpired }: { d
             setAssignment(null)
           }} />}
         {error && <p className="alert-error driver-error" role="alert">{error}</p>}
+        {!online && !active && ready && <div className="driver-trip-card">
+          <button className="btn-ghost" type="button" disabled={Boolean(busy)} aria-expanded={showVehicles}
+            onClick={() => setShowVehicles((value) => !value)}>{showVehicles ? 'Ocultar vehículos' : 'Gestionar vehículos'}</button>
+          {showVehicles && <DriverVehicles driver={driver} onActivate={(activePlate) => {
+            vehicle.current = ''
+            setPlate(activePlate)
+            setError('')
+          }} />}
+        </div>}
 
         {online && !active && <div className="driver-offer-actions" role="group" aria-label="Responder a la oferta">
           {pending && <button className="btn-ghost" disabled={Boolean(busy)} onClick={() => void respond(pending, 'reject')}>Rechazar</button>}

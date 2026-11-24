@@ -7,7 +7,6 @@ services:
       - path: .env
         required: false
     environment:
-      DATABASE_URL: postgresql://postgres.ljuhdtbwhoskyeowrlvr:Aylen.Supabase.040106@aws-0-sa-east-1.pooler.supabase.com:6543/postgres
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672
       REDIS_URL: redis://redis:6379
       CARGO_CANCELACION_URL: http://m7-api:3000
