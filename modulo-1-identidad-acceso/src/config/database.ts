@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
@@ -16,9 +17,13 @@ const databasePath = process.env.DATABASE_PATH || path.join(
     "identity.db"
 );
 
-const db = new Database(databasePath);
+const db = new Database(databasePath, { timeout: 5000 });
 
-db.pragma("journal_mode = WAL");
+try {
+    db.pragma("journal_mode = WAL");
+} catch {
+    // Otro proceso puede estar activando WAL al mismo tiempo
+}
 
 db.exec(`
     CREATE TABLE IF NOT EXISTS usuarios (
@@ -131,6 +136,22 @@ if (!existingOauthColumns.has("last_login_at")) {
     } catch {
         // Ignorar si ya fue agregada
     }
+}
+
+// RF-1.3: usuario OPERADOR semilla para pruebas e integración entre módulos.
+// El registro público sigue rechazando OPERADOR (400).
+const operadorEmail = (process.env.M1_OPERADOR_EMAIL || "operador@movilidad.com").trim().toLowerCase();
+const operadorPassword = process.env.M1_OPERADOR_PASSWORD || "operador123";
+const operadorExiste = db
+    .prepare("SELECT id FROM usuarios WHERE email = ?")
+    .get(operadorEmail);
+
+if (!operadorExiste) {
+    const passwordHash = bcrypt.hashSync(operadorPassword, 10);
+    db.prepare(`
+        INSERT OR IGNORE INTO usuarios (nombre, apellido, dni, telefono, email, password_hash, rol, estado)
+        VALUES ('Operador', 'Sistema', '00000001', '0000000000', ?, ?, 'OPERADOR', 'ACTIVO')
+    `).run(operadorEmail, passwordHash);
 }
 
 export default db;
