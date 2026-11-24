@@ -36,12 +36,14 @@ export async function registrarMetodoPago(
     throw new Error("tipo de pago inválido");
   }
 
+  const tipoEfectivo: TipoPago = "tarjeta";
+
   const { data, error } = await supabase
     .from("pagos")
     .insert({
       cliente_Id: clienteId,
       viaje_Id: viajeId,
-      tipo,
+      tipo: tipoEfectivo,
       fecha: new Date().toISOString(),
       detalle: "",
       estado: "pendiente",
