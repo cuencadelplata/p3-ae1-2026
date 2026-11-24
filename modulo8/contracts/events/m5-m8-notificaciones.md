@@ -25,13 +25,13 @@ para el conductor. La restricción única `(source_message_id, recipient_id)`
 impide duplicarlas ante redelivery. `rideRequestId` vincula el evento con la
 solicitud original, mientras la notificación de asignación se asocia a `tripId`.
 
-El aviso usa el tipo de vehículo y el recorrido. Si se configura
-`M3_CONDUCTOR_BASE_URL`, M8 consulta opcionalmente
-`GET /api/conductores/{driverUserId}` y usa `nombre` y `apellido` sólo cuando
-la respuesta identifica al mismo usuario. La consulta tiene un límite de un
-segundo: si M3 no responde, se crean igualmente ambos avisos sin nombre.
-M3 indicó que esta ruta no requiere token dentro de la red interna. La prueba
-E2E de M3 que acredita que ese ID proviene del JWT de M1 sigue pendiente.
+El aviso al cliente usa el tipo de vehículo y el recorrido. M8 puede agregar
+el nombre mediante `GET /auth/usuarios/{driverUserId}/nombre` en M1. Envía
+`X-Internal-Api-Key` con la clave compartida `M1_INTERNAL_API_KEY` y usa
+`nombre` y `apellido` cuando la respuesta contiene el mismo `userId` numérico.
+La consulta tiene un límite de un segundo. Si falla, M8 genera ambos avisos con
+los datos disponibles. El cliente recibe el título «Conductor asignado» y el
+conductor recibe «Viaje asignado».
 
 Si se configura `M3_VEHICLES_BASE_URL`, M8 consulta opcionalmente
 `GET /api/v1/drivers/{driverUserId}/vehicles` en M3-Vehículos. Usa patente,

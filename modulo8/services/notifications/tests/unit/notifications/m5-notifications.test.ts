@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { NotificationWithOutboxRepository } from "../../../src/notifications/notification-outbox.repository";
 import type { LogicalNotification } from "../../../src/notifications/notification.types";
 import { createRf81Application } from "../../../src/notifications/rf81-application";
+import { createNotificationRequestedData } from "../../../src/notifications/notification-requested.mapper";
 import { parseM5TripEventEnvelope } from "../../../src/messaging/m5-trip-events.consumer";
 
 const requestId = "req_550e8400-e29b-41d4-a716-446655440000";
@@ -36,7 +37,7 @@ function fakeRepository() {
 }
 
 describe("RF8.1 - notificaciones a partir de M5", () => {
-  it("agrega nombre y vehiculo de M3 sólo al aviso del cliente", async () => {
+  it("agrega al aviso del cliente el nombre de M1 y el vehículo de M3", async () => {
     const fake = fakeRepository();
     const driverNameLookup = vi.fn().mockResolvedValue("Carlos Gómez");
     const activeVehicleLookup = vi.fn().mockResolvedValue({ patente: "AB123CD", marca: "Toyota", modelo: "Corolla" });
@@ -84,6 +85,9 @@ describe("RF8.1 - notificaciones a partir de M5", () => {
     expect(fake.stored.size).toBe(2);
     expect([...fake.stored.values()].map((n) => n.recipientId).sort((a, b) => Number(a) - Number(b))).toEqual([42, 105]);
     expect([...fake.stored.values()].map((n) => n.title)).toEqual(["Conductor asignado", "Viaje asignado"]);
+    expect([...fake.stored.values()].map((n) => createNotificationRequestedData(n).title)).toEqual([
+      "Conductor asignado", "Viaje asignado",
+    ]);
     expect([...fake.stored.values()].every((n) => n.tripId === tripId && n.rideRequestId === requestId)).toBe(true);
     expect([...fake.stored.values()].every((n) => n.message.includes("auto") && n.message.includes("Origen") && n.message.includes("Destino"))).toBe(true);
   });

@@ -19,10 +19,11 @@ de M5 en `m8.notifications.m5-events`. La aceptación crea avisos para cliente y
 conductor; la cancelación previa al viaje avisa sólo al cliente. El
 [acuerdo M5 → M8](contracts/events/m5-m8-notificaciones.md) detalla destinatarios,
 correlación y el límite de entrega cuando RabbitMQ está caído antes de publicar.
-El nombre y el vehículo del conductor en el aviso son opcionales: para
-consultarlos dentro de la red común, configurar `M3_CONDUCTOR_BASE_URL` y
-`M3_VEHICLES_BASE_URL` con las URL base de ambos servicios de M3. Una falla de
-M3 no bloquea las notificaciones.
+El aviso al cliente puede incluir el nombre y el vehículo del conductor. M8
+consulta el nombre a M1 por `driverUserId` con la clave compartida
+`M1_INTERNAL_API_KEY` y el vehículo activo a M3 mediante
+`M3_VEHICLES_BASE_URL`. Si una consulta falla, M8 genera ambos avisos con los
+datos disponibles.
 
 ## Organización
 

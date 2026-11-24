@@ -49,6 +49,9 @@ export function createNotificationRequestedData(
   if (notification.rideRequestId !== null) {
     data.rideRequestId = notification.rideRequestId;
   }
+  if (notification.eventType === "TripAssigned" && notification.title.trim()) {
+    data.title = notification.title;
+  }
 
   return data;
 }

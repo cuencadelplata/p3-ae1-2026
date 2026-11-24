@@ -313,7 +313,7 @@ describe("RF8.1 AE2 - NotificationRequested", () => {
     expect(() => createNotificationRequestedData({ ...notification.data, recipientId: "cliente-123" })).toThrow();
   });
 
-  it.each(expectedContent)("genera payload contractual para %s", (eventType, _title, message) => {
+  it.each(expectedContent)("genera payload contractual para %s", (eventType, title, message) => {
     const notification = handleTripNotificationEvent(eventFor(eventType));
 
     expect(notification).toMatchObject({ valid: true });
@@ -328,6 +328,7 @@ describe("RF8.1 AE2 - NotificationRequested", () => {
       channel: "PUSH",
       message,
       createdAt: notification.data.createdAt,
+      ...(eventType === "TripAssigned" ? { title } : {}),
       ...(notification.data.tripId !== null ? { tripId: notification.data.tripId } : {}),
       ...(notification.data.rideRequestId !== null ? { rideRequestId: notification.data.rideRequestId } : {}),
     };

@@ -11,6 +11,8 @@ services:
       PORT: "3000"
       PUBLIC_BASE_URL: "http://localhost:${M8_HOST_PORT:-8000}"
       NOTIFICATIONS_DATABASE_URL: "postgres://m8_notifications:${NOTIFICATIONS_DB_PASSWORD:?NOTIFICATIONS_DB_PASSWORD must be configured}@postgres:5432/${POSTGRES_DB:-m8}"
+      M1_PROFILES_BASE_URL: "${M1_PROFILES_BASE_URL:-}"
+      M1_INTERNAL_API_KEY: "${M1_INTERNAL_API_KEY:-}"
       M3_CONDUCTOR_BASE_URL: "${M3_CONDUCTOR_BASE_URL:-}"
       M3_VEHICLES_BASE_URL: "${M3_VEHICLES_BASE_URL:-}"
       DELIVERY_DATABASE_URL: "postgres://m8_notification_delivery:${DELIVERY_DB_PASSWORD:?DELIVERY_DB_PASSWORD must be configured}@postgres:5432/${POSTGRES_DB:-m8}"
