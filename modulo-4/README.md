@@ -248,9 +248,28 @@ Las credenciales privadas de M7 y las claves compartidas del Compose general
 deben estar configuradas localmente antes de levantar los servicios. El test
 crea usuarios y registros de prueba, habilita un conductor nuevo en M3 y
 finaliza un viaje en efectivo; ejecutarlo en un entorno de prueba. El resultado
-esperado es `pass 2`, `fail 0`, `skipped 0`. El contenedor se elimina al terminar,
+esperado es `pass 3`, `fail 0`, `skipped 0`. El contenedor se elimina al terminar,
 pero las cuentas y el historial creados permanecen en las bases de los módulos.
 
 Verificado el 24 de noviembre de 2026 en el proyecto aislado
 `m4-integration-check`, con el mismo complemento y una red local de prueba:
 2 pruebas aprobadas, 0 fallidas y 0 omitidas. Duración total: 3,75 segundos.
+
+### Cancelación integrada antes del inicio
+
+El tercer E2E crea usuarios reales en M1, publica una ubicación en M4 y acepta
+una oferta en M5 para crear y asignar el viaje en M6. Como M6 sólo permite
+cancelar antes del inicio, el test prepara explícitamente el conductor reservado
+con `PATCH /api/v1/drivers/:id/availability` y `available: false`. Esta preparación
+no verifica que la asignación de M5 reserve automáticamente al conductor.
+
+Luego llama a `PATCH /api/viajes/:id/cancelacion` con actor `cliente` y motivo.
+Comprueba el estado `CANCELADO`, espera que el evento real `viaje.cancelado` de
+M6 llegue a M4 por RabbitMQ y verifica que el conductor vuelva a `nearby`,
+conservando sus coordenadas. Repetir la cancelación debe responder HTTP 400 y
+mantenerlo disponible. No se publica un evento artificial desde el test.
+
+Verificación del 24 de noviembre de 2026: tres pruebas ejecutadas dentro de
+Docker, tres aprobadas, cero fallidas y cero omitidas (2,81 segundos).
+La prueba de cancelación usa M1, M4, M5, M6, Redis, PostgreSQL y RabbitMQ;
+no comprueba cargos por cancelación ni entrega de notificaciones de M8.

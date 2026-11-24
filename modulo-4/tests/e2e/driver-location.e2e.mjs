@@ -150,6 +150,27 @@ test('M5 asigna el viaje a M6, M3 habilita al conductor y M4 procesa inicio y fi
   const state = await request(`${m3}/api/conductor/${driver.usuario.id}/estado`, 200);
   assert.equal(state.habilitado, true, 'M3 debe reconocer al conductor como habilitado');
 
+  const trip = await assignRide(driver, passenger, location, m6);
+  const arrival = await request(`${m6}/api/viajes/${trip.id}/arribo`, 200, {
+    method: 'PUT', body: {},
+  });
+  assert.ok(arrival.qr?.token, 'M8 debe emitir un token QR para el viaje');
+  await request(locationUrl, 200, { method: 'PUT', token: driver.token, body: location });
+  await request(`${m6}/api/viajes/${trip.id}/iniciar`, 200, {
+    method: 'POST', body: { codigoVerificacion: arrival.qr.token },
+  });
+  await waitForAvailability(driver.usuario.id, false);
+
+  await request(`${m6}/api/viajes/${trip.id}/finalizacion`, 200, {
+    method: 'POST',
+    body: { origen: { latitude: location.latitude, longitude: location.longitude },
+      destino: { latitude: -27.4875, longitude: -58.7896 }, tipoVehiculo: 'auto',
+      metodoPago: 'efectivo', horaFin: new Date().toISOString() },
+  });
+  await waitForAvailability(driver.usuario.id, true);
+});
+
+async function assignRide(driver, passenger, location, m6) {
   const ride = await request(`${m5}/ride-requests`, 201, {
     method: 'POST', token: passenger.token,
     headers: { 'Idempotency-Key': randomUUID() },
@@ -174,21 +195,39 @@ test('M5 asigna el viaje a M6, M3 habilita al conductor y M4 procesa inicio y fi
   assert.equal(viajes.length, 1, 'M5 debe crear un único viaje para el pasajero nuevo');
   const [trip] = viajes;
   assert.equal(String(trip.conductorId), String(driver.usuario.id));
-  const arrival = await request(`${m6}/api/viajes/${trip.id}/arribo`, 200, {
-    method: 'PUT', body: {},
-  });
-  assert.ok(arrival.qr?.token, 'M8 debe emitir un token QR para el viaje');
+  return trip;
+}
+
+test('cancelar en M6 libera en M4 al conductor reservado mediante RabbitMQ', {
+  skip: !process.env.M6_E2E_URL,
+}, async (t) => {
+  const m6 = process.env.M6_E2E_URL;
+  const driver = await loginNewUser('CONDUCTOR');
+  const passenger = await loginNewUser('CLIENTE');
+  const locationUrl = `${m4}/drivers/${driver.usuario.id}/location`;
+  const location = { latitude: -27.4692, longitude: -58.8306, vehicleType: 'AUTO', available: true };
   await request(locationUrl, 200, { method: 'PUT', token: driver.token, body: location });
-  await request(`${m6}/api/viajes/${trip.id}/iniciar`, 200, {
-    method: 'POST', body: { codigoVerificacion: arrival.qr.token },
+  t.after(() => request(locationUrl, 204, { method: 'DELETE', token: driver.token }));
+  const trip = await assignRide(driver, passenger, location, m6);
+
+  // Preparación explícita de una reserva: no se inicia un viaje que M6 ya no permitiría cancelar.
+  await request(`${m4}/drivers/${driver.usuario.id}/availability`, 200, {
+    method: 'PATCH', token: driver.token, body: { available: false },
   });
   await waitForAvailability(driver.usuario.id, false);
+  const reserved = await request(locationUrl, 200, { token: driver.token });
+  assert.equal(reserved.available, false, 'el conductor debe tener ubicación vigente y estar reservado');
 
-  await request(`${m6}/api/viajes/${trip.id}/finalizacion`, 200, {
-    method: 'POST',
-    body: { origen: { latitude: location.latitude, longitude: location.longitude },
-      destino: { latitude: -27.4875, longitude: -58.7896 }, tipoVehiculo: 'auto',
-      metodoPago: 'efectivo', horaFin: new Date().toISOString() },
-  });
+  const cancellation = { method: 'PATCH', body: { actor: 'cliente', motivo: 'Prueba E2E de cancelación' } };
+  const cancelled = await request(`${m6}/api/viajes/${trip.id}/cancelacion`, 200, cancellation);
+  assert.equal(cancelled.estado, 'CANCELADO');
+  await waitForAvailability(driver.usuario.id, true);
+  const released = await request(locationUrl, 200, { token: driver.token });
+  assert.equal(released.available, true);
+  assert.equal(released.latitude, location.latitude);
+  assert.equal(released.longitude, location.longitude);
+
+  // M6 rechaza repetir la transición; el conductor debe seguir disponible.
+  await request(`${m6}/api/viajes/${trip.id}/cancelacion`, 400, cancellation);
   await waitForAvailability(driver.usuario.id, true);
 });
