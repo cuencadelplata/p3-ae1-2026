@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { randomInt, randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-const m1 = 'http://m1-identidad-acceso:3001';
-const m4 = 'http://m4-api:3004/api/v1';
-const m5 = 'http://m5-despacho:3005/api/v1';
+const m1 = process.env.M1_E2E_URL || 'http://m1-identidad-acceso:3001';
+const m4 = process.env.M4_E2E_URL || 'http://m4-api:3004/api/v1';
+const m5 = process.env.M5_E2E_URL || 'http://m5-despacho:3005/api/v1';
 
 async function request(url, expectedStatus, { method = 'GET', body, token, headers = {} } = {}) {
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -17,7 +17,10 @@ async function request(url, expectedStatus, { method = 'GET', body, token, heade
     signal: AbortSignal.timeout(5000),
   });
 
-  assert.equal(response.status, expectedStatus, `${method} ${url}`);
+  if (response.status !== expectedStatus) {
+    const error = await response.json().catch(() => null);
+    assert.equal(response.status, expectedStatus, `${method} ${url} (${error?.code || 'sin código'})`);
+  }
   if (response.status === 204) return;
   return response.json();
 }
@@ -94,10 +97,17 @@ test('un pasajero solicita un viaje en M5 y encuentra al conductor que publicó 
     },
   });
   assert.ok(ride.id);
+  t.after(() => request(`${m5}/ride-requests/${ride.id}/cancel`, 200, {
+    method: 'POST',
+    token: passenger.token,
+    headers: { 'X-User-Id': String(passenger.usuario.id) },
+    body: { reason: 'Fin de la prueba de integración' },
+  }));
   assert.equal(ride.status, 'SEARCHING');
 
   const { candidates } = await request(`${m5}/ride-requests/${ride.id}/candidates`, 200, {
     method: 'POST',
+    token: passenger.token,
     headers: { 'X-User-Id': String(passenger.usuario.id) },
     body: { radiusKm: 1, maxCandidates: 5 },
   });
