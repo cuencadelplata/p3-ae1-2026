@@ -28,7 +28,7 @@ enum OutboxStatus {
 
 model Reservation {
   id                     String            @id @db.Uuid
-  clientId               String            @map("client_id") @db.Uuid
+  clientId               String            @map("client_id") @db.VarChar(128)
   origin                 String
   destination            String
   vehicleType            VehicleType       @map("vehicle_type")
@@ -40,7 +40,7 @@ model Reservation {
   routeSnapshot          Json?             @map("route_snapshot")
   assignmentCriteria     String?           @map("assignment_criteria")
   dispatchRequestId      String?           @unique @map("dispatch_request_id") @db.Uuid
-  assignedDriverId       String?           @map("assigned_driver_id") @db.Uuid
+  assignedDriverId       String?           @map("assigned_driver_id")
   dispatchIdempotencyKey String?           @unique @map("dispatch_idempotency_key") @db.Uuid
   version                Int               @default(0)
   createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)

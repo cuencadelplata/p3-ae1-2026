@@ -27,4 +27,12 @@ jobs:
       - run: npm run db:generate
       - run: npm run typecheck
       - run: npm run build
-      - run: npm test
+      - run: npm run test:coverage
+      - name: Guardar cobertura de M9
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m9-coverage
+          path: M9-ReservasProgramadas/coverage/
+          if-no-files-found: ignore
+          retention-days: 7

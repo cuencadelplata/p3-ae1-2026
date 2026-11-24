@@ -10,10 +10,11 @@ export interface ReservaRepository {
   crear(input: CrearReserva): Promise<Reserva>;
   obtenerPorId(id: string): Promise<Reserva | null>;
   listar(): Promise<Reserva[]>;
-  listarPaginado(page?: number, pageSize?: number): Promise<Reserva[]>;
+  listarPaginado(page?: number, pageSize?: number, clienteId?: string): Promise<Reserva[]>;
   actualizarProgramada(id: string, input: CambiosReserva): Promise<Reserva | null>;
   cancelar(id: string, estadoEsperado: EstadoReserva): Promise<Reserva | null>;
-  buscarPendientes(fechaLimite: Date, limite?: number): Promise<Reserva[]>;
+  recuperarActivacion(id: string, anteriorA: Date): Promise<boolean>;
+  buscarPendientes(fechaLimite: Date, limite?: number, clienteId?: string): Promise<Reserva[]>;
   cambiarEstado(
     id: string,
     estadoEsperado: EstadoReserva,

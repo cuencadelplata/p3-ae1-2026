@@ -4,7 +4,7 @@
 // Invariantes verificadas en teardown:
 //   1) cada reserva compartida termina en PROGRAMADA o CANCELADA (nunca otro estado);
 //   2) una reserva CANCELADA no se puede volver a cancelar (409 RESERVA_NO_CANCELABLE).
-import { check } from 'k6';
+import { check, fail } from 'k6';
 import http from 'k6/http';
 
 import { conflictive, crear, parse } from './lib/api.js';
@@ -36,14 +36,25 @@ export function setup() {
     const reserva = crear(reservaPayload(800_000 + index));
     if (reserva !== null) ids.push(reserva.id);
   }
+  if (ids.length !== SHARED) fail('No se pudo crear el conjunto completo de reservas compartidas');
   return { ids };
 }
 
 export default function (data) {
   const id = data.ids[__ITER % data.ids.length];
-  // 1 de cada 10 operaciones intenta cancelar; el resto modifica la fecha.
-  if (__ITER % 10 === 9) conflictive('DELETE', id);
-  else conflictive('PATCH', id, { fechaHoraProgramada: futureIso(2 * 24 * 60 + (__ITER % 300)) });
+  // Combina modificaciones de horario, recotizaciones de vehículo/destino en M7 bajo lock
+  // y cancelaciones concurrentes sobre las mismas reservas compartidas.
+  const mod = __ITER % 12;
+  if (mod === 11) {
+    conflictive('DELETE', id);
+  } else if (mod % 3 === 0) {
+    conflictive('PATCH', id, {
+      destino: `Destino concurrente ${(__ITER + __VU) % 40}`,
+      vehiculo: __ITER % 2 === 0 ? 'MOTO' : 'AUTO',
+    });
+  } else {
+    conflictive('PATCH', id, { fechaHoraProgramada: futureIso(2 * 24 * 60 + (__ITER % 300)) });
+  }
 }
 
 export function teardown(data) {

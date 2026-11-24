@@ -1,4 +1,6 @@
 import cors from 'cors';
+import type { RequestHandler } from 'express';
+import { createAuthentication } from './middleware/auth.middleware.js';
 import express from 'express';
 import helmet from 'helmet';
 import path from 'node:path';
@@ -21,12 +23,14 @@ import type { ReservaService } from './services/reserva.service.js';
 
 export interface AppDependencies {
   reservaService?: ReservaService;
+  authenticate?: RequestHandler;
   readinessService?: ReadinessService;
   requestLogger?: RequestLogger;
 }
 
 export const createApp = ({
   reservaService,
+  authenticate = createAuthentication(),
   readinessService,
   requestLogger,
 }: AppDependencies = {}) => {
@@ -61,8 +65,11 @@ export const createApp = ({
   }
   application.get('/openapi.json', (_request, response) => response.json(openApiDocument));
   application.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
+  application.get('/session', authenticate, (_request, response) =>
+    response.json({ clienteId: response.locals.clientId }),
+  );
   if (reservaService !== undefined) {
-    application.use('/reservas', createReservaRouter(reservaService));
+    application.use('/reservas', authenticate, createReservaRouter(reservaService));
   }
 
   application.use(notFoundHandler);

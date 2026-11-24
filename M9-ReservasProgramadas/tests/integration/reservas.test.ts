@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { testAuthentication, TEST_CLIENT_ID } from '../helpers/auth.js';
 import { createApp } from '../../src/app.js';
 import type { TarifaClient } from '../../src/clients/tarifa.client.js';
 import { InMemoryReservaRepository } from '../../src/repositories/in-memory-reserva.repository.js';
@@ -10,7 +11,7 @@ import { ReservaService } from '../../src/services/reserva.service.js';
 import { fareEstimate, routeResolverDemo } from '../helpers/route.js';
 
 const bodyValido = () => ({
-  clienteId: randomUUID(),
+  clienteId: TEST_CLIENT_ID,
   origen: 'Terminal de Ómnibus',
   destino: 'Aeropuerto',
   vehiculo: 'AUTO',
@@ -24,6 +25,7 @@ describe('API /reservas', () => {
   beforeEach(() => {
     estimarTarifa = vi.fn(async () => fareEstimate(3_250));
     app = createApp({
+      authenticate: testAuthentication,
       reservaService: new ReservaService(
         new InMemoryReservaRepository(),
         { estimar: estimarTarifa },

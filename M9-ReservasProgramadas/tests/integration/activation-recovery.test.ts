@@ -1,0 +1,67 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { InMemoryReservaRepository } from '../../src/repositories/in-memory-reserva.repository.js';
+import { ActivacionReservaService } from '../../src/services/activacion-reserva.service.js';
+import { routeResolverDemo, routeSnapshot } from '../helpers/route.js';
+import type { DispatchClient } from '../../src/clients/m5-dispatch.client.js';
+const expired = {
+  clienteId: '101',
+  origen: 'A',
+  destino: 'B',
+  vehiculo: 'AUTO' as const,
+  fechaHoraProgramada: new Date(Date.now() - 1000).toISOString(),
+  routeSnapshot,
+};
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+describe('recuperacion de activacion interrumpida', () => {
+  it('recupera un claim viejo sin solicitud y lo vuelve a despachar una sola vez', async () => {
+    const now = Date.now();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const repository = new InMemoryReservaRepository();
+    const created = await repository.crear(expired);
+    await repository.cambiarEstado(created.id, 'PROGRAMADA', 'ACTIVANDO');
+    const realGet = repository.obtenerPorId.bind(repository);
+    vi.setSystemTime(now + 120001);
+    const recover = vi.spyOn(repository, 'recuperarActivacion');
+    const createRequest = vi.fn(async () => ({
+      requestId: '44444444-4444-4444-8444-444444444444',
+      clientId: '101',
+      status: 'ASSIGNED' as const,
+      assignedDriverId: 'driver-1',
+    }));
+    const dispatch: DispatchClient = { createRequest, getRequest: vi.fn(), cancelRequest: vi.fn() };
+    const service = new ActivacionReservaService(repository, dispatch, routeResolverDemo());
+    await service.activar(created.id);
+    expect(recover).toHaveBeenCalled();
+    expect(createRequest).not.toHaveBeenCalled();
+    await Promise.all([service.activar(created.id), service.activar(created.id)]);
+    expect(createRequest).toHaveBeenCalledTimes(1);
+    expect(await realGet(created.id)).toMatchObject({
+      estado: 'ACTIVADA',
+      assignedDriverId: 'driver-1',
+    });
+  });
+  it('el CAS no recupera claims recientes ni reservas con solicitud confirmada', async () => {
+    const repository = new InMemoryReservaRepository();
+    const created = await repository.crear(expired);
+    await repository.cambiarEstado(created.id, 'PROGRAMADA', 'ACTIVANDO');
+    expect(await repository.recuperarActivacion(created.id, new Date(Date.now() - 120000))).toBe(
+      false,
+    );
+    await repository.cambiarEstado(created.id, 'ACTIVANDO', 'ACTIVANDO', {
+      idSolicitud: '44444444-4444-4444-8444-444444444444',
+    });
+    expect(await repository.recuperarActivacion(created.id, new Date(Date.now() + 1000))).toBe(
+      false,
+    );
+  });
+  it('un claim abandonado aparece en el lote del scheduler', async () => {
+    const repository = new InMemoryReservaRepository();
+    const created = await repository.crear(expired);
+    await repository.cambiarEstado(created.id, 'PROGRAMADA', 'ACTIVANDO');
+    expect((await repository.buscarPendientes(new Date())).map((r) => r.id)).toContain(created.id);
+  });
+});

@@ -8,7 +8,7 @@ import { getRequestContext } from '../integration/request-context.js';
 import type { GeoLocation } from '../integration/route-estimate.port.js';
 
 export interface DispatchTokenProvider {
-  getAuthorization(): Promise<string | undefined>;
+  getAuthorization(clienteId?: string): Promise<string | undefined>;
 }
 
 export interface DispatchOperationStore {
@@ -87,8 +87,8 @@ const cancellationResponseSchema = z.object({
 
 export interface DispatchClient {
   createRequest(input: CreateRideRequestInput): Promise<M5RideRequest>;
-  getRequest(requestId: string): Promise<M5RideRequest>;
-  cancelRequest(requestId: string, reason?: string): Promise<M5RideRequest>;
+  getRequest(requestId: string, clienteId?: string): Promise<M5RideRequest>;
+  cancelRequest(requestId: string, reason?: string, clienteId?: string): Promise<M5RideRequest>;
 }
 
 export const toM5CreateRideRequest = (input: CreateRideRequestInput) => ({
@@ -103,6 +103,7 @@ export const toM5CreateRideRequest = (input: CreateRideRequestInput) => ({
     address: input.destination.address,
   },
   vehicleType: input.reserva.vehiculo satisfies TipoVehiculo,
+  assignmentCriteria: 'MEJOR_VALORACION' as const,
 });
 
 export class M5DispatchClient implements DispatchClient {
@@ -111,12 +112,22 @@ export class M5DispatchClient implements DispatchClient {
     private readonly timeoutMs: number,
     private readonly tokenProvider: DispatchTokenProvider,
     private readonly operationStore: DispatchOperationStore,
+    private readonly demoClientId?: string,
   ) {}
 
   public async createRequest(input: CreateRideRequestInput): Promise<M5RideRequest> {
-    const authorization = await this.requireAuthorization();
+    if (this.demoClientId !== undefined && input.reserva.clienteId !== this.demoClientId) {
+      throw new ExternalServiceError(
+        'M5',
+        'AUTHORIZATION',
+        403,
+        'CLIENTE_DEMO_REQUERIDO',
+        'El token de demostración no puede despachar reservas de otro cliente.',
+      );
+    }
+    const authorization = await this.requireAuthorization(input.reserva.clienteId);
     const idempotencyKey = await this.operationStore.getOrCreate(input.reserva.id);
-    return this.request('create_request', '/api/v1/ride-requests', {
+    const request = await this.request('create_request', '/api/v1/ride-requests', {
       method: 'POST',
       headers: {
         authorization,
@@ -126,18 +137,32 @@ export class M5DispatchClient implements DispatchClient {
       },
       body: JSON.stringify(toM5CreateRideRequest(input)),
     });
+    if (
+      this.demoClientId !== undefined &&
+      (input.reserva.clienteId !== this.demoClientId || request.clientId !== this.demoClientId)
+    ) {
+      throw ExternalServiceError.badResponse('M5', new Error('M5_CLIENT_ID_MISMATCH'));
+    }
+    return request;
   }
 
-  public async getRequest(requestId: string): Promise<M5RideRequest> {
-    const authorization = await this.requireAuthorization();
+  public async getRequest(requestId: string, clienteId?: string): Promise<M5RideRequest> {
+    const authorization = await this.requireAuthorization(clienteId);
     return this.request('get_request', `/api/v1/ride-requests/${encodeURIComponent(requestId)}`, {
       method: 'GET',
       headers: { authorization, ...this.correlationHeader() },
     });
   }
 
-  public async cancelRequest(requestId: string, reason?: string): Promise<M5RideRequest> {
-    const authorization = await this.requireAuthorization();
+  public async cancelRequest(
+    requestId: string,
+    reason?: string,
+    clienteId?: string,
+  ): Promise<M5RideRequest> {
+    const authorization = await this.requireAuthorization(clienteId);
+    // M5 autentica GET, pero su ruta cancel actual obtiene el cliente de x-user-id.
+    // Consultar primero verifica la propiedad con el Bearer antes de enviar ese header.
+    const request = await this.getRequest(requestId, clienteId);
     const response = await fetchWithTimeout(
       'M5',
       new URL(`/api/v1/ride-requests/${encodeURIComponent(requestId)}/cancel`, this.baseUrl),
@@ -145,6 +170,7 @@ export class M5DispatchClient implements DispatchClient {
         method: 'POST',
         headers: {
           authorization,
+          'x-user-id': request.clientId,
           'content-type': 'application/json',
           ...this.correlationHeader(),
         },
@@ -193,8 +219,8 @@ export class M5DispatchClient implements DispatchClient {
     }
   }
 
-  private async requireAuthorization(): Promise<string> {
-    const authorization = await this.tokenProvider.getAuthorization();
+  private async requireAuthorization(clienteId?: string): Promise<string> {
+    const authorization = await this.tokenProvider.getAuthorization(clienteId);
     if (authorization?.startsWith('Bearer ') !== true) {
       throw new ExternalServiceError(
         'M5',

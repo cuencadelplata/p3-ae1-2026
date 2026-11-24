@@ -1,0 +1,49 @@
+# Dobles de contrato; no demuestra integracion con M5/M7 reales.
+services:
+  m9-reservas:
+    ports: !override
+      - '127.0.0.1::3000'
+    environment:
+      M9_AUTH_MODE: demo
+      M9_DEMO_AUTH_SECRET: ${M9_DEMO_AUTH_SECRET:?Solo mediante npm run test:e2e}
+      DISPATCH_MODE: events
+      ROUTE_RESOLVER_MODE: stub
+      M5_BASE_URL: http://m5-stub:3001
+      M7_BASE_URL: http://m7-stub:3002
+    depends_on:
+      m7-stub:
+        condition: service_healthy
+  m5-stub:
+    image: m9-e2e-fixture:local
+    command: [node, dist/stubs/m5/server.js]
+    environment:
+      PORT: '3001'
+      M5_STUB_AUTO_RESPOND: 'true'
+      RABBITMQ_URL: amqp://m9:m9-local@rabbitmq:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks: [reservas-network]
+    healthcheck:
+      test: [CMD-SHELL, 'wget -qO- http://localhost:3001/health']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  m7-stub:
+    image: m9-e2e-fixture:local
+    command: [node, dist/stubs/m7/server.js]
+    environment:
+      PORT: '3002'
+    networks: [reservas-network]
+    healthcheck:
+      test: [CMD-SHELL, 'wget -qO- http://localhost:3002/health']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  postgres:
+    ports: !reset []
+  redis:
+    ports: !reset []
+  rabbitmq:
+    ports: !reset []

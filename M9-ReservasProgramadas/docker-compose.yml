@@ -2,21 +2,31 @@ name: m9-reservas-programadas
 
 services:
   m9-reservas:
-    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v2.0.0}
+    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v3.0}
     build:
       context: .
       dockerfile: Dockerfile
     environment:
       NODE_ENV: production
+      M9_AUTH_MODE: ${M9_AUTH_MODE:-m1}
+      M1_BASE_URL: ${M1_BASE_URL:-http://m1-identidad-acceso:3001}
+      M9_DEMO_AUTH_SECRET: ${M9_DEMO_AUTH_SECRET:-}
       PORT: ${PORT:-3000}
-      M5_BASE_URL: http://m5-stub:3001
-      M7_BASE_URL: http://m7-stub:3002
+      # Servicios reales del stack `movilidad-urbana` (red reservas-network):
+      #   M5 -> modulo-5/compose.integracion.yml (m5-dispatch-service:3005)
+      #   M7 -> modulo7/compose.integracion.yml  (m7-api:3000)
+      M5_BASE_URL: ${M5_BASE_URL:-http://m5-dispatch-service:3005}
+      M7_BASE_URL: ${M7_BASE_URL:-http://m7-api:3000}
       M5_TIMEOUT_MS: ${M5_TIMEOUT_MS:-3000}
       M7_TIMEOUT_MS: ${M7_TIMEOUT_MS:-3000}
-      DISPATCH_MODE: events
-      # Credencial no productiva aceptada únicamente por el stub local M5.
-      M5_SERVICE_TOKEN: ${M5_SERVICE_TOKEN:-m5-local-e2e-token}
-      ROUTE_RESOLVER_MODE: stub
+      # M5 real no consume los eventos m9.reservas.* (solo lo hacía m5-stub):
+      # la activación debe invocar POST /api/v1/ride-requests por REST.
+      DISPATCH_MODE: ${DISPATCH_MODE:-rest}
+      M9_DISPATCH_AUTH_URL: ${M9_DISPATCH_AUTH_URL:-}
+      M9_DISPATCH_AUTH_TOKEN: ${M9_DISPATCH_AUTH_TOKEN:-}
+      ACTIVATION_RECOVERY_TIMEOUT_MS: ${ACTIVATION_RECOVERY_TIMEOUT_MS:-120000}
+      M5_SERVICE_TOKEN: ${M5_SERVICE_TOKEN:-}
+      ROUTE_RESOLVER_MODE: ${ROUTE_RESOLVER_MODE:-blocked}
       ROUTE_STUB_ORIGIN_LATITUDE: ${ROUTE_STUB_ORIGIN_LATITUDE:--27.4514}
       ROUTE_STUB_ORIGIN_LONGITUDE: ${ROUTE_STUB_ORIGIN_LONGITUDE:--58.9867}
       ROUTE_STUB_DESTINATION_LATITUDE: ${ROUTE_STUB_DESTINATION_LATITUDE:--27.4692}
@@ -38,6 +48,7 @@ services:
       RABBITMQ_RETRY_DELAY_MS: ${RABBITMQ_RETRY_DELAY_MS:-1000}
       M5_STUB_AUTO_RESPOND: ${M5_STUB_AUTO_RESPOND:-true}
       OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-5000}
+      SCHEDULER_CONCURRENCY: ${SCHEDULER_CONCURRENCY:-2}
       RESERVATION_JOB_INTERVAL: ${RESERVATION_JOB_INTERVAL:-*/5 * * * * *}
     ports:
       - '${PORT:-3000}:${PORT:-3000}'
@@ -47,10 +58,6 @@ services:
       timeout: 3s
       retries: 5
     depends_on:
-      m5-stub:
-        condition: service_healthy
-      m7-stub:
-        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -60,50 +67,6 @@ services:
     networks:
       - reservas-network
     restart: unless-stopped
-
-  m5-stub:
-    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v2.0.0}
-    command: ['node', 'dist/stubs/m5/server.js']
-    environment:
-      PORT: 3001
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672
-      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-m9.reservas.events}
-      RABBITMQ_RETRY_EXCHANGE: ${M5_RABBITMQ_RETRY_EXCHANGE:-m5.reservas.events.retry}
-      RABBITMQ_DLQ_EXCHANGE: ${M5_RABBITMQ_DLQ_EXCHANGE:-m5.reservas.events.dlx}
-      M5_RABBITMQ_QUEUE: ${M5_RABBITMQ_QUEUE:-m5.reservas-dispatch-demo}
-      M5_RABBITMQ_RETRY_QUEUE: ${M5_RABBITMQ_RETRY_QUEUE:-m5.reservas-dispatch-demo.retry}
-      M5_RABBITMQ_DLQ: ${M5_RABBITMQ_DLQ:-m5.reservas-dispatch-demo.dlq}
-      RABBITMQ_RETRY_LIMIT: ${RABBITMQ_RETRY_LIMIT:-3}
-      RABBITMQ_RETRY_DELAY_MS: ${RABBITMQ_RETRY_DELAY_MS:-1000}
-    expose:
-      - '3001'
-    ports:
-      - '127.0.0.1:${M5_STUB_PORT:-3001}:3001'
-    healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3001/health']
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - reservas-network
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-
-  m7-stub:
-    image: ${DOCKER_IMAGE:-ignacioparra1902/m9-reservas-programadas:v2.0.0}
-    command: ['node', 'dist/stubs/m7/server.js']
-    environment:
-      PORT: 3002
-    expose:
-      - '3002'
-    healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3002/health']
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - reservas-network
 
   redis:
     image: redis:7.4-alpine
@@ -160,7 +123,12 @@ services:
       # `ping` solo confirma que el nodo Erlang responde; el listener AMQP
       # puede seguir iniciando. M5 necesita que el puerto 5672 ya acepte
       # conexiones antes de arrancar.
-      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'check_port_connectivity']
+      # No crear .erlang.cookie como root durante el primer arranque.
+      test:
+        [
+          'CMD-SHELL',
+          'test -s /var/lib/rabbitmq/.erlang.cookie && su-exec rabbitmq rabbitmq-diagnostics -q check_port_connectivity',
+        ]
       interval: 5s
       timeout: 15s
       retries: 12

@@ -8,7 +8,7 @@
 # Variables (en el .env de la raíz, nunca en Git):
 #   M7_API_KEY, QR_INTERNAL_API_KEY  secretos compartidos con M7 y M8
 #   M6_M7_URL, M6_M8_URL             URLs de M7 y M8 si cambian sus nombres de servicio
-#   M6_M3_URL                        URL de M3 en la red integrada
+#   M6_M3_URL                        M3 real: base sin /api; el cliente agrega /api/conductor/:id/estado
 #   M6_*_HOST_PORT                   puertos del host (tabla acordada: 15000-15002)
 #   M6_VIAJES_REPLICAS               instancias de la API de viajes detrás del balanceador (1 por defecto)
 #   RABBITMQ_USER, RABBITMQ_PASSWORD los mismos que usa el RabbitMQ compartido
@@ -75,7 +75,7 @@ services:
       M7_API_KEY: "${M7_API_KEY:-}"
       M8_URL: "${M6_M8_URL:-http://m8-app:3000}"
       M8_QR_API_KEY: "${QR_INTERNAL_API_KEY:-}"
-      M3_URL: "${M6_M3_URL:-http://m3-api:3000}"
+      M3_URL: "${M6_M3_URL:-http://m3-conductor-api:3000}"
       OTEL_SERVICE_NAME: m6-viajes
       OTEL_EXPORTER_OTLP_ENDPOINT: "${M6_OTEL_ENDPOINT:-}"
     depends_on:
