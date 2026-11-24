@@ -186,13 +186,29 @@ localmente y validación de autenticación habilitada. Resultado: 1 prueba aprob
 
 ### Verificación opcional del ciclo de viaje con M6
 
-Agregar M6_E2E_URL a las variables del comando E2E, por ejemplo
-M6_E2E_URL=http://localhost:15000. Este segundo caso crea y asigna un viaje
-directamente en M6, registra el arribo, obtiene un QR real de M8 y lo valida al
-iniciar. Luego comprueba que M4 recibe el evento RabbitMQ y retira al conductor
-de nearby. Finalmente solicita la finalización y espera que M4 lo vuelva a
-ofrecer como disponible. Este caso requiere M6, M8 y M7 operativos. La aceptación
-de una oferta desde M5 corresponde a un recorrido adicional.
+Agregar M6_E2E_URL y M3_E2E_URL a las variables del comando E2E, por ejemplo
+M6_E2E_URL=http://localhost:15000 y M3_E2E_URL=http://localhost:15003.
+El segundo caso requiere M3, M6, M8 y M7 operativos además de M1, M4 y M5.
+Si falta alguna de esas dos variables, Node informa el segundo caso como omitido.
+
+El test registra un conductor en M3 y lo habilita mediante su API. Un pasajero
+nuevo solicita el viaje en M5; se envía una oferta al conductor y este la acepta
+con su token de M1. El test verifica que M5 haya creado y asignado un único viaje
+en M6 para ese pasajero. Luego registra el arribo, obtiene un QR real de M8 y
+lo valida al iniciar. Comprueba que M4 recibe el evento RabbitMQ y retira al
+conductor de nearby. Finalmente solicita la finalización en efectivo con M7 y
+espera que M4 vuelva a ofrecer al conductor como disponible.
+
+Verificación ampliada del 24 de noviembre de 2026:
+- Dos pruebas aprobadas, cero fallidas y cero omitidas contra el Compose común.
+- M5 creó el viaje en M6 a partir de la aceptación; no se creó desde el test.
+- M3 respondió con habilitación activa. El log de M6 confirmó que guardó el
+  estado del conductor en caché tras consultarlo a M3.
+- M3 usa su fallback de persistencia en memoria cuando no se configura Supabase;
+  esta ejecución verifica su API y Redis, no su base de datos externa.
+- Todos los cambios del test y esta documentación permanecen dentro de modulo-4.
+
+La verificación anterior, antes de ampliar el recorrido, quedó registrada así:
 
 Resultado del 24 de noviembre de 2026:
 - PR #66 fusionado y recorrido M1-M4-M5 aprobado.

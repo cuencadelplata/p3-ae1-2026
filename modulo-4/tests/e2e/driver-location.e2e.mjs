@@ -128,8 +128,8 @@ async function waitForAvailability(driverId, expected) {
   assert.fail(`La disponibilidad del conductor ${driverId} no cambió a ${expected}`);
 }
 
-test('M6 inicia y finaliza un viaje con QR de M8 y M4 actualiza la disponibilidad por RabbitMQ', {
-  skip: !process.env.M6_E2E_URL,
+test('M5 asigna el viaje a M6, M3 habilita al conductor y M4 procesa inicio y finalización con M8 y M7', {
+  skip: !process.env.M6_E2E_URL || !process.env.M3_E2E_URL,
 }, async (t) => {
   const m6 = process.env.M6_E2E_URL;
   const driver = await loginNewUser('CONDUCTOR');
@@ -139,14 +139,41 @@ test('M6 inicia y finaliza un viaje con QR de M8 y M4 actualiza la disponibilida
   await request(locationUrl, 200, { method: 'PUT', token: driver.token, body: location });
   t.after(() => request(locationUrl, 204, { method: 'DELETE', token: driver.token }));
 
-  const trip = await request(`${m6}/api/viajes`, 201, {
-    method: 'POST',
-    body: { clienteId: String(passenger.usuario.id), clientUserId: passenger.usuario.id,
-      origen: 'Corrientes centro', destino: 'Corrientes aeropuerto', rideRequestId: randomUUID() },
+  const m3 = process.env.M3_E2E_URL;
+  await request(`${m3}/api/conductores`, 201, {
+    method: 'POST', token: driver.token,
+    body: { usuarioID: String(driver.usuario.id), ciudad: 'Corrientes', tipovehiculo: 'auto' },
   });
-  await request(`${m6}/api/viajes/${trip.id}/asignar`, 200, {
-    method: 'POST', body: { conductorId: String(driver.usuario.id), driverUserId: driver.usuario.id },
+  await request(`${m3}/api/conductores/${driver.usuario.id}/habilitado`, 200, {
+    method: 'PUT', body: { habilitado: 'activo', motivo: 'Prueba E2E' },
   });
+  const state = await request(`${m3}/api/conductor/${driver.usuario.id}/estado`, 200);
+  assert.equal(state.habilitado, true, 'M3 debe reconocer al conductor como habilitado');
+
+  const ride = await request(`${m5}/ride-requests`, 201, {
+    method: 'POST', token: passenger.token,
+    headers: { 'Idempotency-Key': randomUUID() },
+    body: {
+      origin: { latitude: location.latitude, longitude: location.longitude, address: 'Corrientes centro' },
+      destination: { latitude: -27.4875, longitude: -58.7896, address: 'Corrientes aeropuerto' },
+      vehicleType: 'AUTO',
+    },
+  });
+  const { offers } = await request(`${m5}/ride-requests/${ride.id}/offers`, 201, {
+    method: 'POST', token: passenger.token,
+    headers: { 'X-User-Id': String(passenger.usuario.id) },
+    body: { driverIds: [String(driver.usuario.id)], ttlSeconds: 45 },
+  });
+  assert.equal(offers.length, 1);
+  const accepted = await request(`${m5}/offers/${offers[0].id}/accept`, 200, {
+    method: 'POST', token: driver.token,
+    headers: { 'X-User-Id': String(driver.usuario.id) }, body: {},
+  });
+  assert.equal(accepted.requestStatus, 'ASSIGNED');
+  const { viajes } = await request(`${m6}/api/viajes?clienteId=${passenger.usuario.id}`, 200);
+  assert.equal(viajes.length, 1, 'M5 debe crear un único viaje para el pasajero nuevo');
+  const [trip] = viajes;
+  assert.equal(String(trip.conductorId), String(driver.usuario.id));
   const arrival = await request(`${m6}/api/viajes/${trip.id}/arribo`, 200, {
     method: 'PUT', body: {},
   });
