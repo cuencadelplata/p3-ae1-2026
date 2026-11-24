@@ -159,7 +159,7 @@ Los mismos resultados pueden enviarse a Grafana Cloud mediante `k6 cloud run --l
 ## Limitaciones conocidas
 
 - El geocodificador conoce solamente direcciones de demostracion.
-- M3, M5 y M6 se representan mediante contratos; la integracion completa corresponde a una evolucion posterior.
+- El E2E verifica los recorridos descritos abajo con servicios reales. No cubre todavía todos los módulos ni todos los casos de error.
 - RabbitMQ y los flujos de disponibilidad con M5/M6 corresponden a la parte asignada a Manuel.
 
 ### Ejecutar el E2E contra el Compose general
@@ -226,3 +226,31 @@ Resultado del 24 de noviembre de 2026:
 - En Apple Silicon se ejecutó M7 con plataforma linux/amd64.
 
 Las claves privadas del entorno están fuera de Git. El test opcional comprueba el cambio de disponibilidad al iniciar y finalizar el viaje.
+
+### Ejecutar el ciclo integrado enteramente en Docker
+
+Con los servicios M1, M3, M4, M5, M6, M7 y M8 y sus dependencias ya levantados
+desde el Compose raíz, ejecutar desde la raíz del repositorio:
+
+```bash
+docker compose -f docker-compose.yml -f modulo-4/compose.e2e-general.yml \
+  --profile tests run --rm --no-deps m4-e2e-ciclo
+```
+
+Este complemento agrega solamente el contenedor que ejecuta los tests. Usa la
+red `reservas-network` y los nombres internos de los servicios; no requiere
+Node instalado en la computadora ni usa puertos publicados para las peticiones.
+No levanta ni reconstruye los demás servicios. Si están apagados o mal
+configurados, el test falla. No requiere tokens de Grafana: es una prueba
+funcional, independiente de las pruebas de carga de k6.
+
+Las credenciales privadas de M7 y las claves compartidas del Compose general
+deben estar configuradas localmente antes de levantar los servicios. El test
+crea usuarios y registros de prueba, habilita un conductor nuevo en M3 y
+finaliza un viaje en efectivo; ejecutarlo en un entorno de prueba. El resultado
+esperado es `pass 2`, `fail 0`, `skipped 0`. El contenedor se elimina al terminar,
+pero las cuentas y el historial creados permanecen en las bases de los módulos.
+
+Verificado el 24 de noviembre de 2026 en el proyecto aislado
+`m4-integration-check`, con el mismo complemento y una red local de prueba:
+2 pruebas aprobadas, 0 fallidas y 0 omitidas. Duración total: 3,75 segundos.

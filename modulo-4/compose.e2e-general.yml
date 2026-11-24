@@ -1,0 +1,25 @@
+# Complemento del Compose raíz. Ejecutar desde la raíz del repositorio:
+# docker compose -f docker-compose.yml -f modulo-4/compose.e2e-general.yml \
+#   --profile tests run --rm --no-deps m4-e2e-ciclo
+# Los servicios reales y sus dependencias deben estar levantados previamente.
+services:
+  m4-e2e-ciclo:
+    image: node:22-alpine
+    profiles: [tests]
+    working_dir: /tests
+    volumes:
+      # Las rutas se resuelven desde el primer archivo Compose (la raíz).
+      - ./modulo-4/tests/e2e:/tests:ro
+    environment:
+      M1_E2E_URL: http://m1-identidad-acceso:3001
+      M3_E2E_URL: http://m3-api:3000
+      M4_E2E_URL: http://m4-api:3004/api/v1
+      M5_E2E_URL: http://m5-dispatch-service:3005/api/v1
+      M6_E2E_URL: http://m6-viajes:3000
+    command: [node, --test, driver-location.e2e.mjs]
+    networks:
+      - reservas-network
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
