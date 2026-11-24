@@ -45,6 +45,23 @@ automática depende del token delegado de M1 para M9 en el Compose común.
 Para desarrollar con Vite, podés usar npm run dev -- --port 5174 con
 VITE_API_URL=http://localhost:10000 y, si usás tarjeta, VITE_MP_PUBLIC_KEY.
 
+## Avisos del navegador
+
+En **Tu cuenta → Notificaciones del navegador**, el pasajero o conductor elige
+**Activar avisos** y acepta el permiso del sitio. Se usa su sesión actual.
+Para el pasajero, la activación también selecciona PUSH como canal en M2.
+**Desactivar en este navegador** revoca la suscripción de ese dispositivo.
+
+El service worker recibe avisos cuando la pestaña de la aplicación está cerrada,
+si el navegador y el sistema tienen habilitada la entrega en segundo plano.
+
+En AWS, publicá el frontend con HTTPS y conservá sus rutas nginx hacia M1 y
+M8 en la red privada. Configurá en M8 un par VAPID persistente y guardá la
+clave privada como secreto de despliegue. M8 necesita salida HTTPS hacia los
+proveedores Web Push de los navegadores. El permiso y la suscripción se
+activan una vez por navegador y origen, así que el dominio nuevo requiere
+su propia activación.
+
 ## Qué pide a M1 cada pantalla
 
 | Pantalla | Pedido a M1 | RF |

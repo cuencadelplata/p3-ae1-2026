@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => {
     const prefix = `/flujo-api/${service}/`
     return [prefix, { target, rewrite: (path: string) => path.slice(prefix.length - 1) }]
   }))
+  proxy['/push/app-sw.js'] = { target: services.m8, rewrite: (path: string) => path }
 
   return { plugins: [react()], server: { proxy }, preview: { proxy } }
 })

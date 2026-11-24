@@ -134,6 +134,9 @@ export function classifyM8Route(method: string, rawPathname: string): RouteClass
   if (pathname === '/devices/tokens') {
     return { route: '/devices/tokens', rf: 'RF8.7', ignored: false };
   }
+  if (pathname === '/devices/tokens/deactivate') {
+    return { route: '/devices/tokens/deactivate', rf: 'RF8.7', ignored: false };
+  }
   if (/^\/devices\/tokens\/[^/]+$/.test(pathname)) {
     return { route: '/devices/tokens/:token', rf: 'RF8.7', ignored: false };
   }
@@ -330,7 +333,10 @@ export function createM8MetricsTracker(serviceName: string = 'm8-app'): M8Metric
         operation: 'Registro de token Push',
         result: isSuccess ? 'Activo' : fallbackResult,
       });
-    } else if (rf === 'RF8.7' && method === 'DELETE' && route === '/devices/tokens/:token') {
+    } else if (rf === 'RF8.7' && (
+      (method === 'DELETE' && route === '/devices/tokens/:token') ||
+      (method === 'POST' && route === '/devices/tokens/deactivate')
+    )) {
       businessOperationsTotal.inc({
         rf,
         operation: 'Baja de token Push',

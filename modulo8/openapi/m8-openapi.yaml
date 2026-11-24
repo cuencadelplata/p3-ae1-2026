@@ -71,6 +71,26 @@ paths:
       responses:
         '200': { description: Tokens activos del usuario. }
         '401': { description: JWT de M1 ausente o inválido. }
+  /devices/tokens/deactivate:
+    post:
+      summary: Desactivar la suscripción del usuario autenticado
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        '200': { description: Suscripción desactivada. }
+        '400': { description: Falta la suscripción. }
+        '401': { description: Sesión inválida. }
+        '404': { description: Suscripción inexistente o de otra cuenta. }
+        '503': { description: Servicio de identidad no disponible. }
   /devices/tokens/{token}:
     delete:
       tags: [NotificationDelivery]
@@ -388,6 +408,21 @@ paths:
         '400': { description: Parámetros inválidos. }
         '500': { description: Error interno inesperado. }
         '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
+  /tickets/mios:
+    get:
+      tags: [Support]
+      summary: Listar los tickets creados por el usuario autenticado
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tripId
+          in: query
+          schema: { type: string }
+      responses:
+        '200': { description: Página de tickets propios. }
+        '400': { description: Parámetros inválidos. }
+        '401': { description: Sesión inválida. }
+        '503': { description: Base de datos o identidad no disponibles. }
   /tickets/{id}:
     get:
       tags: [Support]

@@ -67,15 +67,14 @@ services:
       - reservas-network
     restart: unless-stopped
 
-  # Interfaz web de M1 (React + nginx). La abre el navegador en http://localhost:5173
-  # y desde ahí llama a M1 en http://localhost:10000.
+  # Interfaz común. Nginx reenvía /auth al M1 de la red interna.
   m1-ui:
     image: "${M1_UI_IMAGE:-m1-identidad-acceso-ui:local}"
     build:
       context: ../modulo-1-identidad-acceso-ui
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: "http://localhost:${M1_HOST_PORT:-10000}"
+        VITE_API_URL: ""
         # Clave pública de prueba de Mercado Pago (la misma MP_PUBLIC_KEY de modulo7/.env).
         VITE_MP_PUBLIC_KEY: "${MP_PUBLIC_KEY:-}"
     ports:

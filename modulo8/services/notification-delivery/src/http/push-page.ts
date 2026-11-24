@@ -4,7 +4,11 @@
  * suscribe el navegador con la clave VAPID pública de M8 y guarda la
  * suscripción como dispositivo WEB en POST /devices/tokens.
  */
-export const PUSH_SERVICE_WORKER = `self.addEventListener('push', (event) => {
+export const PUSH_SERVICE_WORKER = `self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data ? event.data.text() : '' }; }
   const title = data.title || 'Movilidad Urbana';
@@ -22,10 +26,11 @@ export const PUSH_SERVICE_WORKER = `self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil((async () => {
+    const path = self.location.pathname === '/push/app-sw.js' ? '/' : '/push';
     const pages = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    const page = pages.find((client) => new URL(client.url).pathname.startsWith('/push'));
+    const page = pages.find((client) => new URL(client.url).pathname === path);
     if (page) return page.focus();
-    return self.clients.openWindow('/push');
+    return self.clients.openWindow(path);
   })());
 });
 `;

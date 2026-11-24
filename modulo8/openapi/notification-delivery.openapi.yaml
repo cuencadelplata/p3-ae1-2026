@@ -72,6 +72,26 @@ paths:
         '401':
           description: No autenticado.
 
+  /devices/tokens/deactivate:
+    post:
+      summary: Desactivar la suscripción del usuario autenticado
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        '200': { description: Suscripción desactivada. }
+        '400': { description: Falta la suscripción. }
+        '401': { description: Sesión inválida. }
+        '404': { description: Suscripción inexistente o de otra cuenta. }
+        '503': { description: Servicio de identidad no disponible. }
   /devices/tokens/{token}:
     delete:
       summary: Desactivar Device Token

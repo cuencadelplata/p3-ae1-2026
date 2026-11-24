@@ -65,7 +65,10 @@ export function createDeliveryRouter(deps: DeliveryDependencies): Router {
         .setHeader('Cache-Control', 'no-store')
         .send(renderPushPage({ vapidPublicKey: webPush.publicKey, m1PublicUrl: webPush.m1PublicUrl }));
     });
-    router.get('/push/sw.js', (_request, response) => {
+    router.get('/push/config', (_request, response) => {
+      response.setHeader('Cache-Control', 'no-store').json({ publicKey: webPush.publicKey ?? null });
+    });
+    router.get(['/push/sw.js', '/push/app-sw.js'], (_request, response) => {
       // La página está en /push: el worker de /push/sw.js necesita permiso para ese alcance.
       response
         .type('application/javascript')
@@ -137,11 +140,8 @@ export function createDeliveryRouter(deps: DeliveryDependencies): Router {
     response.status(200).json({ data: tokens });
   });
 
-  router.delete('/devices/tokens/:token', async (request, response) => {
-    const user = await authenticate(request, response);
-    if (!user) return;
-
-    const deactivated = await deps.tokenRepo.deactivateToken(user.userId, request.params.token);
+  async function deactivate(response: Response, userId: number, token: string) {
+    const deactivated = await deps.tokenRepo.deactivateToken(userId, token);
     if (!deactivated) {
       response.status(404).json({
         error: {
@@ -153,6 +153,22 @@ export function createDeliveryRouter(deps: DeliveryDependencies): Router {
     }
 
     response.status(200).json({ message: 'Device token desactivado con éxito.' });
+  }
+
+  router.post('/devices/tokens/deactivate', async (request, response) => {
+    const user = await authenticate(request, response);
+    if (!user) return;
+    const token: unknown = request.body?.token;
+    if (typeof token !== 'string' || !token.trim()) {
+      response.status(400).json({ error: { code: 'INVALID_TOKEN', message: 'El campo token es obligatorio.' } });
+      return;
+    }
+    await deactivate(response, user.userId, token);
+  });
+
+  router.delete('/devices/tokens/:token', async (request, response) => {
+    const user = await authenticate(request, response);
+    if (user) await deactivate(response, user.userId, request.params.token);
   });
 
   router.get('/internal/deliveries/:notificationId', async (request, response) => {

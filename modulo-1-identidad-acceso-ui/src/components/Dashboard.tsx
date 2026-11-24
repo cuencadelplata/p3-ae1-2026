@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import axios from 'axios'
 import Reservations from './Reservations'
+import BrowserNotifications from './BrowserNotifications'
 import TripHistory from './TripHistory'
 import {
   LogOut,
@@ -86,7 +87,7 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
         setError(err.response.data?.error || 'Usuario bloqueado')
         return
       }
-      setError('No se pudo conectar con M1 (¿está corriendo en ' + API_URL + '?)')
+      setError('No se pudo conectar con el servicio de identidad. Volvé a intentar.')
     },
     [onLogout]
   )
@@ -211,7 +212,7 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
             </div>}
 
             {(perfil.rol === 'CLIENTE' || perfil.rol === 'CONDUCTOR') && (
-              <a className="btn-secondary mt-3 inline-flex" href="/push">Notificaciones del navegador</a>
+              <BrowserNotifications key={perfil.userId} token={token} role={perfil.rol} />
             )}
 
             <p className="eyebrow mt-10">Mis datos</p>
