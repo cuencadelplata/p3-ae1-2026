@@ -14,7 +14,7 @@ export interface CreateDeliveryParams {
   tripId?: string;
   userId: number;
   eventType: DeliveryRequest['eventType'];
-  channel: 'PUSH';
+  channel: DeliveryRequest['channel'];
   title?: string;
   message: string;
   deviceToken?: string;

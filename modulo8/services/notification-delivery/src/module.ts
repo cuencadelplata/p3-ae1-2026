@@ -1,14 +1,41 @@
 import * as amqp from 'amqplib';
 import { PostgresTechnicalInbox } from '@m8/shared';
+import { createM1IdentityCheck } from './http/auth/m1-auth.middleware.js';
 import { createDeliveryRouter } from './http/delivery.router.js';
 import { closePgPool, getPgPool, isPostgresReady } from './infrastructure/database/pg-client.js';
 import { PgDeviceTokenRepository } from './infrastructure/database/device-token.repository.js';
 import { PgDeliveryRepository } from './infrastructure/database/delivery.repository.js';
 import { PgMessagingInboxRepository } from './infrastructure/database/inbox.repository.js';
 import { CircuitBreakerM2PreferencesClient, HttpM2PreferencesClient } from './infrastructure/clients/m2-preferences.client.js';
+import { PasswordRecoveryEmailConsumer } from './infrastructure/messaging/password-recovery-email.consumer.js';
 import { RabbitMqDeliveryConsumer } from './infrastructure/messaging/rabbitmq-delivery-consumer.js';
-import { SandboxPushProvider } from './infrastructure/provider/sandbox-push-provider.js';
+import { SmtpEmailSender } from './infrastructure/provider/smtp-email-sender.js';
+import { WebPushProvider } from './infrastructure/provider/web-push-provider.js';
 import { NotificationDeliveryService } from './services/notification-delivery.service.js';
+
+/**
+ * Una suscripción Web Push serializada supera los 255 caracteres de la tabla
+ * original. El rol de entrega es dueño de sus tablas y las amplía al arrancar.
+ */
+async function widenDeviceTokenColumns(pool: ReturnType<typeof getPgPool>): Promise<void> {
+  await pool.query('ALTER TABLE notification_delivery.device_tokens ALTER COLUMN token TYPE TEXT');
+  await pool.query('ALTER TABLE notification_delivery.delivery_requests ALTER COLUMN device_token TYPE TEXT');
+}
+
+/** Corre el consumer de entregas y el de correos de M1 sobre la misma conexión. */
+function combineConsumers(...consumers: DeliveryConsumerLifecycle[]): DeliveryConsumerLifecycle {
+  return {
+    async start() {
+      for (const consumer of consumers) await consumer.start();
+    },
+    async stop() {
+      await Promise.all(consumers.map((consumer) => consumer.stop()));
+    },
+    isReady() {
+      return consumers.every((consumer) => consumer.isReady());
+    },
+  };
+}
 
 interface DeliveryConsumerLifecycle {
   start(): Promise<void>;
@@ -27,7 +54,14 @@ export function createDeliveryModule(options: DeliveryModuleOptions = {}) {
   const tokens = new PgDeviceTokenRepository(pool);
   const deliveries = new PgDeliveryRepository(pool);
   const inbox = new PgMessagingInboxRepository(pool);
-  const provider = new SandboxPushProvider();
+  const provider = new WebPushProvider();
+  const emailSender = new SmtpEmailSender();
+  let schemaReady = false;
+  const ensureSchema = async () => {
+    if (schemaReady) return;
+    await widenDeviceTokenColumns(pool);
+    schemaReady = true;
+  };
   const preferences = new CircuitBreakerM2PreferencesClient(new HttpM2PreferencesClient(
     process.env.M2_API_URL ?? 'http://localhost:3002',
     process.env.M2_INTERNAL_API_KEY ?? '',
@@ -58,6 +92,7 @@ export function createDeliveryModule(options: DeliveryModuleOptions = {}) {
     starting = true;
     let nextConnection: amqp.ChannelModel | undefined;
     try {
+      if (!options.createConsumer) await ensureSchema();
       nextConnection = await (options.connectRabbitMq ?? amqp.connect)(rabbitUrl);
       if (closing) {
         await nextConnection.close();
@@ -82,12 +117,21 @@ export function createDeliveryModule(options: DeliveryModuleOptions = {}) {
         scheduleRetry();
       };
       const nextConsumer = options.createConsumer?.(activeConnection, service, pool, onDisconnected)
-        ?? new RabbitMqDeliveryConsumer({
-          connection: activeConnection,
-          inboxStore: new PostgresTechnicalInbox(pool),
-          deliveryService: service,
-          onDisconnected,
-        });
+        ?? combineConsumers(
+          new RabbitMqDeliveryConsumer({
+            connection: activeConnection,
+            inboxStore: new PostgresTechnicalInbox(pool),
+            deliveryService: service,
+            onDisconnected,
+          }),
+          new PasswordRecoveryEmailConsumer({
+            connection: activeConnection,
+            inboxStore: new PostgresTechnicalInbox(pool),
+            deliveryRepo: deliveries,
+            emailSender,
+            onDisconnected,
+          }),
+        );
       await nextConsumer.start();
       if (closing || connection !== activeConnection) {
         await nextConsumer.stop();
@@ -112,7 +156,9 @@ export function createDeliveryModule(options: DeliveryModuleOptions = {}) {
       checks: {
         postgres: postgres ? 'ok' : 'down',
         rabbitmq: rabbitmq ? 'ok' : 'down',
-        pushProvider: 'ok',
+        // Proveedores externos reales: si falta su configuración se informa, sin frenar la app.
+        pushProvider: provider.isConfigured() ? 'ok' : 'not_configured',
+        emailProvider: emailSender.isConfigured() ? 'ok' : 'not_configured',
         // M2 no ofrece un health acordado; su disponibilidad se comprueba al pedir preferencias.
         m2_preferences: 'not_checked',
       },
@@ -128,6 +174,14 @@ export function createDeliveryModule(options: DeliveryModuleOptions = {}) {
       deliveryRepo: deliveries,
       sandboxProvider: provider,
       isReady: readiness,
+      webPush: {
+        publicKey: provider.publicKey(),
+        m1PublicUrl: (process.env.PUSH_M1_PUBLIC_URL ?? 'http://localhost:10000').replace(/\/+$/, ''),
+      },
+      // M1_IDENTITY_URL es el endpoint completo de validación (el mismo que usan comprobantes).
+      identityCheck: process.env.M1_IDENTITY_URL?.trim()
+        ? createM1IdentityCheck(process.env.M1_IDENTITY_URL.trim(), Number(process.env.M1_TIMEOUT_MS ?? 3000))
+        : undefined,
     }),
     async readiness() {
       const result = await readiness();

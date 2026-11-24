@@ -44,7 +44,7 @@ END $$;
 CREATE TABLE IF NOT EXISTS notification_delivery.device_tokens (
     token_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id BIGINT NOT NULL,
-    token VARCHAR(255) NOT NULL UNIQUE,
+    token TEXT NOT NULL UNIQUE, -- en navegadores, la suscripción Web Push en JSON
     platform VARCHAR(32) NOT NULL DEFAULT 'ANDROID', -- ANDROID, IOS, WEB
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS notification_delivery.delivery_requests (
     status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
     title VARCHAR(255),
     message TEXT NOT NULL,
-    device_token VARCHAR(255),
+    device_token TEXT,
     skip_reason VARCHAR(64),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

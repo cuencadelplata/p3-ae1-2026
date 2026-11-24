@@ -8,6 +8,36 @@ export interface AuthenticatedUser {
   role?: M1Role;
 }
 
+export type M1IdentityStatus = 'active' | 'inactive' | 'unavailable';
+export type M1IdentityCheck = (authHeader: string) => Promise<M1IdentityStatus>;
+
+/**
+ * Confirma con M1 (GET /auth/validar-identidad-y-rol) que el usuario del token
+ * sigue habilitado. La firma no alcanza: M1 responde 200 con valid: false para
+ * un usuario bloqueado o inexistente, y 401 para credenciales revocadas.
+ */
+export function createM1IdentityCheck(
+  endpoint: string,
+  timeoutMs = 3000,
+  fetchImpl: typeof fetch = fetch,
+): M1IdentityCheck {
+  return async (authHeader: string) => {
+    let response: Response;
+    try {
+      response = await fetchImpl(endpoint, {
+        headers: { Authorization: authHeader },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch {
+      return 'unavailable';
+    }
+    if (response.status === 401 || response.status === 403) return 'inactive';
+    if (!response.ok) return 'unavailable';
+    const body = (await response.json().catch(() => null)) as { valid?: unknown } | null;
+    return body?.valid === true ? 'active' : 'inactive';
+  };
+}
+
 /**
  * Decodifica la carga útil (payload) de un token JSON o JWT.
  */

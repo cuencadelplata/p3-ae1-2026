@@ -5,9 +5,10 @@ export type DeliveryEventType =
   | 'TRIP_STARTED'
   | 'TRIP_CANCELLED'
   | 'TRIP_COMPLETED'
-  | 'DRIVER_DOCUMENT_REGISTERED';
+  | 'DRIVER_DOCUMENT_REGISTERED'
+  | 'PASSWORD_RECOVERY';
 
-export type DeliveryChannel = 'PUSH';
+export type DeliveryChannel = 'PUSH' | 'EMAIL';
 
 export type DeliveryPriority = 'HIGH' | 'NORMAL';
 
