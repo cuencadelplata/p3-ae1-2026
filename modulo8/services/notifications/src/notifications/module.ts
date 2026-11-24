@@ -4,6 +4,7 @@ import { PostgresTechnicalInbox } from '@m8/shared';
 
 import { createNotificationsRouter } from '../app';
 import { createNotificationsPool } from '../db/pool';
+import { createNotificationFeed } from '../http/notification-feed';
 import {
   M3DriverDocumentRegisteredConsumer,
   type RabbitMqConnection,
@@ -47,6 +48,8 @@ export function createNotificationsModule(): NotificationsModule {
   });
   // El Inbox es infraestructura de RF8.6 y usa CommunicationsDB, nunca datos de M3.
   const messagingPool = createNotificationsPool(databaseUrl);
+  const router = createNotificationsRouter();
+  router.get('/notifications/me', createNotificationFeed(messagingPool, process.env.M1_IDENTITY_URL?.trim()));
   let available = false;
   let closing = false;
   let retryTimer: NodeJS.Timeout | undefined;
@@ -170,7 +173,7 @@ export function createNotificationsModule(): NotificationsModule {
 
   return {
     name: 'notifications',
-    router: createNotificationsRouter(),
+    router,
     async readiness() {
       return { status: available && m3Consumer?.isReady() && m5Consumer?.isReady() && m6Consumer?.isReady() && outboxRelay?.isReady() && m3Connection ? 'ok' : 'unavailable' };
     },

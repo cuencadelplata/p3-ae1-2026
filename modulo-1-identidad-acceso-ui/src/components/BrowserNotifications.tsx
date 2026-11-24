@@ -9,6 +9,56 @@ interface Customer {
 
 const scope = '/push'
 
+interface Notice {
+  id: string
+  title: string
+  message: string
+  createdAt: string
+}
+
+function RecentNotifications({ token }: { token: string }) {
+  const [notices, setNotices] = useState<Notice[] | null>(null)
+  const [unavailable, setUnavailable] = useState(false)
+  useEffect(() => {
+    const abort = new AbortController()
+    let timer: number
+    async function refresh() {
+      if (document.visibilityState === 'visible') {
+        try {
+          const { data } = await request<{ data: Notice[] }>('M8', '/notifications/me', { token, signal: abort.signal })
+          if (!abort.signal.aborted) {
+            setNotices(data)
+            setUnavailable(false)
+          }
+        } catch {
+          if (!abort.signal.aborted) setUnavailable(true)
+        }
+      }
+      if (!abort.signal.aborted) timer = window.setTimeout(refresh, 10_000)
+    }
+    void refresh()
+    return () => {
+      abort.abort()
+      window.clearTimeout(timer)
+    }
+  }, [token])
+
+  return (
+    <div className="mt-3" aria-live="polite">
+      {unavailable && <p className="text-sm">No pudimos actualizar tus avisos. Se volverán a consultar automáticamente.</p>}
+      {!unavailable && notices === null && <p className="text-sm">Cargando tus avisos…</p>}
+      {notices?.length === 0 && <p className="text-sm">Todavía no tenés avisos.</p>}
+      {notices && notices.length > 0 && <ul className="divide-y divide-[var(--line)]">
+        {notices.map(notice => <li className="py-3" key={notice.id}>
+          <p className="font-semibold">{notice.title}</p>
+          <p className="mt-1 text-sm">{notice.message}</p>
+          <time className="mt-1 text-xs" dateTime={notice.createdAt}>{new Date(notice.createdAt).toLocaleString('es-AR')}</time>
+        </li>)}
+      </ul>}
+    </div>
+  )
+}
+
 function subscriptionKey(key: string) {
   const value = key.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(key.length / 4) * 4, '=')
   return Uint8Array.from(atob(value), (character) => character.charCodeAt(0))
@@ -116,17 +166,21 @@ export default function BrowserNotifications({ token, role }: { token: string; r
   return (
     <section aria-labelledby="browser-notifications" className="detail-card mt-5">
       <h2 id="browser-notifications" className="flex items-center gap-2 font-semibold">
-        <Bell className="h-4 w-4 text-[var(--gold)]" aria-hidden="true" /> Notificaciones del navegador
+        <Bell className="h-4 w-4 text-[var(--gold)]" aria-hidden="true" /> Avisos del viaje
       </h2>
-      <p className="mt-2 text-sm" role="status">
-        {!supported ? 'Este navegador o sitio no admite notificaciones.' : busy ? 'Actualizando avisos…' : active
-          ? 'Activadas en este navegador. Podés cerrar la pestaña.'
-          : 'Activá los avisos para recibir actualizaciones de tus viajes.'}
-      </p>
-      {supported && <button className="btn-secondary mt-3" disabled={busy} onClick={() => void toggle()}>
-        {active ? 'Desactivar en este navegador' : 'Activar avisos'}
-      </button>}
-      {error && <p className="alert-error mt-3" role="alert">{error}</p>}
+      <RecentNotifications token={token} />
+      <details className="mt-4 border-t border-[var(--line)] pt-3">
+        <summary className="cursor-pointer text-sm font-semibold">Avisos fuera de la aplicación</summary>
+        <p className="mt-2 text-sm" role="status">
+          {!supported ? 'Este navegador o sitio no admite notificaciones.' : busy ? 'Actualizando avisos…' : active
+            ? 'Activadas en este navegador. Podés cerrar la pestaña.'
+            : 'Activá los avisos para recibir actualizaciones de tus viajes.'}
+        </p>
+        {supported && <button className="btn-secondary mt-3" disabled={busy} onClick={() => void toggle()}>
+          {active ? 'Desactivar en este navegador' : 'Activar avisos'}
+        </button>}
+        {error && <p className="alert-error mt-3" role="alert">{error}</p>}
+      </details>
     </section>
   )
 }

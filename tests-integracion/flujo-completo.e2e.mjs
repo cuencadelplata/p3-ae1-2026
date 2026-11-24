@@ -438,6 +438,28 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     if (s.conductor) await pedir(M4, `/drivers/${s.conductor.userId}/location`, { method: 'DELETE', token: s.conductor.token }).catch(() => {});
   });
 
+  test('11a. M8: cada participante consulta sus avisos sin suscripción PUSH', async () => {
+    const path = '/notifications/me';
+    assert.equal((await pedir(M8, path)).status, 401);
+    const limite = Date.now() + 15_000;
+    do {
+      const [pasajero, conductor] = await Promise.all([
+        pedir(M8, path, { token: s.pasajero.token }),
+        pedir(M8, path + '?userId=' + s.pasajero.userId, { token: s.conductor.token }),
+      ]);
+      assert.equal(pasajero.status, 200);
+      assert.equal(conductor.status, 200);
+      if (pasajero.data.data.some(aviso => aviso.title === 'Conductor asignado') &&
+          conductor.data.data.some(aviso => aviso.title === 'Viaje asignado')) {
+        const idsDelPasajero = new Set(pasajero.data.data.map(aviso => aviso.id));
+        assert.ok(conductor.data.data.every(aviso => !idsDelPasajero.has(aviso.id)));
+        return;
+      }
+      await esperar(300);
+    } while (Date.now() < limite);
+    assert.fail('No llegaron los avisos de asignación a ambas cuentas');
+  });
+
   test('11b. M8: soporte lista únicamente los tickets del usuario autenticado', async () => {
     const ticketsPath = '/tickets';
     const propio = await pedir(M8, ticketsPath, {

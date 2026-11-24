@@ -76,6 +76,7 @@ describe("PostgreSQL NotificationRepository", () => {
       { version: 5, name: "support_ride_requested_without_trip_id" },
       { version: 6, name: "support_driver_document_registered_notifications" },
       { version: 7, name: "support_preassignment_cancellation_by_ride_request" },
+      { version: 8, name: "index_recipient_notification_feed" },
     ]);
   });
 

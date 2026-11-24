@@ -123,6 +123,33 @@ paths:
         '401': { description: JWT de M1 ausente o inválido. }
         '403': { description: El usuario autenticado no puede consultar la entrega. }
         '404': { description: Entrega no encontrada. }
+  /notifications/me:
+    get:
+      tags: [Notifications]
+      summary: Consultar los 20 avisos más recientes de la cuenta autenticada
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Avisos de la cuenta, del más reciente al más antiguo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, title, message, createdAt]
+                      properties:
+                        id: { type: string }
+                        title: { type: string }
+                        message: { type: string }
+                        createdAt: { type: string, format: date-time }
+        '401': { description: Sesión ausente o inválida. }
+        '503': { description: Servicio de identidad o base de datos no disponible. }
   /notifications:
     post:
       tags: [Notifications]

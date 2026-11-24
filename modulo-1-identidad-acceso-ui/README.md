@@ -47,8 +47,12 @@ VITE_API_URL=http://localhost:10000 y, si usás tarjeta, VITE_MP_PUBLIC_KEY.
 
 ## Avisos del navegador
 
-En **Tu cuenta → Notificaciones del navegador**, el pasajero o conductor elige
-**Activar avisos** y acepta el permiso del sitio. Se usa su sesión actual.
+**Tu cuenta → Avisos del viaje** muestra automáticamente los últimos avisos
+guardados por M8. La lista funciona con la sesión actual y se actualiza cada
+diez segundos mientras la pantalla está visible.
+
+En **Avisos fuera de la aplicación**, el pasajero o conductor puede elegir
+**Activar avisos** y aceptar el permiso del sitio para recibir Web Push.
 Para el pasajero, la activación también selecciona PUSH como canal en M2.
 **Desactivar en este navegador** revoca la suscripción de ese dispositivo.
 
@@ -61,6 +65,44 @@ clave privada como secreto de despliegue. M8 necesita salida HTTPS hacia los
 proveedores Web Push de los navegadores. El permiso y la suscripción se
 activan una vez por navegador y origen, así que el dominio nuevo requiere
 su propia activación.
+
+### Probar con dos cuentas desde un clon limpio
+
+1. Instalá Docker Desktop. En la raíz del repositorio, copiá `.env.example` a
+   `.env` y usá `modulo8/integracion.env.example` como referencia para completar
+   las variables privadas del stack común. Para reservas programadas, configurá
+   `M9_DISPATCH_AUTH_TOKEN`. Si vas a finalizar el viaje con tarjeta, completá
+   `modulo7/.env` con la configuración TEST de M7 y poné `MP_PUBLIC_KEY` en el
+   `.env` de la raíz.
+2. Ejecutá `docker compose up -d --build` y verificá los servicios con
+   `docker compose ps`.
+3. Abrí `http://localhost:5173` en dos perfiles de navegador. Registrá un
+   **cliente** y un **conductor** con datos distintos. El conductor necesita un
+   perfil habilitado en M3. En **Abrir despacho**, registrá y activá un auto,
+   permití la ubicación y elegí **Conectarme** cerca del origen.
+4. Con el cliente, pedí un viaje o programá una reserva. Aceptá la oferta
+   con el conductor. Volvé a **Tu cuenta** en ambas sesiones y comprobá sus
+   avisos de asignación. Para probar también Web Push, activá la opción en
+   ambos perfiles antes de pedir el viaje y configurá las claves VAPID en M8.
+
+Si el conductor acaba de registrarse y todavía carece de perfil en M3, el
+equipo que administra el entorno debe crearlo y habilitarlo. En un Compose
+local de prueba se puede preparar desde PowerShell con su cuenta de conductor.
+
+```powershell
+$credencial = Get-Credential -Message 'Cuenta de conductor de prueba'
+$login = Invoke-RestMethod 'http://localhost:10000/auth/iniciar-sesion' -Method Post -ContentType 'application/json' -Body (@{
+  email = $credencial.UserName
+  password = $credencial.GetNetworkCredential().Password
+} | ConvertTo-Json)
+$headers = @{ Authorization = "Bearer $($login.token)" }
+$conductor = Invoke-RestMethod 'http://localhost:10000/auth/validar-identidad-y-rol' -Headers $headers
+Invoke-RestMethod 'http://localhost:5000/api/conductores' -Method Post -Headers $headers -ContentType 'application/json' -Body '{"ciudad":"Corrientes","tipovehiculo":"auto"}'
+Invoke-RestMethod "http://localhost:5000/api/conductores/$($conductor.userId)/habilitado" -Method Put -ContentType 'application/json' -Body '{"habilitado":"activo"}'
+```
+
+El alta de M3 se hace una vez. Si el perfil ya existe, usá su estado actual y
+continuá con el vehículo activo en el paso 3.
 
 ## Qué pide a M1 cada pantalla
 

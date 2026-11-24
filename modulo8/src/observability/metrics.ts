@@ -71,6 +71,10 @@ export function classifyM8Route(method: string, rawPathname: string): RouteClass
     return { route: pathname, rf: 'M8-CORE', ignored: true };
   }
 
+  if (pathname === '/notifications/me') {
+    return { route: '/notifications/me', rf: 'RF8.1', ignored: false };
+  }
+
   // RF8.2 — QR de verificación
   if (pathname === '/qr') {
     return { route: '/qr', rf: 'RF8.2', ignored: false };
