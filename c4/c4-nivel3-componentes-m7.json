@@ -1,0 +1,324 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C4 · Nivel 3 — Componentes de M7 Tarifas y pagos",
+    "locale": "es",
+    "output": "c4/c4-nivel3-componentes-m7.html",
+    "quality_profile": "showcase",
+    "parentHref": "c4-nivel2-contenedores.html",
+    "repository": {
+      "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
+      "provider": "github",
+      "revision": "687a636f0d66acc26bcde86dce442d4778e37dd8"
+    }
+  },
+  "layout": {
+    "mode": "auto"
+  },
+  "components": [
+    {
+      "id": "clientes",
+      "type": "external",
+      "label": "M5, M6, M8 y M9",
+      "sublabel": "tarifas, pagos y cargos"
+    },
+    {
+      "id": "app",
+      "type": "cloud",
+      "label": "API M7",
+      "sublabel": "Express · :17000",
+      "sources": [
+        {
+          "path": "modulo7/src/index.ts",
+          "line": 23,
+          "label": "app"
+        }
+      ]
+    },
+    {
+      "id": "tarifa",
+      "type": "backend",
+      "label": "Estimación de tarifa",
+      "sublabel": "POST /tarifa/estimacion",
+      "sources": [
+        {
+          "path": "modulo7/src/Lautaro/estimacion-tarifa/estimacion-tarifa.ts",
+          "line": 87,
+          "label": "ruta"
+        }
+      ]
+    },
+    {
+      "id": "cargo",
+      "type": "backend",
+      "label": "Cargo de cancelación",
+      "sublabel": "POST /cancelacion/cargo",
+      "sources": [
+        {
+          "path": "modulo7/src/Lautaro/cargo-cancelacion/cargo-cancelacion.ts",
+          "line": 232,
+          "label": "ruta"
+        }
+      ]
+    },
+    {
+      "id": "pago",
+      "type": "security",
+      "label": "Método de pago",
+      "sublabel": "crear · autorizar · rechazar (API key)",
+      "sources": [
+        {
+          "path": "modulo7/src/Matilda/metodo-pago/rutaPago.ts",
+          "line": 13,
+          "end_line": 22,
+          "label": "rutas"
+        }
+      ]
+    },
+    {
+      "id": "historial",
+      "type": "backend",
+      "label": "Historial financiero",
+      "sublabel": "/operations",
+      "sources": [
+        {
+          "path": "modulo7/src/Lautaro/historial-financiero/historial-financiero.ts",
+          "line": 92,
+          "label": "rutas"
+        }
+      ]
+    },
+    {
+      "id": "reintegro",
+      "type": "backend",
+      "label": "Reintegros",
+      "sublabel": "reintegro y pago duplicado",
+      "sources": [
+        {
+          "path": "modulo7/src/Aylen/reintegro/rutaReintegro.ts",
+          "line": 8,
+          "label": "ruta"
+        },
+        {
+          "path": "modulo7/src/Aylen/reintegro/procesarReintegro.ts",
+          "line": 1,
+          "label": "proceso"
+        }
+      ]
+    },
+    {
+      "id": "consumer",
+      "type": "backend",
+      "label": "Consumidor viaje cancelado",
+      "sublabel": "m7.reintegro.viaje-cancelado · DLQ",
+      "sources": [
+        {
+          "path": "modulo7/src/Aylen/reintegro/consumerViajeCancelado.ts",
+          "line": 26,
+          "label": "consumidor"
+        },
+        {
+          "path": "modulo7/src/infraestructura/rabbit.ts",
+          "line": 9,
+          "label": "cola"
+        }
+      ]
+    },
+    {
+      "id": "cb",
+      "type": "backend",
+      "label": "Circuit breaker",
+      "sublabel": "llamadas externas",
+      "sources": [
+        {
+          "path": "modulo7/src/patrones/circuitBreaker.ts",
+          "line": 1,
+          "label": "patrón"
+        }
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "Supabase",
+      "sublabel": "PostgreSQL en la nube",
+      "sources": [
+        {
+          "path": "modulo7/src/config.ts",
+          "line": 9,
+          "label": "DATABASE_URL"
+        },
+        {
+          "path": "modulo7/src/supabaseClient.ts",
+          "line": 1,
+          "label": "cliente"
+        }
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": "caché e idempotencia",
+      "sources": [
+        {
+          "path": "modulo7/src/infraestructura/redis.ts",
+          "line": 1,
+          "label": "cliente"
+        }
+      ]
+    },
+    {
+      "id": "rabbit",
+      "type": "messagebus",
+      "label": "RabbitMQ",
+      "sublabel": "viajes · m7.eventos",
+      "sources": [
+        {
+          "path": "modulo7/src/infraestructura/rabbit.ts",
+          "line": 6,
+          "end_line": 7,
+          "label": "exchanges"
+        }
+      ]
+    },
+    {
+      "id": "mp",
+      "type": "external",
+      "label": "Mercado Pago",
+      "sublabel": "pagos y tokens de tarjeta",
+      "sources": [
+        {
+          "path": "modulo7/src/Matilda/metodo-pago/PagoCliente.ts",
+          "line": 21,
+          "label": "pagos"
+        },
+        {
+          "path": "modulo7/src/config.ts",
+          "line": 14,
+          "label": "MP_BASE_URL"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "M7 Tarifas y pagos (m7-api)",
+      "wraps": [
+        "app",
+        "tarifa",
+        "cargo",
+        "pago",
+        "historial",
+        "reintegro",
+        "consumer",
+        "cb"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "clientes-app",
+      "from": "clientes",
+      "to": "app",
+      "label": "HTTP",
+      "variant": "emphasis"
+    },
+    {
+      "id": "app-tarifa",
+      "from": "app",
+      "to": "tarifa"
+    },
+    {
+      "id": "app-cargo",
+      "from": "app",
+      "to": "cargo"
+    },
+    {
+      "id": "app-pago",
+      "from": "app",
+      "to": "pago"
+    },
+    {
+      "id": "app-historial",
+      "from": "app",
+      "to": "historial"
+    },
+    {
+      "id": "app-reintegro",
+      "from": "app",
+      "to": "reintegro"
+    },
+    {
+      "id": "pago-cb",
+      "from": "pago",
+      "to": "cb"
+    },
+    {
+      "id": "cb-mp",
+      "from": "cb",
+      "to": "mp",
+      "label": "HTTPS"
+    },
+    {
+      "id": "reintegro-cargo",
+      "from": "reintegro",
+      "to": "cargo",
+      "label": "obtiene el cargo"
+    },
+    {
+      "id": "pago-db",
+      "from": "pago",
+      "to": "db",
+      "label": "SQL"
+    },
+    {
+      "id": "historial-db",
+      "from": "historial",
+      "to": "db",
+      "label": "SQL"
+    },
+    {
+      "id": "reintegro-db",
+      "from": "reintegro",
+      "to": "db",
+      "label": "SQL"
+    },
+    {
+      "id": "tarifa-redis",
+      "from": "tarifa",
+      "to": "redis"
+    },
+    {
+      "id": "rabbit-consumer",
+      "from": "rabbit",
+      "to": "consumer",
+      "label": "viaje cancelado",
+      "variant": "dashed"
+    },
+    {
+      "id": "consumer-reintegro",
+      "from": "consumer",
+      "to": "reintegro"
+    },
+    {
+      "id": "reintegro-rabbit",
+      "from": "reintegro",
+      "to": "rabbit",
+      "label": "m7.eventos",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "Observaciones",
+      "items": [
+        "La base es Supabase en la nube: la única fuera del stack local",
+        "En local se puede reemplazar por el sandbox de pagos de M8"
+      ]
+    }
+  ]
+}

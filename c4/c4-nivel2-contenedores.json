@@ -1,0 +1,686 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C4 · Nivel 2 — Contenedores de Movilidad Urbana",
+    "locale": "es",
+    "output": "c4/c4-nivel2-contenedores.html",
+    "quality_profile": "showcase",
+    "parentHref": "c4-nivel1-contexto.html",
+    "repository": {
+      "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
+      "provider": "github",
+      "revision": "687a636f0d66acc26bcde86dce442d4778e37dd8"
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "cols": 4,
+    "cellW": 200,
+    "cellH": 72,
+    "gapX": 120,
+    "gapY": 96
+  },
+  "components": [
+    {
+      "id": "pasajero",
+      "type": "external",
+      "label": "Pasajero",
+      "sublabel": "Navegador",
+      "sources": [
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 127,
+          "end_line": 137
+        }
+      ],
+      "row": 0,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "m1",
+      "type": "security",
+      "label": "M1 Identidad y acceso",
+      "sublabel": "API :10000 · UI :5173 · SQLite",
+      "explanation": "Emite y valida tokens y roles (CLIENTE, CONDUCTOR, OPERADOR). Todos los módulos le validan la identidad; además precarga el operador semilla, emite el token delegado de M9 y le da a M8 el nombre del conductor.",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/compose.integracion.yml",
+          "line": 18,
+          "end_line": 30
+        },
+        {
+          "path": "docker-compose.yml",
+          "line": 11,
+          "label": "m1-ui"
+        }
+      ],
+      "row": 0,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m1.html"
+    },
+    {
+      "id": "conductor",
+      "type": "external",
+      "label": "Conductor",
+      "sublabel": "Navegador",
+      "sources": [
+        {
+          "path": "modulo-3/compose.integracion.yml",
+          "line": 94,
+          "end_line": 107
+        }
+      ],
+      "row": 0,
+      "col": 3,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "m2web",
+      "type": "frontend",
+      "label": "M2 Web del cliente",
+      "sublabel": "React + nginx · :11001",
+      "sources": [
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 127,
+          "end_line": 137,
+          "label": "m2-client"
+        },
+        {
+          "path": "m2/client/src/api.ts",
+          "line": 9,
+          "end_line": 11,
+          "label": "proxy /api"
+        }
+      ],
+      "row": 1,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "nominatim",
+      "type": "external",
+      "label": "Nominatim",
+      "sublabel": "OpenStreetMap",
+      "sources": [
+        {
+          "path": "modulo-4/compose.integration.yml",
+          "line": 23,
+          "label": "GEOCODING_PROVIDER_URL"
+        }
+      ],
+      "row": 1,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "m3web",
+      "type": "frontend",
+      "label": "M3 Web del conductor",
+      "sublabel": "nginx · :4000",
+      "sources": [
+        {
+          "path": "modulo-3/compose.integracion.yml",
+          "line": 94,
+          "end_line": 107
+        }
+      ],
+      "row": 1,
+      "col": 3,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "m2",
+      "type": "backend",
+      "label": "M2 Perfil, historial y estado",
+      "sublabel": "API (2 réplicas) + worker · :11000",
+      "tag": "nuestro módulo",
+      "emphasis": true,
+      "explanation": "Perfil, estado de cuenta, historial de viajes, direcciones frecuentes y calificaciones. Recalcula el estado con las penalizaciones vigentes de Soporte (2 → bloqueo temporal, 3 → permanente) y expone el desbloqueo por revisión. Entra por m2-gateway (nginx) que balancea dos réplicas; el worker consume eventos y publica el outbox. Abrí el nodo para ver el Nivel 3.",
+      "href": "c4-nivel3-componentes-m2.html",
+      "sources": [
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 42,
+          "end_line": 104,
+          "label": "réplicas + gateway"
+        },
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 118,
+          "end_line": 126,
+          "label": "m2-worker"
+        }
+      ],
+      "row": 2,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "m4",
+      "type": "backend",
+      "label": "M4 Ubicación y disponibilidad",
+      "sublabel": "API :3004 · UI :8084",
+      "sources": [
+        {
+          "path": "modulo-4/compose.integration.yml",
+          "line": 2,
+          "end_line": 36,
+          "label": "m4-api"
+        },
+        {
+          "path": "modulo-4/compose.integration.yml",
+          "line": 37,
+          "end_line": 50,
+          "label": "m4-ui"
+        }
+      ],
+      "row": 2,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m4.html"
+    },
+    {
+      "id": "m3",
+      "type": "backend",
+      "label": "M3 Conductores",
+      "sublabel": "conductor-api + vehículos · :5000",
+      "sources": [
+        {
+          "path": "modulo-3/compose.integracion.yml",
+          "line": 2,
+          "end_line": 21,
+          "label": "m3-vehiculos"
+        },
+        {
+          "path": "modulo-3/compose.integracion.yml",
+          "line": 33,
+          "end_line": 63,
+          "label": "m3-conductor-api"
+        }
+      ],
+      "row": 2,
+      "col": 3,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m3.html"
+    },
+    {
+      "id": "operador",
+      "type": "external",
+      "label": "Operador de soporte",
+      "sublabel": "Rol OPERADOR",
+      "sources": [
+        {
+          "path": "docker-compose.yml",
+          "line": 11,
+          "label": "M1 operador semilla"
+        }
+      ],
+      "row": 3,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "m8",
+      "type": "backend",
+      "label": "M8 Notificaciones y soporte",
+      "sublabel": "QR · comprobantes · tickets · :18000",
+      "sources": [
+        {
+          "path": "modulo8/compose.integracion.yaml",
+          "line": 6,
+          "end_line": 36
+        },
+        {
+          "path": "modulo8/services/notification-delivery/src/infrastructure/clients/m2-preferences.client.ts",
+          "line": 25,
+          "end_line": 32,
+          "label": "consulta preferencias a M2"
+        },
+        {
+          "path": "modulo8/services/support/src/integrations/m2-account-review.ts",
+          "line": 1,
+          "label": "desbloqueo por revisión en M2"
+        }
+      ],
+      "explanation": "Notificaciones, QR, comprobantes y entrega, más Soporte: tickets, penalizaciones por viaje (vigencia 90 días) y revisión de bloqueos que llama al desbloqueo de M2.",
+      "row": 3,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m8.html"
+    },
+    {
+      "id": "m6",
+      "type": "backend",
+      "label": "M6 Viajes",
+      "sublabel": "viajes · cancelación · fachada · :15000",
+      "explanation": "Publica el mismo hecho de viaje en tres exchanges, uno por consumidor: mobility.events (M2, M8), viajes.events (M3) y trip.events (M4).",
+      "sources": [
+        {
+          "path": "modulo6/compose.integracion.yml",
+          "line": 29,
+          "end_line": 54
+        },
+        {
+          "path": "modulo6/src/rf-6.1-6.2-6.3/services/eventos-viaje.service.ts",
+          "line": 40,
+          "end_line": 42,
+          "label": "exchanges por consumidor"
+        }
+      ],
+      "row": 3,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m6.html"
+    },
+    {
+      "id": "m5",
+      "type": "backend",
+      "label": "M5 Solicitud y despacho",
+      "sublabel": "asignación de conductor · :3005",
+      "sources": [
+        {
+          "path": "modulo-5/compose.integracion.yml",
+          "line": 16,
+          "end_line": 31
+        }
+      ],
+      "row": 3,
+      "col": 3,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m5.html"
+    },
+    {
+      "id": "m7",
+      "type": "backend",
+      "label": "M7 Tarifas y pagos",
+      "sublabel": "tarifas, cargos y pagos · :17000",
+      "sources": [
+        {
+          "path": "modulo7/compose.integracion.yml",
+          "line": 2,
+          "end_line": 18,
+          "label": "m7-api"
+        }
+      ],
+      "row": 4,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m7.html"
+    },
+    {
+      "id": "m9",
+      "type": "backend",
+      "label": "M9 Reservas programadas",
+      "sublabel": "reservas y activación · :3000",
+      "sources": [
+        {
+          "path": "M9-ReservasProgramadas/docker-compose.yml",
+          "line": 4,
+          "end_line": 72,
+          "label": "m9-reservas"
+        }
+      ],
+      "row": 4,
+      "col": 3,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m9.html"
+    },
+    {
+      "id": "supabase",
+      "type": "external",
+      "label": "Supabase",
+      "sublabel": "PostgreSQL de M7",
+      "sources": [
+        {
+          "path": "docker-compose.yml",
+          "line": 9,
+          "label": "M7 DATABASE_URL"
+        }
+      ],
+      "row": 5,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "oauth",
+      "type": "external",
+      "label": "Google / Auth0",
+      "sublabel": "OAuth2",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/compose.integracion.yml",
+          "line": 45,
+          "end_line": 48,
+          "label": "GOOGLE / AUTH0"
+        }
+      ],
+      "row": 1,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "push",
+      "type": "external",
+      "label": "Web Push / SMTP",
+      "sublabel": "navegadores y correo",
+      "sources": [
+        {
+          "path": "modulo8/compose.integracion.yaml",
+          "line": 47,
+          "end_line": 49,
+          "label": "VAPID (Web Push)"
+        },
+        {
+          "path": "modulo8/compose.integracion.yaml",
+          "line": 53,
+          "label": "SMTP_HOST"
+        }
+      ],
+      "row": 4,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "mp",
+      "type": "external",
+      "label": "Mercado Pago",
+      "sublabel": "pagos con tarjeta",
+      "sources": [
+        {
+          "path": "modulo7/src/config.ts",
+          "line": 14,
+          "label": "MP_BASE_URL"
+        }
+      ],
+      "row": 5,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "pas-web",
+      "from": "pasajero",
+      "to": "m2web",
+      "label": "usa",
+      "variant": "emphasis"
+    },
+    {
+      "id": "web-m2",
+      "from": "m2web",
+      "to": "m2",
+      "label": "/api/v1 (HTTP)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "con-web",
+      "from": "conductor",
+      "to": "m3web",
+      "label": "usa"
+    },
+    {
+      "id": "web-m3",
+      "from": "m3web",
+      "to": "m3",
+      "label": "HTTP"
+    },
+    {
+      "id": "m2-m4",
+      "from": "m2",
+      "to": "m4",
+      "label": "geocodifica"
+    },
+    {
+      "id": "m2-m6",
+      "from": "m2",
+      "to": "m6",
+      "label": "viajes del cliente"
+    },
+    {
+      "id": "m8-m2",
+      "from": "m8",
+      "to": "m2",
+      "label": "preferencias y desbloqueo",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m5-m4",
+      "from": "m5",
+      "to": "m4",
+      "label": "ubicaciones"
+    },
+    {
+      "id": "m5-m6",
+      "from": "m5",
+      "to": "m6",
+      "label": "viajes"
+    },
+    {
+      "id": "m6-m4",
+      "from": "m6",
+      "to": "m4",
+      "label": "ubicación"
+    },
+    {
+      "id": "m6-m7",
+      "from": "m6",
+      "to": "m7",
+      "label": "tarifa"
+    },
+    {
+      "id": "m6-m8",
+      "from": "m6",
+      "to": "m8",
+      "label": "QR / comprobante"
+    },
+    {
+      "id": "m8-m7",
+      "from": "m8",
+      "to": "m7",
+      "label": "verifica pagos"
+    },
+    {
+      "id": "m9-m5",
+      "from": "m9",
+      "to": "m5",
+      "label": "activa el despacho"
+    },
+    {
+      "id": "m9-m7",
+      "from": "m9",
+      "to": "m7",
+      "label": "tarifa estimada"
+    },
+    {
+      "id": "m4-nom",
+      "from": "m4",
+      "to": "nominatim",
+      "label": "geocodifica (HTTPS)"
+    },
+    {
+      "id": "op-m8",
+      "from": "operador",
+      "to": "m8",
+      "label": "tickets y penalizaciones"
+    },
+    {
+      "id": "pas-m1",
+      "from": "pasajero",
+      "to": "m1",
+      "label": "inicia sesión",
+      "variant": "security"
+    },
+    {
+      "id": "con-m1",
+      "from": "conductor",
+      "to": "m1",
+      "label": "inicia sesión",
+      "variant": "security"
+    },
+    {
+      "id": "m2-m8",
+      "from": "m2",
+      "to": "m8",
+      "label": "penalizaciones",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m5-m7",
+      "from": "m5",
+      "to": "m7",
+      "label": "tarifa"
+    },
+    {
+      "id": "m9-m4",
+      "from": "m9",
+      "to": "m4",
+      "label": "geocodifica"
+    },
+    {
+      "id": "m6-m3",
+      "from": "m6",
+      "to": "m3",
+      "label": "datos del conductor"
+    },
+    {
+      "id": "m4-m3",
+      "from": "m4",
+      "to": "m3",
+      "label": "conductores"
+    },
+    {
+      "id": "m8-m3",
+      "from": "m8",
+      "to": "m3",
+      "label": "conductor y vehículo"
+    },
+    {
+      "id": "m8-m6",
+      "from": "m8",
+      "to": "m6",
+      "label": "valida viaje"
+    },
+    {
+      "id": "m7-supa",
+      "from": "m7",
+      "to": "supabase",
+      "label": "PostgreSQL"
+    },
+    {
+      "id": "m1-oauth",
+      "from": "m1",
+      "to": "oauth",
+      "label": "login federado"
+    },
+    {
+      "id": "m8-push",
+      "from": "m8",
+      "to": "push",
+      "label": "push y correo"
+    },
+    {
+      "id": "m7-mp",
+      "from": "m7",
+      "to": "mp",
+      "label": "cobros"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "violet",
+      "title": "Infraestructura compartida",
+      "items": [
+        "Todos los módulos validan token y rol con M1; M8 también le pide el nombre del conductor y M9 usa un token delegado (flechas omitidas para no cruzar el diagrama)",
+        "RabbitMQ y Redis son comunes a todo el stack (los define M9); los eventos están en el Nivel 2b",
+        "Cada módulo tiene su propia base; M7 usa Supabase en la nube. No hay SQL entre módulos"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Circuito de penalizaciones",
+      "items": [
+        "El operador confirma la penalización de un viaje en M8 (vigencia 90 días)",
+        "M2 consulta las vigentes: 2 → BLOQUEADO_TEMPORAL, 3 → BLOQUEADO_PERMANENTE",
+        "El permanente solo se levanta por revisión: M8 llama a POST /internal/usuarios/{id}/desbloqueo",
+        "M2 → M8 (penalizaciones) y M8 → M2 (desbloqueo) usan la misma X-Secret-Key"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Observaciones",
+      "items": [
+        "En local, M5, M6, M8 y M9 pueden apuntar al sandbox de pagos de M8 en lugar de M7",
+        "M3 publica el puerto 5000, que en macOS ocupa el Receptor AirPlay"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Navegación",
+      "items": [
+        "Clic en un módulo abre su Nivel 3 (componentes)",
+        "Los eventos de RabbitMQ están en el Nivel 2b"
+      ]
+    }
+  ]
+}

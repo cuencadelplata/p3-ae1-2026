@@ -4,13 +4,13 @@
   "meta": {
     "title": "C4 · Nivel 3 — Componentes de M2 Clientes",
     "locale": "es",
-    "output": "m2/c4/c4-nivel3-componentes-m2.html",
+    "output": "c4/c4-nivel3-componentes-m2.html",
     "quality_profile": "showcase",
     "parentHref": "c4-nivel2-contenedores.html",
     "repository": {
       "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
       "provider": "github",
-      "revision": "bd6e17f43689ec617bd57b73553225693e13b0c0"
+      "revision": "687a636f0d66acc26bcde86dce442d4778e37dd8"
     }
   },
   "layout": {
@@ -37,19 +37,26 @@
     {
       "id": "m8",
       "type": "external",
-      "label": "M8 Notificaciones",
+      "label": "M8 Notificaciones y soporte",
       "sublabel": "otro módulo",
       "sources": [
         {
           "path": "modulo8/services/notification-delivery/src/infrastructure/clients/m2-preferences.client.ts",
           "line": 25,
           "end_line": 32
+        },
+        {
+          "path": "modulo8/services/support/src/integrations/m2-account-review.ts",
+          "line": 1,
+          "end_line": 47,
+          "label": "desbloqueo por revisión"
         }
       ],
       "pos": [
         40,
         480
-      ]
+      ],
+      "explanation": "Otro módulo. Consulta preferencias de notificación y, desde Soporte, pide el desbloqueo de una cuenta después de revisarla. También es la fuente de las penalizaciones vigentes."
     },
     {
       "id": "gateway",
@@ -73,8 +80,8 @@
       "id": "auth",
       "type": "security",
       "label": "Middleware de autenticación",
-      "sublabel": "requireAuth · service key · x-api-key",
-      "explanation": "Valida el token de usuario contra M1 (con caché en Redis). /status acepta también X-Secret-Key de otros módulos y /internal/preferences exige la clave interna de M8.",
+      "sublabel": "requireAuth · X-Secret-Key · x-api-key",
+      "explanation": "Valida el token de usuario contra M1 (con caché en Redis). /status acepta también X-Secret-Key de otros módulos; /internal/preferences exige la clave interna de M8 y /internal/usuarios/{id}/desbloqueo exige la X-Secret-Key de Soporte.",
       "sources": [
         {
           "path": "m2/src/middlewares/auth.middleware.ts",
@@ -86,6 +93,12 @@
           "line": 80,
           "end_line": 106,
           "label": "rutas protegidas"
+        },
+        {
+          "path": "m2/src/middlewares/auth.middleware.ts",
+          "line": 85,
+          "end_line": 95,
+          "label": "requireSoporteKey"
         }
       ],
       "pos": [
@@ -128,23 +141,31 @@
       "id": "estado",
       "type": "backend",
       "label": "Estado de cuenta",
-      "sublabel": "RF-2.5 · penalizaciones",
+      "sublabel": "RF-2.5 · penalizaciones · revisión",
       "sources": [
         {
           "path": "m2/src/services/account-status.service.ts",
-          "line": 1,
-          "end_line": 90
+          "line": 18,
+          "end_line": 60,
+          "label": "umbrales y conteo"
+        },
+        {
+          "path": "m2/src/services/account-status.service.ts",
+          "line": 223,
+          "label": "desbloquearPorRevision"
         },
         {
           "path": "m2/src/app.ts",
-          "line": 96,
-          "end_line": 97
+          "line": 94,
+          "end_line": 105,
+          "label": "rutas de estado y desbloqueo"
         }
       ],
       "pos": [
         940,
         160
-      ]
+      ],
+      "explanation": "Recalcula el estado con las penalizaciones vigentes de Soporte (M8): 2 → BLOQUEADO_TEMPORAL, 3 → BLOQUEADO_PERMANENTE. El permanente no se recalcula; solo lo levanta una revisión manual, y después de ella cuentan solo las penalizaciones posteriores. Si Soporte cae, devuelve el último estado guardado."
     },
     {
       "id": "viajes",
@@ -357,23 +378,6 @@
         1580,
         260
       ]
-    },
-    {
-      "id": "soporte",
-      "type": "external",
-      "label": "Soporte",
-      "sublabel": "stub interno de M2",
-      "sources": [
-        {
-          "path": "m2/src/clients/soporte.client.ts",
-          "line": 46,
-          "end_line": 61
-        }
-      ],
-      "pos": [
-        1580,
-        160
-      ]
     }
   ],
   "boundaries": [
@@ -419,7 +423,8 @@
       "id": "m8-gw",
       "from": "m8",
       "to": "gateway",
-      "label": "/internal/preferences"
+      "label": "preferencias y desbloqueo",
+      "variant": "emphasis"
     },
     {
       "id": "gw-auth",
@@ -484,10 +489,11 @@
       "label": "caché de perfil"
     },
     {
-      "id": "estado-soporte",
+      "id": "estado-m8",
       "from": "estado",
-      "to": "soporte",
-      "label": "penalizaciones"
+      "to": "m8",
+      "label": "penalizaciones (X-Secret-Key)",
+      "variant": "emphasis"
     },
     {
       "id": "estado-db",
@@ -573,6 +579,15 @@
         "Outbox + publisher confirms: entrega al menos una vez",
         "Inbox por eventId y deduplicación por viajeId en el worker",
         "Si M4/M6 caen: 503 explícito, lo guardado sigue disponible"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Revisión de bloqueos",
+      "items": [
+        "M8 llama a POST /internal/usuarios/{id}/desbloqueo con X-Secret-Key",
+        "Sin clave o con Bearer → 401; cuenta inexistente → 404; INACTIVA → 409",
+        "Mientras haya un bloqueo automático, el cliente no puede cambiar su estado (409)"
       ]
     },
     {
