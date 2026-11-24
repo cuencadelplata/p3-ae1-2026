@@ -19,6 +19,7 @@ router.post('/:id/finalizacion', finalizarViaje);
 router.get('/:id/historial-transiciones', obtenerHistorialTransiciones);
 //endpoint para asignar conductor (RF-6.2)
 router.post('/:id/asignar', asignarConductor);
+router.patch('/:id/asignar', asignarConductor);
 //endpoint para validar código y iniciar viaje (RF-6.3)
 router.post('/:id/iniciar', iniciarViaje);
 //endpoint para registrar que el conductor llegó 

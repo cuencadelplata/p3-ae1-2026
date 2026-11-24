@@ -1,6 +1,14 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { BadGatewayError, ServiceUnavailableError } from '../rf-6.4-6.7/errors.js';
+class Rf6ApiError extends Error {
+    status;
+    constructor(status, message) {
+        super(message);
+        this.status = status;
+    }
+}
 export class HttpRf6ApiClient {
     baseUrl;
     constructor(baseUrl) {
@@ -25,12 +33,29 @@ export class HttpRf6ApiClient {
         });
     }
     async request(path, init) {
-        const response = await fetch(`${this.baseUrl}${path}`, init);
+        let response;
+        try {
+            response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}${path}`, {
+                ...init,
+                signal: AbortSignal.timeout(5000),
+            });
+        }
+        catch {
+            throw new ServiceUnavailableError('No se pudo conectar con la API de Viajes');
+        }
         if (!response.ok) {
             const detail = await response.json().catch(() => ({}));
-            throw new Error(detail.error ?? `API RF-6 respondió ${response.status}`);
+            const message = detail?.error ?? `API RF-6 respondió ${response.status}`;
+            if (response.status >= 500)
+                throw new ServiceUnavailableError(message);
+            throw new Rf6ApiError(response.status, message);
         }
-        return response.json();
+        try {
+            return await response.json();
+        }
+        catch {
+            throw new BadGatewayError('La API de Viajes devolvió una respuesta JSON inválida');
+        }
     }
 }
 export function createViajeApi(options) {
@@ -122,6 +147,15 @@ export function createViajeApi(options) {
             return send(response, 200, { viaje: viajeCancelado });
         }
         catch (error) {
+            if (error instanceof ServiceUnavailableError) {
+                return send(response, 503, { error: error.message });
+            }
+            if (error instanceof BadGatewayError) {
+                return send(response, 502, { error: error.message });
+            }
+            if (error instanceof Rf6ApiError) {
+                return send(response, error.status, { error: error.message });
+            }
             const message = error instanceof Error ? error.message : 'Solicitud inválida';
             const status = message.includes('Viaje no encontrado') ? 404 : 400;
             return send(response, status, { error: message });

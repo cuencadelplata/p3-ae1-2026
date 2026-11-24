@@ -57,6 +57,22 @@ async function solicitarCancelacion(id: string, body: unknown = { actor: 'client
 }
 
 describe('Compatibilidad RF-6.5/RF-6.6 - rutas de viaje', () => {
+  it.each(['POST', 'PATCH'])('asigna un conductor mediante %s y permite cancelar el mismo viaje', async (method) => {
+    const created = await crearViaje();
+    const response = await fetch(`${baseUrl}/api/viajes/${created.id}/asignar`, {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ conductorId: 'conductor-integracion' }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      viaje: { id: created.id, conductorId: 'conductor-integracion', estado: 'CONDUCTOR_EN_CAMINO' },
+    });
+    const cancelled = await solicitarCancelacion(created.id);
+    expect(cancelled.status).toBe(200);
+    expect(await cancelled.json()).toMatchObject({ id: created.id, estado: 'CANCELADO' });
+  });
+
   it('GET devuelve el viaje directamente con los campos de integración', async () => {
     const created = await crearViaje();
     const response = await fetch(`${baseUrl}/api/viajes/${created.id}`);
