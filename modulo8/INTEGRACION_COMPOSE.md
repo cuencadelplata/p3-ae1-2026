@@ -4,6 +4,8 @@ El `docker-compose.yml` de la raíz incluye `modulo8/compose.integracion.yaml`.
 M8 usa Redis y RabbitMQ del stack común en `reservas-network`. Su PostgreSQL
 es `m8-postgres`, con volumen propio y sin publicar otro puerto 5432.
 
+Para la exposición, consultá las [dos rutas críticas de M8 para AE4](RUTAS_CRITICAS_AE4.md).
+
 ## Configuración privada
 
 Desde la raíz del repositorio:
@@ -86,10 +88,10 @@ El cliente y el conductor del viaje consultan el comprobante con su token de
 M1. Como M1 no comparte nombres con otros servicios, el PDF muestra el número de
 usuario de cada uno.
 
-Regla de pago (acuerdo del grupo M8): con tarjeta se emite cuando M7 la
-autoriza; efectivo y transferencia se cobran fuera de la pasarela, M7 los deja
-pendientes y el comprobante se emite con el pago pendiente. Un pago rechazado no
-genera comprobante.
+En el recorrido integrado, M6 consulta el pago de M7 y exige el estado
+`autorizado` antes de finalizar el viaje. M8 refleja el medio elegido y
+emite el comprobante con estado `APROBADO`. La demostración usa tarjeta
+con Mercado Pago en modo TEST.
 
 ### M7 real
 
@@ -99,26 +101,29 @@ M7. M7 lee su propia configuración de `modulo7/.env` (`M7_API_KEY`,
 proyecto de Supabase y autoriza las tarjetas con Mercado Pago (credenciales de
 prueba). Sin ese archivo, M7 no puede registrar pagos y el viaje no se finaliza.
 
-Con tarjeta, la prueba de punta a punta hace el paso de la app del cliente:
-tokeniza en Mercado Pago la tarjeta de prueba "APRO" con el `MP_ACCESS_TOKEN`
-de `modulo7/.env` y M6 reenvía ese token a M7.
+Con tarjeta, la prueba registra el pago en M7, tokeniza una tarjeta de
+prueba con el `MP_ACCESS_TOKEN` de `modulo7/.env` y llama a
+`POST /metodo-pago/{viajeId}/autorizar` en M7. La finalización en M6
+recibe el medio de pago y consulta la autorización existente.
 
 ### Prueba de punta a punta
 
-Registra usuarios en M1, conductor y vehículo en M3, hace el viaje completo en
-M6 y espera el comprobante en M8:
+Registra usuarios en M1, conductor y vehículo en M3, y da inicio al viaje
+en M6. Comprueba el `402` con un pago pendiente, autoriza el pago en M7,
+finaliza el viaje en M6 y espera el comprobante en M8.
 
 ```powershell
 docker compose --env-file modulo8/.env.integracion up -d --build --wait m8-app m7-api m6-viajes m4-api m3-conductor-api m3-vehiculos m1-identidad-acceso m2-gateway
 cd modulo8
 node tests/e2e/shared-compose-receipt.mjs
-$env:RECEIPT_E2E_METODO_PAGO = 'efectivo'; node tests/e2e/shared-compose-receipt.mjs
 ```
 
 La prueba también recorre los avisos del viaje (RF-8.1 → RF-8.6 → RF-8.7) con
 las preferencias del cliente en M2, y reenvía el comprobante (RF-8.4).
 
-`RECEIPT_E2E_METODO_PAGO` elige el medio de pago (por defecto `tarjeta`).
+`RECEIPT_E2E_METODO_PAGO` elige el medio de pago. Efectivo y transferencia
+requieren el escenario de simulación habilitado en M7. La tarjeta es el caso
+predeterminado y el recorrido de pago que se usa como evidencia.
 
 ## Notificaciones push reales en el navegador (RF-8.7)
 

@@ -3,8 +3,8 @@
 // Recorrido (todos los módulos reales, sin simuladores de M1, M3, M6 ni M7):
 //   M1  registra cliente y conductor e inicia sesión de ambos.
 //   M3  da de alta al conductor y su vehículo activo.
-//   M6  crea el viaje, asigna, registra el arribo (QR de M8), inicia y finaliza
-//       (M6 consulta a M4 la distancia y a M7 la tarifa y el pago).
+//   M6  crea el viaje, asigna, registra el arribo (QR de M8) e inicia.
+//   M7  registra y autoriza el pago antes de que M6 finalice el viaje.
 //   M6 → RabbitMQ: TripCompleted (mobility.events, trip.completed).
 //   M8  consume el evento en m8.receipts.trip-completed, consulta M6, M3 y M7
 //       y guarda el PDF.
@@ -23,21 +23,24 @@ const url = (name, port) => (process.env[name] || `http://localhost:${port}`).re
 const m1 = url('M1_TEST_URL', process.env.M1_HOST_PORT || 10000);
 const m3Conductor = url('M3_CONDUCTOR_TEST_URL', 5000);
 const m3Vehicles = url('M3_VEHICLES_TEST_URL', 8083);
+const m4 = url('M4_TEST_URL', process.env.M4_API_PORT || 3004);
 const m6 = url('M6_TEST_URL', process.env.M6_VIAJES_HOST_PORT || 15000);
+const m7 = url('M7_TEST_URL', 17000);
 const m8 = url('M8_TEST_URL', process.env.M8_HOST_PORT || 18000);
 const receiptTimeoutMs = Number(process.env.RECEIPT_E2E_TIMEOUT_MS || 60000);
 
-// Medio de pago del viaje. Con tarjeta, la prueba hace lo que haría la app del
-// cliente: tokeniza en Mercado Pago la tarjeta de prueba "APRO" con las
-// credenciales de prueba de M7 (modulo7/.env), y M6 reenvía ese token a M7.
 const paymentMethod = process.env.RECEIPT_E2E_METODO_PAGO || 'tarjeta';
 const m7Env = dotenv.config({ path: fileURLToPath(new URL('../../../modulo7/.env', import.meta.url)), processEnv: {}, quiet: true }).parsed ?? {};
+const m7ApiKey = process.env.M7_API_KEY || m7Env.M7_API_KEY;
+assert.ok(m7ApiKey, 'Configurar M7_API_KEY para registrar y autorizar el pago de prueba');
+assert.ok(['tarjeta', 'efectivo', 'transferencia'].includes(paymentMethod), 'Medio de pago de prueba inválido');
+const paymentHeaders = { 'x-api-key': m7ApiKey };
 
 async function cardPayment() {
   let token = process.env.RECEIPT_E2E_CARD_TOKEN;
   if (!token) {
     const accessToken = process.env.MP_ACCESS_TOKEN || m7Env.MP_ACCESS_TOKEN;
-    assert.ok(accessToken, 'Para pagar con tarjeta hace falta MP_ACCESS_TOKEN (credenciales de prueba de M7 en modulo7/.env)');
+    assert.ok(accessToken?.startsWith('TEST-'), 'Usar MP_ACCESS_TOKEN de prueba para tokenizar la tarjeta de demostración');
     const response = await fetch('https://api.mercadopago.com/v1/card_tokens', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
@@ -155,17 +158,63 @@ assert.ok(arrived.data.qr?.token, 'M6 debe recibir el QR generado por M8');
 const started = await request(m6, `/api/viajes/${tripId}/iniciar`, { method: 'POST', body: { token: arrived.data.qr.token } });
 assert.equal(started.status, 200, `M6 iniciar: ${show(started)}`);
 
-const finished = await request(m6, `/api/viajes/${tripId}/finalizacion`, {
-  method: 'POST',
-  body: {
-    origen: { latitude: -27.4692, longitude: -58.8306, address: 'Av. 3 de Abril 1050, Corrientes' },
-    destino: { latitude: -27.4459, longitude: -58.7619, address: 'Aeropuerto Internacional Corrientes' },
-    tipoVehiculo: 'auto',
-    horaFin: new Date().toISOString(),
-    metodoPago: paymentMethod,
-    ...(paymentMethod === 'tarjeta' ? { pago: await cardPayment() } : {}),
+// Fijar la hora de cierre al iniciar el viaje: este recorrido dura un minuto
+// de tarifa. La autorización y los reintentos reutilizan ese mismo cierre.
+const finalizationBody = {
+  origen: { latitude: -27.4692, longitude: -58.8306, address: 'Av. 3 de Abril 1050, Corrientes' },
+  destino: { latitude: -27.4459, longitude: -58.7619, address: 'Aeropuerto Internacional Corrientes' },
+  tipoVehiculo: 'auto',
+  horaFin: new Date().toISOString(),
+  metodoPago: paymentMethod,
+};
+const { origen, destino, tipoVehiculo } = finalizationBody;
+const estimate = await request(m4, '/api/v1/estimate', {
+  method: 'POST', body: {
+    origin: { latitude: origen.latitude, longitude: origen.longitude },
+    destination: { latitude: destino.latitude, longitude: destino.longitude },
   },
 });
+assert.equal(estimate.status, 200, `M4 estimar distancia: ${show(estimate)}`);
+const fare = await request(m7, '/tarifa/estimacion', {
+  method: 'POST', body: {
+    origen: { lat: origen.latitude, lng: origen.longitude, direccion: origen.address },
+    destino: { lat: destino.latitude, lng: destino.longitude, direccion: destino.address },
+    distanciaKm: estimate.data.distanceKm,
+    tiempoEstimadoMin: 1,
+    vehicleType: tipoVehiculo,
+  },
+});
+assert.equal(fare.status, 200, `M7 estimar tarifa: ${show(fare)}`);
+const total = fare.data.estimatedFare;
+const currency = fare.data.currency || 'ARS';
+assert.ok(Number.isFinite(total) && total > 0, 'M7 debe informar el importe de prueba');
+
+const paymentPath = `/metodo-pago/${tripId}`;
+const payment = await request(m7, '/metodo-pago', {
+  method: 'POST', headers: paymentHeaders,
+  body: { clienteId: String(customer.userId), viajeId: tripId, tipo: paymentMethod },
+});
+assert.equal(payment.status, 201, `M7 registrar pago: ${show(payment)}`);
+assert.equal(payment.data.estado, 'pendiente');
+
+const finalize = () => request(m6, `/api/viajes/${tripId}/finalizacion`, {
+  method: 'POST', body: finalizationBody,
+});
+const pending = await finalize();
+assert.equal(pending.status, 402, `M6 debe rechazar el pago pendiente: ${show(pending)}`);
+
+const authorized = await request(m7, `${paymentPath}/autorizar`, {
+  method: 'POST', headers: paymentHeaders, body: {
+    idOrden: `ORD-${tripId}`, total, moneda: currency,
+    ...(paymentMethod === 'tarjeta' ? await cardPayment() : {}),
+  },
+});
+assert.equal(authorized.status, 200, `M7 autorizar pago: ${show(authorized)}`);
+assert.equal(authorized.data.estado, 'autorizado');
+assert.equal(authorized.data.tipo, paymentMethod);
+assert.equal(authorized.data.total, total);
+
+const finished = await finalize();
 assert.equal(finished.status, 200, `M6 finalizar: ${show(finished)}`);
 
 // 4. Comprobante emitido por M8 a partir de TripCompleted
@@ -183,9 +232,9 @@ assert.equal(data.tripId, tripId);
 assert.equal(data.customer.id, String(customer.userId));
 assert.equal(data.driver.vehicle.plate, plate);
 assert.equal(data.fare.total, finished.data.viaje.total);
+assert.equal(data.fare.total, total);
 assert.equal(data.payment.method, paymentMethod.toUpperCase());
-// Tarjeta: M7 la autoriza. Efectivo y transferencia se cobran fuera de la pasarela y quedan pendientes.
-assert.equal(data.payment.status, paymentMethod === 'tarjeta' ? 'APROBADO' : 'PENDIENTE');
+assert.equal(data.payment.status, 'APROBADO');
 assert.equal(data.fiscal, undefined, 'el comprobante ya no pasa por un autorizador fiscal');
 
 // Otro usuario no puede ver el comprobante (RF-8.4 con M1 real)
@@ -216,19 +265,13 @@ const resentPdf = await fetch(resent.data.data.lastDelivery.url, { signal: Abort
 assert.equal(resentPdf.status, 200);
 
 // Repetir la finalización no emite otro comprobante (idempotencia en M6 y en M8)
-const repeated = await request(m6, `/api/viajes/${tripId}/finalizacion`, {
-  method: 'POST',
-  body: {
-    origen: { latitude: -27.4692, longitude: -58.8306 }, destino: { latitude: -27.4459, longitude: -58.7619 },
-    tipoVehiculo: 'auto', horaFin: new Date().toISOString(), metodoPago: paymentMethod,
-    ...(paymentMethod === 'tarjeta' ? { pago: await cardPayment() } : {}),
-  },
-});
+const repeated = await finalize();
 assert.equal(repeated.data?.idempotente, true, `M6 debe reconocer la finalización repetida: ${show(repeated)}`);
 const again = await request(m8, `/api/v1/receipts/${tripId}`, { token: customer.token });
 assert.equal((again.data.data ?? again.data).receiptId, data.receiptId);
 
 console.log(JSON.stringify({
   status: 'ok', tripId, customerUserId: customer.userId, driverUserId: driver.userId,
-  receiptNumber: data.receiptNumber, total: data.fare.total, payment: data.payment, plate,
+  pendingBeforeAuthorization: pending.status, m7Authorization: authorized.status,
+  finalization: finished.status, receiptNumber: data.receiptNumber, total: data.fare.total, payment: data.payment, plate,
 }));
