@@ -137,9 +137,10 @@ export class PrismaReservaRepository implements ReservaRepository {
   }
 
   /** Listado paginado (aportado por la rama M9): orden estable fecha + id, máx. 100 por página. */
-  public async listarPaginado(page = 1, pageSize = 20): Promise<Reserva[]> {
+  public async listarPaginado(page = 1, pageSize = 20, clienteId?: string): Promise<Reserva[]> {
     const reservations = await measureDb('reservation.list_page', () =>
       this.prisma.reservation.findMany({
+        where: clienteId === undefined ? {} : { clientId: clienteId },
         orderBy: [{ scheduledAt: 'asc' }, { id: 'asc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -213,10 +214,26 @@ export class PrismaReservaRepository implements ReservaRepository {
     return cancelled;
   }
 
-  public async buscarPendientes(fechaLimite: Date, limite = 100): Promise<Reserva[]> {
+  public async recuperarActivacion(id: string, anteriorA: Date): Promise<boolean> {
+    const result = await measureDb('reservation.recover_activation', () =>
+      this.prisma.reservation.updateMany({
+        where: { id, status: 'ACTIVANDO', dispatchRequestId: null, updatedAt: { lte: anteriorA } },
+        data: { status: 'PROGRAMADA', version: { increment: 1 } },
+      }),
+    );
+    if (result.count > 0) recordTransition('ACTIVANDO', 'PROGRAMADA');
+    return result.count > 0;
+  }
+
+  public async buscarPendientes(
+    fechaLimite: Date,
+    limite = 100,
+    clienteId?: string,
+  ): Promise<Reserva[]> {
     const reservations = await measureDb('reservation.find_pending', () =>
       this.prisma.reservation.findMany({
         where: {
+          ...(clienteId === undefined ? {} : { clientId: clienteId }),
           OR: [
             { status: 'ACTIVANDO' },
             { status: 'PROGRAMADA', scheduledAt: { lte: fechaLimite } },
@@ -238,8 +255,14 @@ export class PrismaReservaRepository implements ReservaRepository {
     const correlationId = this.correlationId();
     const changed = await measureDb('reservation.change_status', () =>
       this.prisma.$transaction(async (transaction) => {
-        const idempotencyKey =
-          estadoEsperado === 'PROGRAMADA' && nuevoEstado === 'ACTIVANDO' ? randomUUID() : undefined;
+        if (estadoEsperado === 'PROGRAMADA' && nuevoEstado === 'ACTIVANDO') {
+          // Un timeout puede ocultar una solicitud ya creada en M5. Inicializar
+          // una sola vez, dentro de esta transacción, y conservarla al reintentar.
+          await transaction.reservation.updateMany({
+            where: { id, status: estadoEsperado, dispatchIdempotencyKey: null },
+            data: { dispatchIdempotencyKey: randomUUID() },
+          });
+        }
         const result = await transaction.reservation.updateMany({
           where: { id, status: estadoEsperado },
           data: {
@@ -257,7 +280,6 @@ export class PrismaReservaRepository implements ReservaRepository {
                   routeSnapshot:
                     cambio.routeSnapshot === null ? Prisma.DbNull : toJson(cambio.routeSnapshot),
                 }),
-            ...(idempotencyKey === undefined ? {} : { dispatchIdempotencyKey: idempotencyKey }),
             version: { increment: 1 },
           },
         });

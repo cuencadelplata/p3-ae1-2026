@@ -27,9 +27,11 @@ export const futureIso = (minutes = 2 * 24 * 60) =>
 
 export const futureIsoSeconds = (seconds) => new Date(Date.now() + seconds * 1000).toISOString();
 
-/** Datos ficticios: direcciones genéricas y cliente derivado del RUN_ID. */
+export const FIXED_CLIENT_ID = env('CLIENT_ID', '');
+
+/** Datos ficticios: direcciones genéricas y cliente derivado del RUN_ID (o fijo en integración). */
 export const reservaPayload = (index, fechaHoraProgramada = futureIso()) => ({
-  clienteId: clientIdFor(RUN_ID, index % CLIENT_POOL_SIZE),
+  clienteId: FIXED_CLIENT_ID || clientIdFor(RUN_ID, index % CLIENT_POOL_SIZE),
   origen: `Origen k6 ${index % 97}`,
   destino: `Destino k6 ${(index % 89) + 1}`,
   vehiculo: VEHICULOS[index % 2],

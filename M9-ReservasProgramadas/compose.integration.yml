@@ -1,0 +1,51 @@
+# Complemento de ../docker-compose.yml. Solo inicia los servicios seleccionados
+# por scripts/integration-demo.mjs; no cambia los archivos de otros módulos.
+services:
+  m9-reservas:
+    environment:
+      PORT: '3000'
+      M9_AUTH_MODE: demo
+      M9_DEMO_AUTH_SECRET: ${M9_DEMO_JWT_SECRET:?Ejecutar npm run integration:up dentro de M9}
+      DISPATCH_MODE: rest
+      M5_BASE_URL: http://m5-dispatch-service:3005
+      M5_TIMEOUT_MS: '10000'
+      M7_BASE_URL: http://m7-api:3000
+      M5_SERVICE_TOKEN: ${M9_DEMO_TOKEN:?Ejecutar npm run integration:up dentro de M9}
+      M5_DEMO_CLIENT_ID: '99999999-9999-4999-8999-999999999999'
+      ROUTE_RESOLVER_MODE: ${M9_DEMO_ROUTE_MODE:-stub}
+      ROUTE_STUB_ORIGIN_LATITUDE: '-27.4692'
+      ROUTE_STUB_ORIGIN_LONGITUDE: '-58.8306'
+      ROUTE_STUB_DESTINATION_LATITUDE: '-27.4875'
+      ROUTE_STUB_DESTINATION_LONGITUDE: '-58.7896'
+      ROUTE_STUB_DISTANCE_KM: '4.5'
+      ROUTE_STUB_DURATION_MIN: '14'
+      M4_BASE_URL: http://m4-api:3004
+      M4_TIMEOUT_MS: '10000'
+    ports: !override
+      - '127.0.0.1:3000:3000'
+    depends_on:
+      m5-dispatch-service:
+        condition: service_healthy
+      m7-api:
+        condition: service_started
+
+  m5-dispatch-service:
+    environment:
+      AUTH_MODE: jwt
+      M7_URL: http://m7-api:3000
+      JWT_SECRET: ${M9_DEMO_JWT_SECRET:?Ejecutar npm run integration:up dentro de M9}
+    depends_on:
+      m7-api:
+        condition: service_started
+    ports: !override
+      - '127.0.0.1:3005:3005'
+
+  m7-api:
+    environment:
+      PORT: '3000'
+    ports: !override
+      - '127.0.0.1:17000:3000'
+
+  m4-api:
+    ports: !override
+      - '127.0.0.1:3004:3004'

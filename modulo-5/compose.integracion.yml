@@ -35,7 +35,7 @@ services:
       M6_INTERNAL_API_KEY: "${M6_INTERNAL_API_KEY:-}"
       M7_URL: "${M7_URL:-http://m7-api:3000}"
       AUTH_MODE: "${AUTH_MODE:-jwt}"
-      JWT_SECRET: "${JWT_SECRET:-clave-solo-para-demo-local-cambiar}"
+      JWT_SECRET: "${M1_JWT_SECRET:-${JWT_SECRET:?Configurar M1_JWT_SECRET o JWT_SECRET con la misma clave privada para todos los modulos}}"
     depends_on:
       m5-postgres-db:
         condition: service_healthy

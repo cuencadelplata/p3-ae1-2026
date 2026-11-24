@@ -60,8 +60,9 @@ export class InMemoryReservaRepository implements ReservaRepository {
       .map(clone);
   }
 
-  public async listarPaginado(page = 1, pageSize = 20): Promise<Reserva[]> {
+  public async listarPaginado(page = 1, pageSize = 20, clienteId?: string): Promise<Reserva[]> {
     return [...this.reservas.values()]
+      .filter((reserva) => clienteId === undefined || reserva.clienteId === clienteId)
       .sort(
         (a, b) =>
           Date.parse(a.fechaHoraProgramada) - Date.parse(b.fechaHoraProgramada) ||
@@ -87,11 +88,31 @@ export class InMemoryReservaRepository implements ReservaRepository {
     return clone(reserva);
   }
 
-  public async buscarPendientes(fechaLimite: Date, limite = 100): Promise<Reserva[]> {
+  public async recuperarActivacion(id: string, anteriorA: Date): Promise<boolean> {
+    const actual = this.reservas.get(id);
+    if (
+      !actual ||
+      actual.estado !== 'ACTIVANDO' ||
+      actual.idSolicitud !== null ||
+      !actual.actualizadoEn ||
+      Date.parse(actual.actualizadoEn) > anteriorA.getTime()
+    )
+      return false;
+    actual.estado = 'PROGRAMADA';
+    actual.actualizadoEn = new Date().toISOString();
+    return true;
+  }
+
+  public async buscarPendientes(
+    fechaLimite: Date,
+    limite = 100,
+    clienteId?: string,
+  ): Promise<Reserva[]> {
     return [...this.reservas.values()]
+      .filter((reserva) => clienteId === undefined || reserva.clienteId === clienteId)
       .filter(
         (reserva) =>
-          (reserva.estado === 'ACTIVANDO' && reserva.idSolicitud !== null) ||
+          reserva.estado === 'ACTIVANDO' ||
           (reserva.estado === 'PROGRAMADA' &&
             Date.parse(reserva.fechaHoraProgramada) <= fechaLimite.getTime()),
       )

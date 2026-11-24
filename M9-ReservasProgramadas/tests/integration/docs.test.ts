@@ -21,9 +21,9 @@ describe('GET /docs', () => {
     expect(response.body).toEqual(openApiDocument);
   });
 
-  it('documenta ejemplos y la ausencia de autenticación propia', () => {
-    expect(openApiDocument.security).toEqual([]);
-    expect(openApiDocument.info.description).toContain('no implementa autenticación propia');
+  it('documenta ejemplos y autenticacion Bearer de M1', () => {
+    expect(openApiDocument.security).toEqual([{ bearerAuth: [] }]);
+    expect(openApiDocument.info.description).toContain('valida la identidad con M1');
     expect(JSON.stringify(openApiDocument)).toContain('CrearReservaValida');
     expect(JSON.stringify(openApiDocument)).toContain('ErrorNoEncontrada');
     expect(JSON.stringify(openApiDocument)).toContain('ErrorNoCancelable');

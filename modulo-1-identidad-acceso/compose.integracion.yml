@@ -28,7 +28,7 @@ services:
     environment:
       NODE_ENV: "${M1_NODE_ENV:-development}"
       PORT: "3001"
-      JWT_SECRET: "${M1_JWT_SECRET:-}"
+      JWT_SECRET: "${M1_JWT_SECRET:-${JWT_SECRET:?Configurar M1_JWT_SECRET o JWT_SECRET con la misma clave privada para todos los modulos}}"
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: "amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672"
       LOGIN_MAX_INTENTOS: "${M1_LOGIN_MAX_INTENTOS:-5}"

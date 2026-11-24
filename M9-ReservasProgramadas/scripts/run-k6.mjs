@@ -12,16 +12,44 @@
  * Secretos: solo se pasan K6_CLOUD_TOKEN / K6_CLOUD_STACK_ID / K6_CLOUD_PROJECT_ID leídos de
  * observability/.env.grafana-cloud; el token de ingesta OTLP nunca llega a k6.
  */
+import { createDemoToken } from './integration-demo.mjs';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 const K6_IMAGE = 'grafana/k6:2.3.0';
-const NETWORK = process.env.K6_DOCKER_NETWORK ?? 'm9-reservas-programadas_reservas-network';
-const SCENARIOS = ['smoke', 'load', 'stress', 'spike', 'cache', 'concurrency', 'activation'];
+const DEMO_CLIENT_ID = '99999999-9999-4999-8999-999999999999';
+
+const detectActiveNetwork = () => {
+  if (process.env.K6_DOCKER_NETWORK) return process.env.K6_DOCKER_NETWORK;
+  const probe = spawnSync(
+    'docker',
+    ['ps', '--filter', 'label=com.docker.compose.service=m9-reservas', '--format', '{{.Networks}}'],
+    { encoding: 'utf8' },
+  );
+  const net = (probe.stdout || '').trim().split(/\r?\n/)[0]?.split(',')[0]?.trim();
+  return net || 'm9-reservas-programadas_reservas-network';
+};
+
+const NETWORK = detectActiveNetwork();
+const SCENARIOS = [
+  'smoke',
+  'load',
+  'stress',
+  'spike',
+  'cache',
+  'concurrency',
+  'activation',
+  'dispatch',
+  'repricing',
+  'parallel',
+  'breakpoint',
+  'soak',
+];
 const PASSTHROUGH = [
   'PROFILE',
+  'CLIENT_ID',
   'VUS',
   'DURATION',
   'MODE',
@@ -39,6 +67,17 @@ const PASSTHROUGH = [
   'ACTIVATION_TIMEOUT_SECONDS',
   'POLL_INTERVAL_SECONDS',
   'THINK_TIME_SECONDS',
+  'BATCH_SIZE',
+  'REQUEST_TIMEOUT',
+  'BREAKPOINT_RPS',
+  'BASELINE_RPS',
+  'BASELINE_DURATION',
+  'RAMP_DURATION',
+  'STEP_DURATION',
+  'RECOVERY_DURATION',
+  'SPIKE_WAVES',
+  'SPIKE_RAMP_DURATION',
+  'SPIKE_HOLD_DURATION',
 ];
 const CLOUD_VARS = ['K6_CLOUD_TOKEN', 'K6_CLOUD_STACK_ID', 'K6_CLOUD_PROJECT_ID'];
 
@@ -78,12 +117,42 @@ const readCloudEnv = () => {
 };
 
 const scriptEnv = { BASE_URL: baseUrl, RUN_ID: runId, SCENARIO_NAME: scenario };
+if (NETWORK === 'movilidad-urbana_reservas-network' || flags.includes('--integration')) {
+  scriptEnv.CLIENT_ID = DEMO_CLIENT_ID;
+}
 for (const name of PASSTHROUGH)
   if (process.env[name] !== undefined) scriptEnv[name] = process.env[name];
 const cloudEnv = cloud ? readCloudEnv() : {};
+let authToken = process.env.M9_AUTH_TOKEN;
+if (!authToken && scriptEnv.CLIENT_ID === DEMO_CLIENT_ID) {
+  const authPath = path.join(moduleDir, '.integration', 'demo-auth.json');
+  if (existsSync(authPath))
+    authToken = createDemoToken(JSON.parse(readFileSync(authPath, 'utf8')).secret);
+}
+if (!authToken)
+  throw new Error(
+    'Configurar M9_AUTH_TOKEN con una sesion valida; la demo usa .integration/demo-auth.json.',
+  );
+authToken = authToken.replace(/^Bearer\s+/i, '').trim();
+const privateEnv = { M9_AUTH_TOKEN: authToken };
+if (!scriptEnv.CLIENT_ID) {
+  const claims = JSON.parse(Buffer.from(authToken.split('.')[1], 'base64url').toString('utf8'));
+  scriptEnv.CLIENT_ID = String(claims.userId ?? claims.sub ?? '');
+  if (!scriptEnv.CLIENT_ID) throw new Error('Configurar CLIENT_ID para la sesion de k6.');
+}
 
 const k6Args = [
-  ...(cloud ? ['cloud', 'run', '--local-execution', '--no-archive-upload'] : ['run']),
+  ...(cloud
+    ? [
+        'cloud',
+        'run',
+        '--local-execution',
+        '--no-archive-upload',
+        '--include-system-env-vars',
+        '--no-cloud-secrets',
+        '--no-cloud-logs',
+      ]
+    : ['run']),
   ...Object.entries(scriptEnv).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
   `performance/k6/${scenario}.js`,
 ];
@@ -104,7 +173,7 @@ if (hostK6) {
     `${path.join(moduleDir, 'performance')}:/work/performance`,
     '-w',
     '/work',
-    ...Object.keys(cloudEnv).flatMap((name) => ['-e', name]),
+    ...Object.keys({ ...cloudEnv, ...privateEnv }).flatMap((name) => ['-e', name]),
     K6_IMAGE,
     ...k6Args,
   ];
@@ -123,6 +192,7 @@ const metadata = {
   k6Version: (versionProbe.stdout || versionProbe.stderr || 'desconocida').trim(),
   baseUrl,
   parameters: scriptEnv,
+  authTokenSource: process.env.M9_AUTH_TOKEN ? 'provided-session' : 'generated-demo',
   host: {
     platform: `${os.platform()} ${os.release()}`,
     cpus: os.cpus().length,
@@ -137,11 +207,12 @@ console.log(`k6 ${scenario} · RUN_ID=${runId} · ${metadata.generator}`);
 const result = spawnSync(command, args, {
   cwd: moduleDir,
   stdio: 'inherit',
-  env: { ...process.env, ...cloudEnv },
+  env: { ...process.env, ...cloudEnv, ...privateEnv },
 });
 metadata.finishedAt = new Date().toISOString();
 metadata.exitCode = result.status;
-metadata.thresholdsPassed = result.status === 0;
+metadata.thresholdsPassed = result.status === 0 ? true : result.status === 99 ? false : null;
+metadata.executionError = result.error?.message ?? null;
 writeFileSync(
   path.join(resultsDir, `${scenario}-${runId}.meta.json`),
   JSON.stringify(metadata, null, 2),

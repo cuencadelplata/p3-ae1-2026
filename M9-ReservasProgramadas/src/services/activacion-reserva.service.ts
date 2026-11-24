@@ -23,6 +23,8 @@ export class ActivacionReservaService {
     private readonly cache: ReservationCache = NOOP_RESERVATION_CACHE,
     private readonly distributedLock?: DistributedLock,
     private readonly dispatchMode: DispatchMode = 'rest',
+    private readonly demoClientId?: string,
+    private readonly recoveryTimeoutMs = 120000,
   ) {}
 
   public async activar(reservaId: string): Promise<ResultadoActivacion> {
@@ -43,9 +45,25 @@ export class ActivacionReservaService {
   private async activarExclusiva(reservaId: string): Promise<ResultadoActivacion> {
     const actual = await this.repository.obtenerPorId(reservaId);
     if (actual === null) return this.resultado(reservaId);
+    // El token de la demo representa a un único cliente. No despachar reservas
+    // anteriores de otros clientes con esa identidad.
+    if (this.demoClientId !== undefined && actual.clienteId !== this.demoClientId) {
+      return this.resultado(reservaId);
+    }
 
+    if (
+      this.dispatchMode === 'rest' &&
+      actual.estado === 'ACTIVANDO' &&
+      actual.idSolicitud === null
+    ) {
+      await this.repository.recuperarActivacion(
+        reservaId,
+        new Date(Date.now() - this.recoveryTimeoutMs),
+      );
+      return this.resultado(reservaId);
+    }
     if (actual.estado === 'ACTIVANDO' && actual.idSolicitud !== null) {
-      const request = await this.dispatchClient.getRequest(actual.idSolicitud);
+      const request = await this.dispatchClient.getRequest(actual.idSolicitud, actual.clienteId);
       return this.aplicarEstadoM5(actual, request);
     }
 

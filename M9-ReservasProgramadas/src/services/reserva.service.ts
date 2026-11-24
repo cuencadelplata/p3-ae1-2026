@@ -77,6 +77,7 @@ export class ReservaService {
     private readonly cache: ReservationCache = NOOP_RESERVATION_CACHE,
     private readonly distributedLock?: DistributedLock,
     private readonly dispatchClient?: DispatchClient,
+    private readonly demoClientId?: string,
   ) {}
 
   public async crear(input: CrearReserva): Promise<Reserva> {
@@ -84,6 +85,13 @@ export class ReservaService {
   }
 
   private async crearMedida(input: CrearReserva): Promise<Reserva> {
+    if (this.demoClientId !== undefined && input.clienteId !== this.demoClientId) {
+      throw new AppError(
+        403,
+        'CLIENTE_DEMO_REQUERIDO',
+        `Esta demostración admite únicamente el cliente ${this.demoClientId}.`,
+      );
+    }
     this.validarFechaFutura(input.fechaHoraProgramada);
     this.validarOrigenDestino(input.origen, input.destino);
 
@@ -109,33 +117,45 @@ export class ReservaService {
     return withSpan('ReservaService.list', () => this.repository.listar());
   }
 
-  public async listarPaginado(page: number, pageSize: number): Promise<Reserva[]> {
+  public async listarPaginado(
+    page: number,
+    pageSize: number,
+    clienteId?: string,
+  ): Promise<Reserva[]> {
     return withSpan('ReservaService.list_page', () =>
-      this.repository.listarPaginado(page, pageSize),
+      this.repository.listarPaginado(page, pageSize, clienteId),
     );
   }
 
-  public async obtenerPorId(id: string): Promise<Reserva> {
-    return withSpan('ReservaService.get', () => this.obtenerPorIdInterno(id));
+  public async obtenerPorId(id: string, clienteId?: string): Promise<Reserva> {
+    return withSpan('ReservaService.get', () => this.obtenerPorIdInterno(id, clienteId));
   }
 
-  private async obtenerPorIdInterno(id: string): Promise<Reserva> {
+  private async obtenerPorIdInterno(id: string, clienteId?: string): Promise<Reserva> {
     const cached = await this.cache.get(id);
-    if (cached !== null) return cached;
+    if (cached !== null) {
+      this.assertOwner(cached, clienteId);
+      return cached;
+    }
     const reserva = await this.repository.obtenerPorId(id);
     if (reserva === null) {
       throw new AppError(404, 'RESERVA_NO_ENCONTRADA', 'La reserva no existe.');
     }
+    this.assertOwner(reserva, clienteId);
     await this.cache.set(reserva);
     return reserva;
   }
 
-  public async actualizar(id: string, input: ActualizarReserva): Promise<Reserva> {
+  public async actualizar(
+    id: string,
+    input: ActualizarReserva,
+    clienteId?: string,
+  ): Promise<Reserva> {
     return measured('update', () =>
       conReservaExclusiva(this.repository, id, () =>
-        this.withDistributedLock(`lock:reserva:${id}:modificacion`, async () => {
+        this.withDistributedLock(`lock:reserva:${id}:activacion`, async () => {
           await this.cache.invalidate(id);
-          const result = await this.actualizarExclusiva(id, input);
+          const result = await this.actualizarExclusiva(id, input, clienteId);
           await this.cache.set(result);
           return result;
         }),
@@ -143,8 +163,12 @@ export class ReservaService {
     );
   }
 
-  private async actualizarExclusiva(id: string, input: ActualizarReserva): Promise<Reserva> {
-    const actual = await this.obtenerPorIdInterno(id);
+  private async actualizarExclusiva(
+    id: string,
+    input: ActualizarReserva,
+    clienteId?: string,
+  ): Promise<Reserva> {
+    const actual = await this.obtenerPorIdInterno(id, clienteId);
     if (actual.estado !== 'PROGRAMADA') {
       throw new AppError(
         409,
@@ -197,12 +221,12 @@ export class ReservaService {
     return actualizada;
   }
 
-  public async cancelar(id: string): Promise<Reserva> {
+  public async cancelar(id: string, clienteId?: string): Promise<Reserva> {
     return measured('cancel', () =>
       conReservaExclusiva(this.repository, id, () =>
         this.withDistributedLock(`lock:reserva:${id}:activacion`, async () => {
           await this.cache.invalidate(id);
-          const result = await this.cancelarExclusiva(id);
+          const result = await this.cancelarExclusiva(id, clienteId);
           await this.cache.set(result);
           return result;
         }),
@@ -210,8 +234,8 @@ export class ReservaService {
     );
   }
 
-  private async cancelarExclusiva(id: string): Promise<Reserva> {
-    const actual = await this.obtenerPorIdInterno(id);
+  private async cancelarExclusiva(id: string, clienteId?: string): Promise<Reserva> {
+    const actual = await this.obtenerPorIdInterno(id, clienteId);
     if (actual.estado !== 'PROGRAMADA' && actual.estado !== 'ACTIVANDO') {
       throw new AppError(
         409,
@@ -236,7 +260,11 @@ export class ReservaService {
           'No se puede cancelar la solicitud de despacho en este momento.',
         );
       }
-      await this.dispatchClient.cancelRequest(actual.idSolicitud, 'Reserva cancelada en M9');
+      await this.dispatchClient.cancelRequest(
+        actual.idSolicitud,
+        'Reserva cancelada en M9',
+        actual.clienteId,
+      );
     }
 
     const cancelada = await this.repository.cancelar(id, actual.estado);
@@ -274,6 +302,11 @@ export class ReservaService {
     return this.distributedLock === undefined
       ? action()
       : this.distributedLock.runExclusive(key, action);
+  }
+
+  private assertOwner(reserva: Reserva, clienteId?: string): void {
+    if (clienteId !== undefined && reserva.clienteId !== clienteId)
+      throw new AppError(404, 'RESERVA_NO_ENCONTRADA', 'La reserva no existe.');
   }
 
   private validarFechaFutura(fecha: string): void {

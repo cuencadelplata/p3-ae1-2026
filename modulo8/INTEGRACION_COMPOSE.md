@@ -17,7 +17,9 @@ Completar los marcadores del archivo local. No subirlo a Git.
 de M8 leen esa misma variable. Las credenciales `RABBITMQ_USER` y
 `RABBITMQ_PASSWORD`, si se cambian, deben coincidir con el broker compartido.
 Las contraseñas `M8_*` son exclusivas de la base de M8 y no cambian las de M9.
-`M1_JWT_SECRET` y `M2_INTERNAL_API_KEY` deben coincidir con los contratos privados
+`M1_JWT_SECRET` es la clave común de M1, M3, M5 y M8. Como alternativa
+se admite `JWT_SECRET`; si ambas existen, prevalece `M1_JWT_SECRET`.
+`M2_INTERNAL_API_KEY` debe coincidir con el contrato privado
 de esos módulos cuando se prueben sus funcionalidades.
 
 Quien también tenga `modulo8/.env` (el del Compose aislado) debe dejar
@@ -32,15 +34,17 @@ el proyecto con el mismo archivo de configuración.
 
 ## Levantar M8 y probar QR con M6
 
-El Compose se puede leer y los otros servicios se pueden iniciar sin configurar
-las variables privadas de M8. Para iniciar `m8-app` y `m8-postgres`, sí hay que
-completarlas: la aplicación valida las credenciales y PostgreSQL exige su
-contraseña. Un `up` de todo el stack requiere la configuración de todos los
-módulos incluidos.
+Compose valida las contraseñas de M8 y la clave JWT al leer todos los archivos
+incluidos, incluso si se seleccionan servicios de otros módulos. Completar la
+configuración privada antes de ejecutar estos comandos. Si falta un valor,
+Compose indica su nombre antes de crear contenedores. La demo de M9 mantiene
+su configuración automática mediante `npm run integration:up`.
 
 ```powershell
 docker compose --env-file modulo8/.env.integracion config --quiet
-docker compose --env-file modulo8/.env.integracion up -d --build --wait m8-app m6-viajes m6-sim-m3
+# Este escenario QR usa el simulador de M3 de forma explicita.
+$env:M6_M3_URL = "http://m6-sim-m3:3001"
+docker compose --env-file modulo8/.env.integracion --profile m6-simulator up -d --build --wait m8-app m6-viajes m6-sim-m3
 ```
 
 - API M8 desde el host: `http://localhost:18000`.
@@ -65,7 +69,10 @@ obtiene el QR de M8 real y lo valida al iniciar el viaje. Comprueba el estado
 `EN_CURSO` en M6 y un 409 ante otro consumo del mismo QR en M8. Inserta un viaje
 de prueba y registros relacionados; no borra datos ni usa los scripts de carga
 del Compose aislado. El conductor de esta prueba lo habilita `m6-sim-m3`, el
-simulador M3 previsto por el Compose común de M6.
+simulador opcional de M6 habilitado por el comando anterior. En el arranque
+normal, M6 consulta al M3 real por `http://m3-conductor-api:3000/api`.
+Al terminar esta prueba, ejecutar `Remove-Item Env:M6_M3_URL` antes de
+recrear M6 para volver a su dirección predeterminada.
 
 ## Comprobante PDF (RF-8.3) con el viaje real
 

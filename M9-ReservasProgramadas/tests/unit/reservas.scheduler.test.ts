@@ -32,6 +32,81 @@ const dispatch = (created: M5RideRequest, queried = created): DispatchClient => 
 });
 
 describe('activación programada', () => {
+  it('comparte la ejecución en curso y limita la concurrencia aunque falle una reserva', async () => {
+    const repository = new InMemoryReservaRepository();
+    for (let i = 0; i < 5; i++) await crearVencida(repository);
+    const service = new ActivacionReservaService(
+      repository,
+      dispatch(ride('SEARCHING')),
+      routeResolverDemo(),
+    );
+    let running = 0;
+    let peak = 0;
+    let calls = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(service, 'activar').mockImplementation(async (reservaId) => {
+      const attempt = ++calls;
+      running++;
+      peak = Math.max(peak, running);
+      await gate;
+      running--;
+      if (attempt === 1) throw new Error('M5 no disponible');
+      return { reservaId, activada: false, fallida: false };
+    });
+    const onError = vi.fn();
+    const scheduler = new ReservasScheduler(repository, service, '* * * * * *', onError, 2);
+    const first = scheduler.ejecutar();
+    expect(scheduler.ejecutar()).toBe(first);
+    await vi.waitFor(() => expect(calls).toBe(2));
+    release();
+    await expect(first).resolves.toEqual({ encontradas: 5, activadas: 0, fallidas: 1 });
+    expect(peak).toBe(2);
+    expect(calls).toBe(5);
+    expect(onError).toHaveBeenCalledTimes(1);
+    await scheduler.ejecutar();
+    expect(calls).toBe(10);
+  });
+
+  it('filtra el cliente de demostración antes de limitar el lote', async () => {
+    const repository = new InMemoryReservaRepository();
+    await crearVencida(repository);
+    const own = await crearVencida(repository);
+    expect(await repository.buscarPendientes(new Date(), 1, own.clienteId)).toEqual([own]);
+  });
+
+  it.each([0, 17, 1.5])('rechaza concurrencia inválida: %s', (concurrency) => {
+    const repository = new InMemoryReservaRepository();
+    const service = new ActivacionReservaService(
+      repository,
+      dispatch(ride('SEARCHING')),
+      routeResolverDemo(),
+    );
+    expect(
+      () => new ReservasScheduler(repository, service, '* * * * * *', vi.fn(), concurrency),
+    ).toThrow('SCHEDULER_CONCURRENCY');
+  });
+
+  it('no despacha reservas anteriores de otro cliente con el token de demo', async () => {
+    const repository = new InMemoryReservaRepository();
+    const reserva = await crearVencida(repository);
+    const client = dispatch(ride('SEARCHING'));
+    const activation = new ActivacionReservaService(
+      repository,
+      client,
+      routeResolverDemo(),
+      undefined,
+      undefined,
+      'rest',
+      '99999999-9999-4999-8999-999999999999',
+    );
+    await activation.activar(reserva.id);
+    expect(client.createRequest).not.toHaveBeenCalled();
+    expect(await repository.obtenerPorId(reserva.id)).toMatchObject({ estado: 'PROGRAMADA' });
+  });
+
   it('mantiene ACTIVANDO al crear la solicitud y activa solo cuando M5 informa ASSIGNED', async () => {
     const repository = new InMemoryReservaRepository();
     const reserva = await crearVencida(repository);

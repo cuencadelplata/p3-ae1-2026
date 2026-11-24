@@ -12,10 +12,10 @@ services:
       LOCATION_TTL_SECONDS: "${LOCATION_TTL_SECONDS:-60}"
       M1_URL: "${M1_URL:-http://m1-identidad-acceso:3001}"
       M3_URL: "${M3_URL:-http://m3-api:3000}"
-      REDIS_URL: "${REDIS_URL:-redis://redis:6379}"
+      REDIS_URL: "redis://redis:6379"
       REDIS_KEY_PREFIX: "${REDIS_KEY_PREFIX:-driver:}"
-      POSTGRES_URL: "${POSTGRES_URL:-postgres://${M4_POSTGRES_USER:-postgres}:${M4_POSTGRES_PASSWORD:-postgres}@m4-postgres:5432/${M4_POSTGRES_DB:-m4_locations}}"
-      RABBITMQ_URL: "${RABBITMQ_URL:-amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672}"
+      POSTGRES_URL: "postgres://${M4_POSTGRES_USER:-postgres}:${M4_POSTGRES_PASSWORD:-postgres}@m4-postgres:5432/${M4_POSTGRES_DB:-m4_locations}"
+      RABBITMQ_URL: "amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672"
       RABBITMQ_TRIP_EVENTS_EXCHANGE: "${RABBITMQ_TRIP_EVENTS_EXCHANGE:-trip.events}"
       RABBITMQ_TRIP_STARTED_KEY: "${RABBITMQ_TRIP_STARTED_KEY:-viaje.iniciado}"
       RABBITMQ_TRIP_COMPLETED_KEY: "${RABBITMQ_TRIP_COMPLETED_KEY:-viaje.finalizado}"
@@ -24,8 +24,14 @@ services:
       USE_MOCK_GEOCODING: "${USE_MOCK_GEOCODING:-false}"
       SKIP_AUTH_VALIDATION: "${SKIP_AUTH_VALIDATION:-false}"
     depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
       m4-postgres:
         condition: service_healthy
+    networks:
+      - reservas-network
     restart: unless-stopped
 
   m4-ui:
@@ -36,7 +42,10 @@ services:
     ports:
       - "${M4_UI_PORT:-8084}:80"
     depends_on:
-      - m4-api
+      m4-api:
+        condition: service_healthy
+    networks:
+      - reservas-network
     restart: unless-stopped
 
   m4-postgres:
@@ -46,13 +55,19 @@ services:
       POSTGRES_PASSWORD: "${M4_POSTGRES_PASSWORD:-postgres}"
       POSTGRES_DB: "${M4_POSTGRES_DB:-m4_locations}"
     volumes:
-      - m4_postgres_data:/var/lib/postgresql/data
+      - m4-postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 10
+    networks:
+      - reservas-network
     restart: unless-stopped
 
 volumes:
-  m4_postgres_data:
+  m4-postgres-data:
+
+networks:
+  reservas-network:
+    driver: bridge

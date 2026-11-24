@@ -28,6 +28,53 @@ const input = {
 describe('M5DispatchClient', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('impide despachar otro cliente con el token de demostración', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new M5DispatchClient(
+      'http://m5:3005',
+      100,
+      tokenProvider,
+      operationStore,
+      '99999999-9999-4999-8999-999999999999',
+    );
+    await expect(client.createRequest(input)).rejects.toMatchObject({ kind: 'AUTHORIZATION' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rechaza una respuesta de M5 asociada a otra identidad en la demo', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: '44444444-4444-4444-8444-444444444444',
+          clientId: 'otro-cliente',
+          status: 'SEARCHING',
+        }),
+      }),
+    );
+    const client = new M5DispatchClient(
+      'http://m5:3005',
+      100,
+      tokenProvider,
+      operationStore,
+      input.reserva.clienteId,
+    );
+    await expect(client.createRequest(input)).rejects.toMatchObject({ kind: 'BAD_RESPONSE' });
+  });
+
+  it('no cancela si M5 rechaza la consulta autenticada previa', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 403 });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new M5DispatchClient('http://m5:3005', 100, tokenProvider, operationStore);
+    await expect(
+      client.cancelRequest('44444444-4444-4444-8444-444444444444'),
+    ).rejects.toMatchObject({ kind: 'AUTHORIZATION' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[1].method).toBe('GET');
+  });
+
   it('usa el contrato /api/v1, Bearer, idempotencia y mapea requestId', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -57,6 +104,7 @@ describe('M5DispatchClient', () => {
       origin: input.origin,
       destination: input.destination,
       vehicleType: 'AUTO',
+      assignmentCriteria: 'MEJOR_VALORACION',
     });
     expect(result).toMatchObject({
       requestId: '44444444-4444-4444-8444-444444444444',
@@ -102,6 +150,14 @@ describe('M5DispatchClient', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
+          id: '44444444-4444-4444-8444-444444444444',
+          clientId: 'client-1',
+          status: 'SEARCHING',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
           requestId: '44444444-4444-4444-8444-444444444444',
           clientId: 'client-1',
           status: 'CANCELLED',
@@ -119,9 +175,13 @@ describe('M5DispatchClient', () => {
     await expect(
       client.cancelRequest('44444444-4444-4444-8444-444444444444', 'Cambio de planes'),
     ).resolves.toMatchObject({ status: 'CANCELLED' });
-    expect((fetchMock.mock.calls[1]![0] as URL).pathname).toBe(
+    expect((fetchMock.mock.calls[2]![0] as URL).pathname).toBe(
       '/api/v1/ride-requests/44444444-4444-4444-8444-444444444444/cancel',
     );
+    expect((fetchMock.mock.calls[2]![1] as RequestInit).headers).toMatchObject({
+      authorization: 'Bearer test-token',
+      'x-user-id': 'client-1',
+    });
   });
 
   it.each([400, 401, 403, 404, 409, 422, 503])(

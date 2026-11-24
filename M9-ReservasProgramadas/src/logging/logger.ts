@@ -73,4 +73,10 @@ export const log = (level: LogLevel, message: string, context: LogContext = {}):
 
 export const safeErrorContext = (error: unknown): LogContext => ({
   errorName: error instanceof Error ? error.name : 'UNKNOWN_ERROR',
+  ...(error instanceof Error &&
+  'code' in error &&
+  typeof error.code === 'string' &&
+  /^P[0-9]{4}$/.test(error.code)
+    ? { errorCode: error.code }
+    : {}),
 });

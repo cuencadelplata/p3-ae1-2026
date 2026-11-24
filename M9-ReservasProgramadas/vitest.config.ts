@@ -9,7 +9,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reportsDirectory: 'coverage',
-      reporter: ['text', 'html'],
+      reporter: ['text', 'html', 'json-summary'],
+      include: ['src/**/*.ts'],
       exclude: ['src/stubs/**', 'src/server.ts'],
       thresholds: {
         statements: 80,

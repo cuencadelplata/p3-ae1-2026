@@ -18,6 +18,24 @@ const input = () => ({
 });
 
 describe('ReservaService', () => {
+  it('rechaza otros clientes antes de consultar M7 cuando se habilita la demo', async () => {
+    const tarifa = { estimar: vi.fn() };
+    const service = new ReservaService(
+      new InMemoryReservaRepository(),
+      tarifa,
+      routeResolverDemo(),
+      undefined,
+      undefined,
+      undefined,
+      '99999999-9999-4999-8999-999999999999',
+    );
+    await expect(service.crear(input())).rejects.toMatchObject({
+      statusCode: 403,
+      code: 'CLIENTE_DEMO_REQUERIDO',
+    });
+    expect(tarifa.estimar).not.toHaveBeenCalled();
+  });
+
   it('crea PROGRAMADA sin invocar M5 y degrada la tarifa si M7 falla', async () => {
     const repository = new InMemoryReservaRepository();
     const tarifa: TarifaClient = {

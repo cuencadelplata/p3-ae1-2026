@@ -1,0 +1,103 @@
+# =============================================================================
+# compose.escalado.yml  —  Escalado horizontal de la API de Conductores (M3)
+# -----------------------------------------------------------------------------
+# Técnica de IO aplicada: Teoría de Colas, modelo M/M/c
+#   - Clientes (llegadas, λ): pedidos HTTP a la API de conductores en hora pico
+#   - Servidores (c): réplicas del contenedor m3-conductor-worker
+#   - Balanceador: Nginx con least_conn (aproxima una fila única con c servidores)
+#
+# Este archivo NO reemplaza al docker-compose.yml: se SUMA solo cuando se pide.
+#   Normal:    docker compose up -d
+#   Escalado:  docker compose -f docker-compose.yml -f compose.escalado.yml up -d --build
+#   Cambiar c: ... up -d --scale m3-conductor-worker=4 --no-recreate
+#
+# Contrato con otros módulos: se conserva intacto.
+#   El servicio "m3-conductor-api" pasa a ser el BALANCEADOR, y mantiene su
+#   nombre, sus alias de red (api, m3-conductor-api) y su puerto (5000:3000).
+#   M6, M4 y el frontend lo siguen llamando igual, sin enterarse del cambio.
+#
+# Requiere Docker Compose 2.24.4 o superior (por las etiquetas !reset / !override).
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # BALANCEADOR: hereda nombre, alias y puerto de la API original
+  # ---------------------------------------------------------------------------
+  m3-conductor-api:
+    image: nginx:alpine
+    build: !reset null            # ya no se construye desde ./M3-Conductor
+    env_file: !reset []           # Nginx no necesita las variables de la API
+    environment: !reset {}
+    volumes: !override
+      - ./escalado/nginx-balanceador.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: !override
+      m3-conductor-worker:
+        condition: service_healthy
+    healthcheck:
+      # Pasa por el balanceador: está sano si al menos una réplica responde.
+      # Se usa 127.0.0.1 y no "localhost": en nginx:alpine, localhost puede
+      # resolverse a la dirección IPv6 (::1) y el chequeo fallaría.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # SERVIDORES: réplicas de la API de conductores (c = cantidad de réplicas)
+  # Misma configuración que la API original, pero sin container_name ni
+  # puerto publicado (con nombre o puerto fijos no se pueden crear copias).
+  # ---------------------------------------------------------------------------
+  m3-conductor-worker:
+    build:
+      context: ./M3-Conductor
+      dockerfile: Dockerfile
+    image: m3-conductor-api
+    restart: unless-stopped
+    env_file:
+      - path: ./M3-Conductor/.env
+        required: false
+    environment:
+      PORT: 3000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_TTL_HABILITADO: ${REDIS_TTL_HABILITADO:-300}
+      REDIS_TTL_DISPONIBLE: ${REDIS_TTL_DISPONIBLE:-60}
+      REDIS_CONNECT_TIMEOUT_MS: ${REDIS_CONNECT_TIMEOUT_MS:-1000}
+      REDIS_COMMAND_TIMEOUT_MS: ${REDIS_COMMAND_TIMEOUT_MS:-500}
+      REDIS_HEALTHCHECK_INTERVAL_MS: ${REDIS_HEALTHCHECK_INTERVAL_MS:-10000}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: admin
+      RABBITMQ_PASSWORD: admin123
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
+      RABBITMQ_EXCHANGE: m3.conductores.events
+      KAFKA_BROKERS: kafka:9094
+      KAFKA_CONTAINER: m3-kafka
+      KAFKA_FALLBACK_TOPIC: m3.fallback
+      OTEL_SERVICE_NAME: m3-conductor-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://grafana-alloy:4318
+      M1_URL: ${M1_URL:-http://m1-identidad-acceso:3001}
+      M1_REQUIRE_AUTH: ${M1_REQUIRE_AUTH:-false}
+      M6_VIAJES_URL: ${M6_VIAJES_URL:-http://viajes:3000}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - default
+      - p3-shared
+    depends_on:
+      m1-identidad-acceso:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    deploy:
+      replicas: 2                 # valor inicial de c; se cambia con --scale

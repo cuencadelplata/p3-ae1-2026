@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { testAuthentication, TEST_CLIENT_ID } from '../helpers/auth.js';
 
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
@@ -40,10 +40,12 @@ describe('funcionamiento sin exportadores (telemetría apagada)', () => {
       { estimar: async () => fareEstimate() },
       routeResolverDemo(),
     );
-    const response = await request(createApp({ reservaService: service }))
+    const response = await request(
+      createApp({ reservaService: service, authenticate: testAuthentication }),
+    )
       .post('/reservas')
       .send({
-        clienteId: randomUUID(),
+        clienteId: TEST_CLIENT_ID,
         origen: 'Origen',
         destino: 'Destino',
         vehiculo: 'AUTO',
