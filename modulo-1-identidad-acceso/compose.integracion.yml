@@ -13,6 +13,9 @@
 #   M1_HOST_PORT       puerto del host (por defecto 10000, solo en 127.0.0.1)
 #   M1_IMAGE           imagen a usar (por defecto la versión de la AE4 publicada en Docker Hub)
 #   RABBITMQ_USER, RABBITMQ_PASSWORD   los mismos que usa el RabbitMQ compartido
+#   M1_UI_PORT         puerto de la interfaz de M1 (por defecto 5173). Es la dirección de retorno
+#                      registrada en Google y Auth0: si se cambia, hay que registrarla también ahí
+#   M1_UI_IMAGE        imagen de la interfaz (por defecto se construye desde modulo-1-identidad-acceso-ui)
 
 services:
   m1-identidad-acceso:
@@ -49,6 +52,24 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      - reservas-network
+    restart: unless-stopped
+
+  # Interfaz web de M1 (React + nginx). La abre el navegador en http://localhost:5173
+  # y desde ahí llama a M1 en http://localhost:10000.
+  m1-ui:
+    image: "${M1_UI_IMAGE:-m1-identidad-acceso-ui:local}"
+    build:
+      context: ../modulo-1-identidad-acceso-ui
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: "http://localhost:${M1_HOST_PORT:-10000}"
+    ports:
+      - "${M1_UI_PORT:-5173}:80"
+    depends_on:
+      m1-identidad-acceso:
+        condition: service_healthy
     networks:
       - reservas-network
     restart: unless-stopped
