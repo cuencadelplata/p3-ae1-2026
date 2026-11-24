@@ -16,12 +16,28 @@ const stringWithDefault = (defaultValue: string) =>
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  M9_AUTH_MODE: z.enum(['m1', 'demo']).default('m1'),
+  M1_BASE_URL: urlWithDefault('http://m1-identidad-acceso:3001'),
+  M1_TIMEOUT_MS: z.coerce.number().int().positive().default(3000),
+  M9_DEMO_AUTH_SECRET: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(32).optional(),
+  ),
   PORT: z.coerce.number().int().positive().max(65_535).default(3000),
   M5_BASE_URL: urlWithDefault('http://localhost:3001'),
   M7_BASE_URL: urlWithDefault('http://localhost:3002'),
   M5_TIMEOUT_MS: z.coerce.number().int().positive().default(3_000),
   M7_TIMEOUT_MS: z.coerce.number().int().positive().default(3_000),
-  DISPATCH_MODE: z.enum(['rest', 'events']).default('events'),
+  DISPATCH_MODE: z.enum(['rest', 'events']).default('rest'),
+  M9_DISPATCH_AUTH_URL: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.string().url().optional(),
+  ),
+  M9_DISPATCH_AUTH_TOKEN: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.string().min(1).optional(),
+  ),
+  ACTIVATION_RECOVERY_TIMEOUT_MS: z.coerce.number().int().min(60000).default(120000),
   M5_SERVICE_TOKEN: z.string().optional(),
   M5_DEMO_CLIENT_ID: z.string().uuid().optional(),
   M4_BASE_URL: urlWithDefault('http://localhost:3004'),
@@ -49,6 +65,7 @@ const envSchema = z.object({
   RABBITMQ_RETRY_LIMIT: z.coerce.number().int().positive().default(3),
   RABBITMQ_RETRY_DELAY_MS: z.coerce.number().int().nonnegative().default(1_000),
   OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5_000),
+  SCHEDULER_CONCURRENCY: z.coerce.number().int().min(1).max(16).default(2),
   RESERVATION_JOB_INTERVAL: stringWithDefault('*/30 * * * * *'),
 });
 

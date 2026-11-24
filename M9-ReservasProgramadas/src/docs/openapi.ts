@@ -13,7 +13,6 @@ const examplesBase = {
   CrearReservaValida: {
     summary: 'Solicitud válida de reserva futura',
     value: {
-      clienteId: '20000000-0000-4000-8000-000000000001',
       origen: 'Terminal de Ómnibus',
       destino: 'Aeropuerto',
       vehiculo: 'AUTO',
@@ -177,13 +176,23 @@ const reservaResponse = (description: string, exampleName: ExampleName) => ({
   ...jsonSchema('#/components/schemas/Reserva', exampleName),
 });
 
+const authErrors = {
+  '401': {
+    description: 'Sesion ausente, invalida o vencida.',
+    ...jsonSchema('#/components/schemas/ErrorResponse'),
+  },
+  '403': {
+    description: 'Rol no permitido o intento de suplantar un cliente.',
+    ...jsonSchema('#/components/schemas/ErrorResponse'),
+  },
+};
 export const openApiDocument = {
   openapi: '3.0.3',
   info: {
     title: 'M9 – Reservas Programadas',
     version: '2.0.0',
     description:
-      'API REST para administrar reservas programadas. M9 estima tarifas con M7 al crear o modificar y solicita el despacho a M5 únicamente al llegar el horario programado. M9 no implementa autenticación propia; el token de servicio para M5 depende del contrato pendiente con M1.',
+      'API REST para administrar reservas programadas. M9 estima tarifas con M7 al crear o modificar y solicita el despacho a M5 únicamente al llegar el horario programado. M9 valida la identidad con M1 y restringe cada reserva a su propietario. La autenticacion delegada del scheduler requiere un emisor de servicio compatible con M1/M5.',
     license: {
       name: 'Uso académico',
     },
@@ -194,7 +203,7 @@ export const openApiDocument = {
       description: 'Ejecución local predeterminada',
     },
   ],
-  security: [],
+  security: [{ bearerAuth: [] }],
   tags: [
     { name: 'Salud', description: 'Verificación de disponibilidad del servicio.' },
     { name: 'Documentación', description: 'Contrato OpenAPI del módulo.' },
@@ -203,6 +212,7 @@ export const openApiDocument = {
   paths: {
     '/health': {
       get: {
+        security: [],
         tags: ['Salud'],
         summary: 'Consultar el estado básico del servicio',
         operationId: 'getHealth',
@@ -216,6 +226,7 @@ export const openApiDocument = {
     },
     '/readiness': {
       get: {
+        security: [],
         tags: ['Salud'],
         summary: 'Comprobar dependencias críticas del proceso',
         operationId: 'getReadiness',
@@ -233,6 +244,7 @@ export const openApiDocument = {
     },
     '/openapi.json': {
       get: {
+        security: [],
         tags: ['Documentación'],
         summary: 'Obtener la especificación OpenAPI',
         operationId: 'getOpenApiDocument',
@@ -244,6 +256,27 @@ export const openApiDocument = {
                 schema: {
                   type: 'object',
                   additionalProperties: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/session': {
+      get: {
+        tags: ['Reservas'],
+        summary: 'Consultar la identidad autenticada de la sesion',
+        responses: {
+          ...authErrors,
+          '200': {
+            description: 'Identidad validada por M1 o por el modo demo explicito.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['clienteId'],
+                  properties: { clienteId: { type: 'string' } },
                 },
               },
             },
@@ -263,6 +296,7 @@ export const openApiDocument = {
           ...jsonSchema('#/components/schemas/CrearReservaRequest', 'CrearReservaValida'),
         },
         responses: {
+          ...authErrors,
           '201': {
             ...reservaResponse('Reserva guardada en estado PROGRAMADA.', 'ReservaProgramada'),
           },
@@ -289,6 +323,7 @@ export const openApiDocument = {
           },
         ],
         responses: {
+          ...authErrors,
           '200': {
             description: 'Página del listado ordenado por fecha programada e id.',
             content: {
@@ -328,6 +363,7 @@ export const openApiDocument = {
         summary: 'Obtener una reserva',
         operationId: 'obtenerReserva',
         responses: {
+          ...authErrors,
           '200': reservaResponse('Reserva encontrada.', 'ReservaProgramada'),
           '400': errorResponse('Identificador inválido.', 'ErrorValidacion'),
           '404': errorResponse('Reserva no encontrada.', 'ErrorNoEncontrada'),
@@ -345,6 +381,7 @@ export const openApiDocument = {
           ...jsonSchema('#/components/schemas/ActualizarReservaRequest', 'ActualizarReservaValida'),
         },
         responses: {
+          ...authErrors,
           '200': reservaResponse('Reserva actualizada.', 'ReservaModificada'),
           '400': errorResponse('Datos, fecha o identificador inválidos.', 'ErrorValidacion'),
           '404': errorResponse('Reserva no encontrada.', 'ErrorNoEncontrada'),
@@ -359,6 +396,7 @@ export const openApiDocument = {
           'Cancela localmente una reserva PROGRAMADA. Si está ACTIVANDO sin idSolicitud responde 409 para no competir con el despacho asíncrono; si ya posee idSolicitud, solicita primero la cancelación a M5 y no oculta sus conflictos.',
         operationId: 'cancelarReserva',
         responses: {
+          ...authErrors,
           '200': reservaResponse('Reserva cancelada.', 'ReservaCancelada'),
           '400': errorResponse('Identificador inválido.', 'ErrorValidacion'),
           '404': errorResponse('Reserva no encontrada.', 'ErrorNoEncontrada'),
@@ -373,6 +411,7 @@ export const openApiDocument = {
     },
   },
   components: {
+    securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } },
     examples,
     schemas: {
       HealthResponse: {
@@ -400,9 +439,12 @@ export const openApiDocument = {
       CrearReservaRequest: {
         type: 'object',
         additionalProperties: false,
-        required: ['clienteId', 'origen', 'destino', 'vehiculo', 'fechaHoraProgramada'],
+        required: ['origen', 'destino', 'vehiculo', 'fechaHoraProgramada'],
         properties: {
-          clienteId: { type: 'string', format: 'uuid' },
+          clienteId: {
+            type: 'string',
+            description: 'Identidad autenticada de M1; UUID solo en demo',
+          },
           origen: {
             type: 'string',
             minLength: 1,
@@ -471,7 +513,10 @@ export const openApiDocument = {
         ],
         properties: {
           id: { type: 'string', format: 'uuid' },
-          clienteId: { type: 'string', format: 'uuid' },
+          clienteId: {
+            type: 'string',
+            description: 'Identidad autenticada de M1; UUID solo en demo',
+          },
           origen: { type: 'string' },
           destino: { type: 'string' },
           vehiculo: { type: 'string', enum: ['AUTO', 'MOTO'] },

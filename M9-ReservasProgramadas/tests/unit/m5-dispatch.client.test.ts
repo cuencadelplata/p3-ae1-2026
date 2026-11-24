@@ -104,6 +104,7 @@ describe('M5DispatchClient', () => {
       origin: input.origin,
       destination: input.destination,
       vehicleType: 'AUTO',
+      assignmentCriteria: 'MEJOR_VALORACION',
     });
     expect(result).toMatchObject({
       requestId: '44444444-4444-4444-8444-444444444444',

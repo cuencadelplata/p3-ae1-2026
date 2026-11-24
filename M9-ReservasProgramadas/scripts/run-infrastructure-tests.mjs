@@ -1,6 +1,5 @@
 import { spawnSync } from 'node:child_process';
-
-import { connect as connectToRabbitMq } from 'amqplib';
+import { randomUUID } from 'node:crypto';
 
 const npmCli = process.env.npm_execpath;
 
@@ -8,13 +7,11 @@ if (!npmCli) {
   throw new Error('No se pudo determinar la ruta del CLI de npm.');
 }
 
-const composeProject = 'm9-infrastructure-tests';
-const redisPort = process.env.INFRA_REDIS_PORT ?? '46379';
-const postgresPort = process.env.INFRA_POSTGRES_PORT ?? '45432';
-const rabbitMqPort = process.env.INFRA_RABBITMQ_PORT ?? '45672';
-const rabbitMqManagementPort = process.env.INFRA_RABBITMQ_MANAGEMENT_PORT ?? '45673';
-const rabbitMqUrl = `amqp://m9:m9-local@127.0.0.1:${rabbitMqPort}`;
-const databaseUrl = `postgresql://m9:m9-local@127.0.0.1:${postgresPort}/m9_reservas?schema=public`;
+const composeProject = 'm9-infrastructure-tests-' + randomUUID().slice(0, 8);
+const redisPort = process.env.INFRA_REDIS_PORT ?? '0';
+const postgresPort = process.env.INFRA_POSTGRES_PORT ?? '0';
+const rabbitMqPort = process.env.INFRA_RABBITMQ_PORT ?? '0';
+const rabbitMqManagementPort = process.env.INFRA_RABBITMQ_MANAGEMENT_PORT ?? '0';
 const compose = ['compose', '-p', composeProject];
 const dockerEnvironment = {
   ...process.env,
@@ -48,64 +45,89 @@ const run = (command, args, environment = process.env) => {
   }
 };
 
-const isReady = (service, command) =>
-  execute('docker', [...compose, 'exec', '-T', service, ...command], {
-    environment: dockerEnvironment,
-    stdio: 'ignore',
-    timeout: 5_000,
-  }).status === 0;
-
-const acceptsAmqpConnections = async () => {
-  let connection;
-
-  try {
-    connection = await connectToRabbitMq(rabbitMqUrl, { timeout: 5_000 });
-    const channel = await connection.createConfirmChannel();
-    await channel.close();
-    await connection.close();
-    return true;
-  } catch {
-    if (connection) {
-      await connection.close().catch(() => undefined);
-    }
-    return false;
-  }
-};
-
 const waitForBackingServices = async () => {
-  const deadline = Date.now() + 120_000;
-
+  const deadline = Date.now() + 240000;
+  let summary = '';
   while (Date.now() < deadline) {
-    const redisReady = isReady('redis', ['redis-cli', 'ping']);
-    const postgresReady = isReady('postgres', ['pg_isready', '-U', 'm9', '-d', 'm9_reservas']);
-    const rabbitMqNodeReady = isReady('rabbitmq', ['rabbitmq-diagnostics', '-q', 'ping']);
-    const rabbitMqReady = rabbitMqNodeReady && (await acceptsAmqpConnections());
-
-    if (redisReady && postgresReady && rabbitMqReady) return;
-
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    const result = execute('docker', [...compose, 'ps', '--format', 'json'], {
+      environment: dockerEnvironment,
+      stdio: 'pipe',
+      timeout: 15000,
+    });
+    try {
+      const output = result.stdout?.toString().trim() || '';
+      const states = output.startsWith('[')
+        ? JSON.parse(output)
+        : output
+            .split(/\r?\n/)
+            .filter(Boolean)
+            .map((line) => JSON.parse(line));
+      summary = states.map((row) => row.Service + ':' + row.State + '/' + row.Health).join(', ');
+      if (
+        ['postgres', 'redis', 'rabbitmq'].every((name) =>
+          states.some(
+            (row) => row.Service === name && row.State === 'running' && row.Health === 'healthy',
+          ),
+        )
+      )
+        return states;
+    } catch {
+      /* La salida puede estar incompleta mientras Docker inicia. */
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-
-  throw new Error('PostgreSQL, Redis y RabbitMQ no quedaron saludables dentro de 120 segundos.');
+  throw new Error('La infraestructura no alcanzo readiness en 240 segundos: ' + summary);
 };
 
 let cleanupRequired = false;
+let ready = false;
 
 try {
-  run('docker', [...compose, 'down', '--volumes', '--remove-orphans'], dockerEnvironment);
   cleanupRequired = true;
   run('docker', [...compose, 'up', '-d', 'postgres', 'redis', 'rabbitmq'], dockerEnvironment);
-  await waitForBackingServices();
+  const states = await waitForBackingServices();
+  ready = true;
+  const publishedPort = (service, target) => {
+    const port = states
+      .find((row) => row.Service === service)
+      ?.Publishers?.find(
+        (binding) => binding.TargetPort === target && binding.Protocol === 'tcp',
+      )?.PublishedPort;
+    if (!Number.isInteger(port) || port < 1 || port > 65535)
+      throw new Error('Puerto de prueba no disponible para ' + service);
+    return port;
+  };
+  const actualRedisPort = publishedPort('redis', 6379);
+  const databaseUrl =
+    'postgresql://m9:m9-local@127.0.0.1:' +
+    publishedPort('postgres', 5432) +
+    '/m9_reservas?schema=public';
+  const rabbitMqUrl = 'amqp://m9:m9-local@127.0.0.1:' + publishedPort('rabbitmq', 5672);
   run(process.execPath, [npmCli, 'run', 'db:migrate:deploy'], {
     ...process.env,
     DATABASE_URL: databaseUrl,
   });
-  run(process.execPath, [npmCli, 'run', 'test:infrastructure:only'], {
-    ...process.env,
-    DATABASE_URL: databaseUrl,
-    REDIS_URL: `redis://127.0.0.1:${redisPort}`,
-    RABBITMQ_URL: rabbitMqUrl,
-  });
+  run(
+    process.execPath,
+    [
+      npmCli,
+      'run',
+      process.argv.includes('--coverage') ? 'test:coverage:all' : 'test:infrastructure:only',
+    ],
+    {
+      ...process.env,
+      DATABASE_URL: databaseUrl,
+      REDIS_URL: 'redis://127.0.0.1:' + actualRedisPort,
+      RABBITMQ_URL: rabbitMqUrl,
+      M9_TEST_INFRA_PROJECT: composeProject,
+    },
+  );
+} catch (error) {
+  if (!ready)
+    execute('docker', [...compose, 'logs', '--tail', '15', 'postgres', 'redis', 'rabbitmq'], {
+      environment: dockerEnvironment,
+    });
+  throw error;
 } finally {
   if (cleanupRequired) {
     run('docker', [...compose, 'down', '--volumes', '--remove-orphans'], dockerEnvironment);

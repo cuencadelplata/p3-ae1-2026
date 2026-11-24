@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { clientIdentity } from '../domain/client-identity.js';
 
 import { AppError } from '../errors/app.error.js';
 import { TIPOS_VEHICULO, type ActualizarReserva, type CrearReserva } from '../domain/reserva.js';
@@ -30,7 +31,7 @@ const validarOrigenDestino = (
 
 const crearReservaSchema = z
   .object({
-    clienteId: z.string().uuid(),
+    clienteId: clientIdentity,
     origen: ubicacionSchema,
     destino: ubicacionSchema,
     vehiculo: z.enum(TIPOS_VEHICULO),

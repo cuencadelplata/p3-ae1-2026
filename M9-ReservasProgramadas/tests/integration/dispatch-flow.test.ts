@@ -29,7 +29,7 @@ describe('flujo M9 → M5 con contrato OpenAPI', () => {
     m5Url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     client = new M5DispatchClient(
       m5Url,
-      1_000,
+      5_000, // Margen para instrumentacion de cobertura; el timeout se prueba por separado.
       new EnvironmentTokenProvider('test-token'),
       new InMemoryDispatchOperationStore(),
     );

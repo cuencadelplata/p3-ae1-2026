@@ -21,13 +21,19 @@ npm run integration:config
 npm run integration:up
 npm run integration:check
 Invoke-RestMethod http://localhost:3000/readiness
+npm run --silent auth:demo
 Start-Process 'http://localhost:3000'
 Start-Process 'http://localhost:3000/docs/'
 ```
 
-La demo no requiere `.env`: genera sus credenciales en `.integration/`, ignorada por Git. Usar el cliente **`99999999-9999-4999-8999-999999999999`**. La ruta es fija de demostración; M5 y M7 son reales. Docker aplica las migraciones al iniciar.
+La demo no requiere `.env`: genera sus credenciales en `.integration/`, ignorada por Git. Usar el cliente **`99999999-9999-4999-8999-999999999999`**. La ruta es fija de demostración; M5 y M7 son reales. Copiar el token de auth:demo en la interfaz y conectar la sesión. No compartir el token. Docker aplica las migraciones al iniciar.
 
-Opcional, para usar M4 real: `npm run integration:up -- --with-m4`.
+Para usar y comprobar M4 real:
+
+```powershell
+node scripts/integration-demo.mjs up --with-m4
+node scripts/check-real-routes.mjs
+```
 
 ## 3. Pruebas locales
 
@@ -38,10 +44,11 @@ npm run lint
 npm run build
 npm run test:coverage
 npm run test:infrastructure
+npm run test:e2e
 npm run integration:check
 ```
 
-`npm test` no necesita Cloud. `test:infrastructure` prueba PostgreSQL, Redis y RabbitMQ con Docker en un proyecto separado. `integration:check` necesita los contenedores del paso 2.
+`npm test` no necesita Cloud. `test:coverage` mide la cobertura completa con Docker; `test:coverage:unit` es una medición parcial sin infraestructura. `test:infrastructure` prueba PostgreSQL, Redis y RabbitMQ con Docker en un proyecto separado. `integration:check` necesita los contenedores del paso 2.
 
 ## 4. Grafana Cloud
 
@@ -136,4 +143,16 @@ docker logs --tail 100 movilidad-urbana-alloy-1
 npm run integration:obs:stop
 ```
 
-Sin observabilidad: `npm run integration:stop`. Si se inició M4, agregar `-- --with-m4` al comando de detención. Se conservan datos y volúmenes; para reiniciar, repetir `integration:up` o `integration:obs:up`. Si un nombre de contenedor difiere, obtenerlo con `docker ps`.
+Sin observabilidad: `npm run integration:stop`. Si se inició M4, detener con `node scripts/integration-demo.mjs stop --with-m4` (agregar `--with-obs` si corresponde). Se conservan datos y volúmenes; para reiniciar, repetir `integration:up` o `integration:obs:up`. Si un nombre de contenedor difiere, obtenerlo con `docker ps`.
+
+## 7. Seguridad y validación completa
+
+- En modo real, M9 consulta `M1_BASE_URL/auth/validar-identidad-y-rol` y exige rol CLIENTE. Si M1 no responde, rechaza la operación. Cada cliente solo lista y opera sus reservas; no puede suplantar una identidad en el cuerpo.
+- La migración de `client_id` a texto conserva UUID existentes y admite los identificadores numéricos de M1. Docker aplica las migraciones al iniciar.
+- La demo explícita (`M9_AUTH_MODE=demo`) valida HS256 con una clave aleatoria local. No representa usuarios reales de M1.
+- k6 usa `M9_AUTH_TOKEN` y `CLIENT_ID` para sesiones reales. La demo integrada obtiene su token automáticamente; no se escribe en los metadatos de resultados.
+- `test:e2e` usa stubs en un proyecto Docker aleatorio, puertos propios y volúmenes temporales. No baja el stack compartido ni demuestra integración real.
+- `npm run integration:check:activation` exige una aceptación real en M5 y confirma ACTIVADA y el mismo conductor en ambos módulos. Requiere candidatos elegibles y un conductor operando M5; no simula su aceptación.
+- M9 envía `assignmentCriteria: MEJOR_VALORACION`. El M5 actual ordena por distancia, puede crear varias ofertas pendientes e ignora ese criterio: RF-9.7 sigue pendiente en M5 y no debe aprobarse por los stubs.
+- Para varios clientes, el scheduler usa `M9_DISPATCH_AUTH_URL` con `M9_DISPATCH_AUTH_TOKEN`. Contrato propuesto: POST `{clientId, audience: "m5", scope: "ride-requests:write"}`, respuesta `{access_token}`. M9 valida el token contra M1 y comprueba cliente, rol, subject y vencimiento (más de 30 s), sin guardar JWT de pasajeros. El emisor debe autorizar creación, consulta y cancelación de solicitudes en M5. **El emisor todavía debe acordarse e implementarse en M1**; sin él el scheduler falla cerrado.
+- Una activación REST abandonada sin solicitud se recupera tras `ACTIVATION_RECOVERY_TIMEOUT_MS` (120 s por defecto), conservando la clave de idempotencia. No se recuperan de esta forma activaciones recientes o con solicitud confirmada.

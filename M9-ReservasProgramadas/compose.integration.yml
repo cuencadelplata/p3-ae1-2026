@@ -4,6 +4,8 @@ services:
   m9-reservas:
     environment:
       PORT: '3000'
+      M9_AUTH_MODE: demo
+      M9_DEMO_AUTH_SECRET: ${M9_DEMO_JWT_SECRET:?Ejecutar npm run integration:up dentro de M9}
       DISPATCH_MODE: rest
       M5_BASE_URL: http://m5-dispatch-service:3005
       M5_TIMEOUT_MS: '10000'

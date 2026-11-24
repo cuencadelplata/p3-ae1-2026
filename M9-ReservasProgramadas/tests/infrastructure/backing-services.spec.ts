@@ -26,6 +26,10 @@ import { PrismaDispatchResultProcessor } from '../../src/repositories/prisma-dis
 import { PrismaOutboxRepository } from '../../src/repositories/prisma-outbox.repository.js';
 import { PrismaReservaRepository } from '../../src/repositories/prisma-reserva.repository.js';
 
+if (!/^m9-infrastructure-tests-[a-f0-9]{8}$/.test(process.env.M9_TEST_INFRA_PROJECT ?? ''))
+  throw new Error(
+    'Usar npm run test:infrastructure o npm run test:coverage:infra para aislar los datos.',
+  );
 const suffix = randomUUID();
 const redis = new RedisConnection(process.env.REDIS_URL ?? 'redis://localhost:6379');
 const postgres = new PrismaConnection(process.env.DATABASE_URL);
@@ -88,6 +92,39 @@ const track = <T extends { id: string }>(reservation: T): T => {
 };
 
 describe('backing services reales', () => {
+  it('persiste identidades numericas y filtra por propietario antes de paginar', async () => {
+    const repository = new PrismaReservaRepository(postgres.client);
+    const one = track(await repository.crear({ ...reservationInput(), clienteId: '101' }));
+    track(await repository.crear({ ...reservationInput(), clienteId: '202' }));
+    const two = track(await repository.crear({ ...reservationInput(), clienteId: '101' }));
+    const rows = await repository.listarPaginado(1, 100, '101');
+    expect(rows.map((r) => r.id).sort()).toEqual([one.id, two.id].sort());
+    expect((await repository.listarPaginado(2, 1, '101'))[0]?.clienteId).toBe('101');
+  });
+  it('recupera el claim abandonado con CAS y conserva la idempotencia durable', async () => {
+    const repository = new PrismaReservaRepository(postgres.client);
+    const created = track(await repository.crear(reservationInput()));
+    await repository.cambiarEstado(created.id, 'PROGRAMADA', 'ACTIVANDO');
+    const keys = new PrismaDispatchOperationStore(postgres.client);
+    const key = await keys.getOrCreate(created.id);
+    const cutoff = new Date(Date.now() - 120000);
+    expect(await repository.recuperarActivacion(created.id, cutoff)).toBe(false);
+    await postgres.client.reservation.update({
+      where: { id: created.id },
+      data: { updatedAt: new Date(Date.now() - 180000) },
+    });
+    expect(await repository.recuperarActivacion(created.id, cutoff)).toBe(true);
+    expect(await keys.getOrCreate(created.id)).toBe(key);
+    expect(await repository.recuperarActivacion(created.id, cutoff)).toBe(false);
+    await repository.cambiarEstado(created.id, 'PROGRAMADA', 'ACTIVANDO', {
+      idSolicitud: randomUUID(),
+    });
+    await postgres.client.reservation.update({
+      where: { id: created.id },
+      data: { updatedAt: new Date(Date.now() - 180000) },
+    });
+    expect(await repository.recuperarActivacion(created.id, cutoff)).toBe(false);
+  });
   it('guarda, invalida y expira caché en Redis', async () => {
     const cache = new RedisReservationCache(redis.client, 1);
     const reserva = {

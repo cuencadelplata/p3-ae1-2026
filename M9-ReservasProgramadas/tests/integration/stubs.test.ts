@@ -27,7 +27,7 @@ describe('dobles locales compatibles con M5 y M7', () => {
   });
 
   it('M7 responde a POST /tarifa/estimacion con el DTO real', async () => {
-    const response = await new M7TariffClient(m7Url, 1_000).estimar({
+    const response = await new M7TariffClient(m7Url, 5_000).estimar({
       vehiculo: 'MOTO',
       route: routeSnapshot,
     });
@@ -42,7 +42,7 @@ describe('dobles locales compatibles con M5 y M7', () => {
   it('M5 crea, consulta y cancela usando Bearer e idempotencia', async () => {
     const client = new M5DispatchClient(
       m5Url,
-      1_000,
+      5_000, // Margen para instrumentacion de cobertura; el timeout se prueba por separado.
       new EnvironmentTokenProvider('test-token'),
       new InMemoryDispatchOperationStore(),
     );

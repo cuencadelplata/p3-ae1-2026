@@ -5,12 +5,26 @@ import { createDemoToken, DEMO_CLIENT_ID } from './integration-demo.mjs';
 const m9 = 'http://127.0.0.1:3000';
 const m5 = 'http://127.0.0.1:3005';
 const m7 = 'http://127.0.0.1:17000';
+let demoAuthorization;
 const pause = () => new Promise((resolve) => setTimeout(resolve, 1000));
 
 async function json(url, init = {}) {
-  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw new Error(`${new URL(url).pathname}: HTTP ${response.status}`);
-  return response.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        ...(new URL(url).origin === m9 ? { authorization: demoAuthorization } : {}),
+        ...init.headers,
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`${new URL(url).pathname}: HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function main() {
@@ -18,6 +32,7 @@ async function main() {
     await readFile(new URL('../.integration/demo-auth.json', import.meta.url), 'utf8'),
   );
   const authorization = `Bearer ${createDemoToken(secret)}`;
+  demoAuthorization = authorization;
   const readyDeadline = Date.now() + 60000;
   while (true) {
     try {
@@ -84,7 +99,28 @@ async function main() {
   assert.equal(request.id, current.idSolicitud);
   console.log(`M9 → M5: solicitud ${request.id}, estado ${request.status}, cliente correcto.`);
   current = await json(`${m9}/reservas/${reservation.id}`);
-  if (current.estado === 'ACTIVANDO') {
+  if (process.argv.includes('--expect-assigned')) {
+    console.log('Esperando aceptacion REAL de un conductor en M5 (hasta 180 segundos)...');
+    const assignmentDeadline = Date.now() + 180000;
+    while (current.estado !== 'ACTIVADA' && Date.now() < assignmentDeadline) {
+      if (current.estado === 'FALLIDA') throw new Error('La reserva fallo sin asignacion.');
+      await pause();
+      current = await json(m9 + '/reservas/' + reservation.id);
+    }
+    assert.equal(
+      current.estado,
+      'ACTIVADA',
+      'No hubo aceptacion real en M5; no se considera aprobada la activacion.',
+    );
+    request = await json(m5 + '/api/v1/ride-requests/' + current.idSolicitud, {
+      headers: { authorization },
+    });
+    assert.equal(request.status, 'ASSIGNED');
+    assert.ok(request.assignedDriverId);
+    assert.equal(current.assignedDriverId, request.assignedDriverId);
+    console.log('Activacion y conductor asignado confirmados en M9 y M5.');
+  }
+  if (!process.argv.includes('--expect-assigned') && current.estado === 'ACTIVANDO') {
     await json(`${m9}/reservas/${reservation.id}`, { method: 'DELETE' });
     request = await json(`${m5}/api/v1/ride-requests/${request.id}`, {
       headers: { authorization },

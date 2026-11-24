@@ -13,6 +13,7 @@ describe('credenciales locales de integración', () => {
     });
     expect(JSON.parse(Buffer.from(payload!, 'base64url').toString())).toEqual({
       sub: DEMO_CLIENT_ID,
+      role: 'CLIENTE',
       iat: 1000,
       exp: 87400,
     });

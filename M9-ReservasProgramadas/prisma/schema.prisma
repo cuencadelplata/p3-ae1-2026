@@ -28,7 +28,7 @@ enum OutboxStatus {
 
 model Reservation {
   id                     String            @id @db.Uuid
-  clientId               String            @map("client_id") @db.Uuid
+  clientId               String            @map("client_id") @db.VarChar(128)
   origin                 String
   destination            String
   vehicleType            VehicleType       @map("vehicle_type")

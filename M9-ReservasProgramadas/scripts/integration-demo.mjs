@@ -10,7 +10,7 @@ const services = ['m9-reservas', 'm5-dispatch-service', 'm7-api'];
 
 export const createDemoToken = (secret, now = Math.floor(Date.now() / 1000)) => {
   const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
-  const payload = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: DEMO_CLIENT_ID, iat: now, exp: now + 86400 })}`;
+  const payload = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: DEMO_CLIENT_ID, role: 'CLIENTE', iat: now, exp: now + 86400 })}`;
   return `${payload}.${createHmac('sha256', secret).update(payload).digest('base64url')}`;
 };
 

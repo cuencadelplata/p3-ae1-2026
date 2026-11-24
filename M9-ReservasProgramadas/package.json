@@ -26,7 +26,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "node scripts/run-infrastructure-tests.mjs --coverage",
     "test:e2e": "node scripts/run-compose-e2e.mjs",
     "test:e2e:only": "vitest run --config vitest.e2e.config.ts",
     "test:infrastructure": "node scripts/run-infrastructure-tests.mjs",
@@ -70,7 +70,12 @@
     "k6:breakpoint": "node scripts/run-k6.mjs breakpoint",
     "k6:breakpoint:cloud": "node scripts/run-k6.mjs breakpoint --cloud",
     "k6:soak": "node scripts/run-k6.mjs soak",
-    "k6:soak:cloud": "node scripts/run-k6.mjs soak --cloud"
+    "k6:soak:cloud": "node scripts/run-k6.mjs soak --cloud",
+    "auth:demo": "node scripts/demo-session.mjs",
+    "integration:check:activation": "node scripts/check-real-integration.mjs --expect-assigned",
+    "test:coverage:all": "vitest run --config vitest.coverage.config.ts --coverage",
+    "test:coverage:infra": "node scripts/run-infrastructure-tests.mjs --coverage",
+    "test:coverage:unit": "vitest run --coverage"
   },
   "dependencies": {
     "@opentelemetry/api": "1.10.0",
@@ -94,6 +99,7 @@
     "dotenv": "17.4.2",
     "express": "5.3.0",
     "helmet": "8.3.0",
+    "jsonwebtoken": "9.0.3",
     "node-cron": "4.6.0",
     "prisma": "6.19.3",
     "redis": "^6.2.1",
@@ -105,6 +111,7 @@
     "@types/amqplib": "^0.10.8",
     "@types/cors": "2.8.19",
     "@types/express": "5.0.6",
+    "@types/jsonwebtoken": "9.0.10",
     "@types/node": "22.20.1",
     "@types/supertest": "7.2.1",
     "@types/swagger-ui-express": "4.1.8",
@@ -122,7 +129,8 @@
   },
   "overrides": {
     "@prisma/config": {
-      "deepmerge-ts": "8.0.0"
+      "deepmerge-ts": "8.0.0",
+      "effect": "3.22.1"
     }
   },
   "allowScripts": {

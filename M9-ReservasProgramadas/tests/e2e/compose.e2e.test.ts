@@ -3,8 +3,11 @@ import { describe, expect, it } from 'vitest';
 import type { Reserva } from '../../src/domain/reserva.js';
 
 const baseUrl = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3909';
-const requestJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const response = await fetch(`${baseUrl}${path}`, init);
+const requestJson = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
+  const response = await fetch(`${baseUrl}${path}`, {
+    ...init,
+    headers: { ...init.headers, authorization: `Bearer ${process.env.E2E_AUTH_TOKEN ?? ''}` },
+  });
   const body = (await response.json()) as T;
   if (!response.ok) throw new Error(`HTTP ${response.status}: ${JSON.stringify(body)}`);
   return body;
@@ -14,7 +17,7 @@ const create = (suffix: string, delayMs = 600_000) =>
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      clienteId: crypto.randomUUID(),
+      clienteId: process.env.E2E_CLIENT_ID ?? '99999999-9999-4999-8999-999999999999',
       origen: `Origen ${suffix}`,
       destino: `Destino ${suffix}`,
       vehiculo: 'AUTO',

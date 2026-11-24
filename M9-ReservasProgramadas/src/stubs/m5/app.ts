@@ -23,6 +23,7 @@ const createRideRequestSchema = z
     origin: geoLocationSchema,
     destination: geoLocationSchema,
     vehicleType: z.enum(['AUTO', 'MOTO']),
+    assignmentCriteria: z.literal('MEJOR_VALORACION').optional(),
   })
   .strict();
 const candidateSearchSchema = z

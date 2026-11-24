@@ -120,10 +120,6 @@ services:
     restart: unless-stopped
 
 networks:
-      - reservas-network
-    restart: unless-stopped
-
-networks:
   reservas-network:
     driver: bridge
 

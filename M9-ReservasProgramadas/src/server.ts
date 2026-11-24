@@ -1,7 +1,9 @@
 // Debe ser el primer import: crea los proveedores OpenTelemetry antes que cualquier módulo.
 import { telemetry, telemetryEnabled } from './observability/register.js';
 
+import { createAuthentication } from './middleware/auth.middleware.js';
 import { createApp } from './app.js';
+import { DelegatedDispatchTokenProvider } from './clients/delegated-dispatch-token.provider.js';
 import { EnvironmentTokenProvider, M5DispatchClient } from './clients/m5-dispatch.client.js';
 import { M7TariffClient } from './clients/m7-tariff.client.js';
 import { M4RouteResolver } from './clients/m4-route.resolver.js';
@@ -79,7 +81,14 @@ const routeResolver =
 const dispatchClient = new M5DispatchClient(
   env.M5_BASE_URL,
   env.M5_TIMEOUT_MS,
-  new EnvironmentTokenProvider(env.M5_SERVICE_TOKEN),
+  env.M5_DEMO_CLIENT_ID
+    ? new EnvironmentTokenProvider(env.M5_SERVICE_TOKEN)
+    : new DelegatedDispatchTokenProvider(
+        env.M9_DISPATCH_AUTH_URL,
+        env.M9_DISPATCH_AUTH_TOKEN,
+        env.M1_BASE_URL,
+        env.M1_TIMEOUT_MS,
+      ),
   new PrismaDispatchOperationStore(postgres.client),
   env.M5_DEMO_CLIENT_ID,
 );
@@ -101,6 +110,7 @@ const activacionService = new ActivacionReservaService(
   distributedLock,
   env.DISPATCH_MODE,
   env.M5_DEMO_CLIENT_ID,
+  env.ACTIVATION_RECOVERY_TIMEOUT_MS,
 );
 const scheduler = new ReservasScheduler(
   repository,
@@ -118,6 +128,8 @@ const scheduler = new ReservasScheduler(
           }
         : {}),
     }),
+  env.SCHEDULER_CONCURRENCY,
+  env.M5_DEMO_CLIENT_ID,
 );
 const readinessService = new ReadinessService([
   { name: 'postgres', check: () => postgres.ping() },
@@ -125,6 +137,12 @@ const readinessService = new ReadinessService([
   { name: 'rabbitmq', check: () => rabbitMq.ping() },
 ]);
 const app = createApp({
+  authenticate: createAuthentication({
+    mode: env.M9_AUTH_MODE,
+    m1BaseUrl: env.M1_BASE_URL,
+    timeoutMs: env.M1_TIMEOUT_MS,
+    demoSecret: env.M9_DEMO_AUTH_SECRET,
+  }),
   reservaService,
   readinessService,
   requestLogger: (entry) => log('info', 'http_request', { ...entry }),

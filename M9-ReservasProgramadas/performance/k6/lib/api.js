@@ -21,6 +21,7 @@ const headers = () => {
   sequence += 1;
   return {
     'Content-Type': 'application/json',
+    Authorization: `Bearer ${__ENV.M9_AUTH_TOKEN || ''}`,
     // Correlación k6 → logs de M9 (caracteres válidos para el middleware).
     'x-correlation-id':
       `${RUN_ID}-${typeof __VU === 'undefined' ? 0 : __VU}-${typeof __ITER === 'undefined' ? 'setup' : __ITER}-${sequence}`.slice(
