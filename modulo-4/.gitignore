@@ -1,0 +1,2 @@
+# M4 usa pnpm (pnpm-lock.yaml); un package-lock.json solo aparece al correr npm por error.
+package-lock.json
