@@ -274,9 +274,10 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     const destino = await pedir(M6, '/api/viajes/' + s.tripId + '/destino', { method: 'POST', token: s.conductor.token, body: {} });
     assert.equal(destino.status, 200, 'M6 debe registrar la llegada antes del pago');
     const fin = await pedir(M6, `/api/viajes/${s.tripId}/finalizacion`, {
+      token: s.pasajero.token,
       method: 'POST',
       body: {
-        origen: ORIGEN, destino: DESTINO, tipoVehiculo: 'auto', horaFin: new Date().toISOString(), metodoPago: METODO_PAGO,
+        origen: ORIGEN, destino: DESTINO, tipoVehiculo: 'auto', horaFin: new Date().toISOString(), metodoPago: METODO_PAGO, gestionarPago: true,
         ...(METODO_PAGO === 'tarjeta' ? { pago: await pagoConTarjeta() } : {}),
       },
     });
