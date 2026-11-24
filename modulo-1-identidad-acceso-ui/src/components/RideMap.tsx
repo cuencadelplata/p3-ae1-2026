@@ -13,15 +13,18 @@ interface Props {
   dropoff?: Point
   /** Recorrido por calles; sin él se dibuja una línea recta punteada. */
   routeCoords?: LatLngTuple[]
+  showLocation?: boolean
+  vehiclePosition?: { latitude: number; longitude: number }
   /** Si está presente, un clic en el mapa elige ese punto (origen o destino). */
   onPick?: (latitude: number, longitude: number) => void
   pickLabel?: string
 }
 
-export default function RideMap({ driverView = false, showRoute = true, pickup = origin, dropoff = destination, routeCoords, onPick, pickLabel }: Props) {
+export default function RideMap({ driverView = false, showRoute = true, pickup = origin, dropoff = destination, routeCoords, onPick, pickLabel, showLocation = true, vehiclePosition }: Props) {
   const container = useRef<HTMLDivElement>(null)
   const view = useRef<LeafletMap | null>(null)
   const layers = useRef<LayerGroup | null>(null)
+  const car = useRef<ReturnType<typeof circleMarker> | null>(null)
   // Último encuadre pedido: se repite si el contenedor cambia de tamaño (por ejemplo, cuando
   // el panel del conductor achica el mapa al mostrar la tarjeta del viaje).
   const framing = useRef<{ bounds?: LatLngBounds; center?: LatLngTuple }>({})
@@ -58,6 +61,20 @@ export default function RideMap({ driverView = false, showRoute = true, pickup =
     }
   }, [])
 
+  const carLatitude = vehiclePosition?.latitude
+  const carLongitude = vehiclePosition?.longitude
+  useEffect(() => {
+    if (carLatitude === undefined || carLongitude === undefined || !view.current) {
+      car.current?.remove()
+      car.current = null
+      return
+    }
+    const point: LatLngTuple = [carLatitude, carLongitude]
+    if (car.current) car.current.setLatLng(point)
+    else car.current = circleMarker(point, { radius: 9, color: '#141414', weight: 3, fillColor: '#d5ff40', fillOpacity: 1 })
+      .bindTooltip('Ubicación del auto').addTo(view.current)
+  }, [carLatitude, carLongitude])
+
   const routeKey = routeCoords ? `${routeCoords.length}:${routeCoords[0]?.join()}:${routeCoords.at(-1)?.join()}` : ''
 
   useEffect(() => {
@@ -87,14 +104,15 @@ export default function RideMap({ driverView = false, showRoute = true, pickup =
     // Sin recorrido, el conductor ve su ubicación con un halo. Con un viaje u oferta, el mapa se
     // ve igual que el del pasajero.
     const waiting = driverView && !showRoute
+    if (!showLocation) return
     if (waiting) {
       circleMarker(from, { radius: 19, stroke: false, fillColor: '#d5ff40', fillOpacity: .22, interactive: false }).addTo(group)
     }
     circleMarker(from, { radius: 7, color: waiting ? '#141414' : '#d5ff40', fillOpacity: 1, fillColor: '#d5ff40' })
-      .bindTooltip(waiting ? 'Tu ubicación de prueba' : 'Origen', { permanent: true, direction: 'top', offset: [0, -8] }).addTo(group)
+      .bindTooltip(waiting ? 'Tu ubicación' : 'Origen', { permanent: true, direction: 'top', offset: [0, -8] }).addTo(group)
     // routeKey resume el recorrido para no redibujar con cada render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [driverView, showRoute, pickupLat, pickupLng, dropoffLat, dropoffLng, routeKey])
+  }, [driverView, showRoute, pickupLat, pickupLng, dropoffLat, dropoffLng, routeKey, showLocation])
 
   useEffect(() => {
     container.current?.classList.toggle('ride-map-picking', Boolean(onPick))

@@ -127,7 +127,7 @@ export default function Login({ aviso, onLoginSuccess, onSwitchToRegister, onSwi
 
         <div className="hairline my-9" />
 
-        <OAuth2Login onLoginSuccess={(token) => onLoginSuccess(token, {})} />
+        <OAuth2Login />
 
         <div className="hairline my-9" />
 

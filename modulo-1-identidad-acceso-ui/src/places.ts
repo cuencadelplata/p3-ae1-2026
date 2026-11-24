@@ -1,7 +1,5 @@
 // Ubicaciones del pasajero: búsqueda de direcciones, dirección de un punto del mapa y ruta por calles.
 // Usa los mismos servicios públicos que el front de M5: Nominatim (OpenStreetMap) y OSRM.
-import { origin } from './rideFlowApi'
-
 export interface Place {
   latitude: number
   longitude: number
@@ -20,10 +18,6 @@ export interface RouteInfo {
 }
 
 export type VehicleType = 'AUTO' | 'MOTO'
-
-// Los conductores de prueba publican su ubicación en el centro de Corrientes y M5 busca
-// candidatos a 5 km del origen del pedido.
-export const dispatchZone = { center: origin, radiusKm: 5 }
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org'
 // Prioriza resultados en Corrientes capital sin excluir el resto del país.

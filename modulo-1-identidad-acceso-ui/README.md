@@ -16,24 +16,33 @@ Abrir `http://localhost:5173`.
 
 Si M1 corre en otra URL, crear un archivo `.env` en esta carpeta con `VITE_API_URL=http://otra-url:3001`.
 
-## Guía del flujo de login a pago
+## Viaje en el frontend común
 
-El recorrido usa el stack común. Abrí [la interfaz de M1](http://localhost:5173) después de levantarlo desde la raíz. Si el stack ya está arriba, `docker compose up -d --no-deps --build m1-ui` actualiza solo la interfaz. El [README del stack integral](../tests-integracion/README.md) explica la configuración de los servicios y la alternativa con el simulador de M7.
+Levantá el Compose de la raíz y abrí http://localhost:5173. Usá una sesión de
+cliente y otra de conductor. El conductor necesita un perfil habilitado y un
+auto activo en M3. Para recibir ofertas, permite la ubicación del navegador.
 
-Para ver un pago **autorizado de prueba**, configurá el simulador de M7 de esa guía con `UNREGISTERED_TRIPS=not_found`. Asegurate de que `M6_M7_URL` y `M8_M7_PAYMENTS_URL` del stack apunten al simulador. Agregá `VITE_FLOW_SANDBOX_PAYMENT=true` al `.env` raíz y reconstruí `m1-ui`. Si cambiaste las URL de M7 con el stack corriendo, recreá también los servicios `m6-viajes-app` y `m8-app` para que tomen la configuración nueva. Con el M7 real, dejá desactivada la tarjeta de prueba y usá **Efectivo** para registrar el pago pendiente de cobro.
+1. El cliente elige origen y destino y solicita un viaje. El conductor recibe
+   la oferta y la acepta.
+2. En el encuentro, el cliente selecciona «Mostrar QR de inicio». El conductor
+   ingresa el código y elige «Validar e iniciar viaje». M6 verifica el rol
+   y la identidad del participante con M1, valida el código con M8 y registra
+   el inicio. El cronómetro en ambas sesiones usa esa hora de M6. Mientras el
+   viaje está en curso, el mapa muestra la última posición compartida por el
+   navegador del conductor. En el destino, el conductor confirma la llegada
+   y M6 habilita el pago del pasajero.
+3. Para habilitar tarjeta, configurá MP_PUBLIC_KEY con la clave pública que
+   corresponde al mismo entorno de Mercado Pago que usa M7 y reconstruí m1-ui.
+   El navegador envía los datos a Mercado Pago para tokenizar el pago.
+4. Cuando M8 emita el comprobante, el cliente puede descargar el PDF al
+   finalizar o desde «Historial de viajes». Desde el historial también puede
+   consultar y crear tickets de soporte de cada viaje.
 
-1. Iniciá sesión como **Cliente**. Para registrar un cliente nuevo, elegí **Crear una cuenta** y usá un correo y DNI de prueba.
-2. En **Tu cuenta**, elegí **Pedir un viaje**. El mapa muestra el recorrido predefinido de avenida 3 de Abril al aeropuerto de Corrientes.
-3. Presioná **Solicitar viaje**. M5 envía ofertas a los autos disponibles cerca del origen y asigna el viaje al primero que acepta. La pantalla se actualiza automáticamente. Si la solicitud vence, podés usar **Volver a solicitar**.
-4. Cuando aparezca **Tu conductor está asignado**, elegí **Preparar inicio del viaje** para generar el QR y luego **Iniciar viaje** para validarlo. Si el QR vence, usá **Renovar QR**.
-5. Elegí **Tarjeta de prueba** con el simulador o **Efectivo** para registrar un cobro presencial pendiente. Presioná **Finalizar y registrar pago** para ver el total y el estado.
-6. Elegí **Ver comprobante**. Si sigue en emisión, volvé a consultarlo tras unos segundos. Pasado el tiempo de espera, **Hacer otro viaje** abre una nueva solicitud.
+«Mis reservas» permite crear, listar, editar y cancelar reservas. La activación
+automática depende del token delegado de M1 para M9 en el Compose común.
 
-El pasajero usa su propia cuenta durante todo el recorrido. Para la demo, entrá como **Conductor** desde **otra sesión de navegador** (perfil distinto o ventana de incógnito) y abrí **Tu cuenta → Abrir despacho de prueba → Conectarme**. Cuando el pasajero solicite el viaje, revisá el origen, el destino y la tarifa de la oferta en el panel del conductor. Elegí **Aceptar viaje** para confirmar o **Rechazar** para descartarla. Tras aceptar, la pantalla sigue el estado del viaje y habilita **Desconectarme** cuando el viaje finaliza o se cancela.
-
-Si el conductor sigue **En camino al origen**, fijate en el identificador que aparece en **Detalles del viaje**. En la sesión del pasajero que lo solicitó, abrí **Tu cuenta → Pedir un viaje** para retomar el viaje activo, incluso si la pestaña conservaba un viaje anterior ya finalizado.
-
-Para desarrollar con Vite y el stack común ya levantado, ejecutá `npm run dev -- --port 5174` desde esta carpeta con `VITE_API_URL=http://localhost:10000` en su `.env.local`. Agregá ahí `VITE_FLOW_SANDBOX_PAYMENT=true` para seleccionar la tarjeta del simulador. El proxy local usa los puertos publicados por defecto en el stack.
+Para desarrollar con Vite, podés usar npm run dev -- --port 5174 con
+VITE_API_URL=http://localhost:10000 y, si usás tarjeta, VITE_MP_PUBLIC_KEY.
 
 ## Qué pide a M1 cada pantalla
 

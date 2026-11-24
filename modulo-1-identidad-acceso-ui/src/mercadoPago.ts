@@ -1,10 +1,8 @@
 // Tokenización de tarjetas con Mercado Pago (el mismo paso que hace su SDK de JavaScript).
 // Los datos de la tarjeta van del navegador directo a Mercado Pago con la clave pública de M7;
 // a M6 sólo le llega el token, que M6 reenvía a M7 para autorizar el pago.
-import { sandboxPayment } from './rideFlowApi'
-
 export const mpPublicKey: string = import.meta.env.VITE_MP_PUBLIC_KEY ?? ''
-export const cardEnabled = Boolean(mpPublicKey) || sandboxPayment
+export const cardEnabled = Boolean(mpPublicKey)
 
 export interface CardInput {
   number: string
@@ -79,10 +77,7 @@ export async function tokenizeCard(card: CardInput, email: string) {
   if (problem) throw new Error(problem)
   const number = digits(card.number)
 
-  if (!mpPublicKey) {
-    // Sin clave pública, el simulador de M7 acepta cualquier token de prueba.
-    return { token: 'viaje-demo-sandbox', paymentMethodId: brandFromBin(number), email }
-  }
+  if (!mpPublicKey) throw new Error('El pago con tarjeta no está habilitado en este entorno.')
 
   const [month, year] = card.expiry.split('/').map(Number)
   const response = await fetch(`https://api.mercadopago.com/v1/card_tokens?public_key=${encodeURIComponent(mpPublicKey)}`, {

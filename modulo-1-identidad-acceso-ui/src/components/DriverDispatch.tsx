@@ -4,10 +4,14 @@ import RideMap from './RideMap'
 import TripCancellation from './TripCancellation'
 import { fetchRoute } from '../places'
 import type { RouteInfo } from '../places'
-import { destination, FlowError, origin, pollTrip, prepareDriver, publishDriverLocation, request } from '../rideFlowApi'
+import { destination, DriverSessionExpired, FlowError, origin, pollTrip, prepareDriver, publishDriverLocation, request } from '../rideFlowApi'
 import type { Account, Offer, Trip, TripRecord } from '../rideFlowApi'
 import './RideFlow.css'
+import TripClock from './TripClock'
 import './DriverDispatch.css'
+
+type QRDetector = new (options: { formats: string[] }) => { detect(image: ImageBitmap): Promise<{ rawValue: string }[]> }
+const qrDetector = (globalThis as typeof globalThis & { BarcodeDetector?: QRDetector }).BarcodeDetector
 
 interface Assignment {
   offer?: Offer
@@ -58,7 +62,7 @@ async function driverTrip(userId: number, token: string, assignment: Assignment 
   return null
 }
 
-export default function DriverDispatch({ driver, onBack }: { driver: Account; onBack: () => void }) {
+export default function DriverDispatch({ driver, onBack, onSessionExpired }: { driver: Account; onBack: () => void; onSessionExpired: () => void }) {
   const { userId, token } = driver
   const storageKey = `movilidad.conductor.viaje.${userId}`
   const [online, setOnline] = useState(false)
@@ -70,6 +74,8 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
   const [trip, setTrip] = useState<TripRecord | null>(null)
   const [completedOffer, setCompletedOffer] = useState<Offer | null>(null)
   const [error, setError] = useState('')
+  const [startCode, setStartCode] = useState('')
+  const [driverLocation, setDriverLocation] = useState<typeof origin>()
   const [now, setNow] = useState(Date.now)
   const offerId = offer?.id
   // Patente del auto activo en M3. M8 la necesita para emitir el comprobante del viaje: si el
@@ -126,8 +132,9 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
         // antes de volver a recibir ofertas.
         if (available) await ensureVehicleRef.current()
         if (signal.aborted) return false
-        if (available !== lastAvailability || Date.now() - lastPublication >= 20_000) {
-          await publishDriverLocation(userId, token, available, signal)
+        if (available !== lastAvailability || Date.now() - lastPublication >= (current?.estado === 'EN_CURSO' && !current.destinoConfirmadoAt ? 5000 : 20_000)) {
+          const position = await publishDriverLocation(userId, token, available, signal)
+          if (!signal.aborted) setDriverLocation(position)
           lastAvailability = available
           lastPublication = Date.now()
         }
@@ -141,11 +148,12 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
         return true
       } catch (err) {
         if (signal.aborted) return false
+        if (err instanceof DriverSessionExpired) { onSessionExpired(); return false }
         setError(err instanceof Error ? err.message : 'No se pudo actualizar el despacho.')
         return true
       }
     })
-  }, [assignment, busy, online, userId, token])
+  }, [assignment, busy, online, userId, token, onSessionExpired])
 
   async function perform(label: string, task: () => Promise<void>) {
     setBusy(label)
@@ -153,10 +161,52 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
     try {
       await task()
     } catch (err) {
+      if (err instanceof DriverSessionExpired) { onSessionExpired(); return }
       setError(err instanceof Error ? err.message : 'No se pudo completar la acción.')
     } finally {
       setBusy('')
     }
+  }
+
+  async function readQrPhoto(file: File) {
+    if (!qrDetector) return
+    await perform('Leyendo QR…', async () => {
+      const image = await createImageBitmap(file)
+      try {
+        const [code] = await new qrDetector({ formats: ['qr_code'] }).detect(image)
+        if (!code?.rawValue) throw new Error('No se pudo leer el QR. Probá otra foto o ingresá el código del pasajero.')
+        setStartCode(code.rawValue)
+      } finally {
+        image.close()
+      }
+    })
+  }
+
+  async function startAssignedTrip(tripId: string, code: string) {
+    await perform('Validando código…', async () => {
+      const path = '/api/viajes/' + encodeURIComponent(tripId)
+      try {
+        const { viaje } = await request<{ viaje: Pick<Trip, 'estado'> }>('M6', path + '/iniciar', {
+          method: 'POST', token, body: { codigoVerificacion: code.trim() },
+        })
+        setTrip((current) => current?.id === tripId ? { ...current, estado: viaje.estado } : current)
+      } catch (error) {
+        if (!(error instanceof FlowError) || ![0, 502, 503, 504].includes(error.status)) throw error
+        const current = await request<Trip>('M6', path, { token }).catch(() => undefined)
+        if (current?.estado !== 'EN_CURSO') throw error
+        setTrip(current)
+      }
+      setStartCode('')
+    })
+  }
+
+  async function confirmDestination(tripId: string) {
+    await perform('Confirmando llegada…', async () => {
+      const { destinoConfirmadoAt } = await request<{ destinoConfirmadoAt: string }>(
+        'M6', '/api/viajes/' + encodeURIComponent(tripId) + '/destino', { method: 'POST', token, body: {} },
+      )
+      setTrip((current) => current?.id === tripId ? { ...current, destinoConfirmadoAt } : current)
+    })
   }
 
   const active = Boolean(assignment || (trip && isActive(trip)))
@@ -180,7 +230,7 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
       }
 
       await ensureVehicle()
-      await publishDriverLocation(userId, token, true)
+      setDriverLocation(await publishDriverLocation(userId, token, true))
       setTrip(null)
       setCompletedOffer(null)
       setOnline(true)
@@ -241,7 +291,7 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
   const title = active ? (trip && rideStatus[trip.estado]) || 'Viaje asignado'
     : pending ? 'Nueva oferta de viaje'
       : online ? (trip && rideStatus[trip.estado]) || 'Buscando viajes' : 'Estás desconectado'
-  const description = cancellable ? 'El pasajero confirma el encuentro desde su app. Si no vas a llegar, podés cancelar el viaje.'
+  const description = cancellable ? 'Cuando llegues, pedile al pasajero que te muestre el código de inicio. Si no vas a llegar, podés cancelar el viaje.'
     : active ? 'La desconexión se habilita cuando el viaje termina o se cancela.'
     : pending ? 'Revisá el recorrido y confirmá si querés tomarlo.'
       : online ? 'Aceptar viaje se habilita cuando recibís una oferta.' : 'Conectate para recibir ofertas en esta zona.'
@@ -280,9 +330,10 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
       </header>
 
       <div className="driver-map-frame" data-trip={showSummary}>
-        <RideMap driverView showRoute={showRoute} pickup={pickupPoint} dropoff={dropoffPoint}
+        <RideMap driverView showRoute={showRoute} pickup={showRoute ? pickupPoint : driverLocation} dropoff={dropoffPoint}
+          showLocation={Boolean(driverLocation)} vehiclePosition={showRoute && active && !trip?.destinoConfirmadoAt ? driverLocation : undefined}
           routeCoords={showRoute ? routeInfo?.coords : undefined} />
-        <div className="driver-map-label"><MapPin size={16} aria-hidden="true" /> Corrientes <span>Zona de prueba</span></div>
+        <div className="driver-map-label"><MapPin size={16} aria-hidden="true" /> Área del viaje</div>
       </div>
 
       <section className="driver-console" aria-label="Disponibilidad y viajes">
@@ -297,6 +348,33 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
           {active ? <LockKeyhole size={18} aria-hidden="true" /> : <Power size={19} aria-hidden="true" />}
           {online || active ? 'Desconectarme' : 'Conectarme'}
         </button>
+        {trip?.estado === 'EN_CURSO' && <div className="mt-3 grid gap-2">
+          <TripClock startedAt={trip.iniciadoAt} endedAt={trip.destinoConfirmadoAt} />
+          {trip.destinoConfirmadoAt
+            ? <p role="status">Llegada confirmada. El pasajero ya puede finalizar el pago.</p>
+            : <button className="btn-primary" disabled={Boolean(busy)} onClick={() => void confirmDestination(trip.id)}>Confirmar llegada al destino</button>}
+        </div>}
+        {trip?.estado === 'COMPLETADO' && trip.iniciadoAt && trip.completadoAt && (
+          <TripClock startedAt={trip.iniciadoAt} endedAt={trip.completadoAt} />
+        )}
+        {trip?.estado === 'ARRIBADO' && <form className="ride-form" key={trip.id} onSubmit={(event) => {
+          event.preventDefault()
+          if (startCode.trim()) void startAssignedTrip(trip.id, startCode)
+        }}>
+          <label htmlFor="trip-start-code">Código de inicio del pasajero</label>
+          <p className="ride-muted">Ingresá el código que muestra el pasajero.</p>
+          {qrDetector && <label>Leer QR con una foto
+            <input className="input-field" type="file" accept="image/*" capture="environment" disabled={Boolean(busy)}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0]
+                event.currentTarget.value = ''
+                if (file) void readQrPhoto(file)
+              }} />
+          </label>}
+          <input id="trip-start-code" className="input-field" autoComplete="off" value={startCode}
+            onChange={(event) => setStartCode(event.target.value)} required />
+          <button className="btn-primary" type="submit" disabled={Boolean(busy) || !startCode.trim()}>Validar e iniciar viaje</button>
+        </form>}
         {cancellable && trip && <TripCancellation key={trip.id} trip={trip} actor="conductor" token={token} disabled={Boolean(busy)}
           onCancelled={(cancelledTrip) => {
             setTrip(cancelledTrip)
@@ -307,7 +385,7 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
 
         {online && !active && <div className="driver-offer-actions" role="group" aria-label="Responder a la oferta">
           {pending && <button className="btn-ghost" disabled={Boolean(busy)} onClick={() => void respond(pending, 'reject')}>Rechazar</button>}
-          <button className="btn-primary" disabled={!pending || Boolean(busy)} onClick={() => pending && void respond(pending, 'accept')}>Aceptar viaje</button>
+          {pending && <button className="btn-primary" disabled={Boolean(busy)} onClick={() => void respond(pending, 'accept')}>Aceptar viaje</button>}
         </div>}
 
         {showSummary && <div className="driver-trip-card">
@@ -331,7 +409,7 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
 
         <div className="driver-details">
           <CarFront size={17} aria-hidden="true" />
-          {plate ? <span>Auto de prueba <strong>{plate}</strong></span> : <span>Auto de prueba · {origin.address}</span>}
+          {plate && <span>Auto activo <strong>{plate}</strong></span>}
         </div>
       </section>
     </main>

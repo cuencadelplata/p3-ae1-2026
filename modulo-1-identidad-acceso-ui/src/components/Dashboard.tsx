@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import axios from 'axios'
+import Reservations from './Reservations'
+import TripHistory from './TripHistory'
 import {
   LogOut,
   Mail,
@@ -68,6 +70,8 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   const [revocando, setRevocando] = useState(false)
   const [vinculados, setVinculados] = useState<ProveedorVinculado[] | null>(null)
   const [verViaje, setVerViaje] = useState(false)
+  const [verReservas, setVerReservas] = useState(false)
+  const [verHistorial, setVerHistorial] = useState(false)
 
   const headers = { Authorization: `Bearer ${token}` }
 
@@ -140,11 +144,17 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   const nombreCompleto = perfil ? `${perfil.nombre} ${perfil.apellido}` : ''
   const iniciales = perfil ? `${perfil.nombre[0] ?? ''}${perfil.apellido[0] ?? ''}`.toUpperCase() : '?'
 
+  if (verHistorial && perfil?.rol === 'CLIENTE') {
+    return <TripHistory token={token} userId={perfil.userId} onBack={() => setVerHistorial(false)} />
+  }
+  if (verReservas && perfil?.rol === 'CLIENTE') {
+    return <Reservations token={token} onBack={() => setVerReservas(false)} />
+  }
   if (verViaje && perfil?.rol === 'CLIENTE') {
     return <RideFlow key={perfil.userId} passenger={{ ...perfil, token }} onBack={() => setVerViaje(false)} />
   }
   if (verViaje && perfil?.rol === 'CONDUCTOR') {
-    return <DriverDispatch key={perfil.userId} driver={{ ...perfil, token }} onBack={() => setVerViaje(false)} />
+    return <DriverDispatch key={perfil.userId} driver={{ ...perfil, token }} onSessionExpired={() => onLogout('Tu sesión terminó. Iniciá sesión de nuevo para compartir tu ubicación.')} onBack={() => setVerViaje(false)} />
   }
 
   return (
@@ -191,6 +201,11 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
                 <Route className="w-4 h-4" aria-hidden="true" /> {perfil.rol === 'CLIENTE' ? 'Pedir un viaje' : 'Abrir despacho'}
               </button>
             )}
+
+            {perfil.rol === 'CLIENTE' && <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <button className="btn-secondary" onClick={() => setVerReservas(true)}>Mis reservas</button>
+              <button className="btn-secondary" onClick={() => setVerHistorial(true)}>Historial de viajes</button>
+            </div>}
 
             <p className="eyebrow mt-10">Mis datos</p>
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -247,7 +262,7 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
             <p className="eyebrow mb-4">Cuentas externas</p>
             {vinculados.length === 0 ? (
               <p className="text-sm text-[var(--text-soft)]">
-                Ninguna: entraste con email y contraseña. Si entrás con Google, Auth0 o el proveedor de prueba, aparece acá.
+                Ninguna: entraste con email y contraseña. Si entrás con Google o Auth0, lo vas a ver acá.
               </p>
             ) : (
               <ul className="space-y-3 text-sm text-[var(--text-soft)]">

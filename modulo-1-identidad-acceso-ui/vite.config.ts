@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
     m6: env.FLOW_M6_URL || 'http://127.0.0.1:15000',
     'm6-cancelacion': env.FLOW_M6_CANCELACION_URL || 'http://127.0.0.1:15001',
     m8: env.FLOW_M8_URL || 'http://127.0.0.1:18000',
+    m9: env.FLOW_M9_URL || 'http://127.0.0.1:3000',
   }
   const proxy = Object.fromEntries(Object.entries(services).map(([service, target]) => {
     const prefix = `/flujo-api/${service}/`

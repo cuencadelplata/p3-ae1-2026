@@ -4,12 +4,13 @@ import RideMap from './RideMap'
 import TripCancellation from './TripCancellation'
 import TripPlanner from './TripPlanner'
 import type { Draft, PickMode } from './TripPlanner'
-import { destination, ensurePassenger, FlowError, origin, pollTrip, request } from '../rideFlowApi'
+import { destination, downloadReceipt, ensurePassenger, FlowError, origin, pollTrip, request } from '../rideFlowApi'
 import type { Account, Payment, QR, Receipt, RideRequest, Trip, TripRecord } from '../rideFlowApi'
-import { dispatchZone, distanceKm, fetchRoute, reversePlace } from '../places'
-import { cardEnabled, cardProblem, emptyCard, formatCardNumber, formatExpiry, mpPublicKey, tokenizeCard } from '../mercadoPago'
+import { distanceKm, fetchRoute, reversePlace } from '../places'
+import { cardEnabled, cardProblem, emptyCard, formatCardNumber, formatExpiry, tokenizeCard } from '../mercadoPago'
 import type { CardInput } from '../mercadoPago'
 import type { RouteInfo } from '../places'
+import TripClock from './TripClock'
 import './RideFlow.css'
 
 interface Journey {
@@ -30,9 +31,9 @@ function readDraft(key: string): Draft {
     const saved = JSON.parse(sessionStorage.getItem(key) ?? 'null') as Draft | null
     if (saved?.origin?.address && saved.destination?.address) return { ...saved, vehicleType: 'AUTO' }
   } catch {
-    // Un borrador ilegible vuelve al recorrido de prueba.
+    // Si no hay un borrador usable, el planificador vuelve a su encuadre inicial.
   }
-  return defaultDraft
+  return { ...defaultDraft, origin: { ...origin, address: '' }, destination: { ...destination, address: '' } }
 }
 
 const routeFromRide = (ride?: RideRequest): Draft | undefined => ride?.origin && ride.destination
@@ -40,9 +41,7 @@ const routeFromRide = (ride?: RideRequest): Draft | undefined => ride?.origin &&
   : undefined
 
 function draftProblem({ origin: from, destination: to }: Draft) {
-  if (distanceKm(dispatchZone.center, from) > dispatchZone.radiusKm) {
-    return `Los conductores de prueba esperan en el centro de Corrientes. Elegí un origen a menos de ${dispatchZone.radiusKm} km de ${dispatchZone.center.address}.`
-  }
+  if (!from.address || !to.address) return 'Elegí un origen y un destino.'
   if (distanceKm(from, to) < 0.1) return 'El destino tiene que estar a más de 100 metros del origen.'
   return ''
 }
@@ -122,6 +121,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null)
   const [routeLoading, setRouteLoading] = useState(true)
   const [locating, setLocating] = useState(false)
+  const [livePosition, setLivePosition] = useState<{ latitude: number; longitude: number }>()
   const { ride, trip, qr, payment, receipt } = journey
   const rideId = ride?.id
   const tripId = trip?.id
@@ -144,7 +144,11 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   const from = shown?.origin
   const to = shown?.destination
   useEffect(() => {
-    if (!from || !to) return
+    if (!from?.address || !to?.address) {
+      setRouteInfo(null)
+      setRouteLoading(false)
+      return
+    }
     const controller = new AbortController()
     setRouteLoading(true)
     const timer = window.setTimeout(() => {
@@ -156,7 +160,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
     return () => { window.clearTimeout(timer); controller.abort() }
     // Se recalcula sólo cuando cambian las coordenadas.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from?.latitude, from?.longitude, to?.latitude, to?.longitude])
+  }, [from?.latitude, from?.longitude, from?.address, to?.latitude, to?.longitude, to?.address])
 
   // Un clic en el mapa fija el punto elegido y busca su dirección, como en el front de M5.
   const pickOnMap = useCallback(async (latitude: number, longitude: number) => {
@@ -331,21 +335,18 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
     recordTransition(result.viaje.estado, result.qr)
   }
 
-  async function startTrip(id: string, code: string) {
-    const { viaje } = await request<{ viaje: Pick<Trip, 'estado'> }>('M6', `/api/viajes/${id}/iniciar`, { method: 'POST', token, body: { codigoVerificacion: code } })
-    recordTransition(viaje.estado)
-  }
-
   async function finish(id: string) {
+    if (!trip?.destinoConfirmadoAt) throw new Error('Esperá la confirmación de llegada del conductor.')
     // M6 le pide a M4 la distancia entre los puntos que eligió el pasajero.
-    const recorrido = journey.route ?? routeFromRide(ride) ?? defaultDraft
+    const recorrido = journey.route ?? routeFromRide(ride)
+    if (!recorrido) throw new Error('No pudimos recuperar el recorrido de este viaje. Volvé a abrirlo desde tu cuenta e intentá de nuevo.')
     // Tarjeta: primero Mercado Pago tokeniza los datos; M6 recibe el token y M7 autoriza el pago.
     const pago = method === 'tarjeta' ? await tokenizeCard(card, passenger.email) : undefined
     const result = await request<Payment>('M6', `/api/viajes/${id}/finalizacion`, {
       method: 'POST', token,
       body: {
         origen: recorrido.origin, destino: recorrido.destination, tipoVehiculo: recorrido.vehicleType.toLowerCase(),
-        horaFin: new Date().toISOString(), metodoPago: method,
+        horaFin: trip.destinoConfirmadoAt, metodoPago: method,
         ...(pago && { pago }),
       },
     })
@@ -394,6 +395,22 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   }
 
   const started = trip?.estado === 'EN_CURSO'
+  const trackingTripId = started && !trip?.destinoConfirmadoAt ? trip.id : undefined
+  const trackingStartedAt = trip?.iniciadoAt
+  useEffect(() => {
+    setLivePosition(undefined)
+    if (!trackingTripId || !trackingStartedAt) return
+    return pollTrip(async (signal) => {
+      try {
+        const point = await request<{ latitude: number; longitude: number; updatedAt: string }>('M4',
+          '/api/v1/trips/' + encodeURIComponent(trackingTripId) + '/driver-location', { token, signal })
+        if (!signal.aborted) setLivePosition(Date.parse(point.updatedAt) >= Date.parse(trackingStartedAt) ? point : undefined)
+      } catch {
+        if (!signal.aborted) setLivePosition(undefined)
+      }
+      return !signal.aborted
+    })
+  }, [trackingTripId, trackingStartedAt, token])
   const completed = trip?.estado === 'COMPLETADO'
   const replacingDriver = trip?.estado === 'CANCELADO' && trip.canceladoPor === 'conductor'
   const canceled = trip?.estado === 'CANCELADO'
@@ -462,11 +479,19 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
               </>}
 
               {trip && !checkingTrip && !started && !completed && !canceled && <>
-                <h2>{qr ? 'Validá el inicio' : 'Tu conductor está asignado'}</h2>
-                {qr && <div className="ride-qr"><img src={qr.qrDataUrl} alt="QR de verificación del viaje" /><p><QrCode size={16} aria-hidden="true" /> {qrExpired ? 'El QR venció.' : 'QR listo para validar.'}</p></div>}
-                {!qr || qrExpired
-                  ? <button className="btn-primary" disabled={locked} onClick={() => void run('Solicitando QR…', () => prepareStart(trip.id), ['EN_CURSO'])}>{qr ? 'Renovar QR' : 'Preparar inicio del viaje'}</button>
-                  : <button className="btn-primary" disabled={locked} onClick={() => void run('Validando QR…', () => startTrip(trip.id, qr.token), ['EN_CURSO'])}>Iniciar viaje</button>}
+                <h2>{qr && !qrExpired ? 'Mostrale el QR al conductor' : 'Confirmá el encuentro'}</h2>
+                {qr && !qrExpired
+                  ? <div className="ride-qr">
+                      <img src={qr.qrDataUrl} alt="QR de verificación del viaje" />
+                      <p><QrCode size={16} aria-hidden="true" /> El conductor debe validarlo para iniciar el viaje.</p>
+                      <label>Código alternativo
+                        <input className="input-field" value={qr.token} readOnly onFocus={(event) => event.currentTarget.select()} />
+                      </label>
+                    </div>
+                  : <>
+                      <p>{qrExpired ? 'El código venció. Generá otro para el conductor.' : 'Generá el código cuando estés con tu conductor.'}</p>
+                      <button className="btn-primary" disabled={locked} onClick={() => void run('Solicitando QR…', () => prepareStart(trip.id), ['EN_CURSO'])}>{qr ? 'Renovar QR' : 'Mostrar QR de inicio'}</button>
+                    </>}
               </>}
 
               {trip && !checkingTrip && ['SOLICITADO', 'CONDUCTOR_EN_CAMINO'].includes(trip.estado) &&
@@ -475,7 +500,9 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
 
               {trip && !checkingTrip && started && <>
                 <h2>Viaje en curso</h2>
-                <form className="ride-form" onSubmit={(event) => { event.preventDefault(); void run('Calculando la tarifa y registrando el pago…', () => finish(trip.id), []) }}>
+                <TripClock startedAt={trip.iniciadoAt} endedAt={trip.destinoConfirmadoAt} />
+                {!trip.destinoConfirmadoAt && <p role="status">{livePosition ? 'Seguí la ubicación del auto en el mapa.' : 'Esperando la ubicación del conductor.'} El pago se habilita cuando el conductor confirma la llegada.</p>}
+                {trip.destinoConfirmadoAt && <form className="ride-form" onSubmit={(event) => { event.preventDefault(); void run('Calculando la tarifa y registrando el pago…', () => finish(trip.id), []) }}>
                   <fieldset className="ride-pay-methods" disabled={locked}>
                     <legend>Medio de pago</legend>
                     {[
@@ -493,7 +520,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
                   {method === 'transferencia' && <p className="ride-muted">Transferí el importe al conductor al llegar. M7 registra el pago como pendiente hasta que se acredite.</p>}
                   {method === 'tarjeta' && <div className="ride-card">
                     <label className="ride-card-wide">Número de tarjeta
-                      <input className="input-field" inputMode="numeric" autoComplete="cc-number" placeholder="4509 9535 6623 3704" value={card.number}
+                      <input className="input-field" inputMode="numeric" autoComplete="cc-number" placeholder="Ingresá el número de tu tarjeta" value={card.number}
                         onChange={(event) => setCardField('number', formatCardNumber(event.target.value))} />
                     </label>
                     <label>Vencimiento
@@ -505,26 +532,25 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
                         onChange={(event) => setCardField('cvv', event.target.value.replace(/\D/g, ''))} />
                     </label>
                     <label className="ride-card-wide">Titular (como figura en la tarjeta)
-                      <input className="input-field" autoComplete="cc-name" placeholder="APRO" value={card.holder}
+                      <input className="input-field" autoComplete="cc-name" placeholder="Nombre y apellido" value={card.holder}
                         onChange={(event) => setCardField('holder', event.target.value.toUpperCase())} />
                     </label>
                     <label className="ride-card-wide">DNI del titular
-                      <input className="input-field" inputMode="numeric" placeholder="12345678" maxLength={8} value={card.dni}
+                      <input className="input-field" inputMode="numeric" placeholder="DNI sin puntos" maxLength={8} value={card.dni}
                         onChange={(event) => setCardField('dni', event.target.value.replace(/\D/g, ''))} />
                     </label>
-                    <p className="ride-muted ride-card-wide"><LockKeyhole size={13} aria-hidden="true" /> {mpPublicKey
-                      ? 'Los datos van directo a Mercado Pago, que devuelve un token. Nuestros servicios nunca ven el número de la tarjeta.'
-                      : 'Modo simulador: no se contacta a Mercado Pago ni se hace un cargo.'}</p>
+                    <p className="ride-muted ride-card-wide"><LockKeyhole size={13} aria-hidden="true" /> Los datos de la tarjeta se envían directamente a Mercado Pago para tokenizar el pago.</p>
                   </div>}
                   <button className="btn-primary" disabled={locked || (method === 'tarjeta' && Boolean(cardProblem(card)))} type="submit">
                     {method === 'tarjeta' ? 'Pagar y finalizar viaje' : 'Finalizar y registrar pago'}
                   </button>
                   {method === 'tarjeta' && card.number && cardProblem(card) && <p className="ride-muted">{cardProblem(card)}</p>}
-                </form>
+                </form>}
               </>}
 
               {completed && trip && <>
                 <h2>Viaje finalizado</h2>
+                {trip.iniciadoAt && trip.completadoAt && <TripClock startedAt={trip.iniciadoAt} endedAt={trip.completadoAt} />}
                 {payment && <>
                   <div className="ride-total"><CreditCard size={22} aria-hidden="true" /><strong>{money(payment.viaje.total, payment.viaje.moneda)}</strong></div>
                   <p>{payment.estadoPago === 'autorizado'
@@ -535,7 +561,10 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
                   {payment && <><dt>Identificador del pago</dt><dd>{payment.paymentId}</dd></>}
                   <dt>Identificador del viaje</dt><dd>{trip.id}</dd>
                 </dl>
-                {receipt ? <p className="alert-success">Comprobante emitido {receipt.receiptNumber} · Patente {receipt.driver.vehicle.plate}</p>
+                {receipt ? <>
+                    <p className="alert-success">Comprobante {receipt.receiptNumber} · Patente {receipt.driver.vehicle.plate}</p>
+                    <button className="btn-primary" disabled={locked} onClick={() => void run('Descargando comprobante…', () => downloadReceipt(trip.id, receipt.receiptNumber, token))}>Descargar PDF</button>
+                  </>
                   : <button className="btn-primary" disabled={locked} onClick={() => void run('Consultando comprobante…', () => readReceipt(trip.id))}>Ver comprobante</button>}
                 {requestSeconds > 0 && <p className="ride-muted">Podés solicitar otro viaje con esta cuenta en {requestSeconds} s.</p>}
                 <button className="btn-ghost" disabled={locked || requestSeconds > 0} onClick={reset}>Hacer otro viaje</button>
@@ -551,7 +580,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
               </>}
             </section>
           </div>
-          <RideMap pickup={shown?.origin} dropoff={shown?.destination} routeCoords={routeInfo?.coords}
+          <RideMap showRoute={Boolean(from?.address && to?.address)} showLocation={Boolean(from?.address)} pickup={shown?.origin} dropoff={shown?.destination} routeCoords={routeInfo?.coords} vehiclePosition={trackingTripId ? livePosition : undefined}
             onPick={planning && pickMode && !locked ? (latitude, longitude) => void pickOnMap(latitude, longitude) : undefined}
             pickLabel={pickMode === 'origin' ? 'Tocá el mapa para marcar el origen' : 'Tocá el mapa para marcar el destino'} />
         </div>

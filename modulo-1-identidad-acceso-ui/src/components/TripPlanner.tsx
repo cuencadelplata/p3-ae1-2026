@@ -119,7 +119,7 @@ export default function TripPlanner({ draft, onChange, route, routeLoading, pick
 }) {
   const vehicles: Array<{ type: VehicleType; label: string; detail: string; icon: LucideIcon; available: boolean }> = [
     { type: 'AUTO', label: 'Automóvil', detail: 'Hasta 4 personas', icon: CarFront, available: true },
-    { type: 'MOTO', label: 'Moto', detail: 'Sin conductores de prueba', icon: Bike, available: false },
+    { type: 'MOTO', label: 'Moto', detail: 'Por ahora no disponible', icon: Bike, available: false },
   ]
 
   return (
