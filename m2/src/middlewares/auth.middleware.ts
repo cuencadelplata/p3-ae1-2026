@@ -81,6 +81,23 @@ export function requireInternalApiKey(): RequestHandler {
   };
 }
 
+/**
+ * Rutas que llama Soporte (M8): exige `X-Secret-Key` igual a SOPORTE_SECRET_KEY, la misma
+ * clave compartida que M2 envía al consultar penalizaciones. Sin clave configurada → 401.
+ */
+export function requireSoporteKey(): RequestHandler {
+  return (req, res, next) => {
+    if (matchesSecret(req.header('X-Secret-Key'), process.env.SOPORTE_SECRET_KEY)) {
+      next();
+      return;
+    }
+    res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Se requiere la clave de Soporte en el header X-Secret-Key'
+    });
+  };
+}
+
 export function requireAuthOrServiceKey(): RequestHandler {
   const userAuth = requireAuth();
   return (req, res, next) => {

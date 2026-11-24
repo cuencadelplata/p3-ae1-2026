@@ -207,6 +207,8 @@ describe('PUT /v1/customers/:id/status (RF-2.5)', () => {
   beforeEach(() => {
     mockAuthOk();
     mockOwnedProfile();
+    // El service lee el estado actual para no dejar salir de un bloqueo automático
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockResolvedValue(savedStatus());
   });
   afterEach(() => vi.restoreAllMocks());
 
@@ -263,6 +265,21 @@ describe('PUT /v1/customers/:id/status (RF-2.5)', () => {
       .send({ status: 'BLOQUEADO_TEMPORAL', reason: 'Solicitud del admin' });
     expect(res.status).toBe(200);
     expect(res.body.blockOrigin).toBe('MANUAL');
+  });
+
+  it('con bloqueo automático vigente → 409 CuentaBloqueada y no cambia el estado', async () => {
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockResolvedValue(
+      savedStatus({ status: 'BLOQUEADO_PERMANENTE', blockOrigin: 'AUTOMATICO' })
+    );
+    const update = vi.spyOn(accountStatusRepository, 'updateAccountStatus');
+
+    const res = await request(app)
+      .put('/v1/customers/cust_823a7b9c/status')
+      .set('Authorization', TOKEN)
+      .send({ status: 'ACTIVO', reason: 'Quiero volver a viajar' });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('CuentaBloqueada');
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('cliente inexistente → 404 CustomerNotFound', async () => {
@@ -365,5 +382,91 @@ describe('GET /v1/customers/:id/trips (RF-2.3)', () => {
       .set('Authorization', TOKEN)
       .timeout(2000);
     expect(res.status).toBe(503);
+  });
+});
+
+// ─── POST /internal/usuarios/:userId/desbloqueo (revisión manual de M8) ───────
+
+describe('POST /internal/usuarios/:userId/desbloqueo', () => {
+  const KEY = 'clave-soporte-test';
+  const body = { motivo: 'Cancelación justificada', operador: 'op-17', ticketId: 'tick_1' };
+  let claveAnterior: string | undefined;
+
+  beforeEach(() => {
+    claveAnterior = process.env.SOPORTE_SECRET_KEY;
+    process.env.SOPORTE_SECRET_KEY = KEY;
+    vi.spyOn(customerRepository, 'findByUserId').mockResolvedValue(activeCustomer());
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (claveAnterior === undefined) delete process.env.SOPORTE_SECRET_KEY;
+    else process.env.SOPORTE_SECRET_KEY = claveAnterior;
+  });
+
+  it('sin X-Secret-Key → 401', async () => {
+    const res = await request(app).post('/internal/usuarios/12/desbloqueo').send(body);
+    expect(res.status).toBe(401);
+  });
+
+  it('un Bearer de usuario no sirve → 401', async () => {
+    const res = await request(app)
+      .post('/internal/usuarios/12/desbloqueo')
+      .set('Authorization', TOKEN)
+      .send(body);
+    expect(res.status).toBe(401);
+  });
+
+  it('userId no numérico → 400', async () => {
+    const res = await request(app)
+      .post('/internal/usuarios/abc/desbloqueo')
+      .set('X-Secret-Key', KEY)
+      .send(body);
+    expect(res.status).toBe(400);
+  });
+
+  it('sin operador → 400', async () => {
+    const res = await request(app)
+      .post('/internal/usuarios/12/desbloqueo')
+      .set('X-Secret-Key', KEY)
+      .send({ motivo: 'Cancelación justificada' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('ValidationError');
+  });
+
+  it('bloqueo permanente → 200 ACTIVO con reviewedAt', async () => {
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockResolvedValue(
+      savedStatus({ status: 'BLOQUEADO_PERMANENTE', blockOrigin: 'AUTOMATICO' })
+    );
+    const update = vi.spyOn(accountStatusRepository, 'updateAccountStatus').mockImplementation(
+      async (_id, dto) => savedStatus({ status: dto.status, reason: dto.reason, reviewedAt: dto.reviewedAt })
+    );
+
+    const res = await request(app)
+      .post('/internal/usuarios/12/desbloqueo')
+      .set('X-Secret-Key', KEY)
+      .send(body);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('ACTIVO');
+    expect(res.body.reviewedAt).toBeDefined();
+    expect(update).toHaveBeenCalledWith('cust_823a7b9c', expect.objectContaining({ status: 'ACTIVO' }));
+  });
+
+  it('userId sin perfil → 404', async () => {
+    vi.spyOn(customerRepository, 'findByUserId').mockResolvedValue(null);
+    const res = await request(app)
+      .post('/internal/usuarios/999/desbloqueo')
+      .set('X-Secret-Key', KEY)
+      .send(body);
+    expect(res.status).toBe(404);
+  });
+
+  it('cuenta dada de baja → 409', async () => {
+    vi.spyOn(accountStatusRepository, 'findAccountStatus').mockResolvedValue(savedStatus({ status: 'INACTIVO' }));
+    const res = await request(app)
+      .post('/internal/usuarios/12/desbloqueo')
+      .set('X-Secret-Key', KEY)
+      .send(body);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('CuentaInactiva');
   });
 });

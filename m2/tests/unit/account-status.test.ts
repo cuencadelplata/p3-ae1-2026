@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { calcularEstadoAutomatico, AccountStatusService } from '../../src/services/account-status.service.js';
+import {
+  calcularEstadoAutomatico,
+  contarPenalizacionesSinRevisar,
+  AccountStatusService,
+  CuentaBloqueadaError,
+  CuentaInactivaError
+} from '../../src/services/account-status.service.js';
+import { UserIdSchema } from '../../src/types/customer.js';
 import { ServiceUnavailableError } from '../../src/errors/service-unavailable.error.js';
 import type { AccountStatusResponse } from '../../src/types/customer.js';
 
@@ -20,11 +27,14 @@ function makeRepo(statusRow: AccountStatusResponse | null = savedStatus()) {
   return {
     findAccountStatus: vi.fn().mockResolvedValue(statusRow),
     // El service lee el userId del perfil para consultar Soporte
+    findByUserId: vi.fn().mockResolvedValue(
+      statusRow ? { customerId: statusRow.customerId, userId: 12, preferences: { preferredVehicleType: 'auto', notificationChannel: 'email' }, status: statusRow.status, createdAt: '2026-09-01T00:00:00Z' } : null
+    ),
     findById: vi.fn().mockResolvedValue(
       statusRow ? { customerId: statusRow.customerId, userId: 12, preferences: { preferredVehicleType: 'auto', notificationChannel: 'email' }, status: statusRow.status, createdAt: '2026-09-01T00:00:00Z' } : null
     ),
     updateAccountStatus: vi.fn().mockImplementation(async (_id: string, dto: any) =>
-      savedStatus({ status: dto.status, reason: dto.reason, blockOrigin: dto.blockOrigin })
+      savedStatus({ status: dto.status, reason: dto.reason, blockOrigin: dto.blockOrigin, reviewedAt: dto.reviewedAt })
     )
   } as any;
 }
@@ -196,5 +206,131 @@ describe('AccountStatusService.updateAccountStatus — baja y bloqueo manual', (
     const svc = new AccountStatusService(repo, repo, makeSoporte(0));
     const result = await svc.updateAccountStatus('cust_xyz', { status: 'INACTIVO', reason: 'Baja' });
     expect(result).toBeNull();
+  });
+});
+
+// ─── Bloqueo permanente y revisión manual (contrato con M8) ───────────────────
+
+function penalizacion(fecha: string) {
+  return { ticketId: 't', tripId: 'v', motivo: 'Cancelación tardía', fecha };
+}
+
+function makeSoporteCon(fechas: string[]) {
+  return {
+    getPenalizaciones: vi.fn().mockResolvedValue({
+      userId: 12, total: fechas.length, penalizaciones: fechas.map(penalizacion)
+    })
+  } as any;
+}
+
+describe('contarPenalizacionesSinRevisar', () => {
+  const respuesta = {
+    userId: 12,
+    total: 3,
+    penalizaciones: [
+      penalizacion('2026-11-01T00:00:00Z'),
+      penalizacion('2026-11-10T00:00:00Z'),
+      penalizacion('2026-11-20T00:00:00Z')
+    ]
+  };
+
+  it('sin revisión previa → usa el total de Soporte', () => {
+    expect(contarPenalizacionesSinRevisar(respuesta)).toBe(3);
+  });
+
+  it('con revisión → solo cuenta las posteriores', () => {
+    expect(contarPenalizacionesSinRevisar(respuesta, '2026-11-15T00:00:00Z')).toBe(1);
+  });
+
+  it('una fecha ilegible se cuenta igual', () => {
+    const conFechaRara = { ...respuesta, penalizaciones: [penalizacion('ayer')] , total: 1 };
+    expect(contarPenalizacionesSinRevisar(conFechaRara, '2026-11-15T00:00:00Z')).toBe(1);
+  });
+});
+
+describe('AccountStatusService — bloqueo permanente', () => {
+  it('BLOQUEADO_PERMANENTE no se levanta aunque las penalizaciones expiren', async () => {
+    const repo = makeRepo(savedStatus({ status: 'BLOQUEADO_PERMANENTE', blockOrigin: 'AUTOMATICO' }));
+    const soporte = makeSoporte(0);
+    const svc = new AccountStatusService(repo, repo, soporte);
+    const result = await svc.getAccountStatus('cust_abc');
+    expect(result?.status).toBe('BLOQUEADO_PERMANENTE');
+    expect(repo.updateAccountStatus).not.toHaveBeenCalled();
+  });
+
+  it('BLOQUEADO_PERMANENTE no baja a TEMPORAL con 2 penalizaciones', async () => {
+    const repo = makeRepo(savedStatus({ status: 'BLOQUEADO_PERMANENTE', blockOrigin: 'AUTOMATICO' }));
+    const svc = new AccountStatusService(repo, repo, makeSoporte(2));
+    const result = await svc.getAccountStatus('cust_abc');
+    expect(result?.status).toBe('BLOQUEADO_PERMANENTE');
+    expect(repo.updateAccountStatus).not.toHaveBeenCalled();
+  });
+
+  it('tras una revisión, las 3 penalizaciones anteriores no vuelven a bloquear', async () => {
+    const repo = makeRepo(savedStatus({ status: 'ACTIVO', reviewedAt: '2026-11-24T12:00:00Z' }));
+    const soporte = makeSoporteCon(['2026-11-01T00:00:00Z', '2026-11-10T00:00:00Z', '2026-11-20T00:00:00Z']);
+    const svc = new AccountStatusService(repo, repo, soporte);
+    const result = await svc.getAccountStatus('cust_abc');
+    expect(result?.status).toBe('ACTIVO');
+    expect(repo.updateAccountStatus).not.toHaveBeenCalled();
+  });
+
+  it('tras una revisión, 2 penalizaciones nuevas → BLOQUEADO_TEMPORAL', async () => {
+    const repo = makeRepo(savedStatus({ status: 'ACTIVO', reviewedAt: '2026-11-24T12:00:00Z' }));
+    const soporte = makeSoporteCon([
+      '2026-11-01T00:00:00Z', '2026-11-10T00:00:00Z', '2026-11-20T00:00:00Z',
+      '2026-11-25T00:00:00Z', '2026-11-26T00:00:00Z'
+    ]);
+    const svc = new AccountStatusService(repo, repo, soporte);
+    const result = await svc.getAccountStatus('cust_abc');
+    expect(result?.status).toBe('BLOQUEADO_TEMPORAL');
+  });
+});
+
+describe('AccountStatusService.desbloquearPorRevision', () => {
+  const dto = { motivo: 'Cancelación justificada', operador: 'op-17', ticketId: 'tick_1' };
+  const userId = UserIdSchema.parse(12);
+
+  it('levanta un BLOQUEADO_PERMANENTE y registra la fecha de revisión', async () => {
+    const repo = makeRepo(savedStatus({ status: 'BLOQUEADO_PERMANENTE', blockOrigin: 'AUTOMATICO' }));
+    const svc = new AccountStatusService(repo, repo, makeSoporte(3));
+    const result = await svc.desbloquearPorRevision(userId, dto);
+    expect(result?.status).toBe('ACTIVO');
+    const [[, guardado]] = repo.updateAccountStatus.mock.calls;
+    expect(guardado.blockOrigin).toBeUndefined();
+    expect(Date.parse(guardado.reviewedAt)).not.toBeNaN();
+    expect(guardado.reason).toContain('op-17');
+    expect(guardado.reason).toContain('tick_1');
+  });
+
+  it('cuenta ACTIVO → la devuelve sin cambios (idempotente)', async () => {
+    const repo = makeRepo(savedStatus({ status: 'ACTIVO' }));
+    const svc = new AccountStatusService(repo, repo, makeSoporte(0));
+    const result = await svc.desbloquearPorRevision(userId, dto);
+    expect(result?.status).toBe('ACTIVO');
+    expect(repo.updateAccountStatus).not.toHaveBeenCalled();
+  });
+
+  it('cuenta INACTIVO → CuentaInactivaError', async () => {
+    const repo = makeRepo(savedStatus({ status: 'INACTIVO' }));
+    const svc = new AccountStatusService(repo, repo, makeSoporte(0));
+    await expect(svc.desbloquearPorRevision(userId, dto)).rejects.toBeInstanceOf(CuentaInactivaError);
+  });
+
+  it('userId sin perfil → null', async () => {
+    const repo = makeRepo(null);
+    const svc = new AccountStatusService(repo, repo, makeSoporte(0));
+    expect(await svc.desbloquearPorRevision(userId, dto)).toBeNull();
+  });
+});
+
+describe('AccountStatusService.updateAccountStatus — con bloqueo automático', () => {
+  it('el cliente no puede salir de un bloqueo automático por PUT', async () => {
+    const repo = makeRepo(savedStatus({ status: 'BLOQUEADO_PERMANENTE', blockOrigin: 'AUTOMATICO' }));
+    const svc = new AccountStatusService(repo, repo, makeSoporte(0));
+    await expect(
+      svc.updateAccountStatus('cust_abc', { status: 'ACTIVO', reason: 'Quiero volver' })
+    ).rejects.toBeInstanceOf(CuentaBloqueadaError);
+    expect(repo.updateAccountStatus).not.toHaveBeenCalled();
   });
 });
