@@ -273,3 +273,32 @@ Verificación del 24 de noviembre de 2026: tres pruebas ejecutadas dentro de
 Docker, tres aprobadas, cero fallidas y cero omitidas (2,81 segundos).
 La prueba de cancelación usa M1, M4, M5, M6, Redis, PostgreSQL y RabbitMQ;
 no comprueba cargos por cancelación ni entrega de notificaciones de M8.
+
+### Geocodificación integrada con M2
+
+La interfaz actual de M2 muestra perfiles e historial, no una pantalla para
+solicitar viajes. Su conexión directa con M4 es el servicio de geocodificación:
+`GET /api/v1/geocodificacion?q=...` de M2 llama a `POST /api/v1/geocode` de M4
+y adapta la respuesta a `{data: [{direccion, latitud, longitud}]}`.
+
+Con M1, M2 (gateway, API y base) y M4 levantados en el Compose general, ejecutar
+desde la raíz:
+
+```bash
+docker compose -f docker-compose.yml -f modulo-4/compose.e2e-general.yml \
+  --profile tests run --rm --no-deps m4-e2e-m2
+```
+
+El caso `tests/e2e/geocoding-m2.e2e.mjs` registra e inicia sesión de un pasajero
+en M1, comprueba que M2 rechaza consultas sin token y compara las coordenadas
+del Obelisco consultadas directamente en M4 con las devueltas por M2. Exige
+`provider: EXTERNAL_HTTP`: no acepta el geocodificador simulado. Requiere salida
+a Internet y disponibilidad del proveedor público; el timeout de M2 es de dos
+segundos. Una falla externa puede hacer fallar esta comprobación aunque la
+lógica local no haya cambiado. Se ejecuta por separado del ciclo de viajes.
+
+Verificado el 24 de noviembre de 2026 con la imagen publicada de M2 y el
+proveedor externo de M4: una prueba aprobada, cero fallidas y cero omitidas
+(2,24 segundos). Esta verificación es de API; no automatiza el navegador ni
+comprueba una pantalla de solicitud de viajes. La cuenta de prueba permanece
+en M1. Las funciones comunes de petición y login están en `tests/e2e/helpers.mjs`.
