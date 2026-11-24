@@ -241,45 +241,15 @@ async function publicar(evento: EventoSalida): Promise<void> {
 
 /**
  * Publica los eventos pendientes del outbox y los marca como publicados.
- * Es seguro llamarla en paralelo: las ejecuciones se encadenan.
+ * Es seguro llamarla en paralelo: dentro de una instancia las ejecuciones se encadenan, y entre
+ * instancias (m6-viajes escalado detrás del balanceador) cada evento se toma con
+ * FOR UPDATE SKIP LOCKED, así que lo publica una sola instancia.
  */
 export function despacharEventosPendientes(limite = 50): Promise<number> {
     despachando ??= (async () => {
         let publicados = 0;
         try {
-            const { rows } = await pool.query(
-                `SELECT message_id, viaje_id, exchange, routing_key, payload, traceparent
-                 FROM viaje_eventos_outbox
-                 WHERE publicado_at IS NULL
-                 ORDER BY creado_at, message_id
-                 LIMIT $1`,
-                [limite],
-            );
-            for (const row of rows) {
-                // Continúa la traza de la solicitud que finalizó el viaje: la instrumentación de
-                // amqplib crea el span de publicación como hijo e inyecta el traceparent en el mensaje.
-                const contextoOrigen = row.traceparent
-                    ? propagation.extract(context.active(), { traceparent: row.traceparent })
-                    : context.active();
-                await context.with(contextoOrigen, () => conContexto(undefined, async () => {
-                    await publicar({
-                        messageId: row.message_id,
-                        exchange: row.exchange,
-                        routingKey: row.routing_key,
-                        payload: row.payload,
-                    });
-                    await pool.query(
-                        'UPDATE viaje_eventos_outbox SET publicado_at = now() WHERE message_id = $1',
-                        [row.message_id],
-                    );
-                    eventosPublicados.inc({ exchange: row.exchange, routing_key: row.routing_key });
-                    logger.info({
-                        tripId: row.viaje_id,
-                        messageId: row.message_id,
-                        exchange: row.exchange,
-                        routingKey: row.routing_key,
-                    }, 'Evento de viaje publicado');
-                }));
+            while (publicados < limite && await publicarSiguientePendiente()) {
                 publicados += 1;
             }
         } catch (error) {
@@ -294,6 +264,62 @@ export function despacharEventosPendientes(limite = 50): Promise<number> {
         return publicados;
     })();
     return despachando;
+}
+
+/**
+ * Toma el evento pendiente más antiguo que ninguna otra instancia tenga bloqueado, lo publica y lo
+ * marca como publicado, todo en una transacción. Devuelve false si no quedaba ninguno libre.
+ * Si la publicación falla, el ROLLBACK libera el evento y se reintenta en la próxima pasada.
+ */
+async function publicarSiguientePendiente(): Promise<boolean> {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const { rows } = await client.query(
+            `SELECT message_id, viaje_id, exchange, routing_key, payload, traceparent
+             FROM viaje_eventos_outbox
+             WHERE publicado_at IS NULL
+             ORDER BY creado_at, message_id
+             LIMIT 1
+             FOR UPDATE SKIP LOCKED`,
+        );
+        const row = rows[0];
+        if (!row) {
+            await client.query('COMMIT');
+            return false;
+        }
+        // Continúa la traza de la solicitud que originó el evento: la instrumentación de
+        // amqplib crea el span de publicación como hijo e inyecta el traceparent en el mensaje.
+        const contextoOrigen = row.traceparent
+            ? propagation.extract(context.active(), { traceparent: row.traceparent })
+            : context.active();
+        await context.with(contextoOrigen, () => conContexto(undefined, async () => {
+            await publicar({
+                messageId: row.message_id,
+                exchange: row.exchange,
+                routingKey: row.routing_key,
+                payload: row.payload,
+            });
+            await client.query(
+                'UPDATE viaje_eventos_outbox SET publicado_at = now() WHERE message_id = $1',
+                [row.message_id],
+            );
+        }));
+        await client.query('COMMIT');
+        eventosPublicados.inc({ exchange: row.exchange, routing_key: row.routing_key });
+        logger.info({
+            tripId: row.viaje_id,
+            messageId: row.message_id,
+            exchange: row.exchange,
+            routingKey: row.routing_key,
+        }, 'Evento de viaje publicado');
+        return true;
+    } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        throw error;
+    } finally {
+        client.release();
+    }
 }
 
 export async function cerrarPublicador(): Promise<void> {

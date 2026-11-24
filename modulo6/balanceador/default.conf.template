@@ -1,0 +1,35 @@
+# Balanceador de m6-viajes (nginx).
+#
+# Toma el nombre y el puerto que antes tenía la API (m6-viajes:3000 en el stack común,
+# viajes:3000 en modulo6/docker-compose.yml), así que los demás módulos no cambian su URL.
+# Reparte las peticiones entre todas las instancias del servicio ${M6_UPSTREAM}, que se
+# escala con `docker compose up --scale <servicio>=N`.
+#
+# El nombre se resuelve con el DNS interno de Docker (127.0.0.11) en cada petición y con
+# validez de 5 s: si se agregan o quitan instancias, nginx las ve sin reiniciarse.
+# La imagen oficial de nginx reemplaza ${M6_UPSTREAM} al arrancar (envsubst).
+
+resolver 127.0.0.11 valid=5s ipv6=off;
+
+server {
+    listen 3000;
+
+    location / {
+        set $m6_upstream http://${M6_UPSTREAM};
+        proxy_pass $m6_upstream;
+
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 60s;
+        # Si una instancia no responde al conectar, prueba con otra.
+        proxy_next_upstream error timeout;
+
+        # Qué instancia atendió la petición (para la demo y las pruebas de carga).
+        add_header X-M6-Instancia $upstream_addr always;
+    }
+}

@@ -1,6 +1,6 @@
 # Dependencias externas de prueba para recorrer todos los RF de M6 sin otros repos.
 services:
-  viajes:
+  viajes-app:
     environment:
       M3_URL: http://m3-e2e-test:3000
       M4_URL: http://m4-e2e-test:3000/api/v1
