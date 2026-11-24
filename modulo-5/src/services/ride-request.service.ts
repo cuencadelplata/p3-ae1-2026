@@ -1698,6 +1698,12 @@ export class RideRequestService {
       }
     }
 
+    // Persistir la reapertura antes de aceptar nuevas ofertas. La asignación anterior
+    // dejó un candado de 30 s: ya no representa una asignación vigente.
+    await this.dbService.saveRideRequest(request);
+    await this.redisService.saveRideRequest(request, 86400);
+    await this.redisService.releaseAssignmentLock(requestId);
+
     // 3. Buscar nuevos candidatos excluyendo al conductor que canceló
     try {
       const candidatesResult = await this.searchCandidatesForRequest(requestId, clientId, {

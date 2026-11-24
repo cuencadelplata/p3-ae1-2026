@@ -802,6 +802,11 @@ components:
         conductorId:
           type: string
           nullable: true
+        canceladoPor:
+          type: string
+          nullable: true
+          enum: [cliente, conductor, null]
+          description: Actor que canceló el viaje; conductor permite retomar el despacho de M5.
         estado:
           $ref: '#/components/schemas/EstadoViaje'
     AsignarConductorRequest:

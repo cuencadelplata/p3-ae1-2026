@@ -33,6 +33,7 @@ export interface Offer {
   estimatedFare: { amount: number; currency: string; estimatedDistanceKm: number; estimatedDurationMin: number }
 }
 export interface Trip {
+  canceladoPor?: 'cliente' | 'conductor' | null
   id: string
   rideRequestId: string
   conductorId: string
