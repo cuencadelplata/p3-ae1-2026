@@ -3,6 +3,7 @@ import request from "supertest";
 import app from "../../src/app";
 import { initDatabase } from "../../src/config/database";
 import { updateUserStatus } from "../../src/repositories/user.repository";
+import { OAuth2Service } from "../../src/services/oauth2/oauth2.service";
 
 describe("IntegraciÃ³n API: RF-1.5 IntegraciÃ³n EstÃ¡ndar OAuth2 / OpenID Connect", () => {
     beforeAll(() => {
@@ -172,6 +173,49 @@ describe("IntegraciÃ³n API: RF-1.5 IntegraciÃ³n EstÃ¡ndar OAuth2 / OpenID 
 
             expect(response.status).toBe(400);
             expect(response.body.code).toBe("invalid_state");
+        });
+    });
+
+    describe("Rol OPERADOR: no se puede obtener por OAuth2", () => {
+        it("GET /auth/oauth2/authorize con role=OPERADOR responde 400 invalid_role", async () => {
+            const response = await request(app)
+                .get("/auth/oauth2/authorize")
+                .query({ provider: "MOCK", role: "OPERADOR" });
+
+            expect(response.status).toBe(400);
+            expect(response.body.code).toBe("invalid_role");
+            expect(response.body.state).toBeUndefined();
+        });
+
+        it("con redirect=true tampoco redirige al proveedor", async () => {
+            const response = await request(app)
+                .get("/auth/oauth2/authorize")
+                .query({ provider: "MOCK", role: "operador", redirect: "true" });
+
+            expect(response.status).toBe(400);
+            expect(response.headers.location).toBeUndefined();
+        });
+
+        it("aunque llegue un state firmado con OPERADOR, el usuario nuevo se crea como CLIENTE", async () => {
+            const db = initDatabase();
+            db.prepare("DELETE FROM oauth2_providers WHERE provider_name = 'MOCK'").run();
+            db.prepare("DELETE FROM usuarios WHERE email = 'usuario.oauth2@movilidad-urbana.test'").run();
+
+            // Simula un state emitido antes del arreglo (sigue firmado por M1).
+            const state = OAuth2Service.generateState("MOCK", "OPERADOR");
+
+            const response = await request(app)
+                .get("/auth/oauth2/callback")
+                .query({ code: "mock_auth_code_operador", state, provider: "MOCK" });
+
+            expect(response.status).toBe(200);
+            expect(response.body.usuario.rol).toBe("CLIENTE");
+
+            const validacion = await request(app)
+                .get("/auth/validar-identidad-y-rol")
+                .set("Authorization", `Bearer ${response.body.token}`);
+
+            expect(validacion.body.role).toBe("CLIENTE");
         });
     });
 });

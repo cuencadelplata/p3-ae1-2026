@@ -33,11 +33,42 @@ describe("OAuth2Service (Criptografía y Flujo Base)", () => {
     });
 
     it("debe iniciar autorización retornando authorizationUrl, state y verifier", () => {
-        const authData = OAuth2Service.initiateAuthorization("MOCK", "OPERADOR");
+        const authData = OAuth2Service.initiateAuthorization("MOCK", "CONDUCTOR");
 
         expect(authData.authorizationUrl).toContain("state=");
         expect(authData.state).toBeDefined();
         expect(authData.provider).toBe("MOCK");
         expect(authData.codeVerifier).toBeDefined();
+    });
+});
+
+describe("OAuth2Service: rol que se puede pedir por OAuth2", () => {
+    function rolDelState(rawRole?: string): string | undefined {
+        const { state } = OAuth2Service.initiateAuthorization("MOCK", rawRole);
+        return OAuth2Service.verifyState(state).role;
+    }
+
+    it("acepta CLIENTE y CONDUCTOR, sin importar mayúsculas ni espacios", () => {
+        expect(rolDelState("CLIENTE")).toBe("CLIENTE");
+        expect(rolDelState(" conductor ")).toBe("CONDUCTOR");
+    });
+
+    it("sin rol o con un rol desconocido usa CLIENTE", () => {
+        expect(rolDelState()).toBe("CLIENTE");
+        expect(rolDelState("ADMIN")).toBe("CLIENTE");
+    });
+
+    it("rechaza OPERADOR con 400 invalid_role (en cualquier variante de mayúsculas)", () => {
+        for (const rol of ["OPERADOR", "operador", " Operador "]) {
+            let error: unknown;
+            try {
+                OAuth2Service.initiateAuthorization("MOCK", rol);
+            } catch (e) {
+                error = e;
+            }
+            expect(error).toBeInstanceOf(OAuth2Error);
+            expect((error as OAuth2Error).statusCode).toBe(400);
+            expect((error as OAuth2Error).code).toBe("invalid_role");
+        }
     });
 });
