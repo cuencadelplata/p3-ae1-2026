@@ -59,12 +59,6 @@ const nombreProveedor = (p: string) =>
 const roleLabel = (rol: string) =>
   ({ CLIENTE: 'Cliente', CONDUCTOR: 'Conductor', OPERADOR: 'Operador' } as Record<string, string>)[rol] || rol
 
-function Fuente({ texto }: { texto: string }) {
-  return (
-    <span className="font-mono text-[10px] tracking-normal normal-case text-[var(--text-dim)]">{texto}</span>
-  )
-}
-
 export default function Dashboard({ token, onLogout }: DashboardProps) {
   const [perfil, setPerfil] = useState<MiPerfil | null>(null)
   const [validacion, setValidacion] = useState<Validacion | null>(null)
@@ -131,10 +125,12 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
 
   // RF-1.4: invalida todos los tokens del usuario (también los de otros dispositivos).
   const revocar = async () => {
+    if (!window.confirm('¿Querés cerrar sesión en todos los dispositivos? También se cerrará la sesión actual.')) return
+
     setRevocando(true)
     try {
       await axios.post(`${API_URL}/auth/revocar-credenciales`, {}, { headers })
-      onLogout('Credenciales revocadas: todos tus tokens dejaron de funcionar. Iniciá sesión de nuevo.')
+      onLogout('Se cerraron todas tus sesiones. Iniciá sesión de nuevo.')
     } catch (err) {
       manejarError(err)
       setRevocando(false)
@@ -192,14 +188,11 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
 
             {(perfil.rol === 'CLIENTE' || perfil.rol === 'CONDUCTOR') && (
               <button className="btn-primary mt-6 inline-flex items-center gap-2" onClick={() => setVerViaje(true)}>
-                <Route className="w-4 h-4" aria-hidden="true" /> {perfil.rol === 'CLIENTE' ? 'Pedir un viaje' : 'Abrir despacho de prueba'}
+                <Route className="w-4 h-4" aria-hidden="true" /> {perfil.rol === 'CLIENTE' ? 'Pedir un viaje' : 'Abrir despacho'}
               </button>
             )}
 
-            <div className="mt-10 flex items-center justify-between">
-              <p className="eyebrow">Mis datos</p>
-              <Fuente texto="GET /auth/me" />
-            </div>
+            <p className="eyebrow mt-10">Mis datos</p>
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               {[
                 { icono: Mail, titulo: 'Email', valor: perfil.email },
@@ -222,10 +215,7 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
         {/* Validación de identidad y rol: lo que ven los otros módulos (RF-1.3) */}
         {validacion && (
           <div className="mt-8 rounded-2xl border border-[var(--line)] p-6">
-            <div className="flex items-center justify-between mb-4">
-              <p className="eyebrow">Cómo te ven los otros módulos</p>
-              <Fuente texto="GET /auth/validar-identidad-y-rol" />
-            </div>
+            <p className="eyebrow mb-4">Cómo te ven los otros módulos</p>
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-[var(--text-soft)]">
               <li className="flex items-center gap-2.5">
                 {validacion.valid ? <Check className="w-4 h-4 text-[var(--gold)] shrink-0" /> : <X className="w-4 h-4 text-red-400 shrink-0" />}
@@ -254,10 +244,7 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
         {/* Cuentas externas vinculadas (RF-1.5) */}
         {perfil && vinculados && (
           <div className="mt-6 rounded-2xl border border-[var(--line)] p-6">
-            <div className="flex items-center justify-between mb-4">
-              <p className="eyebrow">Cuentas externas</p>
-              <Fuente texto="GET /auth/oauth2/userinfo" />
-            </div>
+            <p className="eyebrow mb-4">Cuentas externas</p>
             {vinculados.length === 0 ? (
               <p className="text-sm text-[var(--text-soft)]">
                 Ninguna: entraste con email y contraseña. Si entrás con Google, Auth0 o el proveedor de prueba, aparece acá.
@@ -281,24 +268,17 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
         {/* Revocación de credenciales (RF-1.4) */}
         {perfil && (
           <div className="mt-6 rounded-2xl border border-[var(--line)] p-6">
-            <div className="flex items-center justify-between mb-2">
-              <p className="eyebrow">Seguridad</p>
-              <Fuente texto="POST /auth/revocar-credenciales" />
-            </div>
+            <p className="eyebrow mb-2">Seguridad</p>
             <p className="text-sm text-[var(--text-soft)] mb-4">
-              Invalida todos tus tokens, también los de otros dispositivos. Vas a tener que iniciar sesión de nuevo.
+              Cerrá las sesiones abiertas en tus dispositivos, incluido este. Vas a tener que iniciar sesión de nuevo.
             </p>
             <button onClick={revocar} disabled={revocando} className="btn-secondary flex items-center justify-center gap-2">
               <KeyRound className="w-4 h-4" />
-              {revocando ? 'Revocando…' : 'Revocar mis credenciales'}
+              {revocando ? 'Cerrando sesiones…' : 'Cerrar sesión en todos los dispositivos'}
             </button>
           </div>
         )}
 
-        <div className="hairline mt-10 mb-5" />
-        <p className="text-center text-[11px] tracking-[0.22em] uppercase text-[var(--text-dim)]">
-          Datos en vivo de M1 · {API_URL} · Docs /docs
-        </p>
       </div>
     </div>
   )
