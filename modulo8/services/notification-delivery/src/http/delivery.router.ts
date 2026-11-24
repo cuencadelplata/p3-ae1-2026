@@ -6,20 +6,17 @@ import {
   type AuthenticatedUser,
   type M1IdentityCheck,
 } from './auth/m1-auth.middleware.js';
-import {
-  ContractValidationError,
-  validateNotificationRequestedEnvelope,
-} from '../domain/notification-requested.contract.js';
-import { NotificationDeliveryService } from '../services/notification-delivery.service.js';
+import type { PushDeliveryProvider } from '../infrastructure/provider/push-delivery-provider.js';
 import { PUSH_SERVICE_WORKER, renderPushPage } from './push-page.js';
 
 type DeliveryDependencies = Required<
   Pick<
     AppDependencies,
-    'deliveryService' | 'tokenRepo' | 'inboxRepo' | 'deliveryRepo' | 'sandboxProvider'
+    'deliveryService' | 'tokenRepo'
   >
 > &
   Pick<AppDependencies, 'isReady'> & {
+    pushProvider: PushDeliveryProvider;
     /** Página de activación de Web Push: clave VAPID pública y URL de M1 para el navegador. */
     webPush?: { publicKey?: string; m1PublicUrl: string };
     /** Confirma con M1 que el usuario del token sigue habilitado (bloqueados y revocados no pasan). */
@@ -90,7 +87,7 @@ export function createDeliveryRouter(deps: DeliveryDependencies): Router {
       });
       return;
     }
-    const result = await deps.sandboxProvider.sendPush({
+    const result = await deps.pushProvider.sendPush({
       notificationId: `prueba-${Date.now()}`,
       recipientId: user.userId,
       deviceToken: device.token,
@@ -125,7 +122,7 @@ export function createDeliveryRouter(deps: DeliveryDependencies): Router {
     }
 
     const normalizedPlatform = normalizePlatform(platform);
-    const record = await deps.tokenRepo.upsertToken(user.userId, token.trim(), normalizedPlatform);
+    const record = await deps.tokenRepo.upsertToken(user.userId, token.trim(), normalizedPlatform, user.role);
     response.status(201).json({
       message: 'Device token registrado con éxito.',
       data: record,
@@ -184,33 +181,6 @@ export function createDeliveryRouter(deps: DeliveryDependencies): Router {
     response.status(200).json({ data: safeDelivery });
   });
 
-  router.post('/internal/deliveries/simulate', async (request, response) => {
-    if (process.env.NODE_ENV === 'production') {
-      response.status(403).json({
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Endpoint de simulación deshabilitado en entorno de producción.',
-        },
-      });
-      return;
-    }
-
-    try {
-      const envelope = validateNotificationRequestedEnvelope(request.body);
-      await sendSimulationResult(deliveryService, envelope, response);
-    } catch (error: unknown) {
-      if (error instanceof ContractValidationError) {
-        response.status(400).json({
-          error: { code: 'CONTRACT_VALIDATION_ERROR', message: error.message },
-        });
-        return;
-      }
-
-      const message = error instanceof Error ? error.message : 'Error interno';
-      response.status(500).json({ error: { code: 'INTERNAL_ERROR', message } });
-    }
-  });
-
   router.use((error: unknown, _request: Request, response: Response, next: NextFunction) => {
     if (error instanceof SyntaxError && 'body' in error) {
       response.status(400).json({
@@ -222,44 +192,6 @@ export function createDeliveryRouter(deps: DeliveryDependencies): Router {
   });
 
   return router;
-}
-
-async function sendSimulationResult(
-  deliveryService: NotificationDeliveryService,
-  envelope: ReturnType<typeof validateNotificationRequestedEnvelope>,
-  response: Response,
-): Promise<void> {
-  const result = await deliveryService.processNotificationRequest(envelope);
-  if (result.actionTaken === 'ACK_DUPLICATE') {
-    response.status(200).json({
-      message: 'Evento duplicado ignorado de forma idempotente en Inbox.',
-      data: result,
-    });
-    return;
-  }
-  if (result.actionTaken === 'SKIPPED_PREFERENCE_OFF') {
-    response.status(200).json({
-      message: 'Entrega omitida por preferencia de usuario en M2 desactivada.',
-      data: result,
-    });
-    return;
-  }
-  if (result.actionTaken === 'SKIPPED_NO_CUSTOMER_PROFILE') {
-    response.status(200).json({ message: 'Entrega omitida: M2 no tiene perfil de cliente para el destinatario.', data: result });
-    return;
-  }
-  if (result.actionTaken === 'FAILED') {
-    response.status(502).json({
-      error: { code: 'DELIVERY_FAILED', message: result.error },
-      data: result,
-    });
-    return;
-  }
-
-  response.status(200).json({
-    message: 'Notificación procesada y entregada con éxito.',
-    data: result,
-  });
 }
 
 function sendUnauthorized(response: Response): void {

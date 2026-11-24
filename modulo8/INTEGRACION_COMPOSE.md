@@ -134,6 +134,13 @@ Desde ahí, los avisos de los viajes de ese usuario (conductor asignado, llegada
 inicio, finalización, cancelación) llegan como notificaciones del navegador.
 Un usuario sin navegador suscripto queda con la entrega `FAILED_NO_DEVICE_TOKEN`.
 
+M8 guarda junto a la suscripción el rol verificado por M1. Un conductor
+con suscripción activa recibe sus avisos por Web Push. Para los clientes con
+suscripción, M8 consulta la preferencia en M2. Los conductores que activaron
+el navegador antes de incorporar el rol deben volver a pulsar **Activar en
+este navegador** una vez. **Desactivar en este navegador** da de baja esa
+suscripción en M8 y en el navegador.
+
 ## Correo de recuperación de contraseña de M1
 
 M1 (RF-1.4) publica `auth.recuperacion_solicitada` en su exchange `m1.eventos`
@@ -174,6 +181,10 @@ se configura. El correo no se guarda en M8: solo queda la constancia de la entre
 Para ver la cola y la DLQ: RabbitMQ → Queues → `m8.receipts.trip-completed*`.
 
 ## Alcance de los demás requerimientos
+
+La [guía de cierre de integración AE4](docs/integracion-final-ae4.md) contiene
+los contratos para el frontend común, las penalizaciones y los pasos que
+requieren a otros equipos.
 
 La configuración usa nombres de servicio para M1, M2, M3, M6 y M7. El Compose
 de M8 integrado no agrega copias simuladas de esos módulos. Si alguno todavía no

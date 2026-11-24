@@ -8,6 +8,7 @@ import { authenticateWithM1 } from './http/authentication.js';
 import { autorizarTicket } from './http/authorization.js';
 import { correlationId } from './http/correlation.js';
 import { supportErrorHandler } from './http/error-handler.js';
+import { ACTIVE_PENALTIES_PATH, CONFIRM_PENALTY_PATH, registerPenaltyRoutes, type PenaltyRouteDeps } from './http/penalties.js';
 import type { SupportReadiness } from './http/readiness.js';
 import type { IdentityVerifier } from './integrations/m1-identity.js';
 import type { TicketService } from './services/ticket.service.js';
@@ -19,6 +20,7 @@ export interface SupportAppDeps {
   readiness?: () => Promise<SupportReadiness>;
   // Si se indica, las rutas de /tickets exigen un Bearer válido según M1.
   identityVerifier?: IdentityVerifier;
+  penalties?: PenaltyRouteDeps;
 }
 
 // Rutas de tickets, relativas a /tickets.
@@ -32,9 +34,11 @@ const TICKET_ROUTES = [
 
 // Rutas de la API que documenta el contrato OpenAPI (openapi/rf85-support.yaml).
 // El test de contrato verifica que ambas listas coincidan.
-export const SUPPORT_API_ROUTES: ReadonlyArray<{ method: string; path: string }> = TICKET_ROUTES.map(
-  ({ method, path }) => ({ method, path: path === '/' ? '/tickets' : `/tickets${path}` }),
-);
+export const SUPPORT_API_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
+  ...TICKET_ROUTES.map(({ method, path }) => ({ method, path: path === '/' ? '/tickets' : `/tickets${path}` })),
+  { method: 'post', path: CONFIRM_PENALTY_PATH },
+  { method: 'get', path: ACTIVE_PENALTIES_PATH },
+];
 
 // Endpoints RF-8.5 (Gestión de tickets de Soporte). Es lo único que necesita
 // registrar una app común de M8: incluye su correlationId y su manejo de
@@ -57,6 +61,7 @@ export function registerSupportRoutes(router: IRouter, deps: SupportAppDeps) {
   tickets.use(supportErrorHandler);
 
   router.use('/tickets', tickets);
+  registerPenaltyRoutes(router, deps.ticketService, deps.identityVerifier, deps.penalties);
 }
 
 function loadOpenapi() {

@@ -1,7 +1,7 @@
 import http from 'node:http';
 import * as amqp from 'amqplib';
 import { createApp } from './app.js';
-import { getPgPool, closePgPool, isPostgresReady } from '../infrastructure/database/pg-client.js';
+import { getPgPool, closePgPool, ensureDeliveryTokenSchema, isPostgresReady } from '../infrastructure/database/pg-client.js';
 import { PgDeviceTokenRepository } from '../infrastructure/database/device-token.repository.js';
 import { PgDeliveryRepository } from '../infrastructure/database/delivery.repository.js';
 import { PgMessagingInboxRepository } from '../infrastructure/database/inbox.repository.js';
@@ -26,6 +26,7 @@ if (process.env.NODE_ENV === 'production' && !M2_INTERNAL_API_KEY) {
 
 async function bootstrap() {
   const pgPool = getPgPool();
+  await ensureDeliveryTokenSchema(pgPool);
   const tokenRepo = new PgDeviceTokenRepository(pgPool);
   const deliveryRepo = new PgDeliveryRepository(pgPool);
   const inboxStore = new PostgresTechnicalInbox(pgPool);

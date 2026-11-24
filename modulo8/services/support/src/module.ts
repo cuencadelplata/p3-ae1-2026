@@ -27,6 +27,7 @@ export function createSupportModule(): SupportModule {
     ticketService: support.ticketService,
     readiness: support.readiness,
     identityVerifier: support.identityVerifier,
+    penalties: support.penalties,
   });
   router.use('/tickets', supportErrorHandler);
 

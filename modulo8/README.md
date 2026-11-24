@@ -8,7 +8,7 @@ M8 es el servicio de comunicaciones de la plataforma de movilidad urbana. Tiene 
 - **RF8.2 — QR:** genera QR temporales para un `tripId`, con vencimiento y consumo atómico de un solo uso en Redis. M6 decide si inicia el viaje.
 - **RF8.3 — Comprobantes:** consulta el pago de M7 por REST, emite un comprobante por viaje, guarda el PDF y sus datos, y publica `ReceiptIssued` mediante Outbox.
 - **RF8.4 — Reenvío:** solicita otra entrega del comprobante existente y crea un enlace temporal; reutiliza el PDF.
-- **RF8.5 — Soporte:** crea tickets asociados a viajes y conserva estados e historial.
+- **RF8.5 — Soporte:** crea tickets asociados a viajes, conserva estados e historial y permite a un operador confirmar penalizaciones de clientes que consulta M2.
 - **RF8.6 — Mensajería:** conecta RabbitMQ, valida eventos, deduplica con Inbox, confirma con ACK tras procesar y aplica retry y DLQ. Consume `documento.registrado` desde `m3.eventos` y los eventos de viaje acordados desde `mobility.events`.
 - **RF8.7 — Entrega PUSH:** administra tokens de dispositivos, solicitudes, intentos y resultados. Un intento registrado no demuestra por sí solo una entrega real en un teléfono.
 

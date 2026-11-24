@@ -103,17 +103,6 @@ paths:
         '401': { description: JWT de M1 ausente o inválido. }
         '403': { description: El usuario autenticado no puede consultar la entrega. }
         '404': { description: Entrega no encontrada. }
-  /internal/deliveries/simulate:
-    post:
-      tags: [NotificationDelivery]
-      summary: Simular el procesamiento de una solicitud de entrega
-      description: Endpoint técnico disponible fuera de producción para verificar el procesamiento idempotente de `NotificationRequested`.
-      responses:
-        '200': { description: Solicitud procesada o duplicado reconocido de forma idempotente. }
-        '400': { description: Envelope de notificación inválido. }
-        '403': { description: Simulación deshabilitada en producción. }
-        '502': { description: Falló el proveedor de entrega simulado. }
-        '500': { description: Error interno inesperado. }
   /notifications:
     post:
       tags: [Notifications]
@@ -473,8 +462,77 @@ paths:
         '404': { description: Ticket no encontrado. }
         '500': { description: Error interno inesperado. }
         '503': { description: Base de datos no disponible, o M1 sin responder si la autenticación está habilitada. }
+  /tickets/{id}/penalizacion:
+    post:
+      summary: Confirma una penalización para el cliente de un ticket resuelto
+      description: Solo OPERADOR. Una penalización por cliente y viaje.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '200': { description: Penalización existente devuelta al reintentar. }
+        '201': { description: Penalización confirmada. }
+        '400': { description: Motivo inválido. }
+        '401': { description: Identidad no autenticada. }
+        '403': { description: Se requiere el rol OPERADOR. }
+        '404': { description: Ticket no encontrado. }
+        '409': { description: Ticket sin resolver, modificado o viaje ya penalizado. }
+        '422': { description: M6 no informó la identidad canónica del cliente. }
+        '503': { description: M1, M6 o PostgreSQL indisponibles, o integración sin configurar. }
+  /usuarios/{userId}/penalizaciones:
+    get:
+      summary: Lista las penalizaciones vigentes de un cliente para M2
+      security:
+        - PenaltiesServiceKey: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Penalizaciones confirmadas hace menos de 90 días.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [userId, total, penalizaciones]
+                properties:
+                  userId: { type: integer, minimum: 1 }
+                  total: { type: integer, minimum: 0 }
+                  penalizaciones:
+                    type: array
+                    items:
+                      type: object
+                      required: [ticketId, tripId, motivo, fecha]
+                      properties:
+                        ticketId: { type: string, format: uuid }
+                        tripId: { type: string }
+                        motivo: { type: string }
+                        fecha: { type: string, format: date-time }
+        '400': { description: Identificador inválido. }
+        '401': { description: Clave de servicio inválida o ausente. }
+        '503': { description: PostgreSQL indisponible o clave de servicio sin configurar. }
+
 components:
   securitySchemes:
+    PenaltiesServiceKey:
+      type: apiKey
+      in: header
+      name: X-Secret-Key
     QrServiceKey:
       type: apiKey
       in: header

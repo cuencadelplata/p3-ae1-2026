@@ -111,6 +111,18 @@ describe('createM6TripsClient: existe', () => {
   });
 });
 
+describe('createM6TripsClient: clienteDe', () => {
+  it('devuelve el userId canónico de M1 aunque clienteId tenga otro valor', async () => {
+    const cliente = clienteCon(async () => respuesta(200, { ...viaje(TRIP_ID), clienteId: 99, clientUserId: 42 }));
+    expect(await cliente.clienteDe(TRIP_ID)).toBe(42);
+  });
+
+  it.each([undefined, '42', 0, 3.5])('rechaza clientUserId inválido (%s)', async (clientUserId) => {
+    const cliente = clienteCon(async () => respuesta(200, { ...viaje(TRIP_ID), clienteId: 99, clientUserId }));
+    expect(await cliente.clienteDe(TRIP_ID)).toBeNull();
+  });
+});
+
 describe('createM6TripsClient: isReachable', () => {
   it('true si GET /health de M6 responde 2xx', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => respuesta(200, { status: 'ok' }));

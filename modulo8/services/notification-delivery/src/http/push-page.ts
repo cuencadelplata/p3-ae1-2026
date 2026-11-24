@@ -85,6 +85,7 @@ export function renderPushPage(options: { vapidPublicKey?: string; m1PublicUrl: 
     <p id="user-line"></p>
     <button id="enable">Activar en este navegador</button>
     <button id="test" class="secondary" disabled>Enviar aviso de prueba</button>
+    <button id="disable" class="secondary">Desactivar en este navegador</button>
     <div class="status" id="push-status"></div>
   </section>
 
@@ -169,6 +170,25 @@ $('test').addEventListener('click', async () => {
   const body = await response.json().catch(() => ({}));
   if (response.ok) setStatus('push-status', 'Aviso de prueba enviado.', 'ok');
   else setStatus('push-status', (body.error && body.error.message) || ('HTTP ' + response.status), 'err');
+});
+
+$('disable').addEventListener('click', async () => {
+  try {
+    const registration = await navigator.serviceWorker.getRegistration('/push');
+    const subscription = await registration?.pushManager.getSubscription();
+    if (subscription) {
+      const token = encodeURIComponent(JSON.stringify(subscription));
+      const response = await fetch('/devices/tokens/' + token, {
+        method: 'DELETE', headers: { authorization: 'Bearer ' + session.token },
+      });
+      if (!response.ok) throw new Error('M8 no pudo desactivar este navegador (HTTP ' + response.status + ').');
+      await subscription.unsubscribe();
+    }
+    $('test').disabled = true;
+    setStatus('push-status', 'Notificaciones desactivadas en este navegador.', 'ok');
+  } catch (error) {
+    setStatus('push-status', error.message, 'err');
+  }
 });
 
 if ('serviceWorker' in navigator) {

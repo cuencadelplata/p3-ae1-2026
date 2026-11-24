@@ -7,9 +7,11 @@ import { SupportDatabase } from './db/database.js';
 import { createSupportPool } from './db/pool.js';
 import { NoopSupportEventPublisher } from './events/support-event-publisher.js';
 import { checkSupportReadiness, type ReadinessProbes } from './http/readiness.js';
+import type { PenaltyRouteDeps } from './http/penalties.js';
 import { createM1IdentityClient, type IdentityVerifier } from './integrations/m1-identity.js';
 import { createM6TripsClient, type TripVerifier } from './integrations/m6-trips.js';
 import { PostgresTicketRepository } from './repositories/postgres-ticket.repository.js';
+import { PostgresPenaltyRepository } from './repositories/penalty.repository.js';
 import type { TicketRepository } from './repositories/ticket.repository.js';
 import { TicketService } from './services/ticket.service.js';
 
@@ -24,6 +26,7 @@ export function createSupportRuntime(
   tripVerifier?: TripVerifier,
   // Sin verificador de identidad /tickets no exige Bearer.
   identityVerifier?: IdentityVerifier,
+  penalties?: PenaltyRouteDeps,
 ) {
   const ticketService = new TicketService(ticketRepository, new NoopSupportEventPublisher(), tripVerifier);
   const readiness = () =>
@@ -33,7 +36,7 @@ export function createSupportRuntime(
       identity: identityVerifier ? () => identityVerifier.isReachable() : undefined,
     });
   const app = includeStandaloneHttpApp
-    ? createSupportApp({ ticketService, readiness, identityVerifier })
+    ? createSupportApp({ ticketService, readiness, identityVerifier, penalties })
     : express();
 
   return {
@@ -41,6 +44,7 @@ export function createSupportRuntime(
     ticketService,
     readiness,
     identityVerifier,
+    penalties,
   };
 }
 
@@ -67,13 +71,19 @@ export function buildSupportFromEnv(
   const pool = createSupportPool(dbConfig.databaseUrl);
   const database = new SupportDatabase({ pool, schema: dbConfig.schema, retryMs });
   const ticketRepository = new PostgresTicketRepository(pool, dbConfig.schema);
+  const tripsClient = m6Trips && createM6TripsClient(m6Trips);
   const runtime = createSupportRuntime(
     config,
     ticketRepository,
     database,
     includeStandaloneHttpApp,
-    m6Trips && createM6TripsClient(m6Trips),
+    tripsClient,
     m1Identity && createM1IdentityClient(m1Identity),
+    {
+      repository: new PostgresPenaltyRepository(pool, dbConfig.schema),
+      trips: tripsClient,
+      internalKey: env.SUPPORT_PENALTIES_API_KEY,
+    },
   );
 
   return { config, pool, database, ...runtime };

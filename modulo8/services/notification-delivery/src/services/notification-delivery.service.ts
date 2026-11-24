@@ -26,6 +26,7 @@ const CANONICAL_TITLES: Record<DeliveryEventType, string> = {
 export const CONSUMER_ID = 'm8.delivery.notification-requested';
 
 export interface DeliveryServiceConfig {
+  allowEventDestination?: boolean;
   maxAttempts?: number;
   initialBackoffMs?: number;
   leaseSeconds?: number;
@@ -42,7 +43,7 @@ export class NotificationDeliveryService {
     private readonly tokenRepo: DeviceTokenRepository,
     private readonly m2Client: M2PreferencesClient,
     private readonly pushProvider: PushDeliveryProvider,
-    config: DeliveryServiceConfig = {}
+    private readonly config: DeliveryServiceConfig = {},
   ) {
     this.maxAttempts = config.maxAttempts ?? 3;
     this.initialBackoffMs = config.initialBackoffMs ?? 50;
@@ -106,91 +107,92 @@ export class NotificationDeliveryService {
       }
     }
 
-    // M2 sólo administra perfiles de clientes. Este hecho identifica inequívocamente a un conductor.
-    if (data.eventType !== 'DRIVER_DOCUMENT_REGISTERED') {
-    try {
-      const preferences = await this.m2Client.getPreferences(userId, correlationId);
-      if (!preferences.notificationsEnabled || !preferences.pushEnabled) {
-        StructuredLogger.info({
-          event: 'DELIVERY_SKIPPED_PREFERENCE_OFF',
+    const activeTokenRecord = await this.tokenRepo.getLatestActiveTokenByUserId(userId);
+    // El rol viene de la identidad de M1 al registrar la suscripción.
+    const isDriver = activeTokenRecord?.userRole === 'CONDUCTOR' || data.eventType === 'DRIVER_DOCUMENT_REGISTERED';
+    if (!isDriver && (activeTokenRecord || this.config.allowEventDestination !== false)) {
+      try {
+        const preferences = await this.m2Client.getPreferences(userId, correlationId);
+        if (!preferences.notificationsEnabled || !preferences.pushEnabled) {
+          StructuredLogger.info({
+            event: 'DELIVERY_SKIPPED_PREFERENCE_OFF',
+            messageId,
+            notificationId: data.notificationId,
+            userId,
+            correlationId,
+            tripId: data.tripId,
+            result: 'SKIPPED_PREFERENCE_OFF',
+          });
+
+          const record = await this.deliveryRepo.createDelivery({
+            notificationId: data.notificationId,
+            messageId,
+            tripId: data.tripId,
+            userId,
+            eventType: data.eventType,
+            channel: 'PUSH',
+            message: data.message,
+          });
+
+          await this.deliveryRepo.updateStatus(
+            record.deliveryId,
+            'SKIPPED_PREFERENCE_OFF',
+            'M2_PREFERENCE_DISABLED'
+          );
+          if (!options.skipInboxClaim) {
+            await this.inboxRepo.markProcessed(CONSUMER_ID, messageId);
+          }
+
+          return {
+            messageId,
+            notificationId: data.notificationId,
+            actionTaken: 'SKIPPED_PREFERENCE_OFF',
+            status: 'SKIPPED_PREFERENCE_OFF',
+            skipReason: 'M2_PREFERENCE_DISABLED',
+            attemptsCount: 0,
+          };
+        }
+      } catch (m2Err: unknown) {
+        if (m2Err instanceof M2PreferencesError && m2Err.code === 'CUSTOMER_NOT_FOUND') {
+          const record = await this.deliveryRepo.createDelivery({
+            notificationId: data.notificationId,
+            messageId,
+            tripId: data.tripId,
+            userId,
+            eventType: data.eventType,
+            channel: 'PUSH',
+            message: data.message,
+          });
+          await this.deliveryRepo.updateStatus(record.deliveryId, 'SKIPPED_NO_CUSTOMER_PROFILE', 'CUSTOMER_NOT_FOUND');
+          if (!options.skipInboxClaim) await this.inboxRepo.markProcessed(CONSUMER_ID, messageId);
+          return {
+            messageId,
+            notificationId: data.notificationId,
+            actionTaken: 'SKIPPED_NO_CUSTOMER_PROFILE',
+            status: 'SKIPPED_NO_CUSTOMER_PROFILE',
+            skipReason: 'CUSTOMER_NOT_FOUND',
+            attemptsCount: 0,
+          };
+        }
+        const errMessage = m2Err instanceof Error ? m2Err.message : 'Error en M2';
+        StructuredLogger.error({
+          event: 'M2_PREFERENCES_ERROR',
           messageId,
           notificationId: data.notificationId,
           userId,
           correlationId,
-          tripId: data.tripId,
-          result: 'SKIPPED_PREFERENCE_OFF',
+          error: errMessage,
         });
-
-        const record = await this.deliveryRepo.createDelivery({
-          notificationId: data.notificationId,
-          messageId,
-          tripId: data.tripId,
-          userId,
-          eventType: data.eventType,
-          channel: 'PUSH',
-          message: data.message,
-        });
-
-        await this.deliveryRepo.updateStatus(
-          record.deliveryId,
-          'SKIPPED_PREFERENCE_OFF',
-          'M2_PREFERENCE_DISABLED'
-        );
-        if (!options.skipInboxClaim) {
-          await this.inboxRepo.markProcessed(CONSUMER_ID, messageId);
+        if (m2Err instanceof M2PreferencesError && m2Err.code === 'CONFIGURATION') {
+          throw new NonRetryableMessagingError(errMessage);
         }
-
-        return {
-          messageId,
-          notificationId: data.notificationId,
-          actionTaken: 'SKIPPED_PREFERENCE_OFF',
-          status: 'SKIPPED_PREFERENCE_OFF',
-          skipReason: 'M2_PREFERENCE_DISABLED',
-          attemptsCount: 0,
-        };
+        throw m2Err;
       }
-    } catch (m2Err: unknown) {
-      if (m2Err instanceof M2PreferencesError && m2Err.code === 'CUSTOMER_NOT_FOUND') {
-        const record = await this.deliveryRepo.createDelivery({
-          notificationId: data.notificationId,
-          messageId,
-          tripId: data.tripId,
-          userId,
-          eventType: data.eventType,
-          channel: 'PUSH',
-          message: data.message,
-        });
-        await this.deliveryRepo.updateStatus(record.deliveryId, 'SKIPPED_NO_CUSTOMER_PROFILE', 'CUSTOMER_NOT_FOUND');
-        if (!options.skipInboxClaim) await this.inboxRepo.markProcessed(CONSUMER_ID, messageId);
-        return {
-          messageId,
-          notificationId: data.notificationId,
-          actionTaken: 'SKIPPED_NO_CUSTOMER_PROFILE',
-          status: 'SKIPPED_NO_CUSTOMER_PROFILE',
-          skipReason: 'CUSTOMER_NOT_FOUND',
-          attemptsCount: 0,
-        };
-      }
-      const errMessage = m2Err instanceof Error ? m2Err.message : 'Error en M2';
-      StructuredLogger.error({
-        event: 'M2_PREFERENCES_ERROR',
-        messageId,
-        notificationId: data.notificationId,
-        userId,
-        correlationId,
-        error: errMessage,
-      });
-      if (m2Err instanceof M2PreferencesError && m2Err.code === 'CONFIGURATION') {
-        throw new NonRetryableMessagingError(errMessage);
-      }
-      throw m2Err;
-    }
     }
 
     // 3. Resolución de Device Token en M8
-    const activeTokenRecord = await this.tokenRepo.getLatestActiveTokenByUserId(userId);
-    const resolvedDeviceToken =
-      activeTokenRecord?.token || data.targetDestination || undefined;
+    const resolvedDeviceToken = activeTokenRecord?.token ||
+      (!isDriver && this.config.allowEventDestination !== false ? data.targetDestination : undefined);
 
     if (!resolvedDeviceToken) {
       StructuredLogger.warn({

@@ -114,6 +114,12 @@ export function classifyM8Route(method: string, rawPathname: string): RouteClass
   if (/^\/tickets\/[^/]+\/historial$/.test(pathname)) {
     return { route: '/tickets/:id/historial', rf: 'RF8.5', ignored: false };
   }
+  if (/^\/tickets\/[^/]+\/penalizacion$/.test(pathname)) {
+    return { route: '/tickets/:id/penalizacion', rf: 'RF8.5', ignored: false };
+  }
+  if (/^\/usuarios\/[^/]+\/penalizaciones$/.test(pathname)) {
+    return { route: '/usuarios/:userId/penalizaciones', rf: 'RF8.5', ignored: false };
+  }
   if (/^\/tickets\/[^/]+$/.test(pathname)) {
     return { route: '/tickets/:id', rf: 'RF8.5', ignored: false };
   }
@@ -124,9 +130,6 @@ export function classifyM8Route(method: string, rawPathname: string): RouteClass
   }
   if (/^\/devices\/tokens\/[^/]+$/.test(pathname)) {
     return { route: '/devices/tokens/:token', rf: 'RF8.7', ignored: false };
-  }
-  if (pathname === '/internal/deliveries/simulate') {
-    return { route: '/internal/deliveries/simulate', rf: 'RF8.7', ignored: false };
   }
   if (/^\/internal\/deliveries\/[^/]+$/.test(pathname)) {
     return { route: '/internal/deliveries/:notificationId', rf: 'RF8.7', ignored: false };

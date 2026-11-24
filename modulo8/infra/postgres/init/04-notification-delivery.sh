@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS notification_delivery.device_tokens (
     user_id BIGINT NOT NULL,
     token TEXT NOT NULL UNIQUE, -- en navegadores, la suscripción Web Push en JSON
     platform VARCHAR(32) NOT NULL DEFAULT 'ANDROID', -- ANDROID, IOS, WEB
+    user_role TEXT CHECK (user_role IN ('CLIENTE', 'CONDUCTOR', 'OPERADOR')),
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

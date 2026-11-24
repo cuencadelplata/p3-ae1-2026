@@ -56,6 +56,7 @@ export interface NotificationRequestedEnvelope {
 }
 
 export interface DeviceTokenRecord {
+  userRole?: 'CLIENTE' | 'CONDUCTOR' | 'OPERADOR';
   tokenId: string;
   userId: number;
   token: string;

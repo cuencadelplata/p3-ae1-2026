@@ -2,7 +2,7 @@ import * as amqp from 'amqplib';
 import { PostgresTechnicalInbox } from '@m8/shared';
 import { createM1IdentityCheck } from './http/auth/m1-auth.middleware.js';
 import { createDeliveryRouter } from './http/delivery.router.js';
-import { closePgPool, getPgPool, isPostgresReady } from './infrastructure/database/pg-client.js';
+import { closePgPool, ensureDeliveryTokenSchema, getPgPool, isPostgresReady } from './infrastructure/database/pg-client.js';
 import { PgDeviceTokenRepository } from './infrastructure/database/device-token.repository.js';
 import { PgDeliveryRepository } from './infrastructure/database/delivery.repository.js';
 import { PgMessagingInboxRepository } from './infrastructure/database/inbox.repository.js';
@@ -12,15 +12,6 @@ import { RabbitMqDeliveryConsumer } from './infrastructure/messaging/rabbitmq-de
 import { SmtpEmailSender } from './infrastructure/provider/smtp-email-sender.js';
 import { WebPushProvider } from './infrastructure/provider/web-push-provider.js';
 import { NotificationDeliveryService } from './services/notification-delivery.service.js';
-
-/**
- * Una suscripción Web Push serializada supera los 255 caracteres de la tabla
- * original. El rol de entrega es dueño de sus tablas y las amplía al arrancar.
- */
-async function widenDeviceTokenColumns(pool: ReturnType<typeof getPgPool>): Promise<void> {
-  await pool.query('ALTER TABLE notification_delivery.device_tokens ALTER COLUMN token TYPE TEXT');
-  await pool.query('ALTER TABLE notification_delivery.delivery_requests ALTER COLUMN device_token TYPE TEXT');
-}
 
 /** Corre el consumer de entregas y el de correos de M1 sobre la misma conexión. */
 function combineConsumers(...consumers: DeliveryConsumerLifecycle[]): DeliveryConsumerLifecycle {
@@ -59,7 +50,7 @@ export function createDeliveryModule(options: DeliveryModuleOptions = {}) {
   let schemaReady = false;
   const ensureSchema = async () => {
     if (schemaReady) return;
-    await widenDeviceTokenColumns(pool);
+    await ensureDeliveryTokenSchema(pool);
     schemaReady = true;
   };
   const preferences = new CircuitBreakerM2PreferencesClient(new HttpM2PreferencesClient(
@@ -67,7 +58,9 @@ export function createDeliveryModule(options: DeliveryModuleOptions = {}) {
     process.env.M2_INTERNAL_API_KEY ?? '',
     Number(process.env.M2_TIMEOUT_MS ?? 3000),
   ));
-  const service = new NotificationDeliveryService(inbox, deliveries, tokens, preferences, provider);
+  const service = new NotificationDeliveryService(inbox, deliveries, tokens, preferences, provider, {
+    allowEventDestination: false,
+  });
   let connection: amqp.ChannelModel | undefined;
   let consumer: DeliveryConsumerLifecycle | undefined;
   let retryTimer: NodeJS.Timeout | undefined;
@@ -170,9 +163,7 @@ export function createDeliveryModule(options: DeliveryModuleOptions = {}) {
     router: createDeliveryRouter({
       deliveryService: service,
       tokenRepo: tokens,
-      inboxRepo: inbox,
-      deliveryRepo: deliveries,
-      sandboxProvider: provider,
+      pushProvider: provider,
       isReady: readiness,
       webPush: {
         publicKey: provider.publicKey(),
