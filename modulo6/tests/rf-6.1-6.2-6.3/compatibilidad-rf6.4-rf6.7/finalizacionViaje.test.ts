@@ -1,6 +1,6 @@
 import express from 'express';
 import type { Server } from 'node:http';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pool from '../../../src/rf-6.1-6.2-6.3/db/pool.js';
 import { EstadoViaje } from '../../../src/rf-6.1-6.2-6.3/models/viaje.model.js';
 import * as viajeRepo from '../../../src/rf-6.1-6.2-6.3/repositories/viaje.repository.js';
@@ -22,10 +22,9 @@ let apiServer: Server;
 let externalServer: Server;
 let apiUrl: string;
 let externalFailureStatus = 0;
-let authorizationCount = 0;
-let authorizationDelayMs = 0;
+let escriturasPagoM7 = 0;
+let consultaPagoDelayMs = 0;
 let ultimaTarifa: Record<string, unknown> | undefined;
-let ultimaAutorizacion: Record<string, unknown> | undefined;
 let llamadasM7 = 0;
 const pagos = new Map<string, Record<string, unknown>>();
 const previousEnv = { M4_URL: process.env.M4_URL, M7_URL: process.env.M7_URL, M7_API_KEY: process.env.M7_API_KEY };
@@ -48,33 +47,20 @@ externalApis.use('/metodo-pago', (request, response, next) => {
   return next();
 });
 
-externalApis.get('/metodo-pago/:viajeId', (request, response) => {
+externalApis.get('/metodo-pago/:viajeId', async (request, response) => {
+  if (consultaPagoDelayMs) await new Promise((resolve) => setTimeout(resolve, consultaPagoDelayMs));
   if (externalFailureStatus) return response.status(externalFailureStatus).json({ mensaje: 'M7 no disponible' });
   const pago = pagos.get(request.params.viajeId);
   return pago ? response.json(pago) : response.status(404).json({ mensaje: 'No se encontró un pago para ese viaje' });
 });
 
-externalApis.post('/metodo-pago', (request, response) => {
-  const { viajeId, tipo, clienteId } = request.body;
-  if (pagos.has(viajeId)) return response.status(400).json({ mensaje: 'No se pudo registrar el método de pago' });
-  const pago = { pagoId: `PAY-${viajeId}`, viajeId, clienteId, tipo, estado: 'pendiente' };
-  pagos.set(viajeId, pago);
-  return response.status(201).json(pago);
+externalApis.post(['/metodo-pago', '/metodo-pago/:viajeId/autorizar'], (_request, response) => {
+  escriturasPagoM7 += 1;
+  return response.status(500).json({ error: 'M6 sólo debe consultar pagos' });
 });
 
-externalApis.post('/metodo-pago/:viajeId/autorizar', async (request, response) => {
-  authorizationCount += 1;
-  ultimaAutorizacion = request.body;
-  if (authorizationDelayMs) await new Promise((resolve) => setTimeout(resolve, authorizationDelayMs));
-  const { idOrden, total, token, paymentMethodId, email } = request.body;
-  if (!idOrden || typeof total !== 'number' || !token || !paymentMethodId || !email) {
-    return response.status(400).json({ mensaje: 'No se pudo autorizar el pago' });
-  }
-  if (token === 'rechazado') return response.status(402).json({ mensaje: 'El pago no fue aprobado por Mercado Pago' });
-  const pago = pagos.get(request.params.viajeId);
-  if (!pago || pago.estado !== 'pendiente') return response.status(400).json({ mensaje: 'No se pudo autorizar el pago' });
-  pago.estado = 'autorizado';
-  return response.json(pago);
+afterEach(() => {
+  expect(escriturasPagoM7).toBe(0);
 });
 
 async function listen(server: ReturnType<typeof express>): Promise<{ server: Server; url: string }> {
@@ -115,11 +101,10 @@ afterAll(async () => {
 beforeEach(async () => {
   await pool.query('TRUNCATE viajes RESTART IDENTITY CASCADE');
   externalFailureStatus = 0;
-  authorizationCount = 0;
-  authorizationDelayMs = 0;
+  escriturasPagoM7 = 0;
+  consultaPagoDelayMs = 0;
   llamadasM7 = 0;
   ultimaTarifa = undefined;
-  ultimaAutorizacion = undefined;
   pagos.clear();
 });
 
@@ -137,10 +122,9 @@ async function crearViajeEnCurso(
   await viajeRepo.actualizarEstado(viaje.id, EstadoViaje.CONDUCTOR_EN_CAMINO, conductorId);
   await viajeRepo.actualizarEstado(viaje.id, EstadoViaje.ARRIBADO);
   await viajeRepo.actualizarEstado(viaje.id, EstadoViaje.EN_CURSO);
+  pagos.set(viaje.id, { pagoId: `PAY-${viaje.id}`, viajeId: viaje.id, tipo: 'tarjeta', estado: 'autorizado' });
   return viaje;
 }
-
-const pagoTarjeta = { token: 'tok-test', paymentMethodId: 'visa', email: 'cliente@example.com' };
 
 function solicitudFinalizacion(id: string, overrides: Record<string, unknown> = {}) {
   return fetch(`${apiUrl}/api/viajes/${encodeURIComponent(id)}/finalizacion`, {
@@ -152,14 +136,13 @@ function solicitudFinalizacion(id: string, overrides: Record<string, unknown> = 
       tipoVehiculo: 'auto',
       horaFin: new Date().toISOString(),
       metodoPago: 'tarjeta',
-      pago: pagoTarjeta,
       ...overrides,
     }),
   });
 }
 
 describe('RF-6.4 - Finalización del viaje', () => {
-  it('finaliza con tarjeta: registra tiempo real, distancia, tarifa y pago autorizado en M7', async () => {
+  it('finaliza con tarjeta: registra tiempo real, distancia, tarifa y consulta el pago autorizado en M7', async () => {
     const viaje = await crearViajeEnCurso();
     const response = await solicitudFinalizacion(viaje.id);
     const body = await response.json();
@@ -189,14 +172,13 @@ describe('RF-6.4 - Finalización del viaje', () => {
       payment_id: `PAY-${viaje.id}`,
       data: { distanciaKm: 1.11, tiempoMinutos: 1, total: 927.5, estadoPago: 'autorizado' },
     });
-    // Los datos de la tarjeta se reenvían a M7 pero no se guardan en TripDB.
+    // La finalización conserva el estado consultado y no contiene datos de tarjeta.
     expect(JSON.stringify(storedFinalization.rows[0].data)).not.toContain('tok-test');
     expect(JSON.stringify(storedFinalization.rows[0].data)).not.toContain('cliente@example.com');
 
-    // La tarifa usa el tiempo real y la autorización envía el contrato completo de M7.
+    // La tarifa usa el tiempo real; la autorización ya existe en M7.
     expect(ultimaTarifa).toMatchObject({ distanciaKm: 1.11, tiempoEstimadoMin: 1, vehicleType: 'auto' });
-    expect(ultimaAutorizacion).toMatchObject({ idOrden: `ORD-${viaje.id}`, total: 927.5, moneda: 'ARS', ...pagoTarjeta });
-    expect(authorizationCount).toBe(1);
+    expect(escriturasPagoM7).toBe(0);
   });
 
   it('tolera un reloj levemente atrasado: horaFin se ajusta al inicio', async () => {
@@ -215,15 +197,39 @@ describe('RF-6.4 - Finalización del viaje', () => {
     expect(minutosTranscurridos(inicio, new Date('2026-11-16T10:00:20Z'))).toBe(1);
   });
 
-  it('finaliza en efectivo sin pasar por la pasarela: el pago queda pendiente en M7', async () => {
+  it.each(['efectivo', 'transferencia', 'tarjeta'])('finaliza con %s consultando su autorización en M7', async (tipo) => {
     const viaje = await crearViajeEnCurso();
-    const response = await solicitudFinalizacion(viaje.id, { metodoPago: 'efectivo', pago: undefined });
-    const body = await response.json();
-
+    pagos.set(viaje.id, { pagoId: `PAY-${viaje.id}`, viajeId: viaje.id, tipo, estado: 'autorizado' });
+    const response = await solicitudFinalizacion(viaje.id, { metodoPago: tipo });
     expect(response.status).toBe(200);
-    expect(body).toMatchObject({ estadoPago: 'pendiente', paymentId: `PAY-${viaje.id}` });
-    expect(authorizationCount).toBe(0);
-    expect(pagos.get(viaje.id)).toMatchObject({ tipo: 'efectivo', estado: 'pendiente' });
+    expect(await response.json()).toMatchObject({
+      estadoPago: 'autorizado', paymentId: `PAY-${viaje.id}`,
+      viaje: { metodoPago: tipo, estadoPago: 'autorizado' },
+    });
+    const stored = await viajeRepo.buscarPorId(viaje.id);
+    expect(stored?.estado).toBe(EstadoViaje.COMPLETADO);
+  });
+
+  it.each(['pendiente', 'rechazado', 'cancelado'])('bloquea trip.completed cuando M7 informa %s', async (estado) => {
+    const viaje = await crearViajeEnCurso();
+    pagos.get(viaje.id)!.estado = estado;
+    expect((await solicitudFinalizacion(viaje.id)).status).toBe(402);
+    expect((await viajeRepo.buscarPorId(viaje.id))?.estado).toBe(EstadoViaje.EN_CURSO);
+    const { rows } = await pool.query("SELECT count(*)::int AS total FROM viaje_eventos_outbox WHERE viaje_id = $1 AND routing_key = 'trip.completed'", [viaje.id]);
+    expect(rows[0].total).toBe(0);
+  });
+
+  it('rechaza finalizar si M7 no tiene un pago registrado', async () => {
+    const viaje = await crearViajeEnCurso();
+    pagos.delete(viaje.id);
+    expect((await solicitudFinalizacion(viaje.id)).status).toBe(402);
+    expect(pagos.has(viaje.id)).toBe(false);
+    expect((await viajeRepo.buscarPorId(viaje.id))?.estado).toBe(EstadoViaje.EN_CURSO);
+  });
+
+  it('rechaza un medio autorizado diferente al seleccionado', async () => {
+    const viaje = await crearViajeEnCurso();
+    expect((await solicitudFinalizacion(viaje.id, { metodoPago: 'efectivo' })).status).toBe(402);
   });
 
   it('rechaza estado inválido y datos incorrectos antes de llamar a M4/M7', async () => {
@@ -239,8 +245,6 @@ describe('RF-6.4 - Finalización del viaje', () => {
     const inProgress = await crearViajeEnCurso();
     const casosInvalidos: Array<Record<string, unknown>> = [
       { metodoPago: 'bitcoin' },
-      { metodoPago: 'tarjeta', pago: undefined },
-      { pago: { ...pagoTarjeta, email: 'no-es-email' } },
       { destino: { latitude: 0, longitude: 0 } },
       { tipoVehiculo: 'camion' },
       { horaFin: new Date(Date.now() + 60 * 60_000).toISOString() },
@@ -273,17 +277,9 @@ describe('RF-6.4 - Finalización del viaje', () => {
     expect(history.historial.map((transicion) => transicion.to)).not.toContain(EstadoViaje.COMPLETADO);
   });
 
-  it('devuelve 402 y no completa el viaje si la pasarela rechaza la tarjeta', async () => {
+  it('finalizaciones concurrentes: una sola finalización y la misma respuesta para ambas', async () => {
     const viaje = await crearViajeEnCurso();
-    const response = await solicitudFinalizacion(viaje.id, { pago: { ...pagoTarjeta, token: 'rechazado' } });
-
-    expect(response.status).toBe(402);
-    expect((await viajeRepo.buscarPorId(viaje.id))?.estado).toBe(EstadoViaje.EN_CURSO);
-  });
-
-  it('finalizaciones concurrentes: un solo cobro y la misma respuesta para ambas', async () => {
-    const viaje = await crearViajeEnCurso();
-    authorizationDelayMs = 50;
+    consultaPagoDelayMs = 50;
 
     const responses = await Promise.all([
       solicitudFinalizacion(viaje.id),
@@ -294,7 +290,7 @@ describe('RF-6.4 - Finalización del viaje', () => {
     expect(responses.map((response) => response.status)).toEqual([200, 200]);
     expect(bodies.map((body) => body.idempotente).sort()).toEqual([false, true]);
     expect(bodies[0].paymentId).toBe(bodies[1].paymentId);
-    expect(authorizationCount).toBe(1);
+    expect(escriturasPagoM7).toBe(0);
     const transiciones = await pool.query(
       'SELECT count(*)::int AS total FROM viaje_transiciones WHERE viaje_id = $1 AND estado_nuevo = $2',
       [viaje.id, EstadoViaje.COMPLETADO],
@@ -323,7 +319,7 @@ describe('RF-6.4 - Finalización del viaje', () => {
     const response = await solicitudFinalizacion(viaje.id);
 
     expect(response.status).toBe(200);
-    expect(authorizationCount).toBe(0);
+    expect(escriturasPagoM7).toBe(0);
     expect((await viajeRepo.buscarPorId(viaje.id))?.estado).toBe(EstadoViaje.COMPLETADO);
   });
 

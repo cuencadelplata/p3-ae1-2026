@@ -49,6 +49,14 @@ const server = createServer(async (request, response) => {
     return send(result.status, result.body);
   }
 
+  // Preparación explícita de pagos en el proveedor de prueba, fuera del flujo M6.
+  if (provider === 'm7' && request.method === 'POST' && request.url === '/__fixtures/pagos') {
+    if (request.headers['x-api-key'] !== apiKey) return send(401, { error: 'API key inválida' });
+    const payment = { pagoId: `PAY-${body.viajeId}`, ...body };
+    payments.set(body.viajeId, payment);
+    return send(201, payment);
+  }
+
   if (provider === 'm7' && request.method === 'POST' && request.url === '/tarifa/estimacion') {
     const multiplier = body.vehicleType === 'moto' ? 0.7 : body.vehicleType === 'auto' ? 1 : undefined;
     if (!multiplier || Number(body.distanciaKm) <= 0 || Number(body.tiempoEstimadoMin) <= 0) {

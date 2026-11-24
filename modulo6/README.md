@@ -74,6 +74,14 @@ npm run test:rf-6.4-6.7
 npm run test:rf-6.5-6.6
 ```
 
+## Pago previo a la finalización
+
+M7 gestiona el pago. Al finalizar, M6 consulta `GET /metodo-pago/{viajeId}` con
+la API key interna y requiere estado `autorizado` para el medio seleccionado.
+Un pago ausente, pendiente o rechazado devuelve 402 y conserva el viaje en curso.
+La finalización no solicita tokens de tarjeta. El evento `trip.completed` se guarda
+junto con la transición a completado después de confirmar la autorización en M7.
+
 ## Pruebas de carga con K6
 
 Instala [K6](https://grafana.com/docs/k6/latest/set-up/install-k6/) y levanta el stack con `npm run docker:up`. Desde esta carpeta, ejecuta:

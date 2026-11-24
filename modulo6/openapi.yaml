@@ -475,12 +475,13 @@ paths:
   /api/viajes/{id}/finalizacion:
     post:
       tags: [Finalización]
-      summary: Finalizar un viaje y autorizar el pago
+      summary: Finalizar un viaje con pago autorizado en M7
       description: |
         Requiere estado EN_CURSO. Registra el tiempo real del viaje (desde la transición a EN_CURSO
         hasta `horaFin`), la distancia estimada por M4 entre origen y destino y la tarifa calculada por M7
-        con esos valores. Luego registra el pago en M7 (`x-api-key`): con `tarjeta` lo autoriza enviando
-        los datos tokenizados de Mercado Pago; con `efectivo` o `transferencia` queda `pendiente`.
+        con esos valores. Consulta el pago mediante GET /metodo-pago/{viajeId} en M7 (`x-api-key`).
+        Requiere un pago autorizado para el medio elegido antes de completar y publicar trip.completed.
+        M7 gestiona el registro y la autorización del pago.
 
         Idempotente: si el viaje ya está COMPLETADO, devuelve la finalización registrada con
         `idempotente: true` y no vuelve a llamar a M7. Las finalizaciones concurrentes del mismo viaje se
@@ -513,10 +514,6 @@ paths:
               tipoVehiculo: auto
               horaFin: '2026-10-05T18:00:00Z'
               metodoPago: tarjeta
-              pago:
-                token: token-de-tarjeta-generado-por-mercado-pago
-                paymentMethodId: visa
-                email: cliente@example.com
       responses:
         '200':
           description: Viaje finalizado (o finalización ya registrada, con idempotente=true)
@@ -531,7 +528,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '402':
-          description: La pasarela de pagos rechazó la tarjeta; el viaje sigue EN_CURSO
+          description: M7 no confirma un pago autorizado para el medio elegido; el viaje sigue EN_CURSO
           content:
             application/json:
               schema:
@@ -910,18 +907,6 @@ components:
         metodoPago:
           type: string
           enum: [efectivo, tarjeta, transferencia]
-        pago:
-          type: object
-          description: Obligatorio si metodoPago es tarjeta. Se reenvía a M7 y no se persiste en M6.
-          required: [token, paymentMethodId, email]
-          properties:
-            token:
-              type: string
-            paymentMethodId:
-              type: string
-            email:
-              type: string
-              format: email
     FinalizarViajeResponse:
       type: object
       required: [viaje, paymentId, estadoPago, metricasEstimadas, fuenteMetrica, idempotente]
