@@ -508,6 +508,70 @@ paths:
         '409': *penaltyError
         '422': *penaltyError
         '503': *penaltyError
+  /tickets/{id}/desbloqueo:
+    post:
+      tags: [Tickets (RF8.5)]
+      summary: Desbloquea en M2 al cliente de un ticket resuelto
+      description: Solo OPERADOR. M8 verifica la identidad con M1 y obtiene de M6 el userId canónico del cliente.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo: { type: string, minLength: 3, maxLength: 500 }
+      responses:
+        '200':
+          description: M2 confirmó que la cuenta está activa.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [userId, status]
+                properties:
+                  userId: { type: integer, minimum: 1 }
+                  status: { type: string, enum: [ACTIVO] }
+        '400': { $ref: '#/components/responses/ErrorDeValidacion' }
+        '401':
+          description: Credencial requerida o inválida.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+        '403':
+          description: Se requiere el rol OPERADOR.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+        '404':
+          description: Ticket o perfil del cliente no encontrado.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+        '409':
+          description: Ticket sin resolver o cuenta inactiva en M2.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+        '422':
+          description: M6 no informó la identidad canónica del cliente.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+        '503':
+          description: Dependencia no disponible o integración sin configurar.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
   /usuarios/{userId}/penalizaciones:
     get:
       tags: [Tickets (RF8.5)]
@@ -987,6 +1051,8 @@ components:
                 - SUPPORT_TRIP_NOT_FOUND
                 - SUPPORT_TRIP_SERVICE_UNAVAILABLE
                 - SUPPORT_IDENTITY_UNAVAILABLE
+                - SUPPORT_CUSTOMER_NOT_FOUND
+                - SUPPORT_ACCOUNT_SERVICE_UNAVAILABLE
                 - SUPPORT_DB_UNAVAILABLE
                 - SUPPORT_INTERNAL_ERROR
             message:

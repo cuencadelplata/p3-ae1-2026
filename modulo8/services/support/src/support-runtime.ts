@@ -9,6 +9,7 @@ import { NoopSupportEventPublisher } from './events/support-event-publisher.js';
 import { checkSupportReadiness, type ReadinessProbes } from './http/readiness.js';
 import type { PenaltyRouteDeps } from './http/penalties.js';
 import { createM1IdentityClient, type IdentityVerifier } from './integrations/m1-identity.js';
+import { createM2AccountUnlocker } from './integrations/m2-account-review.js';
 import { createM6TripsClient, type TripVerifier } from './integrations/m6-trips.js';
 import { PostgresTicketRepository } from './repositories/postgres-ticket.repository.js';
 import { PostgresPenaltyRepository } from './repositories/penalty.repository.js';
@@ -72,6 +73,8 @@ export function buildSupportFromEnv(
   const database = new SupportDatabase({ pool, schema: dbConfig.schema, retryMs });
   const ticketRepository = new PostgresTicketRepository(pool, dbConfig.schema);
   const tripsClient = m6Trips && createM6TripsClient(m6Trips);
+  const m2BaseUrl = env.M2_API_URL?.trim();
+  const supportKey = env.SUPPORT_PENALTIES_API_KEY;
   const runtime = createSupportRuntime(
     config,
     ticketRepository,
@@ -82,7 +85,8 @@ export function buildSupportFromEnv(
     {
       repository: new PostgresPenaltyRepository(pool, dbConfig.schema),
       trips: tripsClient,
-      internalKey: env.SUPPORT_PENALTIES_API_KEY,
+      internalKey: supportKey,
+      unlockAccount: m2BaseUrl && supportKey ? createM2AccountUnlocker(m2BaseUrl, supportKey) : undefined,
     },
   );
 
