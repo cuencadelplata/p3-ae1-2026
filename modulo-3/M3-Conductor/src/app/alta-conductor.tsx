@@ -35,7 +35,7 @@ type TipoServicio = (typeof TIPOS)[number]["valor"];
 
 // Misma regla que vehiculo-service.ts
 const PATENTE_REGEX = /^([A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/;
-const CLAVE_SESION = "m3.tokenM1";
+const CLAVE_IDENTIDAD = "m1.usuario";
 
 // Fotos de licencia
 const TIPOS_IMAGEN = ["image/jpeg", "image/png", "image/webp"];
@@ -49,7 +49,7 @@ const ORDEN_PASOS: Paso[] = ["alta", "vehiculo", "cedula", "licencia", "final"];
 
 // UserResponse de M1 (src/api/autenticacion/m1-Auth-openapi.yaml)
 type UsuarioM1 = {
-  userId: number;
+  id: number | string;
   nombre?: string;
   apellido?: string;
   dni?: string;
@@ -96,33 +96,134 @@ type Documento = {
 // ---------- URLs ----------
 
 function urlApi(ruta: string) {
-  return ruta;
+  const { port, pathname } = window.location;
+  const preview = pathname.includes("/public/") || port === "3001";
+  return `${preview ? "http://127.0.0.1:3000" : ""}${ruta}`;
 }
-const urlVehiculos = (driverId: string) => `/api/v1/drivers/${encodeURIComponent(driverId)}/vehicles`;
-const urlDocumentos = (driverId: string) => `/api/v1/drivers/${encodeURIComponent(driverId)}/documents`;
+
+function leerAlmacen(clave: string) {
+  try {
+    return window.sessionStorage.getItem(clave) ?? window.localStorage.getItem(clave);
+  } catch {
+    return null;
+  }
+}
+
+function guardarAlmacen(clave: string, valor: string) {
+  try {
+    window.sessionStorage.setItem(clave, valor);
+  } catch {
+    /* sin storage: se sigue con lo que vino en la URL */
+  }
+}
+
+/**
+ * Base URL de m3-vehiculos (configurable):
+ *   ?vehiculosUrl=http://host:8083  >  window.M3_VEHICULOS_URL  >  http://<host actual>:8083
+ * m3-vehiculos expone cors() abierto, así que el navegador puede llamarlo directo.
+ */
+function baseVehiculos() {
+  const params = new URLSearchParams(window.location.search);
+  const porUrl = params.get("vehiculosUrl");
+  if (porUrl) guardarAlmacen("m3.vehiculosUrl", porUrl);
+  const global = (window as unknown as { M3_VEHICULOS_URL?: string }).M3_VEHICULOS_URL;
+  const base = porUrl || leerAlmacen("m3.vehiculosUrl") || global || `http://${window.location.hostname || "localhost"}:8083`;
+  return base.replace(/\/$/, "");
+}
+
+const urlVehiculos = (driverId: string) => `${baseVehiculos()}/api/v1/drivers/${encodeURIComponent(driverId)}/vehicles`;
+const urlDocumentos = (driverId: string) => `${baseVehiculos()}/api/v1/drivers/${encodeURIComponent(driverId)}/documents`;
 const urlConductor = (driverId: string) => urlApi(`/api/conductores/${encodeURIComponent(driverId)}`);
 
 // ---------- Identidad de M1 ----------
 
-async function cargarSesion(token: string, signal?: AbortSignal) {
-  const respuesta = await fetch(urlApi("/auth/me"), {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-    signal
-  });
-  if (respuesta.status === 401 || respuesta.status === 403) {
-    throw new Error("Volvé a iniciar sesión en M1 para continuar.");
-  }
-  if (!respuesta.ok) throw new Error("No se pudo verificar tu sesión con M1.");
-  const usuario: UsuarioM1 = await respuesta.json();
-  if (!Number.isSafeInteger(usuario.userId) || usuario.userId <= 0) {
-    throw new Error("M1 no devolvió un ID de usuario válido.");
-  }
-  if (usuario.rol !== "CONDUCTOR" || usuario.estado !== "ACTIVO") {
-    throw new Error("Necesitás una cuenta activa de conductor para continuar.");
-  }
-  return { usuario, token };
+const EJEMPLO_M1: UsuarioM1 = {
+  id: 101,
+  nombre: "Carlos",
+  apellido: "Rodriguez",
+  dni: "23456789",
+  telefono: "+541198765432",
+  email: "carlos.conductor@example.com",
+  rol: "CONDUCTOR",
+  estado: "ACTIVO"
+};
+
+function normalizar(dato: unknown): UsuarioM1 | null {
+  if (!dato || typeof dato !== "object") return null;
+  // Acepta UserResponse o LoginResponse ({ token, usuario })
+  const crudo = ("usuario" in dato ? (dato as { usuario: unknown }).usuario : dato) as Record<string, unknown>;
+  const id = crudo?.id ?? crudo?.userId;
+  if (id === undefined || id === null || id === "") return null;
+  const texto = (v: unknown) => (v === undefined || v === null ? undefined : String(v));
+  return {
+    id: String(id),
+    nombre: texto(crudo.nombre),
+    apellido: texto(crudo.apellido),
+    dni: texto(crudo.dni),
+    telefono: texto(crudo.telefono),
+    email: texto(crudo.email),
+    rol: texto(crudo.rol ?? crudo.role),
+    estado: texto(crudo.estado)
+  };
 }
+
+/**
+ * M1 entrega el usuario al registrarse / iniciar sesión. Se lee de:
+ *   1. ?usuario=<JSON UserResponse/LoginResponse>
+ *   2. ?id=&nombre=&apellido=&dni=&telefono=&email=&rol=&estado=   (también userId / role)
+ *   3. sessionStorage/localStorage "m1.usuario" (lo deja el front de M1)
+ *   4. ?demo=1 -> ejemplo del contrato de M1
+ */
+function leerIdentidadM1(): UsuarioM1 | null {
+  const params = new URLSearchParams(window.location.search);
+  let usuario: UsuarioM1 | null = null;
+
+  const json = params.get("usuario");
+  if (json) {
+    try {
+      usuario = normalizar(JSON.parse(json));
+    } catch {
+      usuario = null;
+    }
+  }
+  if (!usuario && (params.get("id") || params.get("userId"))) {
+    usuario = normalizar(Object.fromEntries(params.entries()));
+  }
+  if (!usuario) {
+    const guardado = leerAlmacen(CLAVE_IDENTIDAD);
+    if (guardado) {
+      try {
+        usuario = normalizar(JSON.parse(guardado));
+      } catch {
+        usuario = null;
+      }
+    }
+  }
+  if (!usuario && params.get("demo") === "1") usuario = { ...EJEMPLO_M1, id: String(EJEMPLO_M1.id) };
+
+  if (usuario) guardarAlmacen(CLAVE_IDENTIDAD, JSON.stringify(usuario));
+  return usuario;
+}
+
+function identidadGuardada(driverId: string) {
+  const guardado = leerAlmacen(CLAVE_IDENTIDAD);
+  if (!guardado) return null;
+  try {
+    const dato = normalizar(JSON.parse(guardado));
+    return dato && String(dato.id) === driverId ? dato : null;
+  } catch {
+    return null;
+  }
+}
+
+// Mensajes neutrales: no revelan el estado de la cuenta en M1 (ACTIVO/BLOQUEADO)
+function problemaIdentidad(usuario: UsuarioM1): string {
+  if (!/^\d+$/.test(String(usuario.id))) return "Los datos de registro no son válidos. Volvé a ingresar desde M1.";
+  if (usuario.rol && usuario.rol.toUpperCase() !== "CONDUCTOR") return "Esta cuenta no está registrada como conductor.";
+  if (usuario.estado && usuario.estado.toUpperCase() === "BLOQUEADO") return "No podemos continuar con esta cuenta. Contactá a soporte.";
+  return "";
+}
+
 function aTipo(valor?: string): TipoServicio | "" {
   const tipo = String(valor || "").toUpperCase();
   return tipo === "AUTO" || tipo === "MOTO" ? tipo : "";
@@ -295,7 +396,7 @@ function TarjetaIdentidad({ usuario }: { usuario: UsuarioM1 }) {
       <h2 className="val-card-titulo">Identidad recibida de M1</h2>
       <Par izq={["Nombre", usuario.nombre]} der={["Apellido", usuario.apellido]} />
       <Par izq={["DNI", usuario.dni]} der={["Teléfono", usuario.telefono]} />
-      <Par izq={["Email", usuario.email]} der={["ID de usuario", String(usuario.userId)]} />
+      <Par izq={["Email", usuario.email]} der={["ID de usuario", String(usuario.id)]} />
     </article>
   );
 }
@@ -331,16 +432,23 @@ function SelectorTipo({
 
 // ---------- Paso 1: alta de conductor / tipo de vehículo ----------
 
-function PasoAlta({ usuario, token }: Awaited<ReturnType<typeof cargarSesion>>) {
+function PasoAlta() {
+  const [usuario] = useState<UsuarioM1 | null>(() => leerIdentidadM1());
   const [tipo, setTipo] = useState<TipoServicio | "">("");
   const [existente, setExistente] = useState<Conductor | null>(null);
   const [verificando, setVerificando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
 
+  const problema = usuario ? problemaIdentidad(usuario) : "";
+
   useEffect(() => {
+    if (!usuario || problema) {
+      setVerificando(false);
+      return;
+    }
     // Si el conductor ya existe en M3 no se vuelve a crear: se puede cambiar el tipo
-    fetch(urlConductor(String(usuario.userId)))
+    fetch(urlConductor(String(usuario.id)))
       .then(async (res) => {
         if (res.ok) {
           const conductor = (await res.json()) as Conductor;
@@ -353,22 +461,22 @@ function PasoAlta({ usuario, token }: Awaited<ReturnType<typeof cargarSesion>>) 
   }, []);
 
   async function continuar() {
-    if (!tipo || enviando) return;
-    const id = String(usuario.userId);
+    if (!usuario || !tipo || enviando) return;
+    const id = String(usuario.id);
     setEnviando(true);
     setError("");
     try {
       if (!existente) {
         await pedirJson(urlApi("/api/conductores"), "No se pudo crear el conductor", {
           method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          headers: { "Content-Type": "application/json" },
           // M3 guarda el tipo en minúscula ("auto" / "moto"), como sus datos existentes
           body: JSON.stringify({ usuarioID: id, tipovehiculo: tipo.toLowerCase() })
         });
       } else if (aTipo(existente.tipovehiculo) !== tipo) {
         await pedirJson(urlConductor(id), "No se pudo cambiar el tipo de vehículo", {
           method: "PATCH",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ tipovehiculo: tipo.toLowerCase() })
         });
       }
@@ -394,9 +502,23 @@ function PasoAlta({ usuario, token }: Awaited<ReturnType<typeof cargarSesion>>) 
       <h1>Alta de conductor</h1>
       <p className="val-subtitulo">Datos de registro de M1</p>
 
-      {verificando ? <Cargando texto="Buscando conductor en M3…" /> : null}
+      {!usuario ? (
+        <article className="val-card">
+          <h2 className="val-card-titulo">Sin datos de M1</h2>
+          <p className="val-vacio">
+            Esta pantalla se abre después de registrarse en M1. No llegó ningún usuario: abrila con
+            los datos del registro (por ejemplo <code>?usuario=…</code>) o probá con <a className="val-volver" href="?demo=1">el ejemplo de M1</a>.
+          </p>
+        </article>
+      ) : (
+        <TarjetaIdentidad usuario={usuario} />
+      )}
 
-      {!verificando ? (
+      {usuario && problema ? <p className="val-error val-aviso">{problema}</p> : null}
+
+      {usuario && !problema && verificando ? <Cargando texto="Buscando conductor en M3…" /> : null}
+
+      {usuario && !problema && !verificando ? (
         <article className="val-card">
           <p className="val-calificar">{existente ? "Tipo de vehículo" : "¿Con qué vas a manejar?"}</p>
           <SelectorTipo
@@ -441,7 +563,7 @@ function validar(form: Formulario): string {
   return "";
 }
 
-function PasoVehiculo({ driverId, usuario }: { driverId: string; usuario: UsuarioM1 }) {
+function PasoVehiculo({ driverId }: { driverId: string }) {
   const [conductor, setConductor] = useState<Conductor | null>(null);
   const [cargando, setCargando] = useState(true);
   const [aviso, setAviso] = useState("");
@@ -453,7 +575,7 @@ function PasoVehiculo({ driverId, usuario }: { driverId: string; usuario: Usuari
   const [cargandoVehiculos, setCargandoVehiculos] = useState(true);
   const [avisoVehiculos, setAvisoVehiculos] = useState("");
 
-
+  const usuario = identidadGuardada(driverId);
   const tipo = aTipo(conductor?.tipovehiculo);
   const delTipo = vehiculos.filter((v) => v.tipoServicio === tipo);
 
@@ -604,7 +726,7 @@ function PasoVehiculo({ driverId, usuario }: { driverId: string; usuario: Usuari
 
       <section className="val-historial">
         <h2>Guardados</h2>
-        <p className="val-etiqueta val-origen">Leído de m3-vehiculos</p>
+        <p className="val-etiqueta val-origen">Leído de m3-vehiculos · {baseVehiculos()}</p>
 
         {cargandoVehiculos ? <Cargando texto="Buscando vehículos…" /> : null}
 
@@ -1144,119 +1266,27 @@ function leerPaso(): { paso: Paso; driverId: string } {
   return { paso: "alta", driverId };
 }
 
-function InicioSesion({ alIngresar }: { alIngresar: (token: string) => Promise<void> }) {
-  const [enviando, setEnviando] = useState(false);
-  const [error, setError] = useState("");
-
-  async function ingresar(evento: React.FormEvent<HTMLFormElement>) {
-    evento.preventDefault();
-    if (enviando) return;
-    const datos = new FormData(evento.currentTarget);
-    setEnviando(true);
-    setError("");
-    try {
-      const respuesta = await pedirJson<{ token: string }>("/auth/iniciar-sesion", "No se pudo iniciar sesión en M1.", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: datos.get("email"), password: datos.get("password") })
-      });
-      if (!respuesta.token) throw new Error("M1 no devolvió un token de sesión.");
-      await alIngresar(respuesta.token);
-    } catch (e) {
-      setError(mensajeDe(e, "No se pudo iniciar sesión en M1."));
-    } finally {
-      setEnviando(false);
-    }
-  }
-
-  return (
-    <form className="val-card" onSubmit={ingresar}>
-      <h1>Alta de conductor</h1>
-      <p className="val-subtitulo">Ingresá con tu cuenta de conductor de M1.</p>
-      <label className="val-comentario">
-        Correo electrónico
-        <input name="email" type="email" autoComplete="username" required />
-      </label>
-      <label className="val-comentario">
-        Contraseña
-        <input name="password" type="password" autoComplete="current-password" required />
-      </label>
-      {error ? <p className="val-error" role="alert">{error}</p> : null}
-      <button className="val-enviar" disabled={enviando}>
-        {enviando ? "Ingresando…" : "Iniciar sesión"}
-      </button>
-    </form>
-  );
-}
-
 export default function AltaConductor() {
   const [ruta, setRuta] = useState(leerPaso);
-  const [sesion, setSesion] = useState<Awaited<ReturnType<typeof cargarSesion>> | null>(null);
-  const [verificando, setVerificando] = useState(true);
-  const [errorSesion, setErrorSesion] = useState("");
 
   useEffect(() => {
     const alCambiar = () => setRuta(leerPaso());
     window.addEventListener("popstate", alCambiar);
-    const consulta = new AbortController();
-
-    async function recuperarSesion() {
-      try {
-        const token = window.sessionStorage.getItem(CLAVE_SESION);
-        if (token) setSesion(await cargarSesion(token, consulta.signal));
-      } catch (e) {
-        if (!consulta.signal.aborted) {
-          setErrorSesion(mensajeDe(e, "No se pudo verificar tu sesión con M1."));
-        }
-      } finally {
-        if (!consulta.signal.aborted) setVerificando(false);
-      }
-    }
-
-    void recuperarSesion();
-    return () => {
-      consulta.abort();
-      window.removeEventListener("popstate", alCambiar);
-    };
+    return () => window.removeEventListener("popstate", alCambiar);
   }, []);
-
-  async function iniciarSesion(token: string) {
-    const nuevaSesion = await cargarSesion(token);
-    window.sessionStorage.setItem(CLAVE_SESION, token);
-    setErrorSesion("");
-    setSesion(nuevaSesion);
-  }
-
-  const driverId = sesion ? String(sesion.usuario.userId) : "";
-  const rutaValida = !ruta.driverId || ruta.driverId === driverId;
 
   return (
     <main className="val-page">
       <style>{estilos}</style>
       <div className="val-columna">
-        <a className="val-volver" href="/">Panel</a>
-        {verificando ? <Cargando texto="Verificando sesión con M1…" /> : null}
-        {!verificando && !sesion ? (
-          <>
-            {errorSesion ? <p className="val-error" role="alert">{errorSesion}</p> : null}
-            <InicioSesion alIngresar={iniciarSesion} />
-          </>
-        ) : null}
-        {sesion && !rutaValida ? (
-          <p className="val-error" role="alert">
-            El ID de la URL no corresponde a tu usuario de M1.{" "}
-            <a className="val-volver" href="alta-conductor.html">Volver al alta</a>
-          </p>
-        ) : null}
-        {sesion && rutaValida ? (
-          <>
-            {ruta.paso === "vehiculo" ? <PasoVehiculo driverId={driverId} usuario={sesion.usuario} /> : null}
-            {ruta.paso === "cedula" ? <PasoDocumento key="cedula" driverId={driverId} config={CEDULA} /> : null}
-            {ruta.paso === "licencia" ? <PasoDocumento key="licencia" driverId={driverId} config={LICENCIA} /> : null}
-            {ruta.paso === "final" ? <PasoFinal driverId={driverId} /> : null}
-            {ruta.paso === "alta" ? <PasoAlta {...sesion} /> : null}
-          </>
-        ) : null}
+        <a className="val-volver" href="/">
+          Panel
+        </a>
+        {ruta.paso === "vehiculo" ? <PasoVehiculo key={ruta.driverId} driverId={ruta.driverId} /> : null}
+        {ruta.paso === "cedula" ? <PasoDocumento key={`cedula-${ruta.driverId}`} driverId={ruta.driverId} config={CEDULA} /> : null}
+        {ruta.paso === "licencia" ? <PasoDocumento key={`licencia-${ruta.driverId}`} driverId={ruta.driverId} config={LICENCIA} /> : null}
+        {ruta.paso === "final" ? <PasoFinal key={ruta.driverId} driverId={ruta.driverId} /> : null}
+        {ruta.paso === "alta" ? <PasoAlta /> : null}
       </div>
     </main>
   );
