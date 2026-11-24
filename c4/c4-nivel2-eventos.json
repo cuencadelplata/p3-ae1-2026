@@ -1,0 +1,364 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C4 · Nivel 2b — Eventos entre contenedores (RabbitMQ)",
+    "locale": "es",
+    "output": "c4/c4-nivel2-eventos.html",
+    "quality_profile": "showcase",
+    "parentHref": "c4-nivel2-contenedores.html",
+    "repository": {
+      "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
+      "provider": "github",
+      "revision": "687a636f0d66acc26bcde86dce442d4778e37dd8"
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "cols": 3,
+    "cellW": 196,
+    "cellH": 64,
+    "gapX": 170,
+    "gapY": 110
+  },
+  "components": [
+    {
+      "id": "m1",
+      "type": "security",
+      "label": "M1 Identidad y acceso",
+      "sublabel": "API :10000 · UI :5173 · SQLite",
+      "explanation": "Emite y valida tokens y roles (CLIENTE, CONDUCTOR, OPERADOR). Todos los módulos le validan la identidad; además precarga el operador semilla, emite el token delegado de M9 y le da a M8 el nombre del conductor.",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/compose.integracion.yml",
+          "line": 18,
+          "end_line": 30
+        },
+        {
+          "path": "docker-compose.yml",
+          "line": 11,
+          "label": "m1-ui"
+        }
+      ],
+      "row": 0,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m1.html"
+    },
+    {
+      "id": "m6",
+      "type": "backend",
+      "label": "M6 Viajes",
+      "sublabel": "viajes · cancelación · fachada · :15000",
+      "explanation": "Publica el mismo hecho de viaje en tres exchanges, uno por consumidor: mobility.events (M2, M8), viajes.events (M3) y trip.events (M4).",
+      "sources": [
+        {
+          "path": "modulo6/compose.integracion.yml",
+          "line": 29,
+          "end_line": 54
+        },
+        {
+          "path": "modulo6/src/rf-6.1-6.2-6.3/services/eventos-viaje.service.ts",
+          "line": 40,
+          "end_line": 42,
+          "label": "exchanges por consumidor"
+        }
+      ],
+      "row": 0,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m6.html"
+    },
+    {
+      "id": "m9",
+      "type": "backend",
+      "label": "M9 Reservas programadas",
+      "sublabel": "reservas y activación · :3000",
+      "sources": [
+        {
+          "path": "M9-ReservasProgramadas/docker-compose.yml",
+          "line": 4,
+          "end_line": 72,
+          "label": "m9-reservas"
+        }
+      ],
+      "row": 0,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m9.html"
+    },
+    {
+      "id": "m5",
+      "type": "backend",
+      "label": "M5 Solicitud y despacho",
+      "sublabel": "asignación de conductor · :3005",
+      "sources": [
+        {
+          "path": "modulo-5/compose.integracion.yml",
+          "line": 16,
+          "end_line": 31
+        }
+      ],
+      "row": 1,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m5.html"
+    },
+    {
+      "id": "rabbit",
+      "type": "messagebus",
+      "label": "RabbitMQ",
+      "sublabel": "broker compartido · :5672",
+      "explanation": "Broker común definido en el compose de M9. M6 publica el mismo hecho de viaje en un exchange por consumidor.",
+      "sources": [
+        {
+          "path": "M9-ReservasProgramadas/docker-compose.yml",
+          "line": 112,
+          "end_line": 142,
+          "label": "rabbitmq"
+        }
+      ],
+      "row": 1,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "m8",
+      "type": "backend",
+      "label": "M8 Notificaciones y soporte",
+      "sublabel": "QR · comprobantes · tickets · :18000",
+      "sources": [
+        {
+          "path": "modulo8/compose.integracion.yaml",
+          "line": 6,
+          "end_line": 36
+        },
+        {
+          "path": "modulo8/services/notification-delivery/src/infrastructure/clients/m2-preferences.client.ts",
+          "line": 25,
+          "end_line": 32,
+          "label": "consulta preferencias a M2"
+        },
+        {
+          "path": "modulo8/services/support/src/integrations/m2-account-review.ts",
+          "line": 1,
+          "label": "desbloqueo por revisión en M2"
+        }
+      ],
+      "explanation": "Notificaciones, QR, comprobantes y entrega, más Soporte: tickets, penalizaciones por viaje (vigencia 90 días) y revisión de bloqueos que llama al desbloqueo de M2.",
+      "row": 1,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m8.html"
+    },
+    {
+      "id": "m3",
+      "type": "backend",
+      "label": "M3 Conductores",
+      "sublabel": "conductor-api + vehículos · :5000",
+      "sources": [
+        {
+          "path": "modulo-3/compose.integracion.yml",
+          "line": 2,
+          "end_line": 21,
+          "label": "m3-vehiculos"
+        },
+        {
+          "path": "modulo-3/compose.integracion.yml",
+          "line": 33,
+          "end_line": 63,
+          "label": "m3-conductor-api"
+        }
+      ],
+      "row": 2,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m3.html"
+    },
+    {
+      "id": "m2",
+      "type": "backend",
+      "label": "M2 Perfil, historial y estado",
+      "sublabel": "API (2 réplicas) + worker · :11000",
+      "tag": "nuestro módulo",
+      "emphasis": true,
+      "explanation": "Perfil, estado de cuenta, historial de viajes, direcciones frecuentes y calificaciones. Recalcula el estado con las penalizaciones vigentes de Soporte (2 → bloqueo temporal, 3 → permanente) y expone el desbloqueo por revisión. Entra por m2-gateway (nginx) que balancea dos réplicas; el worker consume eventos y publica el outbox. Abrí el nodo para ver el Nivel 3.",
+      "sources": [
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 42,
+          "end_line": 104,
+          "label": "réplicas + gateway"
+        },
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 118,
+          "end_line": 126,
+          "label": "m2-worker"
+        }
+      ],
+      "row": 2,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m2.html"
+    },
+    {
+      "id": "m4",
+      "type": "backend",
+      "label": "M4 Ubicación y disponibilidad",
+      "sublabel": "API :3004 · UI :8084",
+      "sources": [
+        {
+          "path": "modulo-4/compose.integration.yml",
+          "line": 2,
+          "end_line": 36,
+          "label": "m4-api"
+        },
+        {
+          "path": "modulo-4/compose.integration.yml",
+          "line": 37,
+          "end_line": 50,
+          "label": "m4-ui"
+        }
+      ],
+      "row": 2,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m4.html"
+    }
+  ],
+  "connections": [
+    {
+      "id": "m6-rabbit",
+      "from": "m6",
+      "to": "rabbit",
+      "label": "eventos de viaje · despacho.reabrir",
+      "variant": "dashed"
+    },
+    {
+      "id": "m5-rabbit",
+      "from": "m5",
+      "to": "rabbit",
+      "label": "eventos de despacho",
+      "variant": "dashed"
+    },
+    {
+      "id": "m1-rabbit",
+      "from": "m1",
+      "to": "rabbit",
+      "label": "m1.eventos",
+      "variant": "dashed"
+    },
+    {
+      "id": "m9-rabbit",
+      "from": "m9",
+      "to": "rabbit",
+      "label": "reservation.*.v1",
+      "variant": "dashed"
+    },
+    {
+      "id": "m3-rabbit",
+      "from": "m3",
+      "to": "rabbit",
+      "label": "documento registrado",
+      "variant": "dashed"
+    },
+    {
+      "id": "m4-rabbit",
+      "from": "m4",
+      "to": "rabbit",
+      "label": "driver.events",
+      "variant": "dashed"
+    },
+    {
+      "id": "m2-rabbit",
+      "from": "m2",
+      "to": "rabbit",
+      "label": "FavoriteAddressChanged.v1",
+      "variant": "dashed"
+    },
+    {
+      "id": "rabbit-m8",
+      "from": "rabbit",
+      "to": "m8",
+      "label": "viaje · despacho · docs · M1",
+      "variant": "dashed"
+    },
+    {
+      "id": "rabbit-m2",
+      "from": "rabbit",
+      "to": "m2",
+      "label": "TripCompleted.v1",
+      "variant": "dashed"
+    },
+    {
+      "id": "rabbit-m3",
+      "from": "rabbit",
+      "to": "m3",
+      "label": "viaje.finalizado",
+      "variant": "dashed"
+    },
+    {
+      "id": "rabbit-m4",
+      "from": "rabbit",
+      "to": "m4",
+      "label": "trip.events",
+      "variant": "dashed"
+    },
+    {
+      "id": "rabbit-m5",
+      "from": "rabbit",
+      "to": "m5",
+      "label": "despacho.reabrir",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "violet",
+      "title": "Cómo leer este nivel",
+      "items": [
+        "Líneas punteadas = asíncrono por RabbitMQ",
+        "M6 publica el fin de viaje en un exchange por consumidor: mobility.events (M2, M8), viajes.events (M3) y trip.events (M4)",
+        "M5 publica ride.requested, driver.offer.accepted y ride_request.cancelled en mobility.events",
+        "M8 es el principal consumidor: comprobantes, notificaciones y el correo de recuperación de M1"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Observaciones (según el código)",
+      "items": [
+        "FavoriteAddressChanged.v1 de M2 no tiene consumidor en el stack real",
+        "M7 espera viajes cancelados en el exchange 'viajes', que ningún módulo publica (M6 usa mobility.events)",
+        "driver.events de M4 y reservation.*.v1 de M9 no tienen consumidores en otros módulos"
+      ]
+    }
+  ]
+}

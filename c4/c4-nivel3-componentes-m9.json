@@ -1,0 +1,321 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C4 · Nivel 3 — Componentes de M9 Reservas programadas",
+    "locale": "es",
+    "output": "c4/c4-nivel3-componentes-m9.html",
+    "quality_profile": "showcase",
+    "parentHref": "c4-nivel2-contenedores.html",
+    "repository": {
+      "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
+      "provider": "github",
+      "revision": "687a636f0d66acc26bcde86dce442d4778e37dd8"
+    }
+  },
+  "layout": {
+    "mode": "auto"
+  },
+  "components": [
+    {
+      "id": "pasajero",
+      "type": "external",
+      "label": "Pasajero",
+      "sublabel": "reserva un viaje a futuro"
+    },
+    {
+      "id": "rutas",
+      "type": "backend",
+      "label": "Rutas de reservas",
+      "sublabel": "crear · listar · actualizar · cancelar",
+      "sources": [
+        {
+          "path": "M9-ReservasProgramadas/src/routes/reserva.routes.ts",
+          "line": 10,
+          "end_line": 14,
+          "label": "rutas"
+        }
+      ]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "Middleware de autenticación",
+      "sublabel": "valida con M1",
+      "sources": [
+        {
+          "path": "M9-ReservasProgramadas/src/middleware/auth.middleware.ts",
+          "line": 39,
+          "label": "validación"
+        }
+      ]
+    },
+    {
+      "id": "svc",
+      "type": "backend",
+      "label": "ReservaService",
+      "sublabel": "reglas de la reserva",
+      "sources": [
+        {
+          "path": "M9-ReservasProgramadas/src/services/reserva.service.ts",
+          "line": 72,
+          "label": "servicio"
+        }
+      ]
+    },
+    {
+      "id": "sched",
+      "type": "backend",
+      "label": "Scheduler",
+      "sublabel": "node-cron · activa reservas vencidas",
+      "sources": [
+        {
+          "path": "M9-ReservasProgramadas/src/jobs/reservas.scheduler.ts",
+          "line": 3,
+          "label": "cron"
+        }
+      ]
+    },
+    {
+      "id": "act",
+      "type": "backend",
+      "label": "ActivacionReservaService",
+      "sublabel": "ruta, tarifa y despacho",
+      "explanation": "Con un lock distribuido en Redis, resuelve la ruta en M4, la tarifa en M7 y activa el despacho en M5 con un token delegado de M1. Reintenta si M4 falla.",
+      "sources": [
+        {
+          "path": "M9-ReservasProgramadas/src/services/activacion-reserva.service.ts",
+          "line": 19,
+          "label": "servicio"
+        },
+        {
+          "path": "M9-ReservasProgramadas/src/locks/redis-distributed-lock.ts",
+          "line": 1,
+          "label": "lock"
+        }
+      ]
+    },
+    {
+      "id": "clients",
+      "type": "backend",
+      "label": "Clientes HTTP",
+      "sublabel": "M4 ruta · M5 despacho · M7 tarifa · token delegado",
+      "sources": [
+        {
+          "path": "M9-ReservasProgramadas/src/clients/m4-route.resolver.ts",
+          "line": 27,
+          "label": "M4"
+        },
+        {
+          "path": "M9-ReservasProgramadas/src/clients/m5-dispatch.client.ts",
+          "line": 111,
+          "label": "M5"
+        },
+        {
+          "path": "M9-ReservasProgramadas/src/clients/delegated-dispatch-token.provider.ts",
+          "line": 46,
+          "label": "token delegado"
+        }
+      ]
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "Repositorios Prisma",
+      "sublabel": "reservas · outbox · operaciones",
+      "sources": [
+        {
+          "path": "M9-ReservasProgramadas/src/repositories/prisma-reserva.repository.ts",
+          "line": 1,
+          "label": "reservas"
+        },
+        {
+          "path": "M9-ReservasProgramadas/src/repositories/prisma-outbox.repository.ts",
+          "line": 1,
+          "label": "outbox"
+        }
+      ]
+    },
+    {
+      "id": "msg",
+      "type": "backend",
+      "label": "Mensajería",
+      "sublabel": "outbox worker · consumidor de resultados",
+      "explanation": "El outbox worker publica reservation.*.v1; el consumidor procesa el resultado del despacho.",
+      "sources": [
+        {
+          "path": "M9-ReservasProgramadas/src/messaging/outbox.worker.ts",
+          "line": 1,
+          "label": "worker"
+        },
+        {
+          "path": "M9-ReservasProgramadas/src/messaging/reservation-events.ts",
+          "line": 8,
+          "end_line": 13,
+          "label": "eventos"
+        },
+        {
+          "path": "M9-ReservasProgramadas/src/messaging/rabbitmq-consumer.ts",
+          "line": 32,
+          "label": "consumidor"
+        }
+      ]
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "m9_reservas",
+      "sources": [
+        {
+          "path": "M9-ReservasProgramadas/src/config/env.ts",
+          "line": 52,
+          "label": "DATABASE_URL"
+        }
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": "caché y locks",
+      "sources": [
+        {
+          "path": "M9-ReservasProgramadas/src/cache/redis-reservation-cache.ts",
+          "line": 1,
+          "label": "caché"
+        }
+      ]
+    },
+    {
+      "id": "rabbit",
+      "type": "messagebus",
+      "label": "RabbitMQ",
+      "sublabel": "eventos de reservas"
+    },
+    {
+      "id": "otros",
+      "type": "external",
+      "label": "M1, M4, M5 y M7",
+      "sublabel": "otros módulos"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "M9 Reservas (:3000)",
+      "wraps": [
+        "rutas",
+        "auth",
+        "svc",
+        "sched",
+        "act",
+        "clients",
+        "repo",
+        "pg",
+        "msg"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "pasajero-rutas",
+      "from": "pasajero",
+      "to": "rutas",
+      "label": "/reservas",
+      "variant": "emphasis"
+    },
+    {
+      "id": "rutas-auth",
+      "from": "rutas",
+      "to": "auth"
+    },
+    {
+      "id": "auth-otros",
+      "from": "auth",
+      "to": "otros",
+      "label": "valida token (M1)",
+      "variant": "security"
+    },
+    {
+      "id": "auth-svc",
+      "from": "auth",
+      "to": "svc"
+    },
+    {
+      "id": "svc-repo",
+      "from": "svc",
+      "to": "repo"
+    },
+    {
+      "id": "svc-redis",
+      "from": "svc",
+      "to": "redis",
+      "label": "caché"
+    },
+    {
+      "id": "sched-act",
+      "from": "sched",
+      "to": "act",
+      "label": "reservas a activar"
+    },
+    {
+      "id": "act-clients",
+      "from": "act",
+      "to": "clients"
+    },
+    {
+      "id": "act-redis",
+      "from": "act",
+      "to": "redis",
+      "label": "lock"
+    },
+    {
+      "id": "act-repo",
+      "from": "act",
+      "to": "repo"
+    },
+    {
+      "id": "clients-otros",
+      "from": "clients",
+      "to": "otros",
+      "label": "ruta (M4) · tarifa (M7) · despacho (M5) · token delegado (M1)"
+    },
+    {
+      "id": "repo-pg",
+      "from": "repo",
+      "to": "pg",
+      "label": "Prisma"
+    },
+    {
+      "id": "msg-repo",
+      "from": "msg",
+      "to": "repo",
+      "label": "lee pendientes"
+    },
+    {
+      "id": "msg-rabbit",
+      "from": "msg",
+      "to": "rabbit",
+      "label": "reservation.*.v1",
+      "variant": "dashed"
+    },
+    {
+      "id": "rabbit-msg",
+      "from": "rabbit",
+      "to": "msg",
+      "label": "resultado de despacho",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Garantías",
+      "items": [
+        "Lock distribuido: una reserva se activa una sola vez aunque haya varias réplicas",
+        "Outbox: los eventos salen aunque RabbitMQ esté caído al momento de guardar"
+      ]
+    }
+  ]
+}

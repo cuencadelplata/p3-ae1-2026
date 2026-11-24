@@ -1,0 +1,363 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C4 · Nivel 3 — Componentes de M4 Ubicación y disponibilidad",
+    "locale": "es",
+    "output": "c4/c4-nivel3-componentes-m4.html",
+    "quality_profile": "showcase",
+    "parentHref": "c4-nivel2-contenedores.html",
+    "repository": {
+      "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
+      "provider": "github",
+      "revision": "687a636f0d66acc26bcde86dce442d4778e37dd8"
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "cols": 3,
+    "cellW": 196,
+    "cellH": 64,
+    "gapX": 150,
+    "gapY": 92
+  },
+  "components": [
+    {
+      "id": "clientes",
+      "type": "external",
+      "label": "Clientes de M4",
+      "sublabel": "M4 UI · M2, M5, M6, M9",
+      "row": 0,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "ctrl",
+      "type": "backend",
+      "label": "LocationController",
+      "sublabel": "ubicación · cercanos · geocode",
+      "sources": [
+        {
+          "path": "modulo-4/src/app.ts",
+          "line": 130,
+          "end_line": 137,
+          "label": "rutas"
+        }
+      ],
+      "row": 1,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "Adaptador M1",
+      "sublabel": "valida el token en M1",
+      "sources": [
+        {
+          "path": "modulo-4/src/infrastructure/auth/m1-auth.adapter.ts",
+          "line": 31,
+          "label": "validación"
+        }
+      ],
+      "row": 0,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "uc",
+      "type": "backend",
+      "label": "Casos de uso",
+      "sublabel": "update-location · nearby · historial",
+      "explanation": "Arquitectura hexagonal: los casos de uso dependen de puertos, no de Redis ni Postgres.",
+      "sources": [
+        {
+          "path": "modulo-4/src/application/use-cases/update-location.usecase.ts",
+          "line": 1,
+          "label": "actualizar"
+        },
+        {
+          "path": "modulo-4/src/application/use-cases/search-nearby-drivers.usecase.ts",
+          "line": 1,
+          "label": "cercanos"
+        }
+      ],
+      "row": 2,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "geo",
+      "type": "backend",
+      "label": "Geocodificación y estimación",
+      "sublabel": "geocode · distancia y ETA",
+      "sources": [
+        {
+          "path": "modulo-4/src/application/use-cases/geocode-address.usecase.ts",
+          "line": 1,
+          "label": "geocode"
+        },
+        {
+          "path": "modulo-4/src/application/use-cases/estimate-distance-eta.usecase.ts",
+          "line": 1,
+          "label": "estimate"
+        }
+      ],
+      "row": 1,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "handler",
+      "type": "backend",
+      "label": "TripEventHandler",
+      "sublabel": "libera u ocupa al conductor",
+      "sources": [
+        {
+          "path": "modulo-4/src/application/event-handlers/trip-event.handler.ts",
+          "line": 1,
+          "label": "handler"
+        },
+        {
+          "path": "modulo-4/src/infrastructure/rabbitmq/rabbitmq-trip-event.consumer.ts",
+          "line": 41,
+          "label": "consumidor"
+        }
+      ],
+      "row": 3,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "redisrepo",
+      "type": "backend",
+      "label": "Repositorio de ubicaciones",
+      "sublabel": "Redis GEO",
+      "sources": [
+        {
+          "path": "modulo-4/src/infrastructure/redis/redis-location.repository.ts",
+          "line": 1,
+          "label": "repositorio"
+        }
+      ],
+      "row": 2,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "hist",
+      "type": "backend",
+      "label": "Historial de ubicaciones",
+      "sublabel": "PostgreSQL",
+      "sources": [
+        {
+          "path": "modulo-4/src/infrastructure/postgres/postgres-location-history.repository.ts",
+          "line": 1,
+          "label": "repositorio"
+        }
+      ],
+      "row": 3,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "pub",
+      "type": "backend",
+      "label": "Publicador de eventos",
+      "sublabel": "driver.availability_changed",
+      "sources": [
+        {
+          "path": "modulo-4/src/infrastructure/rabbitmq/rabbitmq-event.publisher.ts",
+          "line": 20,
+          "label": "evento"
+        }
+      ],
+      "row": 3,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": "posiciones y event store",
+      "row": 1,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "m4-postgres",
+      "sublabel": "historial",
+      "sources": [
+        {
+          "path": "modulo-4/src/infrastructure/config/env.config.ts",
+          "line": 13,
+          "label": "POSTGRES_URL"
+        }
+      ],
+      "row": 2,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "rabbit",
+      "type": "messagebus",
+      "label": "RabbitMQ",
+      "sublabel": "trip.events · driver.events",
+      "sources": [
+        {
+          "path": "modulo-4/src/infrastructure/rabbitmq/rabbitmq.connection.ts",
+          "line": 98,
+          "label": "cola"
+        }
+      ],
+      "row": 4,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "nominatim",
+      "type": "external",
+      "label": "Nominatim",
+      "sublabel": "OpenStreetMap",
+      "sources": [
+        {
+          "path": "modulo-4/src/infrastructure/geocoding/http-geocoding.adapter.ts",
+          "line": 40,
+          "label": "HTTP"
+        }
+      ],
+      "row": 0,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "clientes-ctrl",
+      "from": "clientes",
+      "to": "ctrl",
+      "label": "HTTP · /api/v1",
+      "variant": "emphasis"
+    },
+    {
+      "id": "ctrl-auth",
+      "from": "ctrl",
+      "to": "auth"
+    },
+    {
+      "id": "ctrl-uc",
+      "from": "ctrl",
+      "to": "uc"
+    },
+    {
+      "id": "ctrl-geo",
+      "from": "ctrl",
+      "to": "geo"
+    },
+    {
+      "id": "uc-redisrepo",
+      "from": "uc",
+      "to": "redisrepo"
+    },
+    {
+      "id": "uc-hist",
+      "from": "uc",
+      "to": "hist"
+    },
+    {
+      "id": "uc-pub",
+      "from": "uc",
+      "to": "pub"
+    },
+    {
+      "id": "geo-nominatim",
+      "from": "geo",
+      "to": "nominatim",
+      "label": "HTTPS"
+    },
+    {
+      "id": "redisrepo-redis",
+      "from": "redisrepo",
+      "to": "redis",
+      "label": "GEO"
+    },
+    {
+      "id": "hist-pg",
+      "from": "hist",
+      "to": "pg",
+      "label": "SQL"
+    },
+    {
+      "id": "rabbit-handler",
+      "from": "rabbit",
+      "to": "handler",
+      "label": "trip.events",
+      "variant": "dashed"
+    },
+    {
+      "id": "handler-redisrepo",
+      "from": "handler",
+      "to": "redisrepo",
+      "label": "disponibilidad"
+    },
+    {
+      "id": "pub-rabbit",
+      "from": "pub",
+      "to": "rabbit",
+      "label": "driver.events",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Diseño",
+      "items": [
+        "Hexagonal: puertos en src/ports, adaptadores en src/infrastructure",
+        "Con USE_MOCK_GEOCODING=true no sale a Nominatim"
+      ]
+    }
+  ]
+}
