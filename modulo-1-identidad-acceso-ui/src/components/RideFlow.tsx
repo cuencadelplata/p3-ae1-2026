@@ -99,6 +99,11 @@ async function completedPayment(trip: Trip, userId: number, token: string, signa
   return { paymentId: result.paymentId, estadoPago: result.estadoPago, viaje: result }
 }
 
+async function fetchReceipt(id: string, token: string, signal?: AbortSignal) {
+  const result = await request<{ data?: Receipt } & Partial<Receipt>>('M8', `/api/v1/receipts/${id}`, { token, signal })
+  return result.data ?? (result as Receipt)
+}
+
 export default function RideFlow({ passenger, onBack }: { passenger: Account; onBack: () => void }) {
   const { token, userId } = passenger
   const storageKey = `movilidad.viaje.${userId}`
@@ -126,6 +131,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   const rideId = ride?.id
   const tripId = trip?.id
   const hasPayment = Boolean(payment)
+  const waitsForReceipt = trip?.estado === 'COMPLETADO' && !receipt
   const canRestore = trip ? terminalTrip(trip.estado) : !ride || closed(ride.status)
   const planning = !ride && !trip
   // Lo que se muestra: el borrador mientras se arma el pedido, o el recorrido del viaje pedido.
@@ -286,6 +292,20 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
     })
   }, [tripId, busy, hasPayment, token, userId])
 
+  useEffect(() => {
+    if (!tripId || !waitsForReceipt) return
+    const deadline = Date.now() + 30_000
+    return pollTrip(async (signal) => {
+      try {
+        const issued = await fetchReceipt(tripId, token, signal)
+        if (!signal.aborted) setJourney((previous) => previous.trip?.id === tripId ? { ...previous, receipt: issued } : previous)
+        return false
+      } catch (error) {
+        return error instanceof FlowError && error.status === 404 && Date.now() < deadline
+      }
+    })
+  }, [tripId, token, waitsForReceipt])
+
   const update = (values: Partial<Journey>) => setJourney((current) => ({ ...current, ...values }))
 
   function recordTransition(estado: string, qr?: QR, payment?: Payment) {
@@ -356,8 +376,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
 
   async function readReceipt(id: string) {
     try {
-      const result = await request<{ data?: Receipt } & Partial<Receipt>>('M8', `/api/v1/receipts/${id}`, { token })
-      update({ receipt: result.data ?? (result as Receipt) })
+      update({ receipt: await fetchReceipt(id, token) })
     } catch (err) {
       if (err instanceof FlowError && err.status === 404) throw new Error('M8 todavía está emitiendo el comprobante. Volvé a consultarlo en unos segundos.')
       throw err
