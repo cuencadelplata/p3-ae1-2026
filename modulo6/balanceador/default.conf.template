@@ -13,12 +13,22 @@
 resolver ${NGINX_LOCAL_RESOLVERS} valid=5s ipv6=off;
 resolver_timeout 2s;
 
+# Grupo de instancias con conexiones reutilizables (keepalive). Con `proxy_pass $variable`
+# nginx abría una conexión nueva hacia la API en cada petición y, bajo carga (k6:load),
+# agotaba los puertos efímeros: "connect() failed (99: Address not available)".
+# `resolve` (nginx >= 1.27.3) vuelve a resolver el nombre según el `resolver` de arriba,
+# así que el escalado con --scale sigue funcionando sin reiniciar nginx.
+upstream m6_viajes {
+    zone m6_viajes 64k;
+    server ${M6_UPSTREAM} resolve;
+    keepalive 64;
+}
+
 server {
     listen 3000;
 
     location / {
-        set $m6_upstream http://${M6_UPSTREAM};
-        proxy_pass $m6_upstream;
+        proxy_pass http://m6_viajes;
 
         proxy_http_version 1.1;
         proxy_set_header Connection "";
