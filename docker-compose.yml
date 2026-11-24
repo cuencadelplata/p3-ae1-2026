@@ -23,7 +23,7 @@ services:
       NODE_ENV: "production"
       LOCATION_TTL_SECONDS: "${LOCATION_TTL_SECONDS:-60}"
       M1_URL: "${M1_URL:-http://m1-identidad-acceso:3001}"
-      M3_URL: "${M3_URL:-http://m3-api:3003}"
+      M3_URL: "${M3_URL:-http://m3-api:3000}"
       REDIS_URL: "redis://redis:6379"
       REDIS_KEY_PREFIX: "${REDIS_KEY_PREFIX:-driver:}"
       POSTGRES_URL: "postgres://${M4_POSTGRES_USER:-postgres}:${M4_POSTGRES_PASSWORD:-postgres}@m4-postgres:5432/${M4_POSTGRES_DB:-m4_locations}"
