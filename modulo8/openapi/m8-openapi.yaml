@@ -492,6 +492,44 @@ paths:
         '409': { description: Ticket sin resolver, modificado o viaje ya penalizado. }
         '422': { description: M6 no informó la identidad canónica del cliente. }
         '503': { description: M1, M6 o PostgreSQL indisponibles, o integración sin configurar. }
+  /tickets/{id}/desbloqueo:
+    post:
+      summary: Desbloquea en M2 al cliente de un ticket resuelto
+      description: Solo OPERADOR. M8 verifica la identidad con M1 y obtiene de M6 el userId canónico del cliente.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo: { type: string, minLength: 3, maxLength: 500 }
+      responses:
+        '200':
+          description: M2 confirmó que la cuenta está activa.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [userId, status]
+                properties:
+                  userId: { type: integer, minimum: 1 }
+                  status: { type: string, enum: [ACTIVO] }
+        '400': { description: Motivo inválido. }
+        '401': { description: Credencial requerida o inválida. }
+        '403': { description: Se requiere el rol OPERADOR. }
+        '404': { description: Ticket o perfil del cliente no encontrado. }
+        '409': { description: Ticket sin resolver o cuenta inactiva en M2. }
+        '422': { description: M6 no informó la identidad canónica del cliente. }
+        '503': { description: Dependencia no disponible o integración sin configurar. }
   /usuarios/{userId}/penalizaciones:
     get:
       summary: Lista las penalizaciones vigentes de un cliente para M2

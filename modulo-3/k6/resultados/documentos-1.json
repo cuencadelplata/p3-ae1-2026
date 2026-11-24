@@ -1,0 +1,163 @@
+{
+    "metrics": {
+        "iterations": {
+            "count": 6,
+            "rate": 0.018694317100366578
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 18,
+            "value": 0
+        },
+        "http_req_duration": {
+            "max": 213.910447,
+            "avg": 47.893550222222224,
+            "med": 13.815362499999999,
+            "p(95)": 210.43012965
+        },
+        "documentos_procesados": {
+            "count": 6,
+            "rate": 0.018694317100366578
+        },
+        "validacion_observada_ms": {
+            "med": 415.5,
+            "p(95)": 531.25,
+            "max": 532,
+            "avg": 429.3333333333333
+        },
+        "documentos_pendientes_al_timeout": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+                "count==0": false
+            }
+        },
+        "http_req_connecting": {
+            "p(95)": 10.0116214,
+            "max": 10.412172,
+            "avg": 2.4106702777777778,
+            "med": 0
+        },
+        "http_req_tls_handshaking": {
+            "p(95)": 0,
+            "max": 0,
+            "avg": 0,
+            "med": 0
+        },
+        "http_req_sending": {
+            "avg": 0.938887277777778,
+            "med": 0.077898,
+            "p(95)": 3.237277449999997,
+            "max": 5.237211
+        },
+        "documentos_rechazados": {
+            "count": 3,
+            "rate": 0.009347158550183289
+        },
+        "vus_max": {
+            "value": 25,
+            "min": 25,
+            "max": 25
+        },
+        "checks": {
+            "passes": 6,
+            "fails": 0,
+            "value": 1
+        },
+        "vus": {
+            "value": 0,
+            "min": 0,
+            "max": 0
+        },
+        "data_received": {
+            "count": 10521,
+            "rate": 32.780485035492795
+        },
+        "registro_http_ms": {
+            "avg": 120.06358483333332,
+            "med": 98.13414,
+            "p(95)": 212.88682425000002,
+            "max": 213.910447
+        },
+        "http_req_waiting": {
+            "med": 13.458419,
+            "p(95)": 206.84704635,
+            "max": 206.901012,
+            "avg": 46.15920872222223
+        },
+        "http_req_receiving": {
+            "max": 2.53968,
+            "avg": 0.7954542222222222,
+            "med": 0.38460700000000003,
+            "p(95)": 1.941308049999999
+        },
+        "documentos_recibidos": {
+            "count": 6,
+            "rate": 0.018694317100366578
+        },
+        "http_req_blocked": {
+            "max": 33.071751,
+            "avg": 4.865800444444445,
+            "med": 0.0901535,
+            "p(95)": 17.005642599999973
+        },
+        "documentos_aprobados": {
+            "count": 3,
+            "rate": 0.009347158550183289
+        },
+        "dropped_iterations": {
+            "rate": 0,
+            "count": 0,
+            "thresholds": {
+                "count==0": false
+            }
+        },
+        "data_sent": {
+            "count": 4074,
+            "rate": 12.693441311148906
+        },
+        "http_req_duration{expected_response:true}": {
+            "avg": 47.893550222222224,
+            "med": 13.815362499999999,
+            "p(95)": 210.43012965,
+            "max": 213.910447
+        },
+        "errores_documentales": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+                "count==0": false
+            }
+        },
+        "iteration_duration": {
+            "p(95)": 537.7463495,
+            "max": 540.351763,
+            "avg": 441.2318381666667,
+            "med": 441.3885275
+        },
+        "http_reqs": {
+            "count": 18,
+            "rate": 0.05608295130109973
+        }
+    },
+    "setup_data": {
+        "driverBase": 1878792429,
+        "expires": "2027-11-24",
+        "run": "mwv2of7y"
+    },
+    "root_group": {
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+            "registro devuelve 201 e ID": {
+                "passes": 6,
+                "fails": 0,
+                "name": "registro devuelve 201 e ID",
+                "path": "::registro devuelve 201 e ID",
+                "id": "4ab28700f6a4c735f07db31524c840c0"
+            }
+        },
+        "name": ""
+    }
+}

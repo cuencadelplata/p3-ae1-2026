@@ -8,7 +8,9 @@ import { authenticateWithM1 } from './http/authentication.js';
 import { autorizarTicket } from './http/authorization.js';
 import { correlationId } from './http/correlation.js';
 import { supportErrorHandler } from './http/error-handler.js';
-import { ACTIVE_PENALTIES_PATH, CONFIRM_PENALTY_PATH, registerPenaltyRoutes, type PenaltyRouteDeps } from './http/penalties.js';
+import {
+  ACTIVE_PENALTIES_PATH, CONFIRM_PENALTY_PATH, UNLOCK_ACCOUNT_PATH, registerPenaltyRoutes, type PenaltyRouteDeps,
+} from './http/penalties.js';
 import type { SupportReadiness } from './http/readiness.js';
 import type { IdentityVerifier } from './integrations/m1-identity.js';
 import type { TicketService } from './services/ticket.service.js';
@@ -37,6 +39,7 @@ const TICKET_ROUTES = [
 export const SUPPORT_API_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
   ...TICKET_ROUTES.map(({ method, path }) => ({ method, path: path === '/' ? '/tickets' : `/tickets${path}` })),
   { method: 'post', path: CONFIRM_PENALTY_PATH },
+  { method: 'post', path: UNLOCK_ACCOUNT_PATH },
   { method: 'get', path: ACTIVE_PENALTIES_PATH },
 ];
 

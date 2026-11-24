@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IRouter, Request, Response } from 'express';
 import { concurrencyConflict, forbidden, SupportError, validationError } from '../errors/support-error.js';
 import type { AuthenticatedUser, IdentityVerifier } from '../integrations/m1-identity.js';
+import type { AccountUnlocker } from '../integrations/m2-account-review.js';
 import type { M6TripsClient } from '../integrations/m6-trips.js';
 import type { PenaltyRepository } from '../repositories/penalty.repository.js';
 import type { TicketService } from '../services/ticket.service.js';
@@ -11,11 +12,13 @@ import { supportErrorHandler } from './error-handler.js';
 
 export const CONFIRM_PENALTY_PATH = '/tickets/:id/penalizacion';
 export const ACTIVE_PENALTIES_PATH = '/usuarios/:userId/penalizaciones';
+export const UNLOCK_ACCOUNT_PATH = '/tickets/:id/desbloqueo';
 
 export interface PenaltyRouteDeps {
   repository: PenaltyRepository;
   trips?: Pick<M6TripsClient, 'clienteDe'>;
   internalKey?: string;
+  unlockAccount?: AccountUnlocker;
 }
 
 function unavailable(): never {
@@ -35,6 +38,19 @@ export function registerPenaltyRoutes(
   const authenticate = verifyIdentity ? authenticateWithM1(verifyIdentity) : unavailable;
   const expectedKey = deps?.internalKey ? hashKey(deps.internalKey) : undefined;
 
+  async function resolvedTicketCustomer(ticketId: string, action: string) {
+    if (!deps?.trips) unavailable();
+    const ticket = await ticketService.obtenerTicket(ticketId);
+    if (ticket.estado !== 'RESUELTO') {
+      throw new SupportError(409, 'SUPPORT_INVALID_TRANSITION', `${action} requiere un ticket resuelto.`);
+    }
+    const userId = await deps.trips.clienteDe(ticket.tripId);
+    if (userId === null) {
+      throw new SupportError(422, 'SUPPORT_VALIDATION_ERROR', 'M6 no informó el userId de M1 del cliente del viaje.');
+    }
+    return { ticket, userId };
+  }
+
   router.post(CONFIRM_PENALTY_PATH, correlationId, authenticate, async (req: Request, res: Response) => {
     const operator = res.locals.usuarioAutenticado as AuthenticatedUser;
     if (operator.role !== 'OPERADOR') throw forbidden();
@@ -44,14 +60,7 @@ export function registerPenaltyRoutes(
       throw validationError([{ field: 'motivo', reason: 'Indicá el motivo confirmado, de 1 a 500 caracteres.' }]);
     }
 
-    const ticket = await ticketService.obtenerTicket(String(req.params.id));
-    if (ticket.estado !== 'RESUELTO') {
-      throw new SupportError(409, 'SUPPORT_INVALID_TRANSITION', 'La penalización requiere un ticket resuelto.');
-    }
-    const userId = await deps.trips.clienteDe(ticket.tripId);
-    if (userId === null) {
-      throw new SupportError(422, 'SUPPORT_VALIDATION_ERROR', 'M6 no informó el userId de M1 del cliente del viaje.');
-    }
+    const { ticket, userId } = await resolvedTicketCustomer(String(req.params.id), 'La penalización');
 
     const created = await deps.repository.confirm(ticket, userId, operator.userId, reason);
     if (created) {
@@ -65,6 +74,24 @@ export function registerPenaltyRoutes(
       throw new SupportError(409, 'SUPPORT_IDEMPOTENCY_CONFLICT', 'Ya se registró una penalización para este cliente y viaje.');
     }
     res.status(200).json(existing);
+  }, supportErrorHandler);
+
+  router.post(UNLOCK_ACCOUNT_PATH, correlationId, authenticate, async (req: Request, res: Response) => {
+    const operator = res.locals.usuarioAutenticado as AuthenticatedUser;
+    if (operator.role !== 'OPERADOR') throw forbidden();
+    if (!deps?.unlockAccount) unavailable();
+    const motive = typeof req.body?.motivo === 'string' ? req.body.motivo.trim() : '';
+    if (motive.length < 3 || motive.length > 500) {
+      throw validationError([{ field: 'motivo', reason: 'Indicá un motivo de revisión de 3 a 500 caracteres.' }]);
+    }
+    const { ticket, userId } = await resolvedTicketCustomer(String(req.params.id), 'El desbloqueo');
+    res.json(await deps.unlockAccount({
+      userId,
+      operatorId: operator.userId,
+      ticketId: ticket.id,
+      motive,
+      correlationId: res.locals.correlationId,
+    }));
   }, supportErrorHandler);
 
   router.get(ACTIVE_PENALTIES_PATH, correlationId, async (req: Request, res: Response) => {

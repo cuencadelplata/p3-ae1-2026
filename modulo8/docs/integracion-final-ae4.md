@@ -30,14 +30,45 @@ servicios reales. La API común recibe avisos por RabbitMQ y la página
    `{ userId, total, penalizaciones: [{ ticketId, tripId, motivo, fecha }] }`.
 4. M2 administra el estado de cuenta. El bloqueo temporal se recalcula con
    las penalizaciones vigentes. El permanente se conserva hasta la revisión
-   manual. El desbloqueo requiere el endpoint que publique M2.
+   manual. Desde un ticket resuelto, un operador puede llamar a
+   `POST /tickets/{id}/desbloqueo` con `{"motivo":"Motivo de la revisión"}`.
+   M8 toma el operador de la sesión M1, obtiene el cliente del viaje en M6
+   y pide la revisión a `POST /internal/usuarios/{userId}/desbloqueo` de
+   M2 con `X-Secret-Key`. Las penalizaciones se conservan en M8. M2 registra
+   la revisión y excluye del recálculo las penalizaciones previas.
+
+Para comprobar la confirmación en el Compose común, usá M6 actualizado y
+un operador de prueba de M1. Cargá `SUPPORT_E2E_OPERATOR_EMAIL` y
+`SUPPORT_E2E_OPERATOR_PASSWORD` fuera de Git y ejecutá desde `modulo8`:
+
+```powershell
+node tests/e2e/shared-compose-penalty.mjs
+```
+
+La prueba crea un viaje con valores distintos para `clienteId` y
+`clientUserId`. Comprueba que M6 devuelve el ID de M1, que un cliente recibe
+`403` cuando intenta confirmar la infracción y que el operador recibe
+`201`. Repetir la confirmación devuelve `200` con el mismo registro.
+Si el entorno tiene `M2_SOPORTE_SECRET_KEY`, también verifica la consulta
+de penalizaciones de M8 con esa clave.
+
+Para probar también el bloqueo y el desbloqueo, usá M2 con la migración
+`202611240001_revision_manual_bloqueo` aplicada y la misma clave en ambos
+servicios. La prueba crea un cliente sintético y confirma tres penalizaciones
+en viajes distintos, verifica los estados de M2 y pide el desbloqueo desde M8.
+
+```powershell
+$env:SUPPORT_E2E_VERIFY_M2 = 'true'
+node tests/e2e/shared-compose-penalty.mjs
+Remove-Item Env:SUPPORT_E2E_VERIFY_M2
+```
 
 ## Frontend común
 
 - Usar la sesión de M1 para consultar comprobantes y operar sobre los tickets
-  según el rol. El panel de operador puede confirmar una penalización desde
-  un ticket resuelto. La consulta de penalizaciones se mantiene en la red
-  interna entre M2 y M8.
+  según el rol. El panel de operador puede confirmar una penalización o
+  pedir el desbloqueo desde un ticket resuelto. La consulta de
+  penalizaciones se mantiene en la red interna entre M2 y M8.
 - Registrar en `POST /devices/tokens` la suscripción del navegador con
   `platform: "WEB"` y su JSON serializado en `token`. En la baja, usar
   `DELETE /devices/tokens/{token}` con el token codificado en la URL. La
@@ -54,27 +85,25 @@ servicios reales. La API común recibe avisos por RabbitMQ y la página
 ## Dependencias de otros equipos
 
 - **M1.** Para reservas, acordar con M9 dónde emitir el token delegado del
-  cliente y qué autorización se necesita. Para el frontend común, mantener
-  el flujo de identidad y recuperación accesible desde el origen final.
-- **M2.** Apuntar `M2_SOPORTE_SERVICE_URL` a `http://m8-app:3000`, completar
-  la clave compartida y desactivar los stubs en el Compose común con
-  `M2_STUBS_ENABLED=false`. Aplicar la regla acordada para bloqueos
-  permanentes y publicar el endpoint de revisión manual. Confirmar qué
-  sucede si las penalizaciones siguen vigentes tras el desbloqueo.
-- **M3.** Confirmar el endpoint que devuelve nombre y apellido del conductor
-  por su `userId` de M1 y asegurar la durabilidad de vehículos y documentos
-  para que el enriquecimiento funcione tras un reinicio.
+  cliente y qué autorización se necesita. Para incluir el nombre del
+  conductor en el aviso de asignación, acordar una consulta interna de
+  `userId`, `nombre` y `apellido` autenticada entre servicios. El consumidor
+  recibe el `driverUserId` en RabbitMQ. Para el frontend común, mantener el
+  flujo de identidad y recuperación accesible desde el origen final.
+- **M2.** Usar el Compose con `M2_SOPORTE_SERVICE_URL=http://m8-app:3000`,
+  `M2_STUBS_ENABLED=false` y la `M2_SOPORTE_SECRET_KEY` compartida. Aplicar
+  la migración de revisión manual al desplegar M2 sobre un volumen existente.
+- **M3.** Asegurar la persistencia de vehículos y documentos para que M8
+  pueda consultar el vehículo activo tras un reinicio del Compose común.
 - **M4 y M9.** Conectar el resolver de M9 a la geocodificación y estimación
   de M4 en la red común. La prueba final debe usar la ruta real.
 - **M5 y M9.** Confirmar que el despacho REST programado acepta el token
   delegado acordado con M1. Mantener documentado el límite de los eventos
   de M5 que no alcanzan a publicarse durante una caída del broker.
-- **M6.** Incorporar `clientUserId` numérico de M1 en
-  `GET /api/viajes/{id}`. Hoy crear y asignar el viaje lo devuelven, pero
-  la consulta devuelve una representación que lo omite. Es necesario para
-  confirmar penalizaciones con los servicios reales. En el recorrido de
-  reserva, completar arribo, QR e inicio y publicar `trip.completed` al
-  finalizar para emitir el comprobante.
+- **M6.** Usar una versión que incluya el `clientUserId` numérico de M1 en
+  `GET /api/viajes/{id}`. M8 lo consume para confirmar penalizaciones.
+  En el recorrido de reserva, completar arribo, QR e inicio, autorizar el
+  pago en M7 y finalizar en M6 para que publique `trip.completed`.
 - **M7.** Fijar la versión de la imagen que se validará en la entrega con
   M6 y M8. Conservar el medio elegido y su estado real. Usar credenciales
   de prueba para verificar el cobro con tarjeta.
