@@ -14,7 +14,7 @@ async function request(url, expectedStatus, { method = 'GET', body, token, heade
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(15000),
   });
 
   if (response.status !== expectedStatus) {
@@ -114,4 +114,54 @@ test('un pasajero solicita un viaje en M5 y encuentra al conductor que publicó 
   const dispatchedCandidate = candidates.find(({ driverId }) => String(driverId) === String(usuario.id));
   assert.ok(dispatchedCandidate, 'M5 debe encontrar al mismo conductor publicado en M4');
   assert.equal(dispatchedCandidate.vehicleType, location.vehicleType);
+});
+
+async function waitForAvailability(driverId, expected) {
+  const query = new URLSearchParams({
+    latitude: '-27.4692', longitude: '-58.8306', vehicleType: 'AUTO', radiusKm: '1',
+  });
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const { drivers } = await request(`${m4}/drivers/nearby?${query}`, 200);
+    if (drivers.some((driver) => driver.driverId === driverId) === expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  assert.fail(`La disponibilidad del conductor ${driverId} no cambió a ${expected}`);
+}
+
+test('M6 inicia y finaliza un viaje con QR de M8 y M4 actualiza la disponibilidad por RabbitMQ', {
+  skip: !process.env.M6_E2E_URL,
+}, async (t) => {
+  const m6 = process.env.M6_E2E_URL;
+  const driver = await loginNewUser('CONDUCTOR');
+  const passenger = await loginNewUser('CLIENTE');
+  const locationUrl = `${m4}/drivers/${driver.usuario.id}/location`;
+  const location = { latitude: -27.4692, longitude: -58.8306, vehicleType: 'AUTO', available: true };
+  await request(locationUrl, 200, { method: 'PUT', token: driver.token, body: location });
+  t.after(() => request(locationUrl, 204, { method: 'DELETE', token: driver.token }));
+
+  const trip = await request(`${m6}/api/viajes`, 201, {
+    method: 'POST',
+    body: { clienteId: String(passenger.usuario.id), clientUserId: passenger.usuario.id,
+      origen: 'Corrientes centro', destino: 'Corrientes aeropuerto', rideRequestId: randomUUID() },
+  });
+  await request(`${m6}/api/viajes/${trip.id}/asignar`, 200, {
+    method: 'POST', body: { conductorId: String(driver.usuario.id), driverUserId: driver.usuario.id },
+  });
+  const arrival = await request(`${m6}/api/viajes/${trip.id}/arribo`, 200, {
+    method: 'PUT', body: {},
+  });
+  assert.ok(arrival.qr?.token, 'M8 debe emitir un token QR para el viaje');
+  await request(locationUrl, 200, { method: 'PUT', token: driver.token, body: location });
+  await request(`${m6}/api/viajes/${trip.id}/iniciar`, 200, {
+    method: 'POST', body: { codigoVerificacion: arrival.qr.token },
+  });
+  await waitForAvailability(driver.usuario.id, false);
+
+  await request(`${m6}/api/viajes/${trip.id}/finalizacion`, 200, {
+    method: 'POST',
+    body: { origen: { latitude: location.latitude, longitude: location.longitude },
+      destino: { latitude: -27.4875, longitude: -58.7896 }, tipoVehiculo: 'auto',
+      metodoPago: 'efectivo', horaFin: new Date().toISOString() },
+  });
+  await waitForAvailability(driver.usuario.id, true);
 });
