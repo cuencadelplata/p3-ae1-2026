@@ -17,6 +17,7 @@ interface Journey {
 const newJourney = (): Journey => ({ key: crypto.randomUUID() })
 const steps = ['Solicitud', 'Asignación', 'Viaje', 'Pago']
 const closed = (status: string) => status === 'EXPIRED' || status === 'CANCELLED'
+const terminalTrip = (status: string) => status === 'COMPLETADO' || status === 'CANCELADO'
 const money = (amount: number, currency: string) => new Intl.NumberFormat('es-AR', { style: 'currency', currency }).format(amount)
 
 function readJourney(key: string): Journey {
@@ -34,13 +35,24 @@ function readJourney(key: string): Journey {
 }
 
 async function findTrip(ride: RideRequest, passengerId: number, token: string, signal: AbortSignal) {
-  if (!ride.assignedDriverId) return
-  const filters = new URLSearchParams({ clienteId: String(passengerId), conductorId: ride.assignedDriverId })
-  const { viajes } = await request<{ viajes: { id: string }[] }>('M6', `/api/viajes?${filters}`, { token, signal })
+  const filters = new URLSearchParams({ clienteId: String(passengerId) })
+  if (ride.assignedDriverId) filters.set('conductorId', ride.assignedDriverId)
+  const { viajes } = await request<{ viajes: TripRecord[] }>('M6', `/api/viajes?${filters}`, { token, signal })
   // El listado de M6 omite rideRequestId; el detalle identifica el viaje de esta solicitud.
   for (const item of viajes) {
+    if (Date.parse(item.fechaCreacion) < Date.parse(ride.createdAt)) break
     const detail = await request<Trip>('M6', `/api/viajes/${item.id}`, { token, signal })
     if (detail.rideRequestId === ride.id) return detail
+  }
+}
+
+async function findActiveTrip(passengerId: number, newerThan: number, token: string, signal: AbortSignal) {
+  const { viajes } = await request<{ viajes: TripRecord[] }>('M6', `/api/viajes?clienteId=${passengerId}`, { token, signal })
+  for (const item of viajes) {
+    if (Date.parse(item.fechaCreacion) <= newerThan) break
+    if (terminalTrip(item.estado) || item.origen !== origin.address || item.destino !== destination.address) continue
+    const detail = await request<Trip>('M6', `/api/viajes/${item.id}`, { token, signal })
+    if (!terminalTrip(detail.estado)) return detail
   }
 }
 
@@ -61,12 +73,15 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   const [error, setError] = useState('')
   const [searchPaused, setSearchPaused] = useState(false)
   const [verifiedTripId, setVerifiedTripId] = useState<string>()
+  const [checkingExistingTrip, setCheckingExistingTrip] = useState(true)
   const [method, setMethod] = useState(sandboxPayment ? 'tarjeta' : 'efectivo')
   const [now, setNow] = useState(Date.now)
   const { ride, trip, qr, payment, receipt } = journey
   const rideId = ride?.id
   const tripId = trip?.id
   const hasPayment = Boolean(payment)
+  const canRestore = trip ? terminalTrip(trip.estado) : !ride || closed(ride.status)
+  const newerThan = Date.parse(trip?.fechaCreacion ?? ride?.createdAt ?? '') || 0
 
   useEffect(() => {
     sessionStorage.setItem(storageKey, JSON.stringify(journey))
@@ -79,6 +94,31 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   }, [rideId])
 
   useEffect(() => {
+    if (!canRestore || busy) return
+
+    return pollTrip(async (signal) => {
+      try {
+        const active = await findActiveTrip(userId, newerThan, token, signal)
+        if (signal.aborted) return false
+        if (active) {
+          const related = active.rideRequestId
+            ? await request<RideRequest>('M5', `/api/v1/ride-requests/${active.rideRequestId}`, { token, signal }).catch(() => undefined)
+            : undefined
+          if (signal.aborted) return false
+          setSearchPaused(false)
+          setError('')
+          setVerifiedTripId(active.id)
+          setJourney((previous) => ({ key: previous.key, ride: related, trip: active }))
+        }
+        setCheckingExistingTrip(false)
+        return false
+      } catch {
+        return !signal.aborted
+      }
+    })
+  }, [busy, canRestore, newerThan, token, userId])
+
+  useEffect(() => {
     if (!rideId || tripId || searchPaused) return
     const path = `/api/v1/ride-requests/${rideId}`
     return pollTrip(async (signal) => {
@@ -88,14 +128,13 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
         setJourney((previous) => ({ ...previous, ride: current }))
 
         if (closed(current.status)) return false
-        if (current.status === 'ASSIGNED') {
+        if (current.status === 'ASSIGNED' || current.status === 'OFFERED') {
           const assigned = await findTrip(current, userId, token, signal)
           if (assigned && !signal.aborted) {
             setJourney((previous) => ({ ...previous, trip: assigned }))
           }
           return !assigned
         }
-        if (current.status === 'OFFERED') return true
         if (Date.parse(current.expiresAt) <= Date.now()) {
           setJourney((previous) => ({ ...previous, ride: { ...current, status: 'EXPIRED' } }))
           return false
@@ -124,13 +163,15 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
         const current = await request<Trip>('M6', `/api/viajes/${tripId}`, { token, signal })
         if (signal.aborted) return false
         setVerifiedTripId(current.id)
-        setJourney((previous) => ({ ...previous, trip: current, qr: current.estado === 'ARRIBADO' ? previous.qr : undefined }))
+        setJourney((previous) => previous.trip?.id === tripId
+          ? { ...previous, trip: current, qr: current.estado === 'ARRIBADO' ? previous.qr : undefined }
+          : previous)
         if (current.estado === 'CANCELADO') return false
         if (current.estado !== 'COMPLETADO') return true
 
         if (!hasPayment) {
           const savedPayment = await completedPayment(current, userId, token, signal)
-          if (savedPayment && !signal.aborted) setJourney((previous) => ({ ...previous, payment: savedPayment }))
+          if (savedPayment && !signal.aborted) setJourney((previous) => previous.trip?.id === tripId ? { ...previous, payment: savedPayment } : previous)
         }
         return false
       } catch {
@@ -213,6 +254,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   function reset() {
     setError('')
     setSearchPaused(false)
+    setCheckingExistingTrip(true)
     setJourney(newJourney())
   }
 
@@ -257,10 +299,10 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
               {busy && <p className="ride-muted" role="status">{busy}</p>}
               {checkingTrip && <p className="ride-muted" role="status">Consultando el estado del viaje…</p>}
 
-              {!ride && <>
+              {!ride && !trip && <>
                 <h2>Pedí un viaje</h2>
-                <p>Al confirmar el pedido, buscamos autos disponibles cerca del origen.</p>
-                <button className="btn-primary" disabled={locked} onClick={() => void run('Creando la solicitud…', createRide)}>Solicitar viaje</button>
+                <p>{checkingExistingTrip ? 'Buscando si tenés un viaje en curso…' : 'Al confirmar el pedido, buscamos autos disponibles cerca del origen.'}</p>
+                <button className="btn-primary" disabled={locked || checkingExistingTrip} onClick={() => void run('Creando la solicitud…', createRide)}>Solicitar viaje</button>
               </>}
 
               {ride && !trip && <>

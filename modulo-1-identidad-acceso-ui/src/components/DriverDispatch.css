@@ -121,6 +121,7 @@
 .driver-trip-heading, .driver-offer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; }
 .driver-trip-heading { justify-content: space-between; }
 .driver-trip-heading h3 { font-size: 1rem; font-weight: 600; }
+.driver-trip-reference { font-size: .78rem; color: var(--text-soft); }
 .driver-offer-time { display: inline-flex; align-items: center; gap: .35rem; color: var(--accent); font-size: .82rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .driver-trip-stops, .driver-trip-metrics { display: grid; gap: .75rem; margin-top: .8rem; }
 .driver-trip-stops { grid-template-columns: repeat(2, minmax(0, 1fr)); }

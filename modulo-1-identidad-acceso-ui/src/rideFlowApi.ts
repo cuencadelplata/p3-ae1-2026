@@ -14,6 +14,7 @@ export type Account = Identity & { token: string }
 export interface RideRequest {
   id: string
   status: string
+  createdAt: string
   expiresAt: string
   assignedDriverId?: string | null
   estimatedFare?: { amount: number; currency: string }

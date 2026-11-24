@@ -31,7 +31,9 @@ Para ver un pago **autorizado de prueba**, configurá el simulador de M7 de esa 
 
 El pasajero usa su propia cuenta durante todo el recorrido. Para la demo, entrá como **Conductor** desde **otra sesión de navegador** (perfil distinto o ventana de incógnito) y abrí **Tu cuenta → Abrir despacho de prueba → Conectarme**. Cuando el pasajero solicite el viaje, revisá el origen, el destino y la tarifa de la oferta en el panel del conductor. Elegí **Aceptar viaje** para confirmar o **Rechazar** para descartarla. Tras aceptar, la pantalla sigue el estado del viaje y habilita **Desconectarme** cuando el viaje finaliza o se cancela.
 
-La pestaña del pasajero conserva el avance si recargás y volvés a **Pedir un viaje**. Para desarrollar con Vite y el stack común ya levantado, ejecutá `npm run dev -- --port 5174` desde esta carpeta con `VITE_API_URL=http://localhost:10000` en su `.env.local`. Agregá ahí `VITE_FLOW_SANDBOX_PAYMENT=true` para seleccionar la tarjeta del simulador. El proxy local usa los puertos publicados por defecto en el stack.
+Si el conductor sigue **En camino al origen**, fijate en el identificador que aparece en **Detalles del viaje**. En la sesión del pasajero que lo solicitó, abrí **Tu cuenta → Pedir un viaje** para retomar el viaje activo, incluso si la pestaña conservaba un viaje anterior ya finalizado.
+
+Para desarrollar con Vite y el stack común ya levantado, ejecutá `npm run dev -- --port 5174` desde esta carpeta con `VITE_API_URL=http://localhost:10000` en su `.env.local`. Agregá ahí `VITE_FLOW_SANDBOX_PAYMENT=true` para seleccionar la tarjeta del simulador. El proxy local usa los puertos publicados por defecto en el stack.
 
 ## Qué pide a M1 cada pantalla
 

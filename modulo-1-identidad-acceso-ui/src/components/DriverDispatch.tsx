@@ -257,6 +257,7 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
         {showSummary && <div className="driver-trip-card">
           <div className="driver-trip-heading">
             <h3>{pending ? 'Detalles de la oferta' : 'Detalles del viaje'}</h3>
+            {!pending && trip && <span className="driver-trip-reference" title={trip.id}>Viaje #{trip.id.slice(0, 8)}</span>}
             {pending && <span className="driver-offer-time" aria-label={`La oferta vence en ${secondsLeft} segundos`}>
               <Clock3 size={15} aria-hidden="true" /> {secondsLeft} s
             </span>}
