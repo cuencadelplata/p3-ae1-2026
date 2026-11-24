@@ -1,6 +1,7 @@
-import { Response } from "express";
+import { Request, Response } from "express";
 
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
+import { findUserById } from "../repositories/user.repository";
 import { AuthError } from "../services/auth.service";
 import { obtenerPerfilPropio } from "../services/user-profile.service";
 
@@ -37,4 +38,42 @@ export function obtenerMiPerfil(
             error: "Error interno del servidor"
         });
     }
+}
+
+// GET /auth/usuarios/:id/nombre: consulta interna entre servicios (ej. M8)
+// autenticada con X-Internal-Api-Key. Devuelve únicamente { userId, nombre, apellido }.
+export function obtenerNombreUsuarioInterno(
+    req: Request,
+    res: Response
+): void {
+    const rawId = String(req.params.id ?? "").trim();
+
+    if (!/^\d+$/.test(rawId)) {
+        res.status(400).json({
+            error: "El id de usuario debe ser un entero positivo"
+        });
+        return;
+    }
+
+    const userId = Number(rawId);
+    if (!Number.isSafeInteger(userId) || userId <= 0) {
+        res.status(400).json({
+            error: "El id de usuario debe ser un entero positivo"
+        });
+        return;
+    }
+
+    const usuario = findUserById(userId);
+    if (!usuario) {
+        res.status(404).json({
+            error: "Usuario no encontrado"
+        });
+        return;
+    }
+
+    res.status(200).json({
+        userId: usuario.id,
+        nombre: usuario.nombre,
+        apellido: usuario.apellido
+    });
 }
