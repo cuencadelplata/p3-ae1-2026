@@ -7,6 +7,9 @@ import type { RabbitMQConnection } from './rabbitmq.connection.js';
 
 export class RabbitMQTripEventConsumer {
   private readonly maxRetries = 3;
+  private subscribedChannel: amqp.Channel | null = null;
+  private running = false;
+  private retryTimer?: ReturnType<typeof setTimeout>;
 
   public constructor(
     private readonly connectionManager: RabbitMQConnection,
@@ -14,23 +17,34 @@ export class RabbitMQTripEventConsumer {
     private readonly eventStore: EventStore
   ) {}
 
-  public async startConsuming(): Promise<void> {
+  public startConsuming(): void {
+    if (this.running) return;
+    this.running = true;
+    void this.ensureSubscription();
+  }
+
+  public stopConsuming(): void {
+    this.running = false;
+    clearTimeout(this.retryTimer);
+  }
+
+  private async ensureSubscription(): Promise<void> {
     try {
       const channel = await this.connectionManager.getChannel();
-      if (!channel) {
-        Logger.warn('RabbitMQ no está disponible para iniciar el consumidor de eventos de viaje');
-        return;
-      }
+      if (!this.running || !channel || this.subscribedChannel === channel) return;
 
       const queueName = 'm4.trip-events.queue';
       await channel.prefetch(1);
+      if (!this.running) return;
 
-      Logger.info(`Iniciando consumo de cola RabbitMQ '${queueName}'`);
-
+      this.subscribedChannel = channel;
       await channel.consume(
         queueName,
         async (msg) => {
-          if (!msg) return;
+          if (!msg) {
+            if (this.subscribedChannel === channel) this.subscribedChannel = null;
+            return;
+          }
 
           try {
             await this.processMessage(channel, msg);
@@ -41,8 +55,14 @@ export class RabbitMQTripEventConsumer {
         },
         { noAck: false }
       );
+      Logger.info(`Consumiendo cola RabbitMQ '${queueName}'`);
     } catch (error) {
+      this.subscribedChannel = null;
       Logger.error('Falla al iniciar el consumidor RabbitMQ', error);
+    } finally {
+      if (this.running) {
+        this.retryTimer = setTimeout(() => void this.ensureSubscription(), 1_000);
+      }
     }
   }
 

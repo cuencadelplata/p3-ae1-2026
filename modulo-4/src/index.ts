@@ -35,10 +35,6 @@ async function bootstrap() {
 
   // Conexión RabbitMQ
   const rabbitmqConnection = new RabbitMQConnection(config.rabbitmqUrl);
-  const rabbitConnected = await rabbitmqConnection.connectWithRetry();
-  if (!rabbitConnected) {
-    Logger.warn('M4 continuará iniciado, pero RabbitMQ permanecerá no disponible hasta una reconexión posterior');
-  }
 
   // Publicador y Consumidor de Eventos RabbitMQ
   const eventPublisher = new RabbitMQEventPublisher(rabbitmqConnection);
@@ -50,9 +46,7 @@ async function bootstrap() {
   );
 
   // Iniciar consumidor de eventos de viaje en segundo plano
-  tripEventConsumer.startConsuming().catch((err) => {
-    Logger.error('Falla al iniciar consumidor de eventos de viaje RabbitMQ', err);
-  });
+  tripEventConsumer.startConsuming();
 
   // Crear aplicación Express
   const app = createApp({
@@ -75,6 +69,7 @@ async function bootstrap() {
   // Cierre controlado (Graceful Shutdown)
   const shutdown = async (signal: string) => {
     Logger.warn(`Señal ${signal} recibida. Apagando servicio M4 ordenadamente...`);
+    tripEventConsumer.stopConsuming();
     server.close(async () => {
       await rabbitmqConnection.close();
       Logger.info('Servicio M4 apagado completamente.');

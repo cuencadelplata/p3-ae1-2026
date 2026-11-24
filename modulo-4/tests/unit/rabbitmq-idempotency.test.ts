@@ -53,6 +53,39 @@ describe('RabbitMQ, Adaptación M6 e Idempotencia (RNF-07 / RNF-08 / Requerimien
     }, 60);
   });
 
+  it('reintenta si RabbitMQ no está disponible y se suscribe una vez por canal', async () => {
+    vi.useFakeTimers();
+    const firstChannel = { prefetch: vi.fn(), consume: vi.fn() };
+    const recoveredChannel = { prefetch: vi.fn(), consume: vi.fn() };
+    const getChannel = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(firstChannel)
+      .mockResolvedValueOnce(firstChannel)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(recoveredChannel);
+    const connection = { getChannel } as unknown as RabbitMQConnection;
+    const recoveringConsumer = new RabbitMQTripEventConsumer(connection, tripEventHandler, eventStore);
+
+    try {
+      recoveringConsumer.startConsuming();
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(firstChannel.consume).toHaveBeenCalledTimes(1);
+      expect(recoveredChannel.consume).toHaveBeenCalledTimes(1);
+      expect(recoveredChannel.consume).toHaveBeenCalledWith(
+        'm4.trip-events.queue',
+        expect.any(Function),
+        { noAck: false }
+      );
+
+      recoveringConsumer.stopConsuming();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(getChannel).toHaveBeenCalledTimes(5);
+    } finally {
+      recoveringConsumer.stopConsuming();
+      vi.useRealTimers();
+    }
+  });
+
   it('debe procesar un evento de viaje TripStarted (o viaje.iniciado) y marcar el conductor como NO disponible', async () => {
     const mockChannel = {
       ack: vi.fn(),
