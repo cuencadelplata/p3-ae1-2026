@@ -23,3 +23,22 @@ services:
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
+
+  # Verificación separada: requiere M2 y salida al proveedor externo de mapas.
+  m4-e2e-m2:
+    image: node:22-alpine
+    profiles: [tests]
+    working_dir: /tests
+    volumes:
+      - ./modulo-4/tests/e2e:/tests:ro
+    environment:
+      M1_E2E_URL: http://m1-identidad-acceso:3001
+      M2_E2E_URL: http://m2-api:3000
+      M4_E2E_URL: http://m4-api:3004/api/v1
+    command: [node, --test, geocoding-m2.e2e.mjs]
+    networks:
+      - reservas-network
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
