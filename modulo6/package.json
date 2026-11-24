@@ -21,6 +21,7 @@
     "k6:stress": "k6 run --env K6_PROFILE=stress k6/viajes.js",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
+    "docker:integration:up": "node scripts/start-integracion.mjs",
     "docker:e2e:up": "docker compose -f docker-compose.yml -f docker-compose.rf-e2e.yml up -d --build --wait",
     "docker:e2e:down": "docker compose -f docker-compose.yml -f docker-compose.rf-e2e.yml down"
   },

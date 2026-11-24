@@ -1,7 +1,7 @@
 # M6 (Viajes y Ciclo de Vida) dentro del stack común `movilidad-urbana`.
 #
-# Lo incluye el docker-compose.yml de la raíz. Usa la red `reservas-network`
-# y el RabbitMQ y Redis compartidos que define M9, y llama a los módulos reales
+# Se conecta a la red externa `reservas-network`, que debe existir antes del arranque,
+# y al RabbitMQ y Redis compartidos que levanta M9 en esa red. Llama a los módulos reales
 # por su nombre de servicio. Para desarrollo y tests aislados con APIs reales
 # se sigue usando modulo6/docker-compose.yml.
 #
@@ -81,10 +81,6 @@ services:
     depends_on:
       m6-tripdb:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
     healthcheck: *m6-healthcheck
     networks:
       - reservas-network
@@ -101,8 +97,6 @@ services:
       RABBITMQ_URL: "amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672"
     depends_on:
       m6-viajes:
-        condition: service_healthy
-      rabbitmq:
         condition: service_healthy
     networks:
       - reservas-network
@@ -149,7 +143,7 @@ services:
 
 networks:
   reservas-network:
-    driver: bridge
+    external: true
 
 volumes:
   m6-tripdb-data:

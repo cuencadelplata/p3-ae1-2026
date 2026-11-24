@@ -9,6 +9,21 @@ Los requisitos RF-6.1/6.2/6.3, RF-6.4/6.7 y RF-6.5/6.6 comparten un único proye
 
 ## Instalar y probar
 
+### Arranque con infraestructura compartida
+
+Desde `modulo6/`, ejecutar `npm run docker:integration:up`. El comando comprueba
+Docker, crea `reservas-network` si hace falta y espera a que Redis y RabbitMQ
+compartidos estén saludables antes de construir y levantar M6. Usa el Compose
+de la raíz y sus variables de entorno para mantener la misma red, credenciales
+y proyecto `movilidad-urbana` que el stack de integración.
+
+Los puertos predeterminados son 15000 para Viajes, 15001 para Cancelaciones y
+15002 para la fachada. Los módulos M4, M7 y M8 deben estar disponibles en la red
+compartida para completar los flujos que los utilizan. El estado puede consultarse
+desde la raíz con `docker compose ps`.
+
+### Entorno local y pruebas
+
 Desde esta carpeta:
 
 ```sh
