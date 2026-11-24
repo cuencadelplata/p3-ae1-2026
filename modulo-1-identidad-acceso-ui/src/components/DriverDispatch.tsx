@@ -1,87 +1,228 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, CarFront, CircleCheck, MapPin, Power, Radar } from 'lucide-react'
+import { ArrowLeft, CarFront, CircleCheck, Clock3, LockKeyhole, MapPin, Navigation, Power, Radar } from 'lucide-react'
 import RideMap from './RideMap'
 import { destination, FlowError, origin, pollTrip, prepareDriver, publishDriverLocation, request } from '../rideFlowApi'
-import type { Account, Offer } from '../rideFlowApi'
+import type { Account, Offer, Trip } from '../rideFlowApi'
 import './RideFlow.css'
 import './DriverDispatch.css'
 
-function isDemoOffer(offer: Offer) {
-  return offer.status === 'PENDING' && offer.origin?.latitude === origin.latitude && offer.origin?.longitude === origin.longitude
-    && offer.destination?.latitude === destination.latitude && offer.destination?.longitude === destination.longitude
+interface DriverTrip {
+  id: string
+  estado: string
+  origen: string
+  destino: string
+  fechaCreacion: string
+  finalizacion?: { total: number; moneda: string; distanciaKm: number; tiempoMinutos: number } | null
+}
+
+interface Assignment {
+  offer?: Offer
+  tripId?: string
+}
+
+const isActive = (trip: DriverTrip) => trip.estado !== 'COMPLETADO' && trip.estado !== 'CANCELADO'
+const currency = (total: number, moneda: string) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: moneda }).format(total)
+const rideStatus: Record<string, string> = {
+  CONDUCTOR_EN_CAMINO: 'En camino al origen',
+  ARRIBADO: 'En el punto de encuentro',
+  EN_CURSO: 'Viaje en curso',
+  COMPLETADO: 'Viaje finalizado',
+  CANCELADO: 'Viaje cancelado',
+}
+
+function readAssignment(key: string): Assignment | null {
+  try {
+    return JSON.parse(sessionStorage.getItem(key) ?? 'null') as Assignment | null
+  } catch {
+    return null
+  }
+}
+
+function driverOffers(userId: number, token: string, signal?: AbortSignal) {
+  return request<{ offers: Offer[] }>('M5', `/api/v1/drivers/${userId}/offers`, { token, signal })
+}
+
+async function driverTrip(userId: number, token: string, assignment: Assignment | null, signal?: AbortSignal) {
+  const { viajes } = await request<{ viajes: DriverTrip[] }>('M6', `/api/viajes?conductorId=${userId}`, { token, signal })
+  const active = viajes.find(isActive)
+  if (active) return active
+  if (assignment?.tripId) {
+    return viajes.find((item) => item.id === assignment.tripId) ?? null
+  }
+  if (assignment?.offer) {
+    for (const item of viajes) {
+      if (Date.parse(item.fechaCreacion) < Date.parse(assignment.offer.createdAt)) break
+      const detail = await request<Trip>('M6', `/api/viajes/${item.id}`, { token, signal })
+      if (detail.rideRequestId === assignment.offer.requestId) return item
+    }
+  }
+  return null
 }
 
 export default function DriverDispatch({ driver, onBack }: { driver: Account; onBack: () => void }) {
   const { userId, token } = driver
+  const storageKey = `movilidad.conductor.viaje.${userId}`
   const [online, setOnline] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [ready, setReady] = useState(false)
+  const [busy, setBusy] = useState('')
   const [plate, setPlate] = useState('')
-  const [assigned, setAssigned] = useState(false)
+  const [offer, setOffer] = useState<Offer | null>(null)
+  const [assignment, setAssignment] = useState(() => readAssignment(storageKey))
+  const [trip, setTrip] = useState<DriverTrip | null>(null)
+  const [completedOffer, setCompletedOffer] = useState<Offer | null>(null)
   const [error, setError] = useState('')
+  const [now, setNow] = useState(Date.now)
+  const offerId = offer?.id
 
   useEffect(() => {
-    if (!online) return
-    let lastPublication = Date.now()
+    if (assignment) sessionStorage.setItem(storageKey, JSON.stringify(assignment))
+    else sessionStorage.removeItem(storageKey)
+  }, [storageKey, assignment])
 
+  useEffect(() => {
+    if (!offerId) return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [offerId])
+
+  useEffect(() => {
+    if (busy) return
+    let lastPublication = 0
+    let lastAvailability: boolean | undefined
     return pollTrip(async (signal) => {
       try {
-        if (Date.now() - lastPublication >= 20_000) {
-          await publishDriverLocation(userId, token, true, signal)
+        const current = await driverTrip(userId, token, assignment, signal)
+        if (signal.aborted) return false
+        setReady(true)
+
+        if (current && isActive(current)) {
+          setTrip(current)
+          setOffer(null)
+          setOnline(true)
+          if (assignment?.tripId !== current.id) setAssignment({ ...assignment, tripId: current.id })
+        } else if (current && assignment) {
+          setTrip(current)
+          setCompletedOffer(assignment.offer ?? null)
+          setAssignment(null)
+        }
+
+        const occupied = Boolean(current ? isActive(current) : assignment)
+        if (!online) return occupied
+        const available = !occupied
+        if (available !== lastAvailability || Date.now() - lastPublication >= 20_000) {
+          await publishDriverLocation(userId, token, available, signal)
+          lastAvailability = available
           lastPublication = Date.now()
         }
-        const { offers } = await request<{ offers: Offer[] }>('M5', `/api/v1/drivers/${userId}/offers`, { token, signal })
-        const pending = offers.find(isDemoOffer)
-        if (!pending || signal.aborted) return !signal.aborted
+        if (occupied || signal.aborted) return !signal.aborted
 
-        const result = await request<{ requestStatus: string }>('M5', `/api/v1/offers/${pending.id}/accept`, {
-          method: 'POST', body: {}, token, signal,
-        })
-        if (result.requestStatus !== 'ASSIGNED') return true
+        const { offers } = await driverOffers(userId, token, signal)
         if (signal.aborted) return false
-
-        setAssigned(true)
-        setOnline(false)
-        return false
+        const instant = Date.now()
+        setNow(instant)
+        setOffer(offers.find((item) => item.status === 'PENDING' && Date.parse(item.expiresAt) > instant) ?? null)
+        return true
       } catch (err) {
         if (signal.aborted) return false
-        // Otra sesión puede haber aceptado la misma solicitud mientras se procesaba esta oferta.
-        if (err instanceof FlowError && err.status === 409) return true
-        setError(err instanceof Error ? err.message : 'No se pudieron consultar las ofertas.')
-        setOnline(false)
-        return false
+        setError(err instanceof Error ? err.message : 'No se pudo actualizar el despacho.')
+        return true
       }
     })
-  }, [online, userId, token])
+  }, [assignment, busy, online, userId, token])
 
-  async function toggleAvailability() {
-    setBusy(true)
+  async function perform(label: string, task: () => Promise<void>) {
+    setBusy(label)
     setError('')
     try {
+      await task()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo completar la acción.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const active = Boolean(assignment || (trip && isActive(trip)))
+
+  async function toggleAvailability() {
+    if (!ready || active) return
+    await perform('Actualizando disponibilidad…', async () => {
+      const current = await driverTrip(userId, token, null)
+      if (current && isActive(current)) {
+        setTrip(current)
+        setAssignment({ tripId: current.id })
+        setOnline(true)
+        return
+      }
+
       if (online) {
-        setOnline(false)
         await publishDriverLocation(userId, token, false)
+        setOnline(false)
+        setOffer(null)
         return
       }
 
       const vehiclePlate = await prepareDriver(driver)
       await publishDriverLocation(userId, token, true)
       setPlate(vehiclePlate)
-      setAssigned(false)
+      setTrip(null)
+      setCompletedOffer(null)
       setOnline(true)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo cambiar la disponibilidad.')
-    } finally {
-      setBusy(false)
-    }
+    })
   }
 
-  const status = busy ? 'Actualizando disponibilidad…' : assigned ? 'Viaje asignado' : online ? 'Buscando viajes' : 'Estás desconectado'
-  const StatusIcon = assigned ? CircleCheck : online ? Radar : Power
+  function confirmAssignment(pending: Offer) {
+    setTrip(null)
+    setOffer(null)
+    setAssignment({ offer: pending })
+  }
+
+  async function respond(pending: Offer, action: 'accept' | 'reject') {
+    if (!online || active || Date.parse(pending.expiresAt) <= Date.now()) return
+    await perform(action === 'accept' ? 'Confirmando el viaje…' : 'Rechazando la oferta…', async () => {
+      try {
+        const response = await request<{ requestStatus: string }>('M5', `/api/v1/offers/${pending.id}/${action}`, {
+          method: 'POST', token, body: {},
+        })
+        if (action === 'accept' && response.requestStatus === 'ASSIGNED') confirmAssignment(pending)
+        else setOffer(null)
+      } catch (err) {
+        if (action === 'accept' && err instanceof FlowError) {
+          const snapshot = await driverOffers(userId, token).catch(() => null)
+          if (snapshot?.offers.some((item) => item.id === pending.id && item.status === 'ACCEPTED')) {
+            confirmAssignment(pending)
+            return
+          }
+        }
+        if (err instanceof FlowError && (err.status === 404 || err.status === 409)) {
+          setOffer(null)
+          throw new Error('La oferta ya no está disponible. Te avisamos cuando llegue otra.')
+        }
+        throw err
+      }
+    })
+  }
+
+  const secondsLeft = offer ? Math.max(0, Math.ceil((Date.parse(offer.expiresAt) - now) / 1000)) : 0
+  const pending = secondsLeft > 0 && !active ? offer : null
+  const routeOffer = assignment?.offer ?? pending ?? completedOffer
+  const showSummary = Boolean(active || pending || trip)
+  const pickupAddress = active ? assignment?.offer?.origin.address ?? trip?.origen : pending?.origin.address ?? trip?.origen
+  const dropoffAddress = active ? assignment?.offer?.destination.address ?? trip?.destino : pending?.destination.address ?? trip?.destino
+  const fare = pending || !trip?.finalizacion ? routeOffer?.estimatedFare : undefined
+  const finalFare = pending ? null : trip?.finalizacion
+  const title = active ? (trip && rideStatus[trip.estado]) || 'Viaje asignado'
+    : pending ? 'Nueva oferta de viaje'
+      : online ? (trip && rideStatus[trip.estado]) || 'Buscando viajes' : 'Estás desconectado'
+  const description = active ? 'La desconexión se habilita cuando el viaje termina o se cancela.'
+    : pending ? 'Revisá el recorrido y confirmá si querés tomarlo.'
+      : online ? 'Estás disponible para recibir ofertas.' : 'Conectate para recibir ofertas en esta zona.'
+  const StatusIcon = active || (online && trip?.estado === 'COMPLETADO') ? CircleCheck : online ? Radar : Power
 
   return (
     <main className="driver-dispatch">
       <header className="driver-topbar">
-        <button className="driver-back" aria-label="Volver a mi cuenta" disabled={busy || online} onClick={onBack}>
+        <button className="driver-back" aria-label="Volver a mi cuenta" disabled={Boolean(busy) || online || active} onClick={onBack}>
           <ArrowLeft size={19} aria-hidden="true" />
         </button>
         <h1 className="display">Disponibilidad del conductor</h1>
@@ -91,29 +232,51 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
         </div>
       </header>
 
-      <div className="driver-map-frame">
-        <RideMap driverView showRoute={assigned} />
+      <div className="driver-map-frame" data-trip={showSummary}>
+        <RideMap driverView showRoute={Boolean(routeOffer || (pickupAddress === origin.address && dropoffAddress === destination.address))}
+          pickup={routeOffer?.origin} dropoff={routeOffer?.destination} />
         <div className="driver-map-label"><MapPin size={16} aria-hidden="true" /> Corrientes <span>Zona de prueba</span></div>
       </div>
 
       <section className="driver-console" aria-label="Disponibilidad y viajes">
-        <div className="driver-status" data-active={online || assigned}>
+        <div className="driver-status" data-active={online || active}>
           <div className="driver-status-icon"><StatusIcon size={24} aria-hidden="true" /></div>
           <div role="status">
-            <h2>{status}</h2>
-            <p>{assigned ? 'Esperá a que el pasajero termine el viaje antes de volver a conectarte.'
-              : online ? 'Tu auto ya está disponible. La próxima oferta de prueba se acepta automáticamente.'
-                : 'Conectate para recibir una oferta de prueba en esta zona.'}</p>
+            <h2>{ready || active ? busy || title : 'Consultando disponibilidad…'}</h2>
+            <p>{description}</p>
           </div>
         </div>
-        {error && <p className="alert-error driver-error" role="alert">{error}</p>}
-        <button className="driver-toggle" data-online={online} disabled={busy} onClick={() => void toggleAvailability()}>
-          <Power size={19} aria-hidden="true" /> {online ? 'Desconectarme' : 'Conectarme'}
+        <button className="driver-toggle" data-online={online || active} disabled={Boolean(busy) || !ready || active} onClick={() => void toggleAvailability()}>
+          {active ? <LockKeyhole size={18} aria-hidden="true" /> : <Power size={19} aria-hidden="true" />}
+          {online || active ? 'Desconectarme' : 'Conectarme'}
         </button>
+        {error && <p className="alert-error driver-error" role="alert">{error}</p>}
+
+        {showSummary && <div className="driver-trip-card">
+          <div className="driver-trip-heading">
+            <h3>{pending ? 'Detalles de la oferta' : 'Detalles del viaje'}</h3>
+            {pending && <span className="driver-offer-time" aria-label={`La oferta vence en ${secondsLeft} segundos`}>
+              <Clock3 size={15} aria-hidden="true" /> {secondsLeft} s
+            </span>}
+          </div>
+          <dl className="driver-trip-stops">
+            <div><MapPin size={18} aria-hidden="true" /><div><dt>Origen</dt><dd>{pickupAddress || 'Cargando origen…'}</dd></div></div>
+            <div><Navigation size={18} aria-hidden="true" /><div><dt>Destino</dt><dd>{dropoffAddress || 'Cargando destino…'}</dd></div></div>
+          </dl>
+          {(fare || finalFare) && <dl className="driver-trip-metrics">
+            <div><dt>{finalFare ? 'Total del viaje' : 'Tarifa estimada'}</dt><dd>{finalFare ? currency(finalFare.total, finalFare.moneda) : fare && currency(fare.amount, fare.currency)}</dd></div>
+            <div><dt>Distancia</dt><dd>{(finalFare?.distanciaKm ?? fare?.estimatedDistanceKm)?.toLocaleString('es-AR', { maximumFractionDigits: 1 })} km</dd></div>
+            <div><dt>{finalFare ? 'Duración' : 'Duración estimada'}</dt><dd>{finalFare?.tiempoMinutos ?? fare?.estimatedDurationMin} min</dd></div>
+          </dl>}
+          {pending && <div className="driver-offer-actions">
+            <button className="btn-ghost" disabled={Boolean(busy)} onClick={() => void respond(pending, 'reject')}>Rechazar</button>
+            <button className="btn-primary" disabled={Boolean(busy)} onClick={() => void respond(pending, 'accept')}>Aceptar viaje</button>
+          </div>}
+        </div>}
+
         <div className="driver-details">
           <CarFront size={17} aria-hidden="true" />
           {plate ? <span>Auto de prueba <strong>{plate}</strong></span> : <span>Auto de prueba · {origin.address}</span>}
-          {assigned && <span className="driver-destination"><MapPin size={16} aria-hidden="true" /> {destination.address}</span>}
         </div>
       </section>
     </main>

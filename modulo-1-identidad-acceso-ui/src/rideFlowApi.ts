@@ -20,9 +20,13 @@ export interface RideRequest {
 }
 export interface Offer {
   id: string
+  requestId: string
   status: string
+  createdAt: string
+  expiresAt: string
   origin: typeof origin
   destination: typeof destination
+  estimatedFare: { amount: number; currency: string; estimatedDistanceKm: number; estimatedDurationMin: number }
 }
 export interface Trip {
   id: string
