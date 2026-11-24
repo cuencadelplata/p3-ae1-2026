@@ -15,11 +15,16 @@ info:
     - **Pago verificado en M7 (2.2.0):** antes de emitir se consulta `GET /metodo-pago/{viajeId}` de M7.
       Solo un pago `autorizado` genera comprobante, y el medio de pago se toma de M7.
     - **Importe de M7 (2.3.0):** el total y la moneda del comprobante se toman de M7 cuando los informa.
+    - **Viaje real de M6 (2.4.0):** en el Compose común la emisión se dispara con `trip.completed` de M6 y los
+      datos se consultan a M6 y M3. Esos comprobantes pueden no tener `customer.fullName` ni `driver.fullName`
+      (M1 no comparte nombres): el PDF muestra el número de usuario.
+    - **Efectivo y transferencia (2.5.0):** se cobran fuera de la pasarela y M7 los deja `pendiente`; el
+      comprobante se emite igual con `payment.status` `PENDIENTE`. La tarjeta sigue esperando la autorización.
     - **Dependencias caídas:** responden `503` con `Retry-After` (nunca `500`); el servicio sigue atendiendo.
 
-    Los contratos asincrónicos (`payment.confirmed`, `receipt.issued`) y el contrato interno con Receipts
+    Los contratos asincrónicos (`payment.confirmed`, `trip.completed`, `receipt.issued`) y el contrato interno con Receipts
     Delivery están en `contracts/events/catalogo-eventos-v1.md`; no forman parte de esta API pública.
-  version: 2.3.0
+  version: 2.5.0
 servers:
   - url: http://localhost:3000/api/v1
     description: Aplicación única de M8
@@ -59,8 +64,10 @@ paths:
           (`efectivo`, `tarjeta`, `transferencia` → `EFECTIVO`, `TARJETA`, `TRANSFERENCIA`), aunque la entrada
           informe otro valor. Si M7 informa `total` y `moneda` (2.3.0), `fare.total` y `fare.currency` se toman
           de M7; el desglose de `fare` se conserva solo si suma ese total, y si no queda solo el total.
-        - `pendiente` o sin pago registrado: `409 PAYMENT_PENDING` / `409 PAYMENT_NOT_FOUND` con `Retry-After`.
-          No se persiste nada y el pedido se puede repetir cuando M7 autorice el pago.
+        - `pendiente` con `tipo` `efectivo` o `transferencia` (2.5.0): se emite con `payment.status`
+          `PENDIENTE`, porque esos medios se cobran fuera de la pasarela y M7 no los autoriza después.
+        - `pendiente` con tarjeta, o sin pago registrado: `409 PAYMENT_PENDING` / `409 PAYMENT_NOT_FOUND` con
+          `Retry-After`. No se persiste nada y el pedido se puede repetir cuando M7 autorice el pago.
         - `rechazado`: `422 PAYMENT_REJECTED`. Ese pago no genera comprobante.
         - M7 sin respuesta: `503 PAYMENTS_SERVICE_UNAVAILABLE` con `Retry-After`.
       operationId: createReceipt
@@ -126,7 +133,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: |
-            M7 todavía no autorizó el pago (`PAYMENT_PENDING`) o no tiene un pago registrado para el viaje
+            M7 todavía no autorizó el pago con tarjeta (`PAYMENT_PENDING`) o no tiene un pago registrado para el viaje
             (`PAYMENT_NOT_FOUND`). No se emite nada; el pedido se puede repetir después de `Retry-After`.
           headers:
             Retry-After:

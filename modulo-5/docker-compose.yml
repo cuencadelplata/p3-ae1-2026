@@ -15,7 +15,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      test: [ 'CMD-SHELL', 'pg_isready -U postgres' ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -30,7 +30,7 @@ services:
       - redis_data:/data
     restart: unless-stopped
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test: [ 'CMD', 'redis-cli', 'ping' ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,13 +40,13 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: m5-rabbitmq
     ports:
-      - '5672:5672'    # AMQP
-      - '15672:15672'  # Panel Web (user: guest / pass: guest)
+      - '5672:5672' # AMQP
+      - '15672:15672' # Panel Web (user: guest / pass: guest)
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     restart: unless-stopped
     healthcheck:
-      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      test: [ 'CMD', 'rabbitmq-diagnostics', '-q', 'ping' ]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -67,6 +67,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
       - M4_SERVICE_URL=http://m4-api:3004/api/v1
+      - M4_MOCK=${M4_MOCK:-true}
       - M6_SERVICE_URL=${M6_SERVICE_URL:-http://m6-viajes:3000}
       - M6_INTERNAL_API_KEY=${M6_INTERNAL_API_KEY:-}
       # Autenticación RNF-10: JWT real por defecto. Definir JWT_SECRET en el entorno (el valor por defecto es SOLO para demo local).
@@ -84,7 +85,7 @@ services:
       - ./openapi:/app/openapi:ro
       - ./public:/app/public:ro
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3005/health']
+      test: [ 'CMD', 'wget', '-qO-', 'http://localhost:3005/health' ]
       interval: 30s
       timeout: 5s
       retries: 3

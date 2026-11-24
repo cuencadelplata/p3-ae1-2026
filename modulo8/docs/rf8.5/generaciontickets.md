@@ -183,7 +183,7 @@ token de M1.
 | --- | --- | --- |
 | `M6_TRIPS_URL` | sin definir | URL base de M6. Si está definida, `POST /tickets` verifica que el viaje exista (`GET /api/viajes/{id}`). |
 | `M6_TIMEOUT_MS` | `2000` | Espera máxima de cada consulta a M6. |
-| `SUPPORT_M1_IDENTITY_URL` | sin definir | URL base de M1. Si está definida, todas las rutas de `/tickets` exigen `Authorization: Bearer <token>`, que se valida con `GET /auth/validar-identidad-y-rol`. |
+| `SUPPORT_M1_IDENTITY_URL` | sin definir | URL base de M1. Si está definida, todas las rutas de `/tickets` exigen `Authorization: Bearer <token>`, que se valida con `GET /auth/validar-identidad-y-rol`, y se aplican permisos por rol: cualquier usuario crea tickets; listar todos y cambiar el estado es del `OPERADOR`; ver un ticket o su historial, del `OPERADOR` o de quien lo creó (`403 SUPPORT_FORBIDDEN` si no). El Compose común la define apuntando a `m1-identidad-acceso`. |
 | `M1_TIMEOUT_MS` | `2000` | Espera máxima de cada consulta a M1. |
 
 Con autenticación, el autor que queda en el historial es `m1:<userId>` y

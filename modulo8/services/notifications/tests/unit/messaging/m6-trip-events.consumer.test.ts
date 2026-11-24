@@ -65,6 +65,47 @@ describe("RF8.6 - eventos DriverArrived y TripStarted de M6", () => {
     expect(rabbit.channel.assertQueue).toHaveBeenCalledWith(M6_TRIP_EVENTS_QUEUE, expect.objectContaining({ durable: true }));
     expect(rabbit.channel.bindQueue).toHaveBeenCalledWith(M6_TRIP_EVENTS_QUEUE, "mobility.events", "driver.arrived");
     expect(rabbit.channel.bindQueue).toHaveBeenCalledWith(M6_TRIP_EVENTS_QUEUE, "mobility.events", "trip.started");
+    expect(rabbit.channel.bindQueue).toHaveBeenCalledWith(M6_TRIP_EVENTS_QUEUE, "mobility.events", "trip.completed");
+    expect(rabbit.channel.bindQueue).toHaveBeenCalledWith(M6_TRIP_EVENTS_QUEUE, "mobility.events", "trip.cancelled");
+  });
+
+  it("acepta TripCancelled de M6 para el cliente y para el conductor", async () => {
+    const cancelled = (messageId: string, recipientId: number) => ({
+      messageId,
+      eventType: "TripCancelled",
+      version: 1,
+      occurredAt: "2026-11-16T21:10:00.000Z",
+      correlationId: arrived.data.tripId,
+      producer: "m6-viajes",
+      data: { tripId: arrived.data.tripId, recipientId, cancelledBy: "cliente", motivo: "Ya no lo necesito" },
+    });
+    const rabbit = broker();
+    const deliver = vi.fn().mockResolvedValue({ status: "SUCCESS_CREATED", valid: true, created: true, data: {} });
+    await createConsumer(rabbit.channel, deliver).start();
+    await rabbit.deliver(cancelled("c0a80123-4567-489a-8abc-000000000001", 42), "trip.cancelled");
+    await rabbit.deliver(cancelled("c0a80123-4567-489a-8abc-000000000002", 7), "trip.cancelled");
+    expect(deliver).toHaveBeenCalledTimes(2);
+    expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ eventType: "TripCancelled", data: expect.objectContaining({ recipientId: 7 }) }));
+  });
+
+  it("acepta el TripCompleted que M6 publica desde su outbox (producer m6-viajes)", async () => {
+    // Forma exacta de modulo6/src/rf-6.1-6.2-6.3/services/eventos-viaje.service.ts
+    const completed = {
+      messageId: "c0a80123-4567-489a-8abc-fedcba987654",
+      eventType: "TripCompleted",
+      version: 1,
+      occurredAt: "2026-11-16T21:05:00.000Z",
+      correlationId: arrived.data.tripId,
+      producer: "m6-viajes",
+      data: { tripId: arrived.data.tripId, recipientId: 42, total: 2365, paymentId: "pago-1" },
+    };
+    expect(parseM6TripEventEnvelope(Buffer.from(JSON.stringify(completed)), "trip.completed").eventType).toBe("TripCompleted");
+
+    const rabbit = broker();
+    const deliver = vi.fn().mockResolvedValue({ status: "SUCCESS_CREATED", valid: true, created: true, data: {} });
+    await createConsumer(rabbit.channel, deliver).start();
+    await rabbit.deliver(completed, "trip.completed");
+    expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ eventType: "TripCompleted" }));
   });
 
   it("procesa los dos tipos una sola vez por messageId", async () => {

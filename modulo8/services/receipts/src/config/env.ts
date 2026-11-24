@@ -51,7 +51,7 @@ const port = readPort('PORT', 3008);
 export const env = {
   nodeEnv: readText('NODE_ENV', 'development'),
   serviceName: 'm8-documentos',
-  serviceVersion: readText('SERVICE_VERSION', '2.3.0'),
+  serviceVersion: readText('SERVICE_VERSION', '2.5.0'),
   port,
 
   /** Prefijo de la API REST versionada. */
@@ -80,6 +80,8 @@ export const env = {
   eventsExchange: readText('EVENTS_EXCHANGE', 'mobility.events'),
   deadLetterExchange: readText('EVENTS_DEAD_LETTER_EXCHANGE', 'mobility.events.dlx'),
   paymentConfirmedQueue: readText('PAYMENT_CONFIRMED_QUEUE', 'm8.receipts.payment-confirmed'),
+  /** Cola propia de receipts para el TripCompleted que publica M6 al finalizar un viaje. */
+  tripCompletedQueue: readText('TRIP_COMPLETED_QUEUE', 'm8.receipts.trip-completed'),
 
   /** Mensajes que el consumidor procesa a la vez antes de confirmar. */
   consumerPrefetch: readPositiveInt('CONSUMER_PREFETCH', 5),
@@ -122,6 +124,24 @@ export const env = {
 
   /** Tiempo maximo de espera de una consulta a M7, en milisegundos. */
   m7TimeoutMs: readPositiveInt('M7_TIMEOUT_MS', 2000),
+
+  /**
+   * API de viajes de M6 (GET /api/viajes). Con el evento TripCompleted, receipts
+   * le pide a M6 el recorrido del viaje. Vacia: no se consume TripCompleted.
+   */
+  m6TripsUrl: readText('M6_TRIPS_URL', '').replace(/\/+$/, ''),
+
+  /** Tiempo maximo de espera de una consulta a M6, en milisegundos. */
+  m6TimeoutMs: readPositiveInt('M6_TIMEOUT_MS', 2000),
+
+  /** API de conductores de M3 (GET /api/conductores/{userId}). */
+  m3ConductorUrl: readText('M3_CONDUCTOR_BASE_URL', '').replace(/\/+$/, ''),
+
+  /** API de vehiculos de M3 (GET /api/v1/drivers/{userId}/vehicles). */
+  m3VehiclesUrl: readText('M3_VEHICLES_BASE_URL', '').replace(/\/+$/, ''),
+
+  /** Tiempo maximo de espera de una consulta a M3, en milisegundos. */
+  m3TimeoutMs: readPositiveInt('M3_TIMEOUT_MS', 2000),
 
   /** Datos de presentacion del emisor dentro del PDF. */
   issuerName: readText('RECEIPT_ISSUER_NAME', 'Plataforma de Movilidad Urbana'),

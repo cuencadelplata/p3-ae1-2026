@@ -14,6 +14,7 @@ import { startConsumer, type RunningConsumer } from './messaging/consumer';
 import { startOutboxRelay, type RunningRelay } from './messaging/outbox-relay';
 import { PAYMENT_CONFIRMED_ROUTING_KEY, processPaymentConfirmed } from './messaging/payment-confirmed';
 import { queueTopology } from './messaging/topology';
+import { processTripCompleted, TRIP_COMPLETED_ROUTING_KEY } from './messaging/trip-completed';
 import { createAuthenticateM1, type IdentityValidator } from './middlewares/auth.middleware';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
 import { requestContext } from './middlewares/request-context.middleware';
@@ -55,12 +56,14 @@ export function createReceiptsModule(options: ReceiptsModuleOptions = {}): Recei
   let closing = false;
   let schemaReady = false;
   let consumer: RunningConsumer | undefined;
+  let tripConsumer: RunningConsumer | undefined;
   let relay: RunningRelay | undefined;
 
   const checks: DependencyChecks = {
     postgres: async () => schemaReady && (await isDatabaseReady()),
     redis: isRedisReady,
-    rabbitmq: async () => Boolean(consumer?.isConnected() && relay?.isConnected()),
+    rabbitmq: async () =>
+      Boolean(consumer?.isConnected() && relay?.isConnected() && (!tripConsumer || tripConsumer.isConnected())),
     fiscal: () => fiscalClient.isReachable(),
     payments: () => paymentsClient.isReachable(),
   };
@@ -122,6 +125,39 @@ export function createReceiptsModule(options: ReceiptsModuleOptions = {}): Recei
       },
     });
 
+    // Integracion con M6: al finalizar un viaje, M6 publica TripCompleted en
+    // mobility.events. Receipts lo recibe en su propia cola (la de RF-8.6 no se
+    // comparte) y completa el comprobante consultando a M6, M3 y M7. Solo se
+    // activa donde M6 existe (stack comun); el compose aislado no lo usa.
+    if (env.m6TripsUrl) {
+      const tripLog = createLogger('trip-completed');
+      tripConsumer = startConsumer({
+        name: 'trip-completed',
+        url: env.rabbitmqUrl,
+        topology: queueTopology({
+          exchange: env.eventsExchange,
+          deadLetterExchange: env.deadLetterExchange,
+          routingKey: TRIP_COMPLETED_ROUTING_KEY,
+          queue: env.tripCompletedQueue,
+        }),
+        prefetch: env.consumerPrefetch,
+        maxRetries: env.consumerMaxRetries,
+        retryDelayMs: env.consumerRetryDelayMs,
+        handle: async (content) => {
+          const outcome = await processTripCompleted(content);
+          if (outcome.status === 'duplicate') {
+            tripLog('info', 'mensaje repetido descartado', { messageId: outcome.messageId, tripId: outcome.tripId });
+            return;
+          }
+          tripLog('info', outcome.created ? 'comprobante emitido' : 'comprobante ya existente', {
+            messageId: outcome.messageId,
+            tripId: outcome.tripId,
+            receiptId: outcome.receiptId,
+          });
+        },
+      });
+    }
+
     // receipt.issued se publica desde la bandeja de salida: el evento ya quedo
     // guardado junto con el comprobante y aca solo se envia a RabbitMQ.
     relay = startOutboxRelay({
@@ -179,7 +215,7 @@ export function createReceiptsModule(options: ReceiptsModuleOptions = {}): Recei
     },
     async stop() {
       closing = true;
-      await Promise.all([consumer?.close(), relay?.close()]);
+      await Promise.all([consumer?.close(), tripConsumer?.close(), relay?.close()]);
       await Promise.all([closePool(), closeRedis()]);
     },
   };

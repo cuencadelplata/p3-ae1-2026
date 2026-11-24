@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit';
 
 import { env } from '../config/env';
+import { isOffGatewayPending } from '../integrations/m7-payments';
 import type { Fare, Receipt } from '../models/receipt';
 import {
   formatCurrency,
@@ -121,10 +122,14 @@ function drawParties(doc: Doc, receipt: Receipt): void {
   const columnWidth = (width - COLUMN_GAP) / 2;
   const top = doc.y;
 
-  const customerRows: Row[] = [
-    ['Nombre', receipt.customer.fullName],
-    ['Identificador', receipt.customer.id],
-  ];
+  // Un comprobante emitido desde TripCompleted no trae el nombre: M1 no lo
+  // comparte con otros servicios y se imprime el numero de usuario.
+  const customerRows: Row[] = receipt.customer.fullName
+    ? [
+        ['Nombre', receipt.customer.fullName],
+        ['Identificador', receipt.customer.id],
+      ]
+    : [['N.º de usuario', receipt.customer.id]];
   if (receipt.customer.documentId) {
     customerRows.push(['Documento', receipt.customer.documentId]);
   }
@@ -134,8 +139,12 @@ function drawParties(doc: Doc, receipt: Receipt): void {
 
   const vehicle = receipt.driver.vehicle;
   const driverRows: Row[] = [
-    ['Nombre', receipt.driver.fullName],
-    ['Identificador', receipt.driver.id],
+    ...(receipt.driver.fullName
+      ? ([
+          ['Nombre', receipt.driver.fullName],
+          ['Identificador', receipt.driver.id],
+        ] as Row[])
+      : ([['N.º de usuario', receipt.driver.id]] as Row[])),
     ['Vehiculo', `${labelForVehicleType(vehicle.type)}${vehicle.model ? ` - ${vehicle.model}` : ''}`],
     ['Dominio', vehicle.plate],
   ];
@@ -250,7 +259,14 @@ function drawPaymentSection(doc: Doc, receipt: Receipt): void {
 
   const rows: Row[] = [
     ['Metodo de pago', labelForPaymentMethod(receipt.payment.method)],
-    ['Estado', labelForPaymentStatus(receipt.payment.status)],
+    [
+      'Estado',
+      isOffGatewayPending(receipt.payment)
+        ? receipt.payment.method === 'EFECTIVO'
+          ? 'Pendiente: se abona al conductor'
+          : 'Pendiente: se abona por transferencia'
+        : labelForPaymentStatus(receipt.payment.status),
+    ],
   ];
   if (receipt.payment.authorizationCode) {
     rows.push(['Codigo de autorizacion', receipt.payment.authorizationCode]);

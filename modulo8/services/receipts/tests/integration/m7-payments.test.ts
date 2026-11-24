@@ -185,9 +185,9 @@ describe('Emision segun el estado del pago en M7 (Integration HTTP + PostgreSQL 
     await new Promise((resolve) => server.close(resolve));
   });
 
-  it('un pago pendiente no debe emitir, y al autorizarse debe emitir con el medio de pago de M7', async () => {
+  it('un pago con tarjeta pendiente no debe emitir, y al autorizarse debe emitir con el medio de pago de M7', async () => {
     const tripId = newTripId();
-    await registerPayment(tripId, 'transferencia');
+    await registerPayment(tripId, 'tarjeta');
 
     await assert.rejects(
       issueReceipt(receiptRequest(tripId)),
@@ -200,7 +200,21 @@ describe('Emision segun el estado del pago en M7 (Integration HTTP + PostgreSQL 
 
     assert.equal(created, true);
     assert.equal(receipt.payment.status, 'APROBADO');
-    assert.equal(receipt.payment.method, 'TRANSFERENCIA', 'el medio de pago sale de M7, no de la entrada');
+    assert.equal(receipt.payment.method, 'TARJETA', 'el medio de pago sale de M7');
+  });
+
+  it('efectivo y transferencia pendientes deben emitir con el pago pendiente (se cobran fuera de la pasarela)', async () => {
+    for (const tipo of ['efectivo', 'transferencia']) {
+      const tripId = newTripId();
+      await registerPayment(tripId, tipo);
+
+      const { receipt, created } = await issueReceipt(receiptRequest(tripId));
+
+      assert.equal(created, true);
+      assert.equal(receipt.payment.status, 'PENDIENTE');
+      assert.equal(receipt.payment.method, tipo === 'efectivo' ? 'EFECTIVO' : 'TRANSFERENCIA');
+      assert.equal(receipt.fare.total, 5390.5, 'sin importe en M7 queda el total de la entrada');
+    }
   });
 
   it('el comprobante debe tomar el total y la moneda que M7 guarda al autorizar', async () => {
@@ -244,7 +258,7 @@ describe('Emision segun el estado del pago en M7 (Integration HTTP + PostgreSQL 
 
   it('POST /receipts debe responder 409 con el pago pendiente y 422 con el pago rechazado', async () => {
     const pending = newTripId();
-    await registerPayment(pending, 'efectivo');
+    await registerPayment(pending, 'tarjeta');
     assert.deepEqual(await postReceipt(pending), { status: 409, code: 'PAYMENT_PENDING' });
 
     const rejected = newTripId();

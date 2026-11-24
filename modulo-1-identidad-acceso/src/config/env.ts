@@ -30,7 +30,7 @@ const defaultPort = parseInt(process.env.PORT || "3001", 10);
 const rawDefaultProvider = (process.env.DEFAULT_OAUTH2_PROVIDER || "MOCK").toUpperCase();
 const defaultProvider: OAuth2Provider =
     rawDefaultProvider === "GOOGLE" ? "GOOGLE" :
-    rawDefaultProvider === "AUTH0" ? "AUTH0" : "MOCK";
+        rawDefaultProvider === "AUTH0" ? "AUTH0" : "MOCK";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID || "";
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || "";
@@ -74,6 +74,7 @@ export function getJwtSecret(): string {
 export const config: AppConfig = {
     port: defaultPort,
     nodeEnv: process.env.NODE_ENV || "development",
+    //Función que devuelve el secreto
     get jwtSecret(): string {
         return getJwtSecret();
     },

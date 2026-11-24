@@ -2,7 +2,7 @@
 FROM node:22-alpine
 
 LABEL org.opencontainers.image.title="m8-m7-payments-sandbox" \
-      org.opencontainers.image.description="API de pagos de M7 simulada para el servicio de comprobantes (AE2)"
+      org.opencontainers.image.description="Contrato de M7 simulado (tarifa y pagos) para comprobantes y para el Compose común"
 
 WORKDIR /app
 COPY server.mjs ./

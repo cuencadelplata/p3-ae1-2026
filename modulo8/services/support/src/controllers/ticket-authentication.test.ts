@@ -62,6 +62,7 @@ describe('autenticación con M1 habilitada: sin cabecera Authorization', () => {
     await request(app).post('/tickets').send(PEDIDO);
 
     expect(existe).not.toHaveBeenCalled();
+    verificar.mockResolvedValueOnce({ userId: 9, role: 'OPERADOR' });
     expect((await request(app).get('/tickets').set('Authorization', TOKEN)).body).toEqual([]);
   });
 
@@ -103,6 +104,7 @@ describe('autenticación con M1 habilitada: token rechazado', () => {
     await request(app).post('/tickets').set('Authorization', 'Bearer token-vencido').send(PEDIDO);
 
     expect(existe).not.toHaveBeenCalled();
+    verificar.mockResolvedValueOnce({ userId: 9, role: 'OPERADOR' });
     expect((await request(app).get('/tickets').set('Authorization', TOKEN)).body).toEqual([]);
   });
 });
@@ -153,6 +155,7 @@ describe('autenticación con M1 habilitada: token válido', () => {
   });
 
   it('X-Actor-Id se ignora: el autor es siempre el usuario de M1', async () => {
+    verificar.mockResolvedValue({ userId: 42, role: 'OPERADOR' });
     const creado = await request(app)
       .post('/tickets')
       .set('Authorization', TOKEN)
@@ -277,5 +280,69 @@ describe('contrato OpenAPI de la autenticación', () => {
 
     expect(sinCabecera.body.error).toEqual(ejemplos.sinCabecera.value.error);
     expect(rechazado.body.error).toEqual(ejemplos.tokenInvalido.value.error);
+  });
+});
+
+describe('permisos por rol con M1 habilitada', () => {
+  const CLIENTE_42 = { userId: 42, role: 'CLIENTE' as const };
+  const CLIENTE_7 = { userId: 7, role: 'CLIENTE' as const };
+  const OPERADOR_9 = { userId: 9, role: 'OPERADOR' as const };
+
+  async function crearComo(usuario: { userId: number; role: 'CLIENTE' }) {
+    verificar.mockResolvedValueOnce(usuario);
+    const res = await request(app).post('/tickets').set('Authorization', TOKEN).send(PEDIDO);
+    expect(res.status).toBe(201);
+    return res.body.id as string;
+  }
+
+  it('un cliente no lista todos los tickets ni cambia estados: 403 SUPPORT_FORBIDDEN', async () => {
+    const id = await crearComo(CLIENTE_42);
+
+    verificar.mockResolvedValueOnce(CLIENTE_42);
+    const listado = await request(app).get('/tickets').set('Authorization', TOKEN);
+    verificar.mockResolvedValueOnce(CLIENTE_42);
+    const cambio = await request(app).patch(`/tickets/${id}/estado`).set('Authorization', TOKEN).send({ estado: 'RESUELTO' });
+
+    expect(listado.status).toBe(403);
+    expect(listado.body.error.code).toBe('SUPPORT_FORBIDDEN');
+    expect(cambio.status).toBe(403);
+    verificar.mockResolvedValueOnce(OPERADOR_9);
+    expect((await request(app).get(`/tickets/${id}`).set('Authorization', TOKEN)).body.estado).toBe('ABIERTO');
+  });
+
+  it('quien creó el ticket lo ve con su historial; otro cliente recibe 403', async () => {
+    const id = await crearComo(CLIENTE_42);
+
+    verificar.mockResolvedValueOnce(CLIENTE_42);
+    const propio = await request(app).get(`/tickets/${id}`).set('Authorization', TOKEN);
+    verificar.mockResolvedValueOnce(CLIENTE_42);
+    const historial = await request(app).get(`/tickets/${id}/historial`).set('Authorization', TOKEN);
+    verificar.mockResolvedValueOnce(CLIENTE_7);
+    const ajeno = await request(app).get(`/tickets/${id}`).set('Authorization', TOKEN);
+    verificar.mockResolvedValueOnce(CLIENTE_7);
+    const historialAjeno = await request(app).get(`/tickets/${id}/historial`).set('Authorization', TOKEN);
+
+    expect(propio.status).toBe(200);
+    expect(historial.status).toBe(200);
+    expect(ajeno.status).toBe(403);
+    expect(historialAjeno.status).toBe(403);
+  });
+
+  it('el operador lista, consulta y cambia el estado de cualquier ticket', async () => {
+    const id = await crearComo(CLIENTE_7);
+    verificar.mockResolvedValue(OPERADOR_9);
+
+    const listado = await request(app).get('/tickets').set('Authorization', TOKEN);
+    const cambio = await request(app).patch(`/tickets/${id}/estado`).set('Authorization', TOKEN).send({ estado: 'EN_PROCESO' });
+
+    expect(listado.status).toBe(200);
+    expect(cambio.status).toBe(200);
+    expect(cambio.body.estado).toBe('EN_PROCESO');
+  });
+
+  it('un ticket inexistente sigue respondiendo 404 a un cliente', async () => {
+    const res = await request(app).get('/tickets/no-existe').set('Authorization', TOKEN);
+
+    expect(res.status).toBe(404);
   });
 });

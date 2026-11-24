@@ -84,6 +84,71 @@ export class HttpM2PreferencesClient implements M2PreferencesClient {
   }
 }
 
+export interface M2CircuitBreakerOptions {
+  /** Fallas UNAVAILABLE seguidas que abren el circuito. */
+  failureThreshold?: number;
+  /** Tiempo con el circuito abierto antes de probar de nuevo, en milisegundos. */
+  openMs?: number;
+  now?: () => number;
+}
+
+/**
+ * Circuit breaker delante del cliente de M2.
+ *
+ * Si M2 no está levantado, cada consulta tarda segundos en fallar (DNS de un
+ * nombre que no existe más el timeout). En un proceso Node esas búsquedas
+ * ocupan los hilos de libuv y frenan al resto de la app única: la validación
+ * de tokens con M1 y las conexiones a PostgreSQL de otros RF. Con el circuito
+ * abierto la consulta falla al instante como UNAVAILABLE (reintentable) sin
+ * tocar la red. Solo cuentan las fallas UNAVAILABLE: si M2 responde, aunque sea
+ * con un error de negocio, la dependencia está viva.
+ */
+export class CircuitBreakerM2PreferencesClient implements M2PreferencesClient {
+  private failures = 0;
+  private openedAt: number | undefined;
+  private trialInFlight = false;
+  private readonly failureThreshold: number;
+  private readonly openMs: number;
+  private readonly now: () => number;
+
+  constructor(private readonly inner: M2PreferencesClient, options: M2CircuitBreakerOptions = {}) {
+    this.failureThreshold = options.failureThreshold ?? 3;
+    this.openMs = options.openMs ?? 30_000;
+    this.now = options.now ?? Date.now;
+  }
+
+  state(): 'closed' | 'open' | 'half-open' {
+    if (this.openedAt === undefined) return 'closed';
+    return this.now() - this.openedAt >= this.openMs ? 'half-open' : 'open';
+  }
+
+  async getPreferences(userId: number, correlationId: string): Promise<UserPreferences> {
+    const state = this.state();
+    if (state === 'open' || (state === 'half-open' && this.trialInFlight)) {
+      throw new M2PreferencesError('UNAVAILABLE', `Circuito de M2 abierto: no se consultan preferencias de ${userId}.`);
+    }
+    const trial = state === 'half-open';
+    if (trial) this.trialInFlight = true;
+    try {
+      const preferences = await this.inner.getPreferences(userId, correlationId);
+      this.failures = 0;
+      this.openedAt = undefined;
+      return preferences;
+    } catch (error) {
+      if (error instanceof M2PreferencesError && error.code === 'UNAVAILABLE') {
+        this.failures += 1;
+        if (trial || this.failures >= this.failureThreshold) this.openedAt = this.now();
+      } else {
+        this.failures = 0;
+        this.openedAt = undefined;
+      }
+      throw error;
+    } finally {
+      if (trial) this.trialInFlight = false;
+    }
+  }
+}
+
 export class MockM2PreferencesClient implements M2PreferencesClient {
   private preferences = new Map<number, UserPreferences>();
   private shouldFail: boolean = false;
