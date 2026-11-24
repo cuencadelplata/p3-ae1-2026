@@ -18,6 +18,9 @@ export interface RideRequest {
   expiresAt: string
   assignedDriverId?: string | null
   estimatedFare?: { amount: number; currency: string }
+  origin?: typeof origin
+  destination?: typeof destination
+  vehicleType?: 'AUTO' | 'MOTO'
 }
 export interface Offer {
   id: string
@@ -74,7 +77,7 @@ export class FlowError extends Error {
   }
 }
 
-type Service = 'M2' | 'M3' | 'M3-vehiculos' | 'M4' | 'M5' | 'M6' | 'M8'
+type Service = 'M2' | 'M3' | 'M3-vehiculos' | 'M4' | 'M5' | 'M6' | 'M6-cancelacion' | 'M8'
 interface Options {
   method?: 'POST' | 'PUT' | 'PATCH'
   body?: object

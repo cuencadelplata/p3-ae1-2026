@@ -1,8 +1,14 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeft, CarFront, CircleCheck, CreditCard, MapPin, Navigation, QrCode, Route } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { ArrowLeft, Banknote, Bike, CarFront, CircleCheck, CreditCard, Landmark, LockKeyhole, MapPin, Navigation, QrCode, Route } from 'lucide-react'
 import RideMap from './RideMap'
-import { destination, ensurePassenger, FlowError, origin, pollTrip, request, sandboxPayment } from '../rideFlowApi'
+import TripPlanner from './TripPlanner'
+import type { Draft, PickMode } from './TripPlanner'
+import { destination, ensurePassenger, FlowError, origin, pollTrip, request } from '../rideFlowApi'
 import type { Account, Payment, QR, Receipt, RideRequest, Trip, TripRecord } from '../rideFlowApi'
+import { dispatchZone, distanceKm, fetchRoute, reversePlace } from '../places'
+import { cardEnabled, cardProblem, emptyCard, formatCardNumber, formatExpiry, mpPublicKey, tokenizeCard } from '../mercadoPago'
+import type { CardInput } from '../mercadoPago'
+import type { RouteInfo } from '../places'
 import './RideFlow.css'
 
 interface Journey {
@@ -12,6 +18,32 @@ interface Journey {
   qr?: QR
   payment?: Payment
   receipt?: Receipt
+  /** Origen, destino y vehículo que eligió el pasajero para este viaje. */
+  route?: Draft
+}
+
+const defaultDraft: Draft = { origin, destination, vehicleType: 'AUTO' }
+
+function readDraft(key: string): Draft {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(key) ?? 'null') as Draft | null
+    if (saved?.origin?.address && saved.destination?.address) return { ...saved, vehicleType: 'AUTO' }
+  } catch {
+    // Un borrador ilegible vuelve al recorrido de prueba.
+  }
+  return defaultDraft
+}
+
+const routeFromRide = (ride?: RideRequest): Draft | undefined => ride?.origin && ride.destination
+  ? { origin: ride.origin, destination: ride.destination, vehicleType: ride.vehicleType ?? 'AUTO' }
+  : undefined
+
+function draftProblem({ origin: from, destination: to }: Draft) {
+  if (distanceKm(dispatchZone.center, from) > dispatchZone.radiusKm) {
+    return `Los conductores de prueba esperan en el centro de Corrientes. Elegí un origen a menos de ${dispatchZone.radiusKm} km de ${dispatchZone.center.address}.`
+  }
+  if (distanceKm(from, to) < 0.1) return 'El destino tiene que estar a más de 100 metros del origen.'
+  return ''
 }
 
 const newJourney = (): Journey => ({ key: crypto.randomUUID() })
@@ -25,8 +57,8 @@ function readJourney(key: string): Journey {
     const saved = sessionStorage.getItem(key)
     if (saved) {
       // Conserva el viaje y elimina la sesión secundaria guardada por la versión anterior.
-      const { key: id, ride, trip, qr, payment, receipt } = JSON.parse(saved) as Journey
-      return { key: id, ride, trip, qr, payment, receipt }
+      const { key: id, ride, trip, qr, payment, receipt, route } = JSON.parse(saved) as Journey
+      return { key: id, ride, trip, qr, payment, receipt, route }
     }
   } catch {
     return newJourney()
@@ -46,11 +78,13 @@ async function findTrip(ride: RideRequest, passengerId: number, token: string, s
   }
 }
 
-async function findActiveTrip(passengerId: number, newerThan: number, token: string, signal: AbortSignal) {
+// Retoma cualquier viaje del pasajero que siga activo, sea anterior o posterior al que guardó la
+// pestaña. Si solo se buscaran viajes más nuevos, uno activo más viejo quedaría invisible: el
+// pasajero pediría otro y su conductor quedaría esperando "en camino" sin forma de terminarlo.
+async function findActiveTrip(passengerId: number, token: string, signal: AbortSignal) {
   const { viajes } = await request<{ viajes: TripRecord[] }>('M6', `/api/viajes?clienteId=${passengerId}`, { token, signal })
   for (const item of viajes) {
-    if (Date.parse(item.fechaCreacion) <= newerThan) break
-    if (terminalTrip(item.estado) || item.origen !== origin.address || item.destino !== destination.address) continue
+    if (terminalTrip(item.estado)) continue
     const detail = await request<Trip>('M6', `/api/viajes/${item.id}`, { token, signal })
     if (!terminalTrip(detail.estado)) return detail
   }
@@ -74,18 +108,65 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   const [searchPaused, setSearchPaused] = useState(false)
   const [verifiedTripId, setVerifiedTripId] = useState<string>()
   const [checkingExistingTrip, setCheckingExistingTrip] = useState(true)
-  const [method, setMethod] = useState(sandboxPayment ? 'tarjeta' : 'efectivo')
+  const [method, setMethod] = useState('efectivo')
+  // Los datos de la tarjeta sólo viven en memoria: no se guardan en el navegador ni se mandan a M6.
+  const [card, setCard] = useState<CardInput>(emptyCard)
+  const setCardField = (field: keyof CardInput, value: string) => setCard((current) => ({ ...current, [field]: value }))
   const [now, setNow] = useState(Date.now)
+  const draftKey = `${storageKey}.borrador`
+  const [draft, setDraft] = useState(() => readDraft(draftKey))
+  const [pickMode, setPickMode] = useState<PickMode | null>('origin')
+  const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null)
+  const [routeLoading, setRouteLoading] = useState(true)
+  const [locating, setLocating] = useState(false)
   const { ride, trip, qr, payment, receipt } = journey
   const rideId = ride?.id
   const tripId = trip?.id
   const hasPayment = Boolean(payment)
   const canRestore = trip ? terminalTrip(trip.estado) : !ride || closed(ride.status)
-  const newerThan = Date.parse(trip?.fechaCreacion ?? ride?.createdAt ?? '') || 0
+  const planning = !ride && !trip
+  // Lo que se muestra: el borrador mientras se arma el pedido, o el recorrido del viaje pedido.
+  const shown = planning ? draft : journey.route ?? routeFromRide(ride)
+    ?? (trip?.origen === origin.address && trip?.destino === destination.address ? defaultDraft : undefined)
+  const problem = planning ? draftProblem(draft) : ''
 
   useEffect(() => {
     sessionStorage.setItem(storageKey, JSON.stringify(journey))
   }, [storageKey, journey])
+
+  useEffect(() => {
+    sessionStorage.setItem(draftKey, JSON.stringify(draft))
+  }, [draftKey, draft])
+
+  const from = shown?.origin
+  const to = shown?.destination
+  useEffect(() => {
+    if (!from || !to) return
+    const controller = new AbortController()
+    setRouteLoading(true)
+    const timer = window.setTimeout(() => {
+      fetchRoute(from, to, controller.signal)
+        .then((info) => { if (!controller.signal.aborted) setRouteInfo(info) })
+        .catch(() => undefined)
+        .finally(() => { if (!controller.signal.aborted) setRouteLoading(false) })
+    }, 300)
+    return () => { window.clearTimeout(timer); controller.abort() }
+    // Se recalcula sólo cuando cambian las coordenadas.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from?.latitude, from?.longitude, to?.latitude, to?.longitude])
+
+  // Un clic en el mapa fija el punto elegido y busca su dirección, como en el front de M5.
+  const pickOnMap = useCallback(async (latitude: number, longitude: number) => {
+    if (!pickMode) return
+    const mode = pickMode
+    setLocating(true)
+    setDraft((current) => ({ ...current, [mode]: { latitude, longitude, address: 'Buscando la dirección…' } }))
+    const place = await reversePlace(latitude, longitude).catch(() => ({ latitude, longitude, address: `Punto ${latitude}, ${longitude}` }))
+    setDraft((current) => current[mode].latitude === latitude && current[mode].longitude === longitude ? { ...current, [mode]: place } : current)
+    setLocating(false)
+    // Después del origen, el siguiente clic elige el destino.
+    if (mode === 'origin') setPickMode('destination')
+  }, [pickMode])
 
   useEffect(() => {
     if (!rideId) return
@@ -98,7 +179,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
 
     return pollTrip(async (signal) => {
       try {
-        const active = await findActiveTrip(userId, newerThan, token, signal)
+        const active = await findActiveTrip(userId, token, signal)
         if (signal.aborted) return false
         if (active) {
           const related = active.rideRequestId
@@ -108,7 +189,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
           setSearchPaused(false)
           setError('')
           setVerifiedTripId(active.id)
-          setJourney((previous) => ({ key: previous.key, ride: related, trip: active }))
+          setJourney((previous) => ({ key: previous.key, ride: related, trip: active, route: routeFromRide(related) }))
         }
         setCheckingExistingTrip(false)
         return false
@@ -116,7 +197,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
         return !signal.aborted
       }
     })
-  }, [busy, canRestore, newerThan, token, userId])
+  }, [busy, canRestore, token, userId])
 
   useEffect(() => {
     if (!rideId || tripId || searchPaused) return
@@ -209,14 +290,18 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   }
 
   async function createRide() {
+    const chosen = draft
+    const invalid = draftProblem(chosen)
+    if (invalid) throw new Error(invalid)
     await ensurePassenger(token)
     const created = await request<RideRequest>('M5', '/api/v1/ride-requests', {
       method: 'POST', token, headers: { 'Idempotency-Key': journey.key },
-      body: { origin, destination, vehicleType: 'AUTO' },
+      body: { origin: chosen.origin, destination: chosen.destination, vehicleType: chosen.vehicleType },
     })
     setNow(Date.now())
     setSearchPaused(false)
-    update({ ride: created })
+    setPickMode(null)
+    update({ ride: created, route: chosen })
   }
 
   async function prepareStart(id: string) {
@@ -231,13 +316,19 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   }
 
   async function finish(id: string) {
+    // M6 le pide a M4 la distancia entre los puntos que eligió el pasajero.
+    const recorrido = journey.route ?? routeFromRide(ride) ?? defaultDraft
+    // Tarjeta: primero Mercado Pago tokeniza los datos; M6 recibe el token y M7 autoriza el pago.
+    const pago = method === 'tarjeta' ? await tokenizeCard(card, passenger.email) : undefined
     const result = await request<Payment>('M6', `/api/viajes/${id}/finalizacion`, {
       method: 'POST', token,
       body: {
-        origen: origin, destino: destination, tipoVehiculo: 'auto', horaFin: new Date().toISOString(), metodoPago: method,
-        ...(method === 'tarjeta' && sandboxPayment && { pago: { token: 'viaje-demo-sandbox', paymentMethodId: 'visa', email: passenger.email } }),
+        origen: recorrido.origin, destino: recorrido.destination, tipoVehiculo: recorrido.vehicleType.toLowerCase(),
+        horaFin: new Date().toISOString(), metodoPago: method,
+        ...(pago && { pago }),
       },
     })
+    setCard(emptyCard)
     recordTransition('COMPLETADO', undefined, result)
   }
 
@@ -255,6 +346,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
     setError('')
     setSearchPaused(false)
     setCheckingExistingTrip(true)
+    setPickMode('origin')
     setJourney(newJourney())
   }
 
@@ -286,12 +378,20 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
 
         <div className="ride-columns">
           <div className="ride-sidebar">
-            <aside className="ride-route" aria-label="Recorrido de prueba">
-              <h2><Route size={18} aria-hidden="true" /> Recorrido de prueba</h2>
-              <div className="ride-stop"><MapPin size={18} aria-hidden="true" /><div><small>Origen</small><p>{origin.address}</p></div></div>
-              <div className="ride-stop"><Navigation size={18} aria-hidden="true" /><div><small>Destino</small><p>{destination.address}</p></div></div>
-              <div className="ride-vehicle"><CarFront size={18} aria-hidden="true" /><span>Auto{(trip?.conductorId || ride?.assignedDriverId) && ` · Conductor #${trip?.conductorId ?? ride?.assignedDriverId}`}</span></div>
-              {ride?.estimatedFare && !completed && !canceled && <p className="ride-muted mt-2 text-sm">Estimación {money(ride.estimatedFare.amount, ride.estimatedFare.currency)}</p>}
+            <aside className="ride-route" aria-label={planning ? '¿A dónde vamos?' : 'Recorrido del viaje'}>
+              <h2><Route size={18} aria-hidden="true" /> {planning ? '¿A dónde vamos hoy?' : 'Tu recorrido'}</h2>
+              {planning ? <TripPlanner draft={draft} onChange={setDraft} route={routeInfo} routeLoading={routeLoading}
+                pickMode={pickMode} onPickMode={setPickMode} disabled={locked || checkingExistingTrip} warning={problem} />
+                : <>
+                  <div className="ride-stop"><MapPin size={18} aria-hidden="true" /><div><small>Origen</small><p>{shown?.origin.address ?? trip?.origen}</p></div></div>
+                  <div className="ride-stop"><Navigation size={18} aria-hidden="true" /><div><small>Destino</small><p>{shown?.destination.address ?? trip?.destino}</p></div></div>
+                  <div className="ride-vehicle">
+                    {shown?.vehicleType === 'MOTO' ? <Bike size={18} aria-hidden="true" /> : <CarFront size={18} aria-hidden="true" />}
+                    <span>{shown?.vehicleType === 'MOTO' ? 'Moto' : 'Auto'}{(trip?.conductorId || ride?.assignedDriverId) && ` · Conductor #${trip?.conductorId ?? ride?.assignedDriverId}`}</span>
+                  </div>
+                  {routeInfo && <p className="ride-muted mt-2 text-sm">{routeInfo.distanceKm.toLocaleString('es-AR', { maximumFractionDigits: 1 })} km · ~{routeInfo.durationMin} min</p>}
+                  {ride?.estimatedFare && !completed && !canceled && <p className="ride-muted mt-2 text-sm">Tarifa estimada por M7: {money(ride.estimatedFare.amount, ride.estimatedFare.currency)}</p>}
+                </>}
             </aside>
 
             <section className="ride-action" aria-label="Paso actual" aria-busy={locked}>
@@ -301,8 +401,8 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
 
               {!ride && !trip && <>
                 <h2>Pedí un viaje</h2>
-                <p>{checkingExistingTrip ? 'Buscando si tenés un viaje en curso…' : 'Al confirmar el pedido, buscamos autos disponibles cerca del origen.'}</p>
-                <button className="btn-primary" disabled={locked || checkingExistingTrip} onClick={() => void run('Creando la solicitud…', createRide)}>Solicitar viaje</button>
+                <p>{checkingExistingTrip ? 'Buscando si tenés un viaje en curso…' : 'Elegí el origen y el destino escribiendo la dirección o tocando el mapa. Al confirmar, buscamos autos disponibles cerca del origen.'}</p>
+                <button className="btn-primary" disabled={locked || checkingExistingTrip || locating || Boolean(problem)} onClick={() => void run('Creando la solicitud…', createRide)}>Pedir viaje ahora</button>
               </>}
 
               {ride && !trip && <>
@@ -324,12 +424,50 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
               {trip && !checkingTrip && started && <>
                 <h2>Viaje en curso</h2>
                 <form className="ride-form" onSubmit={(event) => { event.preventDefault(); void run('Calculando la tarifa y registrando el pago…', () => finish(trip.id), []) }}>
-                  <label>Medio de pago<select className="input-field" disabled={locked} value={method} onChange={(event) => setMethod(event.target.value)}>
-                    <option value="efectivo">Efectivo</option>
-                    {sandboxPayment && <option value="tarjeta">Tarjeta de prueba</option>}
-                  </select></label>
-                  <p className="ride-muted">{method === 'tarjeta' ? 'El simulador autoriza la operación sin hacer un cargo.' : 'El importe se abona al conductor. El sistema registra el pago como pendiente.'}</p>
-                  <button className="btn-primary" disabled={locked} type="submit">Finalizar y registrar pago</button>
+                  <fieldset className="ride-pay-methods" disabled={locked}>
+                    <legend>Medio de pago</legend>
+                    {[
+                      { value: 'efectivo', label: 'Efectivo', icon: Banknote, available: true },
+                      { value: 'transferencia', label: 'Transferencia', icon: Landmark, available: true },
+                      { value: 'tarjeta', label: 'Tarjeta', icon: CreditCard, available: cardEnabled },
+                    ].filter((option) => option.available).map(({ value, label, icon: Icon }) => (
+                      <label key={value} className="ride-pay-option" data-selected={method === value}>
+                        <input type="radio" name="metodo-pago" value={value} checked={method === value} onChange={() => setMethod(value)} />
+                        <Icon size={18} aria-hidden="true" /> {label}
+                      </label>
+                    ))}
+                  </fieldset>
+                  {method === 'efectivo' && <p className="ride-muted">El importe se abona al conductor. M7 registra el pago como pendiente de cobro.</p>}
+                  {method === 'transferencia' && <p className="ride-muted">Transferí el importe al conductor al llegar. M7 registra el pago como pendiente hasta que se acredite.</p>}
+                  {method === 'tarjeta' && <div className="ride-card">
+                    <label className="ride-card-wide">Número de tarjeta
+                      <input className="input-field" inputMode="numeric" autoComplete="cc-number" placeholder="4509 9535 6623 3704" value={card.number}
+                        onChange={(event) => setCardField('number', formatCardNumber(event.target.value))} />
+                    </label>
+                    <label>Vencimiento
+                      <input className="input-field" inputMode="numeric" autoComplete="cc-exp" placeholder="MM/AA" value={card.expiry}
+                        onChange={(event) => setCardField('expiry', formatExpiry(event.target.value))} />
+                    </label>
+                    <label>Código de seguridad
+                      <input className="input-field" inputMode="numeric" autoComplete="cc-csc" placeholder="123" maxLength={4} value={card.cvv}
+                        onChange={(event) => setCardField('cvv', event.target.value.replace(/\D/g, ''))} />
+                    </label>
+                    <label className="ride-card-wide">Titular (como figura en la tarjeta)
+                      <input className="input-field" autoComplete="cc-name" placeholder="APRO" value={card.holder}
+                        onChange={(event) => setCardField('holder', event.target.value.toUpperCase())} />
+                    </label>
+                    <label className="ride-card-wide">DNI del titular
+                      <input className="input-field" inputMode="numeric" placeholder="12345678" maxLength={8} value={card.dni}
+                        onChange={(event) => setCardField('dni', event.target.value.replace(/\D/g, ''))} />
+                    </label>
+                    <p className="ride-muted ride-card-wide"><LockKeyhole size={13} aria-hidden="true" /> {mpPublicKey
+                      ? 'Los datos van directo a Mercado Pago, que devuelve un token. Nuestros servicios nunca ven el número de la tarjeta.'
+                      : 'Modo simulador: no se contacta a Mercado Pago ni se hace un cargo.'}</p>
+                  </div>}
+                  <button className="btn-primary" disabled={locked || (method === 'tarjeta' && Boolean(cardProblem(card)))} type="submit">
+                    {method === 'tarjeta' ? 'Pagar y finalizar viaje' : 'Finalizar y registrar pago'}
+                  </button>
+                  {method === 'tarjeta' && card.number && cardProblem(card) && <p className="ride-muted">{cardProblem(card)}</p>}
                 </form>
               </>}
 
@@ -337,7 +475,9 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
                 <h2>Viaje finalizado</h2>
                 {payment && <>
                   <div className="ride-total"><CreditCard size={22} aria-hidden="true" /><strong>{money(payment.viaje.total, payment.viaje.moneda)}</strong></div>
-                  <p>{payment.estadoPago === 'autorizado' ? 'Pago autorizado' : 'Pago en efectivo pendiente de cobro'}</p>
+                  <p>{payment.estadoPago === 'autorizado'
+                    ? 'Pago con tarjeta autorizado por Mercado Pago'
+                    : payment.viaje.metodoPago === 'transferencia' ? 'Transferencia pendiente de acreditación' : 'Pago en efectivo pendiente de cobro'}</p>
                 </>}
                 <dl className="ride-result">
                   {payment && <><dt>Identificador del pago</dt><dd>{payment.paymentId}</dd></>}
@@ -354,7 +494,9 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
               </>}
             </section>
           </div>
-          <RideMap />
+          <RideMap pickup={shown?.origin} dropoff={shown?.destination} routeCoords={routeInfo?.coords}
+            onPick={planning && pickMode && !locked ? (latitude, longitude) => void pickOnMap(latitude, longitude) : undefined}
+            pickLabel={pickMode === 'origin' ? 'Tocá el mapa para marcar el origen' : 'Tocá el mapa para marcar el destino'} />
         </div>
       </div>
     </div>

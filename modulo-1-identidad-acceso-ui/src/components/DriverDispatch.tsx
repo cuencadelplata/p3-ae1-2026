@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeft, CarFront, CircleCheck, Clock3, LockKeyhole, MapPin, Navigation, Power, Radar } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowLeft, CarFront, CircleCheck, CircleX, Clock3, LockKeyhole, MapPin, Navigation, Power, Radar } from 'lucide-react'
 import RideMap from './RideMap'
+import { fetchRoute } from '../places'
+import type { RouteInfo } from '../places'
 import { destination, FlowError, origin, pollTrip, prepareDriver, publishDriverLocation, request } from '../rideFlowApi'
 import type { Account, Offer, Trip, TripRecord } from '../rideFlowApi'
 import './RideFlow.css'
@@ -69,6 +71,19 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
   const [error, setError] = useState('')
   const [now, setNow] = useState(Date.now)
   const offerId = offer?.id
+  // Patente del auto activo en M3. M8 la necesita para emitir el comprobante del viaje: si el
+  // conductor toma un viaje sin auto activo, el comprobante falla y termina en la DLQ de M8.
+  const vehicle = useRef('')
+
+  async function ensureVehicle() {
+    if (!vehicle.current) {
+      vehicle.current = await prepareDriver(driver)
+      setPlate(vehicle.current)
+    }
+    return vehicle.current
+  }
+  const ensureVehicleRef = useRef(ensureVehicle)
+  useEffect(() => { ensureVehicleRef.current = ensureVehicle })
 
   useEffect(() => {
     if (assignment) sessionStorage.setItem(storageKey, JSON.stringify(assignment))
@@ -106,6 +121,10 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
         const occupied = Boolean(current ? isActive(current) : assignment)
         if (!online) return occupied
         const available = !occupied
+        // Al quedar en línea por un viaje retomado, "Conectarme" no corrió: se prepara el auto
+        // antes de volver a recibir ofertas.
+        if (available) await ensureVehicleRef.current()
+        if (signal.aborted) return false
         if (available !== lastAvailability || Date.now() - lastPublication >= 20_000) {
           await publishDriverLocation(userId, token, available, signal)
           lastAvailability = available
@@ -159,9 +178,8 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
         return
       }
 
-      const vehiclePlate = await prepareDriver(driver)
+      await ensureVehicle()
       await publishDriverLocation(userId, token, true)
-      setPlate(vehiclePlate)
       setTrip(null)
       setCompletedOffer(null)
       setOnline(true)
@@ -178,6 +196,7 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
     if (!online || active || Date.parse(pending.expiresAt) <= Date.now()) return
     await perform(action === 'accept' ? 'Confirmando el viaje…' : 'Rechazando la oferta…', async () => {
       try {
+        if (action === 'accept') await ensureVehicle()
         const response = await request<{ requestStatus: string }>('M5', `/api/v1/offers/${pending.id}/${action}`, {
           method: 'POST', token, body: {},
         })
@@ -200,6 +219,23 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
     })
   }
 
+  // RF-6.6: mientras va en camino, el conductor puede cancelar. M6 cierra el viaje y le pide a M5
+  // que vuelva a buscar conductor para el pasajero; el conductor queda libre para otra oferta.
+  const cancellable = active && trip?.estado === 'CONDUCTOR_EN_CAMINO'
+
+  async function cancelTrip() {
+    if (!trip || !cancellable) return
+    if (!window.confirm('¿Cancelar este viaje? El pasajero vuelve a la búsqueda de conductor.')) return
+    await perform('Cancelando el viaje…', async () => {
+      await request('M6-cancelacion', `/api/viajes/${encodeURIComponent(trip.id)}/cancelacion-conductor`, {
+        method: 'POST', token, body: { motivo: 'El conductor no puede llegar al punto de encuentro' },
+      })
+      setTrip({ ...trip, estado: 'CANCELADO' })
+      setCompletedOffer(assignment?.offer ?? null)
+      setAssignment(null)
+    })
+  }
+
   const secondsLeft = offer ? Math.max(0, Math.ceil((Date.parse(offer.expiresAt) - now) / 1000)) : 0
   const pending = secondsLeft > 0 && !active ? offer : null
   const routeOffer = assignment?.offer ?? pending ?? completedOffer
@@ -211,10 +247,30 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
   const title = active ? (trip && rideStatus[trip.estado]) || 'Viaje asignado'
     : pending ? 'Nueva oferta de viaje'
       : online ? (trip && rideStatus[trip.estado]) || 'Buscando viajes' : 'Estás desconectado'
-  const description = active ? 'La desconexión se habilita cuando el viaje termina o se cancela.'
+  const description = cancellable ? 'El pasajero confirma el encuentro desde su app. Si no vas a llegar, podés cancelar el viaje.'
+    : active ? 'La desconexión se habilita cuando el viaje termina o se cancela.'
     : pending ? 'Revisá el recorrido y confirmá si querés tomarlo.'
       : online ? 'Aceptar viaje se habilita cuando recibís una oferta.' : 'Conectate para recibir ofertas en esta zona.'
   const StatusIcon = active || (online && trip?.estado === 'COMPLETADO') ? CircleCheck : online ? Radar : Power
+
+  // Mismo mapa que "Tu viaje": ruta por calles entre el origen y el destino de la oferta o el viaje.
+  const showRoute = Boolean(routeOffer || (pickupAddress === origin.address && dropoffAddress === destination.address))
+  const pickupPoint = routeOffer?.origin ?? origin
+  const dropoffPoint = routeOffer?.destination ?? destination
+  const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null)
+  useEffect(() => {
+    if (!showRoute) {
+      setRouteInfo(null)
+      return
+    }
+    const controller = new AbortController()
+    fetchRoute(pickupPoint, dropoffPoint, controller.signal)
+      .then((info) => { if (!controller.signal.aborted) setRouteInfo(info) })
+      .catch(() => undefined)
+    return () => controller.abort()
+    // Se recalcula sólo cuando cambian las coordenadas del recorrido.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showRoute, pickupPoint.latitude, pickupPoint.longitude, dropoffPoint.latitude, dropoffPoint.longitude])
 
   return (
     <main className="driver-dispatch">
@@ -230,8 +286,8 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
       </header>
 
       <div className="driver-map-frame" data-trip={showSummary}>
-        <RideMap driverView showRoute={Boolean(routeOffer || (pickupAddress === origin.address && dropoffAddress === destination.address))}
-          pickup={routeOffer?.origin} dropoff={routeOffer?.destination} />
+        <RideMap driverView showRoute={showRoute} pickup={pickupPoint} dropoff={dropoffPoint}
+          routeCoords={showRoute ? routeInfo?.coords : undefined} />
         <div className="driver-map-label"><MapPin size={16} aria-hidden="true" /> Corrientes <span>Zona de prueba</span></div>
       </div>
 
@@ -247,6 +303,9 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
           {active ? <LockKeyhole size={18} aria-hidden="true" /> : <Power size={19} aria-hidden="true" />}
           {online || active ? 'Desconectarme' : 'Conectarme'}
         </button>
+        {cancellable && <button className="btn-ghost driver-cancel" disabled={Boolean(busy)} onClick={() => void cancelTrip()}>
+          <CircleX size={18} aria-hidden="true" /> Cancelar viaje
+        </button>}
         {error && <p className="alert-error driver-error" role="alert">{error}</p>}
 
         {online && !active && <div className="driver-offer-actions" role="group" aria-label="Responder a la oferta">

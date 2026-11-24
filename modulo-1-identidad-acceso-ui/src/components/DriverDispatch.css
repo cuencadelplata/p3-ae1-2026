@@ -110,6 +110,24 @@
 .driver-details strong { margin-left: .3rem; color: var(--text); font-weight: 600; }
 .driver-error { grid-column: 1 / -1; grid-row: 2; font-size: .85rem; }
 
+/* Cancelar en camino: debajo del botón de disponibilidad, con el mismo ancho. */
+.driver-cancel {
+  grid-column: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  min-width: 11rem;
+  border-radius: 999px;
+  border-color: rgba(248, 113, 113, .45);
+  color: #fca5a5;
+}
+.driver-cancel:hover:not(:disabled) { border-color: #f87171; color: #fecaca; }
+
+@media (max-width: 640px) {
+  .driver-cancel { grid-column: 1 / -1; }
+}
+
 .driver-trip-card {
   grid-column: 1 / -1;
   padding: clamp(.85rem, 2.5vw, 1.2rem);
