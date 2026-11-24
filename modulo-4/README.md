@@ -161,3 +161,25 @@ Los mismos resultados pueden enviarse a Grafana Cloud mediante `k6 cloud run --l
 - El geocodificador conoce solamente direcciones de demostracion.
 - M3, M5 y M6 se representan mediante contratos; la integracion completa corresponde a una evolucion posterior.
 - RabbitMQ y los flujos de disponibilidad con M5/M6 corresponden a la parte asignada a Manuel.
+
+### Ejecutar el E2E contra el Compose general
+
+Con M1, M4 y M5 del Compose raíz saludables, ejecutar desde la raíz:
+
+```bash
+M1_E2E_URL=http://localhost:10000 \
+M4_E2E_URL=http://localhost:3004/api/v1 \
+M5_E2E_URL=http://localhost:3005/api/v1 \
+node --test modulo-4/tests/e2e/driver-location.e2e.mjs
+```
+
+Ajustar los puertos si el entorno utiliza otros. La prueba usa el token real
+de M1 también para solicitar candidatos en M5. Al finalizar elimina la ubicación
+activa y cancela la solicitud de viaje. Las cuentas y el historial generados son
+datos de prueba que permanecen en las bases del entorno.
+
+Verificación del 24 de noviembre de 2026: recorrido aprobado sobre main 021eb207,
+con M1, M4, M5 y sus dependencias del Compose general. Para esta ejecución se
+usaron una red propia y puertos 13001, 13004 y 13005, con JWT compartido generado
+localmente y validación de autenticación habilitada. Resultado: 1 prueba aprobada,
+0 fallidas. El recorrido termina en la búsqueda de candidatos de M5.
