@@ -4,6 +4,8 @@ import {
     solicitarViaje,
     obtenerViaje,
     cancelarViaje,
+    confirmarDestino,
+    consultarSeguimiento,
     finalizarViaje,
     obtenerHistorialTransiciones,
     registrarArribo,
@@ -30,6 +32,8 @@ router.get('/', listarRegistroViajes);
 router.get('/:id', obtenerViaje);
 router.patch('/:id/cancelacion', cancelarViaje);
 router.post('/:id/finalizacion', finalizarViaje);
+router.post('/:id/destino', confirmarDestino);
+router.get('/:id/seguimiento', consultarSeguimiento);
 router.get('/:id/historial-transiciones', obtenerHistorialTransiciones);
 
 //endpoint para asignar conductor (RF-6.2)

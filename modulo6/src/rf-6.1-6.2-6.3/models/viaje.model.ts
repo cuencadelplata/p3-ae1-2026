@@ -24,5 +24,6 @@ export interface Viaje {
     codigoVerificacion: string | null;
     qrCode: string | null;
     qrExpiresAt: Date | null;
+    destinoConfirmadoAt?: Date | null;
     fechaCreacion: Date;
 }

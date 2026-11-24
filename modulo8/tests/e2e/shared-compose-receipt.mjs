@@ -152,12 +152,21 @@ const assigned = await request(m6, `/api/viajes/${tripId}/asignar`, {
   method: 'POST', body: { conductorId: String(driver.userId), driverUserId: driver.userId },
 });
 assert.equal(assigned.status, 200, `M6 asignar: ${show(assigned)}`);
-const arrived = await request(m6, `/api/viajes/${tripId}/arribo`, { method: 'PUT', body: {} });
+const arrived = await request(m6, `/api/viajes/${tripId}/arribo`, { method: 'PUT', token: customer.token, body: {} });
 assert.equal(arrived.status, 200, `M6 arribo: ${show(arrived)}`);
 assert.ok(arrived.data.qr?.token, 'M6 debe recibir el QR generado por M8');
-const started = await request(m6, `/api/viajes/${tripId}/iniciar`, { method: 'POST', body: { token: arrived.data.qr.token } });
+const started = await request(m6, `/api/viajes/${tripId}/iniciar`, { method: 'POST', token: driver.token, body: { token: arrived.data.qr.token } });
 assert.equal(started.status, 200, `M6 iniciar: ${show(started)}`);
 
+const destinationPath = '/api/viajes/' + tripId + '/destino';
+const beforeDestination = await request(m6, '/api/viajes/' + tripId + '/finalizacion', {
+  method: 'POST', token: customer.token, body: {},
+});
+assert.equal(beforeDestination.status, 409, 'M6 debe bloquear el pago antes de la llegada');
+assert.equal((await request(m6, destinationPath, { method: 'POST', token: customer.token, body: {} })).status, 403);
+const destinationReached = await request(m6, destinationPath, { method: 'POST', token: driver.token, body: {} });
+assert.equal(destinationReached.status, 200);
+assert.ok(Number.isFinite(Date.parse(destinationReached.data.destinoConfirmadoAt)));
 // Fijar la hora de cierre al iniciar el viaje: este recorrido dura un minuto
 // de tarifa. La autorización y los reintentos reutilizan ese mismo cierre.
 const finalizationBody = {

@@ -57,7 +57,7 @@ let extensionSchemaPromise: Promise<void> | undefined;
  * Versión del esquema que crea ESQUEMA_SQL. Subirla cada vez que se cambie ese SQL, para que
  * las bases existentes lo vuelvan a aplicar una vez.
  */
-const ESQUEMA_VERSION = 1;
+const ESQUEMA_VERSION = 3;
 
 async function ensureExtensionSchema(): Promise<void> {
     extensionSchemaPromise ??= aplicarEsquema().catch((error: unknown) => {
@@ -121,6 +121,7 @@ const ESQUEMA_SQL = `
         ALTER TABLE viajes ADD COLUMN IF NOT EXISTS driver_user_id BIGINT;
         ALTER TABLE viajes ADD COLUMN IF NOT EXISTS ride_request_id VARCHAR(100);
         ALTER TABLE viajes ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(255);
+        ALTER TABLE viajes ADD COLUMN IF NOT EXISTS destino_confirmado_at TIMESTAMPTZ;
         -- RF-6.7: registro de viajes filtrado por conductor.
         CREATE INDEX IF NOT EXISTS viajes_conductor_id_fecha_idx
             ON viajes(conductor_id, fecha_creacion DESC, id DESC);
@@ -308,6 +309,28 @@ export async function buscarPorId(id: string): Promise<Viaje | null> {
 }
 
 /** RF-6.4: hora de fin registrada al finalizar el viaje (null si no fue finalizado). */
+export async function confirmarDestino(id: string, driverUserId: number): Promise<Date | null> {
+    await ensureExtensionSchema();
+    const { rows } = await pool.query(
+        `UPDATE viajes
+           SET destino_confirmado_at = COALESCE(destino_confirmado_at, now())
+         WHERE id = $1 AND estado = $2 AND driver_user_id = $3
+         RETURNING destino_confirmado_at`,
+        [id, EstadoViaje.EN_CURSO, driverUserId],
+    );
+    return rows[0]?.destino_confirmado_at ?? null;
+}
+
+export async function buscarInicioViaje(id: string, db: Pick<PoolClient, 'query'> = pool): Promise<Date | null> {
+    const { rows } = await db.query(
+        `SELECT timestamp FROM viaje_transiciones
+         WHERE viaje_id = $1 AND estado_nuevo = $2
+         ORDER BY id DESC LIMIT 1`,
+        [id, EstadoViaje.EN_CURSO],
+    );
+    return rows[0]?.timestamp ? new Date(rows[0].timestamp) : null;
+}
+
 export async function buscarHoraFin(id: string): Promise<Date | null> {
     await ensureExtensionSchema();
     const { rows } = await pool.query(
@@ -616,15 +639,7 @@ export async function finalizarSiEnCurso(
             return { kind: 'invalid-state', estado: viaje.estado };
         }
 
-        const inicioResult = await client.query(
-            `SELECT timestamp FROM viaje_transiciones
-             WHERE viaje_id = $1 AND estado_nuevo = $2
-             ORDER BY id DESC LIMIT 1`,
-            [id, EstadoViaje.EN_CURSO]
-        );
-        const inicio = inicioResult.rows[0]?.timestamp
-            ? new Date(inicioResult.rows[0].timestamp)
-            : viaje.fechaCreacion;
+        const inicio = (await buscarInicioViaje(id, client)) ?? viaje.fechaCreacion;
         const finalizacion = await ejecutarFinalizacion(viaje, inicio);
 
         const { rows } = await client.query(
@@ -777,6 +792,7 @@ function mapRow(row: any): Viaje {
         codigoVerificacion: row.codigo_verificacion,
         qrCode: row.qr_data_url,
         qrExpiresAt: row.qr_expires_at,
+        destinoConfirmadoAt: row.destino_confirmado_at ?? null,
         fechaCreacion: row.fecha_creacion,
     };
 }

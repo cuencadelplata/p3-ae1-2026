@@ -129,6 +129,7 @@ export const createApp = (dependencies: AppDependencies = {}): Application => {
   // Endpoints de la API
   application.put('/api/v1/drivers/:driverId/location', locationController.updateLocation);
   application.get('/api/v1/drivers/:driverId/location', locationController.getLocation);
+  application.get('/api/v1/trips/:tripId/driver-location', locationController.getTripDriverLocation);
   application.get('/api/v1/drivers/:driverId/location-history', locationController.getLocationHistory);
   application.delete('/api/v1/drivers/:driverId/location', locationController.removeLocation);
   application.patch('/api/v1/drivers/:driverId/availability', locationController.updateAvailability);

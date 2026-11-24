@@ -806,6 +806,11 @@ components:
           nullable: true
         estado:
           $ref: '#/components/schemas/EstadoViaje'
+        iniciadoAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Hora de la transición a EN_CURSO registrada en TripDB.
     AsignarConductorRequest:
       type: object
       required: [conductorId]

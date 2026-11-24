@@ -260,17 +260,19 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
   });
 
   test('8. M6 + M8: arribo con QR e inicio validado; M4 marca al conductor ocupado', async () => {
-    const arribo = await pedir(M6, `/api/viajes/${s.tripId}/arribo`, { method: 'PUT', body: {} });
+    const arribo = await pedir(M6, `/api/viajes/${s.tripId}/arribo`, { method: 'PUT', token: s.pasajero.token, body: {} });
     assert.equal(arribo.status, 200, `M6 arribo: ${mostrar(arribo)}`);
     assert.ok(arribo.data.qr?.token, 'M8 debe emitir el QR del viaje');
-    const inicio = await pedir(M6, `/api/viajes/${s.tripId}/iniciar`, { method: 'POST', body: { codigoVerificacion: arribo.data.qr.token } });
+    const inicio = await pedir(M6, `/api/viajes/${s.tripId}/iniciar`, { method: 'POST', token: s.conductor.token, body: { codigoVerificacion: arribo.data.qr.token } });
     assert.equal(inicio.status, 200, `M6 inicio: ${mostrar(inicio)}`);
-    const reuso = await pedir(M6, `/api/viajes/${s.tripId}/iniciar`, { method: 'POST', body: { codigoVerificacion: arribo.data.qr.token } });
+    const reuso = await pedir(M6, `/api/viajes/${s.tripId}/iniciar`, { method: 'POST', token: s.conductor.token, body: { codigoVerificacion: arribo.data.qr.token } });
     assert.notEqual(reuso.status, 200, 'El QR de M8 no debe servir dos veces');
     await conductorDisponibleEnM4(s.conductor.userId, false);
   });
 
   test(`9. M6 + M4 + M7: finalización y pago (${METODO_PAGO}); M4 libera al conductor`, async () => {
+    const destino = await pedir(M6, '/api/viajes/' + s.tripId + '/destino', { method: 'POST', token: s.conductor.token, body: {} });
+    assert.equal(destino.status, 200, 'M6 debe registrar la llegada antes del pago');
     const fin = await pedir(M6, `/api/viajes/${s.tripId}/finalizacion`, {
       method: 'POST',
       body: {

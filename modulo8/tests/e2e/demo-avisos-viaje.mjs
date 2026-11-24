@@ -57,11 +57,11 @@ async function crearYAsignar() {
 
 // Viaje 1: llega el conductor y empieza el viaje.
 const viaje1 = await crearYAsignar();
-const arrived = await request(m6, `/api/viajes/${viaje1}/arribo`, { method: 'PUT', body: {} });
+const arrived = await request(m6, `/api/viajes/${viaje1}/arribo`, { method: 'PUT', token: client.token, body: {} });
 assert.equal(arrived.status, 200, `M6 arribo: ${show(arrived)}`);
 console.log('1) el conductor llegó → aviso "Tu conductor ha llegado"');
 await sleep(6000);
-const started = await request(m6, `/api/viajes/${viaje1}/iniciar`, { method: 'POST', body: { token: arrived.data.qr.token } });
+const started = await request(m6, `/api/viajes/${viaje1}/iniciar`, { method: 'POST', token: driver.token, body: { token: arrived.data.qr.token } });
 assert.equal(started.status, 200, `M6 iniciar: ${show(started)}`);
 console.log('2) viaje iniciado con el QR de M8 → aviso "Viaje en curso"');
 await sleep(6000);
