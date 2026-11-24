@@ -1,7 +1,8 @@
 # Se incluye desde docker-compose.yml de la raíz.
 # Redis y RabbitMQ pertenecen al stack común. PostgreSQL es exclusivo de M8.
-# Configurar las claves privadas antes de iniciar el stack; Compose falla temprano
-# si faltan contraseñas, en vez de iniciar PostgreSQL con valores vacios.
+# Las contraseñas de la base de M8 tienen valores locales por defecto: ningún otro
+# módulo necesita configurar M8 para leer o levantar el stack común. La base no se
+# publica en el host. Fuera de una máquina local, definir los M8_* en el .env.
 services:
   m8-app:
     image: "${M8_IMAGE:-modulo-8-m8-app:local}"
@@ -16,16 +17,17 @@ services:
       # Más hilos de libuv: DNS, bcrypt y zlib comparten el pool (4 por defecto) en la app única.
       UV_THREADPOOL_SIZE: "16"
       PUBLIC_BASE_URL: "${M8_PUBLIC_BASE_URL:-http://localhost:${M8_HOST_PORT:-18000}}"
-      NOTIFICATIONS_DATABASE_URL: "postgres://m8_notifications:${M8_NOTIFICATIONS_DB_PASSWORD:?Configurar M8_NOTIFICATIONS_DB_PASSWORD fuera del repositorio}@m8-postgres:5432/m8"
-      RECEIPTS_DATABASE_URL: "postgres://m8_receipts:${M8_RECEIPTS_DB_PASSWORD:?Configurar M8_RECEIPTS_DB_PASSWORD fuera del repositorio}@m8-postgres:5432/m8"
-      SUPPORT_DATABASE_URL: "postgres://m8_support:${M8_SUPPORT_DB_PASSWORD:?Configurar M8_SUPPORT_DB_PASSWORD fuera del repositorio}@m8-postgres:5432/m8"
-      DELIVERY_DATABASE_URL: "postgres://m8_notification_delivery:${M8_DELIVERY_DB_PASSWORD:?Configurar M8_DELIVERY_DB_PASSWORD fuera del repositorio}@m8-postgres:5432/m8"
+      NOTIFICATIONS_DATABASE_URL: "postgres://m8_notifications:${M8_NOTIFICATIONS_DB_PASSWORD:-m8-local-notifications}@m8-postgres:5432/m8"
+      RECEIPTS_DATABASE_URL: "postgres://m8_receipts:${M8_RECEIPTS_DB_PASSWORD:-m8-local-receipts}@m8-postgres:5432/m8"
+      SUPPORT_DATABASE_URL: "postgres://m8_support:${M8_SUPPORT_DB_PASSWORD:-m8-local-support}@m8-postgres:5432/m8"
+      DELIVERY_DATABASE_URL: "postgres://m8_notification_delivery:${M8_DELIVERY_DB_PASSWORD:-m8-local-delivery}@m8-postgres:5432/m8"
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: "amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672"
       QR_INTERNAL_API_KEY: "${QR_INTERNAL_API_KEY:-}"
       QR_TTL_SECONDS: "${M8_QR_TTL_SECONDS:-300}"
       QR_EXPIRED_GRACE_SECONDS: "${M8_QR_EXPIRED_GRACE_SECONDS:-3600}"
-      M1_JWT_SECRET: "${M1_JWT_SECRET:-${JWT_SECRET:?Configurar M1_JWT_SECRET o JWT_SECRET con la misma clave privada para todos los modulos}}"
+      # Misma clave que M1 (M1_JWT_SECRET); se acepta JWT_SECRET como alternativa.
+      M1_JWT_SECRET: "${M1_JWT_SECRET:-${JWT_SECRET:-}}"
       M1_IDENTITY_URL: "${M8_M1_IDENTITY_URL:-http://m1-identidad-acceso:3001/auth/validar-identidad-y-rol}"
       # RF-8.5: con M1 configurado, /tickets exige un Bearer válido de M1 (sin esto queda abierto).
       SUPPORT_M1_IDENTITY_URL: "${M8_SUPPORT_M1_IDENTITY_URL:-http://m1-identidad-acceso:3001}"
@@ -37,41 +39,25 @@ services:
       M6_TRIPS_URL: "${M8_M6_TRIPS_URL:-http://m6-viajes:3000}"
       M7_PAYMENTS_URL: "${M8_M7_PAYMENTS_URL:-http://m7-api:3000}"
       M7_API_KEY: "${M7_API_KEY:-}"
-      FISCAL_API_URL: "${M8_FISCAL_API_URL:-http://m8-fiscal-sandbox:4010}"
+      # RF-8.7 push real a navegadores (Web Push). Las claves VAPID van en .env.integracion.
+      VAPID_PUBLIC_KEY: "${M8_VAPID_PUBLIC_KEY:-}"
+      VAPID_PRIVATE_KEY: "${M8_VAPID_PRIVATE_KEY:-}"
+      VAPID_SUBJECT: "${M8_VAPID_SUBJECT:-mailto:notificaciones@movilidad-urbana.example}"
+      # La página /push inicia sesión en M1 desde el navegador.
+      PUSH_M1_PUBLIC_URL: "${M8_PUSH_M1_PUBLIC_URL:-http://localhost:10000}"
+      # Correo de recuperación de contraseña de M1 (RF-1.4) por SMTP real.
+      SMTP_HOST: "${M8_SMTP_HOST:-smtp.gmail.com}"
+      SMTP_PORT: "${M8_SMTP_PORT:-465}"
+      SMTP_USER: "${M8_SMTP_USER:-}"
+      SMTP_PASSWORD: "${M8_SMTP_PASSWORD:-}"
+      MAIL_FROM: "${M8_MAIL_FROM:-}"
     depends_on:
-      m8-fiscal-sandbox:
-        condition: service_started
       m8-postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    networks:
-      - reservas-network
-    restart: unless-stopped
-
-  # Autorizador fiscal externo simulado que usa RF-8.3 antes de generar el PDF.
-  # Es una dependencia propia de M8 (proveedor externo), sin puerto en el host.
-  m8-fiscal-sandbox:
-    build:
-      context: ./infra/fiscal-sandbox
-    environment:
-      FISCAL_MODE: "${M8_FISCAL_MODE:-normal}"
-    networks:
-      - reservas-network
-    restart: unless-stopped
-
-  # Simulador del contrato de M7 (tarifa y pagos) para cuando M7 no puede correr
-  # en el stack común. No arranca por defecto: perfil m7-sandbox, y M6 y M8 lo
-  # usan solo si M6_M7_URL y M8_M7_PAYMENTS_URL apuntan a él (INTEGRACION_COMPOSE.md).
-  m8-m7-sandbox:
-    profiles: ["m7-sandbox"]
-    build:
-      context: ./infra/m7-payments-sandbox
-    environment:
-      UNREGISTERED_TRIPS: not_found
-      M7_API_KEY: "${M7_API_KEY:-}"
     networks:
       - reservas-network
     restart: unless-stopped
@@ -103,11 +89,11 @@ services:
     environment:
       POSTGRES_USER: m8_admin
       POSTGRES_DB: m8
-      POSTGRES_PASSWORD: "${M8_POSTGRES_PASSWORD:?Configurar M8_POSTGRES_PASSWORD fuera del repositorio}"
-      NOTIFICATIONS_DB_PASSWORD: "${M8_NOTIFICATIONS_DB_PASSWORD:?Configurar M8_NOTIFICATIONS_DB_PASSWORD fuera del repositorio}"
-      RECEIPTS_DB_PASSWORD: "${M8_RECEIPTS_DB_PASSWORD:?Configurar M8_RECEIPTS_DB_PASSWORD fuera del repositorio}"
-      SUPPORT_DB_PASSWORD: "${M8_SUPPORT_DB_PASSWORD:?Configurar M8_SUPPORT_DB_PASSWORD fuera del repositorio}"
-      DELIVERY_DB_PASSWORD: "${M8_DELIVERY_DB_PASSWORD:?Configurar M8_DELIVERY_DB_PASSWORD fuera del repositorio}"
+      POSTGRES_PASSWORD: "${M8_POSTGRES_PASSWORD:-m8-local-admin}"
+      NOTIFICATIONS_DB_PASSWORD: "${M8_NOTIFICATIONS_DB_PASSWORD:-m8-local-notifications}"
+      RECEIPTS_DB_PASSWORD: "${M8_RECEIPTS_DB_PASSWORD:-m8-local-receipts}"
+      SUPPORT_DB_PASSWORD: "${M8_SUPPORT_DB_PASSWORD:-m8-local-support}"
+      DELIVERY_DB_PASSWORD: "${M8_DELIVERY_DB_PASSWORD:-m8-local-delivery}"
     volumes:
       - m8-integration-postgres:/var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
