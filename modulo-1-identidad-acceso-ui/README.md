@@ -54,3 +54,11 @@ Si M1 rechaza el token (vencido o revocado), el panel cierra la sesión solo y l
 2. "Validar de nuevo": sube la métrica de validaciones (RF-1.3).
 3. "Revocar mis credenciales": vuelve al login con el aviso (RF-1.4).
 4. Equivocarse 6 veces con la contraseña: el botón se bloquea con la cuenta regresiva y en Grafana sube `bloqueado` (RF-1.2).
+
+## Cancelar desde el flujo del viaje (M6)
+
+El pasajero puede elegir **Cancelar viaje** mientras el viaje esté `SOLICITADO` o `CONDUCTOR_EN_CAMINO`. El conductor puede hacerlo mientras esté `CONDUCTOR_EN_CAMINO`. El formulario solicita un motivo de hasta 240 caracteres, permite revisarlo o editarlo y pide confirmación antes de enviar la cancelación.
+
+Las acciones usan la sesión actual y el viaje de la pantalla: `POST /api/viajes/{id}/cancelacion-cliente` o `POST /api/viajes/{id}/cancelacion-conductor`, mediante `/flujo-api/m6-cancelacion`. La interfaz muestra el viaje cancelado después de recibir de M6 el mismo identificador con estado `CANCELADO`. Si la API falla, conserva el motivo para reintentar. La cancelación del conductor conserva el flujo de reapertura del despacho en M5 gestionado por M6.
+
+En desarrollo, `FLOW_M6_CANCELACION_URL` configura el destino del proxy (por defecto `http://127.0.0.1:15001`). En Docker se utiliza `m6-cancelacion:3001`.

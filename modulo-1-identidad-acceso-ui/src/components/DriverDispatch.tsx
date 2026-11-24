@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, CarFront, CircleCheck, CircleX, Clock3, LockKeyhole, MapPin, Navigation, Power, Radar } from 'lucide-react'
+import { ArrowLeft, CarFront, CircleCheck, Clock3, LockKeyhole, MapPin, Navigation, Power, Radar } from 'lucide-react'
 import RideMap from './RideMap'
+import TripCancellation from './TripCancellation'
 import { fetchRoute } from '../places'
 import type { RouteInfo } from '../places'
 import { destination, FlowError, origin, pollTrip, prepareDriver, publishDriverLocation, request } from '../rideFlowApi'
@@ -223,19 +224,6 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
   // que vuelva a buscar conductor para el pasajero; el conductor queda libre para otra oferta.
   const cancellable = active && trip?.estado === 'CONDUCTOR_EN_CAMINO'
 
-  async function cancelTrip() {
-    if (!trip || !cancellable) return
-    if (!window.confirm('¿Cancelar este viaje? El pasajero vuelve a la búsqueda de conductor.')) return
-    await perform('Cancelando el viaje…', async () => {
-      await request('M6-cancelacion', `/api/viajes/${encodeURIComponent(trip.id)}/cancelacion-conductor`, {
-        method: 'POST', token, body: { motivo: 'El conductor no puede llegar al punto de encuentro' },
-      })
-      setTrip({ ...trip, estado: 'CANCELADO' })
-      setCompletedOffer(assignment?.offer ?? null)
-      setAssignment(null)
-    })
-  }
-
   const secondsLeft = offer ? Math.max(0, Math.ceil((Date.parse(offer.expiresAt) - now) / 1000)) : 0
   const pending = secondsLeft > 0 && !active ? offer : null
   const routeOffer = assignment?.offer ?? pending ?? completedOffer
@@ -303,9 +291,12 @@ export default function DriverDispatch({ driver, onBack }: { driver: Account; on
           {active ? <LockKeyhole size={18} aria-hidden="true" /> : <Power size={19} aria-hidden="true" />}
           {online || active ? 'Desconectarme' : 'Conectarme'}
         </button>
-        {cancellable && <button className="btn-ghost driver-cancel" disabled={Boolean(busy)} onClick={() => void cancelTrip()}>
-          <CircleX size={18} aria-hidden="true" /> Cancelar viaje
-        </button>}
+        {cancellable && trip && <TripCancellation key={trip.id} trip={trip} actor="conductor" token={token} disabled={Boolean(busy)}
+          onCancelled={(cancelledTrip) => {
+            setTrip(cancelledTrip)
+            setCompletedOffer(assignment?.offer ?? null)
+            setAssignment(null)
+          }} />}
         {error && <p className="alert-error driver-error" role="alert">{error}</p>}
 
         {online && !active && <div className="driver-offer-actions" role="group" aria-label="Responder a la oferta">

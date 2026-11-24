@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, Banknote, Bike, CarFront, CircleCheck, CreditCard, Landmark, LockKeyhole, MapPin, Navigation, QrCode, Route } from 'lucide-react'
 import RideMap from './RideMap'
+import TripCancellation from './TripCancellation'
 import TripPlanner from './TripPlanner'
 import type { Draft, PickMode } from './TripPlanner'
 import { destination, ensurePassenger, FlowError, origin, pollTrip, request } from '../rideFlowApi'
@@ -420,6 +421,10 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
                   ? <button className="btn-primary" disabled={locked} onClick={() => void run('Solicitando QR…', () => prepareStart(trip.id), ['EN_CURSO'])}>{qr ? 'Renovar QR' : 'Preparar inicio del viaje'}</button>
                   : <button className="btn-primary" disabled={locked} onClick={() => void run('Validando QR…', () => startTrip(trip.id, qr.token), ['EN_CURSO'])}>Iniciar viaje</button>}
               </>}
+
+              {trip && !checkingTrip && ['SOLICITADO', 'CONDUCTOR_EN_CAMINO'].includes(trip.estado) &&
+                <TripCancellation key={trip.id} trip={trip} actor="cliente" token={token} disabled={locked}
+                  onCancelled={(cancelledTrip) => update({ trip: cancelledTrip, qr: undefined, payment: undefined, receipt: undefined })} />}
 
               {trip && !checkingTrip && started && <>
                 <h2>Viaje en curso</h2>
