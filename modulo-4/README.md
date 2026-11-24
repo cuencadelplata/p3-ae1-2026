@@ -200,11 +200,13 @@ Resultado del 24 de noviembre de 2026:
 - Se configuraron claves internas locales de M2 y QR para el arranque de M8.
 - Arribo con QR real, inicio del viaje y cambio de disponibilidad en M4 aprobados.
 - M3 no estaba levantado. M6 permitió el arribo por su comportamiento de resiliencia.
-- Finalización bloqueada por M7: su imagen aylen0/m7-tarifas-ae2:latest se reinicia
-  con "Falta la variable de entorno DATABASE_URL". En Apple Silicon también
-  requiere plataforma linux/amd64.
-- M7 exige además M7_API_KEY y MP_ACCESS_TOKEN según su configuración. Se necesita
-  su entorno de prueba válido antes de repetir la finalización completa.
+- Finalización en efectivo aprobada con M7 y su configuración privada de Supabase.
+- M4 recibió viaje.finalizado y el conductor volvió a aparecer en nearby.
+- Resultado de la ejecución completa: 2 pruebas aprobadas, 0 fallidas, 0 omitidas.
+- La imagen aylen0/m7-tarifas-ae2:latest requiere DATABASE_URL, SUPABASE_URL,
+  SUPABASE_KEY, M7_API_KEY y MP_ACCESS_TOKEN para arrancar. La conexión corresponde
+  al entorno de prueba entregado por M7. El caso en efectivo se ejecutó con un
+  valor de prueba de MP_ACCESS_TOKEN y no realiza autorización de tarjeta.
+- En Apple Silicon se ejecutó M7 con plataforma linux/amd64.
 
-Las claves privadas del entorno están fuera de Git. El test opcional mantiene
-el fallo visible cuando M6 no puede finalizar por una dependencia no disponible.
+Las claves privadas del entorno están fuera de Git. El test opcional comprueba el cambio de disponibilidad al iniciar y finalizar el viaje.
