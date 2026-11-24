@@ -171,7 +171,6 @@ export const testPageHtml = `<!DOCTYPE html>
                     <select id="roleSelect">
                         <option value="CLIENTE" selected>CLIENTE</option>
                         <option value="CONDUCTOR">CONDUCTOR</option>
-                        <option value="OPERADOR">OPERADOR</option>
                     </select>
                 </div>
             </div>

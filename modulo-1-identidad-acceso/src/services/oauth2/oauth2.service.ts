@@ -11,6 +11,7 @@ import {
     createOAuth2ProviderLink,
     updateOAuth2LastLogin
 } from "../../repositories/user.repository";
+import { esRolRegistrable } from "../../utils/auth.validators";
 import { OAuth2AdapterFactory } from "./oauth2.factory";
 import {
     OAuth2Error,
@@ -172,9 +173,14 @@ export class OAuth2Service {
                 // Crear nuevo usuario local con el rol solicitado en el state
                 const nombre = userInfo.givenName || userInfo.name || "";
                 const apellido = userInfo.familyName || "";
+                // Segunda barrera: aunque el state esté firmado, nunca se crea un
+                // usuario con un rol que el registro público no permite.
+                const rolNuevo = statePayload.role && esRolRegistrable(statePayload.role)
+                    ? statePayload.role
+                    : "CLIENTE";
                 const newUserId = createOAuth2User(
                     userInfo.email,
-                    statePayload.role || "CLIENTE",
+                    rolNuevo,
                     nombre,
                     apellido
                 );
@@ -358,13 +364,21 @@ export class OAuth2Service {
         );
     }
 
+    // Por OAuth2 solo se pueden crear cuentas CLIENTE o CONDUCTOR, igual que en el
+    // registro público. Las cuentas OPERADOR se crean por vía administrativa: si se
+    // pudieran pedir acá, cualquiera con una cuenta de Google o Auth0 tendría
+    // permisos de operador en M1 y en los módulos que confían en su rol (ej. M8).
     private static normalizeRole(rawRole?: string): UserRole {
         if (!rawRole) return "CLIENTE";
         const upper = rawRole.trim().toUpperCase();
-        if (upper === "CONDUCTOR" || upper === "OPERADOR") {
-            return upper as UserRole;
+        if (upper === "OPERADOR") {
+            throw new OAuth2Error(
+                400,
+                "El rol OPERADOR no se puede solicitar por OAuth2: esas cuentas se crean por vía administrativa",
+                "invalid_role"
+            );
         }
-        return "CLIENTE";
+        return esRolRegistrable(upper) ? upper : "CLIENTE";
     }
 }
 
