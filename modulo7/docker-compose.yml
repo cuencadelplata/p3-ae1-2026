@@ -3,54 +3,67 @@ services:
     image: aylen0/m7-tarifas-ae2:latest
     ports:
       - "17000:3000"
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
     environment:
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672
       REDIS_URL: redis://redis:6379
-      CARGO_CANCELACION_URL: http://localhost:3000
+      DATABASE_URL: postgres://m7user:m7pass@m7-postgres:5432/m7db?sslmode=disable
+      # m7-cargo-cancelacion es un servicio Express separado (Lautaro, M7-cargo-cancelacion/).
+      # Corre en su propio contenedor en el puerto 3007.
+      CARGO_CANCELACION_URL: http://m7-cargo-cancelacion:3007
     depends_on:
       rabbitmq:
         condition: service_healthy
       redis:
         condition: service_healthy
+      m7-postgres:
+        condition: service_healthy
+      m7-cargo-cancelacion:
+        condition: service_healthy
+    networks:
+      - reservas-network
     restart: on-failure
-    networks:
-      - movilidad-network
 
-  rabbitmq:
-    image: rabbitmq:3-management
+  m7-cargo-cancelacion:
+    build:
+      context: ./M7-cargo-cancelacion
+      dockerfile: Dockerfile
     ports:
-      - "17001:5672"
-      - "17002:15672"
+      - "17007:3007"
+    environment:
+      PORT: 3007
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 5s
-      timeout: 10s
-      retries: 12
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3007/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     networks:
-      - movilidad-network
+      - reservas-network
+    restart: on-failure
 
-  redis:
-    image: redis:7-alpine
+  m7-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: m7user
+      POSTGRES_PASSWORD: m7pass
+      POSTGRES_DB: m7db
+    volumes:
+      - m7-postgres-data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "pg_isready -U m7user -d m7db"]
       interval: 5s
       timeout: 5s
       retries: 10
     networks:
-      - movilidad-network
+      - reservas-network
 
-  grafana-alloy:
-    image: grafana/alloy:latest
-    env_file: .env
-    volumes:
-      - ./alloy-config.alloy:/etc/alloy/config.alloy
-      - /var/run/docker.sock:/var/run/docker.sock
-    command: run /etc/alloy/config.alloy
-    restart: on-failure
-    networks:
-      - movilidad-network
+volumes:
+  m7-postgres-data:
 
 networks:
-  movilidad-network:
-    external: true
+  reservas-network:
+    driver: bridge
