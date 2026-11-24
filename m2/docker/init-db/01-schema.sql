@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS customers.AccountStatus (
     -- Origen del bloqueo: AUTOMATICO (por penalizaciones) o MANUAL (por el usuario/admin).
     -- Solo los bloqueos AUTOMATICOS pueden revertirse automáticamente al consultar el estado.
     block_origin VARCHAR(20) CHECK (block_origin IN ('AUTOMATICO', 'MANUAL')),
+    -- Última revisión manual de Soporte (M8): las penalizaciones anteriores ya no cuentan.
+    reviewed_at TIMESTAMP WITH TIME ZONE,
     updated_at TIMESTAMP
     WITH
         TIME ZONE DEFAULT CURRENT_TIMESTAMP

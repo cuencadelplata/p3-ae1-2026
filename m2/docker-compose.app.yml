@@ -51,12 +51,16 @@ services:
       DB_NAME: profiles
       # M1 real (servicio m1-identidad-acceso de modulo-1-identidad-acceso/compose.integracion.yml).
       M1_SERVICE_URL: ${M2_M1_SERVICE_URL:-http://m1-identidad-acceso:3001}
-      # Soporte todavía no expone penalizaciones por usuario: se usa el stub interno de M2.
-      # STUBS_ENABLED solo queda por ese stub (el de M1 sigue montado pero M2 no lo usa).
-      STUBS_ENABLED: ${M2_STUBS_ENABLED:-true}
-      SOPORTE_SERVICE_URL: ${M2_SOPORTE_SERVICE_URL:-http://localhost:3000/__stubs/soporte}
+      # Penalizaciones reales de Soporte (servicio m8-app de modulo8/compose.integracion.yaml):
+      # GET /usuarios/{userId}/penalizaciones con X-Secret-Key. Sin simuladores en el stack común;
+      # para volver al stub: M2_STUBS_ENABLED=true y M2_SOPORTE_SERVICE_URL=http://localhost:3000/__stubs/soporte
+      STUBS_ENABLED: ${M2_STUBS_ENABLED:-false}
+      SOPORTE_SERVICE_URL: ${M2_SOPORTE_SERVICE_URL:-http://m8-app:3000}
       # M6 real (servicio m6-viajes de modulo6/compose.integracion.yml)
       M6_SERVICE_URL: ${M2_M6_SERVICE_URL:-http://m6-viajes:3000}
+      # Clave compartida con M8 en X-Secret-Key, en los dos sentidos: M2 la envía al pedir
+      # penalizaciones y la exige en POST /internal/usuarios/{userId}/desbloqueo.
+      # M8 debe leer la misma variable del .env raíz (M2_SOPORTE_SECRET_KEY).
       SOPORTE_SECRET_KEY: ${M2_SOPORTE_SECRET_KEY:-secret-m2}
       STATUS_SECRET_KEY: ${M2_STATUS_SECRET_KEY:-secret-status}
       # Clave que M8 envía en x-api-key a /internal/preferences (= M2_INTERNAL_API_KEY de M8)

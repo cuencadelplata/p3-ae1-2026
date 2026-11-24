@@ -1,13 +1,15 @@
 import { accountStatusRepository, AccountStatusRepository } from '../repositories/account-status.repository.js';
 import { customerRepository, CustomerRepository } from '../repositories/customer.repository.js';
 import { customerCache } from '../cache/customer.cache.js';
-import { soporteClient, SoporteClient } from '../clients/soporte.client.js';
+import { soporteClient, SoporteClient, type PenalizacionesResponse } from '../clients/soporte.client.js';
 import { ServiceUnavailableError } from '../errors/service-unavailable.error.js';
 import type {
   AccountStatusResponse,
   AccountStatusEnum,
   UpdateAccountStatusDTO,
-  UpdateAccountStatusInternalDTO
+  UpdateAccountStatusInternalDTO,
+  DesbloqueoManualDTO,
+  UserId
 } from '../types/customer.js';
 
 /**
@@ -36,13 +38,54 @@ export function calcularEstadoAutomatico(
 }
 
 /**
+ * Cuenta las penalizaciones vigentes que todavía no evaluó un operador.
+ * Sin revisión manual previa se usa el total que informa Soporte (M8 ya filtra las
+ * vigentes de los últimos 90 días). Con revisión, solo cuentan las posteriores a ella:
+ * las anteriores ya las vio el operador al desbloquear. Una fecha ilegible se cuenta
+ * (ante la duda, no se pierde una penalización).
+ */
+export function contarPenalizacionesSinRevisar(
+  respuesta: PenalizacionesResponse,
+  reviewedAt?: string
+): number {
+  if (!reviewedAt) return respuesta.total;
+  const revision = Date.parse(reviewedAt);
+  if (Number.isNaN(revision)) return respuesta.total;
+  return respuesta.penalizaciones.filter((p) => {
+    const fecha = Date.parse(p.fecha);
+    return Number.isNaN(fecha) || fecha > revision;
+  }).length;
+}
+
+const BLOQUEOS: readonly AccountStatusEnum[] = ['BLOQUEADO_TEMPORAL', 'BLOQUEADO_PERMANENTE'];
+
+/** El cliente no puede cambiar su estado mientras tiene un bloqueo por penalizaciones. */
+export class CuentaBloqueadaError extends Error {
+  constructor(readonly status: AccountStatusEnum) {
+    super(`La cuenta tiene un bloqueo automático (${status}): solo lo levanta Soporte`);
+    this.name = 'CuentaBloqueadaError';
+  }
+}
+
+/** Una cuenta dada de baja (INACTIVO) no se reactiva por revisión de bloqueo. */
+export class CuentaInactivaError extends Error {
+  constructor() {
+    super('La cuenta está dada de baja (INACTIVO): no hay bloqueo que revisar');
+    this.name = 'CuentaInactivaError';
+  }
+}
+
+/**
  * Servicio de estado de cuenta (RF-2.5).
  *
  * Reglas de negocio:
  *  1. Al consultar GET /status se recalcula con las penalizaciones de Soporte.
  *  2. Las penalizaciones tienen prioridad sobre el estado elegido manualmente.
- *  3. Solo los bloqueos AUTOMATICOS pueden revertirse automáticamente
- *     (si bajan las penalizaciones). Los bloqueos MANUALES son intocables por este servicio.
+ *  3. Solo los bloqueos TEMPORALES automáticos se revierten solos (si bajan las penalizaciones).
+ *     BLOQUEADO_PERMANENTE no se recalcula: lo levanta únicamente la revisión manual de
+ *     Soporte (desbloquearPorRevision). Los bloqueos MANUALES tampoco se tocan.
+ *  3b. Tras una revisión manual solo cuentan las penalizaciones posteriores a ella, así el
+ *     siguiente recálculo respeta la decisión del operador aunque sigan vigentes en M8.
  *  4. Si Soporte está caído (ServiceUnavailableError) → se devuelve el último estado guardado
  *     sin modificarlo (degradación elegante).
  *  5. Si el estado cambia tras el recálculo → se persiste y se invalida la caché del perfil
@@ -77,11 +120,14 @@ export class AccountStatusService {
     if (!profile) return null;
     const userId = profile.userId;
 
+    // El bloqueo permanente no se recalcula: solo lo levanta la revisión manual de Soporte
+    if (saved.status === 'BLOQUEADO_PERMANENTE') return saved;
+
     // Intentar recalcular con las penalizaciones de Soporte
     let totalPenalizaciones: number;
     try {
-      const { total } = await this.soporte.getPenalizaciones(userId);
-      totalPenalizaciones = total;
+      const respuesta = await this.soporte.getPenalizaciones(userId);
+      totalPenalizaciones = contarPenalizacionesSinRevisar(respuesta, saved.reviewedAt);
     } catch (err) {
       if (err instanceof ServiceUnavailableError) {
         // Soporte caído: degradación elegante → devolver el último estado guardado
@@ -114,10 +160,9 @@ export class AccountStatusService {
     }
 
     // Caso 2: Penalizaciones por debajo del umbral
-    // Solo desbloquear si el bloqueo fue automático
+    // Solo desbloquear si el bloqueo fue automático (el permanente ya salió más arriba)
     const esBloqueoAutomatico =
-      saved.blockOrigin === 'AUTOMATICO' &&
-      (saved.status === 'BLOQUEADO_TEMPORAL' || saved.status === 'BLOQUEADO_PERMANENTE');
+      saved.blockOrigin === 'AUTOMATICO' && saved.status === 'BLOQUEADO_TEMPORAL';
 
     if (esBloqueoAutomatico) {
       const updated = await this.repository.updateAccountStatus(customerId, {
@@ -145,8 +190,14 @@ export class AccountStatusService {
     customerId: string,
     dto: UpdateAccountStatusDTO
   ): Promise<AccountStatusResponse | null> {
-    const esBloqueo =
-      dto.status === 'BLOQUEADO_TEMPORAL' || dto.status === 'BLOQUEADO_PERMANENTE';
+    // Con un bloqueo por penalizaciones vigente el cliente no puede cambiar su estado
+    // (ni darse de alta ni de baja): lo levanta el recálculo o la revisión de Soporte.
+    const actual = await this.repository.findAccountStatus(customerId);
+    if (actual && actual.blockOrigin === 'AUTOMATICO' && BLOQUEOS.includes(actual.status)) {
+      throw new CuentaBloqueadaError(actual.status);
+    }
+
+    const esBloqueo = BLOQUEOS.includes(dto.status);
 
     const internal: UpdateAccountStatusInternalDTO = {
       ...dto,
@@ -155,6 +206,40 @@ export class AccountStatusService {
 
     const updated = await this.repository.updateAccountStatus(customerId, internal);
     if (updated) await customerCache.invalidate(customerId);
+    return updated;
+  }
+
+  /**
+   * Revisión manual de Soporte (M8): POST /internal/usuarios/:userId/desbloqueo.
+   *
+   * Levanta cualquier bloqueo (temporal o permanente, automático o manual) y EN_REVISIÓN,
+   * y registra la fecha de revisión: las penalizaciones anteriores ya no cuentan, aunque
+   * sigan vigentes en M8. Una penalización nueva (posterior) vuelve a contar.
+   *
+   * - Perfil inexistente → null (404).
+   * - Cuenta ACTIVO → se devuelve sin cambios (idempotente: M8 puede reintentar).
+   * - Cuenta INACTIVO (baja) → CuentaInactivaError (409).
+   */
+  async desbloquearPorRevision(
+    userId: UserId,
+    dto: DesbloqueoManualDTO
+  ): Promise<AccountStatusResponse | null> {
+    const profile = await this.profiles.findByUserId(userId);
+    if (!profile) return null;
+
+    const saved = await this.repository.findAccountStatus(profile.customerId);
+    if (!saved) return null;
+    if (saved.status === 'ACTIVO') return saved;
+    if (saved.status === 'INACTIVO') throw new CuentaInactivaError();
+
+    const ticket = dto.ticketId ? `, ticket ${dto.ticketId}` : '';
+    const updated = await this.repository.updateAccountStatus(profile.customerId, {
+      status: 'ACTIVO',
+      reason: `Desbloqueado por revisión manual de Soporte (operador ${dto.operador}${ticket}): ${dto.motivo}`,
+      blockOrigin: undefined,
+      reviewedAt: new Date().toISOString()
+    });
+    if (updated) await customerCache.invalidate(profile.customerId);
     return updated;
   }
 }

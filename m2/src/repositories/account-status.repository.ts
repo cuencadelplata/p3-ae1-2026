@@ -11,6 +11,7 @@ type AccountStatusRow = {
   readonly status: AccountStatusResponse['status'];
   readonly reason: string;
   readonly block_origin: AccountStatusResponse['blockOrigin'] | null;
+  readonly reviewed_at: string | Date | null;
   readonly updated_at: string;
 };
 
@@ -26,6 +27,7 @@ function statusFromRow(row: AccountStatusRow): AccountStatusResponse {
     status: row.status,
     reason: row.reason,
     blockOrigin: row.block_origin ?? undefined,
+    reviewedAt: row.reviewed_at == null ? undefined : new Date(row.reviewed_at).toISOString(),
     updatedAt: row.updated_at
   };
 }
@@ -41,7 +43,7 @@ export class AccountStatusRepository {
   async findAccountStatus(customerId: string): Promise<AccountStatusResponse | null> {
     return postgresPolicy.execute(async () => {
       const query = `
-        SELECT customer_id, status, reason, block_origin, updated_at
+        SELECT customer_id, status, reason, block_origin, reviewed_at, updated_at
         FROM customers.AccountStatus
         WHERE customer_id = $1;
       `;
@@ -65,15 +67,17 @@ export class AccountStatusRepository {
         await client.query('BEGIN');
 
         const { rows } = await client.query<AccountStatusRow>(
-          `INSERT INTO customers.AccountStatus (customer_id, status, reason, block_origin, updated_at)
-           VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+          // reviewed_at solo cambia cuando se envía (desbloqueo por revisión manual)
+          `INSERT INTO customers.AccountStatus (customer_id, status, reason, block_origin, reviewed_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
            ON CONFLICT (customer_id) DO UPDATE
              SET status       = EXCLUDED.status,
                  reason       = EXCLUDED.reason,
                  block_origin = EXCLUDED.block_origin,
+                 reviewed_at  = COALESCE(EXCLUDED.reviewed_at, customers.AccountStatus.reviewed_at),
                  updated_at   = EXCLUDED.updated_at
-           RETURNING customer_id, status, reason, block_origin, updated_at;`,
-          [customerId, dto.status, dto.reason, dto.blockOrigin ?? null]
+           RETURNING customer_id, status, reason, block_origin, reviewed_at, updated_at;`,
+          [customerId, dto.status, dto.reason, dto.blockOrigin ?? null, dto.reviewedAt ?? null]
         );
 
         await client.query('COMMIT');
