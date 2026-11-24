@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ReservationCache } from '../../src/cache/reservation-cache.js';
 import type { TarifaClient } from '../../src/clients/tarifa.client.js';
 import type { Reserva } from '../../src/domain/reserva.js';
+import { AppError } from '../../src/errors/app.error.js';
 import { InMemoryReservaRepository } from '../../src/repositories/in-memory-reserva.repository.js';
 import { ReservaService } from '../../src/services/reserva.service.js';
 import { fareEstimate, routeResolverDemo } from '../helpers/route.js';
@@ -99,6 +100,45 @@ describe('ReservaService', () => {
       id: creada.id,
       estado: 'CANCELADA',
       assignedDriverId: null,
+    });
+  });
+
+  it('no degrada ni persiste reservas cuando la ruta se rechaza por distancia 0 km en crear o actualizar', async () => {
+    const repository = new InMemoryReservaRepository();
+    const tarifa = { estimar: vi.fn(async () => fareEstimate(1_500)) };
+    const routeTooShort = () =>
+      new AppError(
+        400,
+        'DATOS_INVALIDOS',
+        'El origen y el destino están en el mismo punto o demasiado cercanos para programar un viaje.',
+      );
+    const resolve = vi
+      .fn()
+      .mockRejectedValueOnce(routeTooShort())
+      .mockResolvedValueOnce({
+        origin: { latitude: -27.46, longitude: -58.83, address: 'A' },
+        destination: { latitude: -27.48, longitude: -58.78, address: 'B' },
+        distanceKm: 4.2,
+        estimatedDurationMin: 11,
+      })
+      .mockRejectedValueOnce(routeTooShort());
+    const service = new ReservaService(repository, tarifa, { resolve });
+
+    await expect(service.crear(input())).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'DATOS_INVALIDOS',
+    });
+    expect(await repository.listar()).toHaveLength(0);
+    expect(tarifa.estimar).not.toHaveBeenCalled();
+
+    const creada = await service.crear(input());
+    await expect(service.actualizar(creada.id, { destino: 'A casi igual' })).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'DATOS_INVALIDOS',
+    });
+    expect(await repository.obtenerPorId(creada.id)).toMatchObject({
+      destino: 'B',
+      tarifaEstimada: 1_500,
     });
   });
 });

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AppError } from '../../src/errors/app.error.js';
 import { InMemoryReservaRepository } from '../../src/repositories/in-memory-reserva.repository.js';
 import { ActivacionReservaService } from '../../src/services/activacion-reserva.service.js';
 import { routeResolverDemo, routeSnapshot } from '../helpers/route.js';
@@ -16,6 +17,69 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe('recuperacion de activacion interrumpida', () => {
+  it('conserva PROGRAMADA si M4 falla y despacha al recuperarse la ruta', async () => {
+    const repository = new InMemoryReservaRepository();
+    const created = await repository.crear({ ...expired, routeSnapshot: null });
+    const resolve = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('M4 no disponible'))
+      .mockResolvedValue(routeSnapshot);
+    const createRequest = vi.fn(async () => ({
+      requestId: 'request-1',
+      clientId: '101',
+      status: 'SEARCHING' as const,
+      assignedDriverId: null,
+    }));
+    const service = new ActivacionReservaService(
+      repository,
+      { createRequest } as unknown as DispatchClient,
+      { resolve },
+    );
+    await expect(service.activar(created.id)).rejects.toThrow('M4 no disponible');
+    expect(await repository.obtenerPorId(created.id)).toMatchObject({
+      estado: 'PROGRAMADA',
+      idSolicitud: null,
+    });
+    expect(createRequest).not.toHaveBeenCalled();
+    await service.activar(created.id);
+    expect(createRequest).toHaveBeenCalledTimes(1);
+    expect(await repository.obtenerPorId(created.id)).toMatchObject({
+      estado: 'ACTIVANDO',
+      idSolicitud: 'request-1',
+      routeSnapshot,
+    });
+  });
+
+  it('marca FALLIDA sin reintentar si una reserva degradada resuelve a recorrido inválido (0 km)', async () => {
+    const repository = new InMemoryReservaRepository();
+    const created = await repository.crear({ ...expired, routeSnapshot: null });
+    const createRequest = vi.fn();
+    const service = new ActivacionReservaService(
+      repository,
+      { createRequest } as unknown as DispatchClient,
+      {
+        resolve: vi.fn(async () => {
+          throw new AppError(
+            400,
+            'DATOS_INVALIDOS',
+            'El origen y el destino están en el mismo punto o demasiado cercanos para programar un viaje.',
+          );
+        }),
+      },
+    );
+
+    await expect(service.activar(created.id)).resolves.toMatchObject({
+      reservaId: created.id,
+      activada: false,
+      fallida: true,
+    });
+    expect(createRequest).not.toHaveBeenCalled();
+    expect(await repository.obtenerPorId(created.id)).toMatchObject({
+      estado: 'FALLIDA',
+      idSolicitud: null,
+    });
+  });
+
   it('recupera un claim viejo sin solicitud y lo vuelve a despachar una sola vez', async () => {
     const now = Date.now();
     vi.useFakeTimers();

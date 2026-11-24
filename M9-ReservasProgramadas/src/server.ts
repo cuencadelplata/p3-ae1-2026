@@ -9,6 +9,7 @@ import { M7TariffClient } from './clients/m7-tariff.client.js';
 import { M4RouteResolver } from './clients/m4-route.resolver.js';
 import { env } from './config/env.js';
 import { ExternalServiceError } from './errors/external-service.error.js';
+import { AppError } from './errors/app.error.js';
 import { RedisReservationCache } from './cache/redis-reservation-cache.js';
 import { RedisConnection } from './infrastructure/redis/redis.connection.js';
 import { RabbitMqConnection } from './infrastructure/rabbitmq/rabbitmq.connection.js';
@@ -119,6 +120,7 @@ const scheduler = new ReservasScheduler(
   (error) =>
     log('error', 'reservation_scheduler_error', {
       ...safeErrorContext(error),
+      ...(error instanceof AppError ? { code: error.code, statusCode: error.statusCode } : {}),
       ...(error instanceof ExternalServiceError
         ? {
             dependency: error.service,
