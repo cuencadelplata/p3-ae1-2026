@@ -1,6 +1,11 @@
 import { Request, Response } from 'express';
-import { accountStatusService, AccountStatusService } from '../services/account-status.service.js';
-import { UpdateAccountStatusSchema } from '../types/customer.js';
+import {
+  accountStatusService,
+  AccountStatusService,
+  CuentaBloqueadaError,
+  CuentaInactivaError
+} from '../services/account-status.service.js';
+import { DesbloqueoManualSchema, UpdateAccountStatusSchema, UserIdSchema } from '../types/customer.js';
 import { findOwnedCustomer } from './ownership.js';
 
 /**
@@ -62,11 +67,61 @@ export class AccountStatusController {
 
     if (!(await findOwnedCustomer(req, res, id))) return;
 
-    const updated = await this.service.updateAccountStatus(id, parseResult.data);
+    let updated;
+    try {
+      updated = await this.service.updateAccountStatus(id, parseResult.data);
+    } catch (err) {
+      if (err instanceof CuentaBloqueadaError) {
+        res.status(409).json({ error: 'CuentaBloqueada', message: err.message });
+        return;
+      }
+      throw err;
+    }
     if (!updated) {
       res.status(404).json({
         error: 'CustomerNotFound',
         message: 'No se encontró un cliente con el ID proporcionado para actualizar'
+      });
+      return;
+    }
+
+    res.status(200).json(updated);
+  };
+
+  /**
+   * POST /internal/usuarios/:userId/desbloqueo
+   * Revisión manual de Soporte (M8): levanta el bloqueo y las penalizaciones vigentes hasta
+   * ese momento dejan de contar. Autenticación: X-Secret-Key (requireSoporteKey).
+   */
+  desbloquearPorRevision = async (req: Request, res: Response): Promise<void> => {
+    const userId = UserIdSchema.safeParse(Number(req.params.userId));
+    const body = DesbloqueoManualSchema.safeParse(req.body ?? {});
+    if (!userId.success || !body.success) {
+      res.status(400).json({
+        error: 'ValidationError',
+        message: !userId.success
+          ? 'userId debe ser el id numérico del usuario en M1'
+          : 'El cuerpo debe tener motivo y operador',
+        details: body.success ? undefined : body.error.errors
+      });
+      return;
+    }
+
+    let updated;
+    try {
+      updated = await this.service.desbloquearPorRevision(userId.data, body.data);
+    } catch (err) {
+      if (err instanceof CuentaInactivaError) {
+        res.status(409).json({ error: 'CuentaInactiva', message: err.message });
+        return;
+      }
+      throw err;
+    }
+
+    if (!updated) {
+      res.status(404).json({
+        error: 'CustomerNotFound',
+        message: 'No hay un perfil de cliente para ese userId'
       });
       return;
     }

@@ -3,24 +3,24 @@ import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
 import { apiReference } from '@scalar/express-api-reference';
-import { createSupportController, publicarEvento } from './controllers/support.controller.js';
+import { createSupportController } from './controllers/support.controller.js';
 import { authenticateWithM1 } from './http/authentication.js';
 import { autorizarTicket } from './http/authorization.js';
 import { correlationId } from './http/correlation.js';
 import { supportErrorHandler } from './http/error-handler.js';
+import { ACTIVE_PENALTIES_PATH, CONFIRM_PENALTY_PATH, registerPenaltyRoutes, type PenaltyRouteDeps } from './http/penalties.js';
 import type { SupportReadiness } from './http/readiness.js';
 import type { IdentityVerifier } from './integrations/m1-identity.js';
 import type { TicketService } from './services/ticket.service.js';
 
 export interface SupportAppDeps {
   ticketService: TicketService;
-  // Expone POST /events/publish, heredado de AE1.
-  legacyEvents: boolean;
   // Estado de las dependencias para /health/ready. Sin él la app no declara
   // dependencias externas y se informa lista.
   readiness?: () => Promise<SupportReadiness>;
   // Si se indica, las rutas de /tickets exigen un Bearer válido según M1.
   identityVerifier?: IdentityVerifier;
+  penalties?: PenaltyRouteDeps;
 }
 
 // Rutas de tickets, relativas a /tickets.
@@ -32,13 +32,12 @@ const TICKET_ROUTES = [
   { method: 'get', path: '/', handler: 'listarTodos', permiso: 'operador' },
 ] as const;
 
-const LEGACY_EVENT_ROUTE = { method: 'post', path: '/events/publish' } as const;
-
 // Rutas de la API que documenta el contrato OpenAPI (openapi/rf85-support.yaml).
 // El test de contrato verifica que ambas listas coincidan.
 export const SUPPORT_API_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
   ...TICKET_ROUTES.map(({ method, path }) => ({ method, path: path === '/' ? '/tickets' : `/tickets${path}` })),
-  LEGACY_EVENT_ROUTE,
+  { method: 'post', path: CONFIRM_PENALTY_PATH },
+  { method: 'get', path: ACTIVE_PENALTIES_PATH },
 ];
 
 // Endpoints RF-8.5 (Gestión de tickets de Soporte). Es lo único que necesita
@@ -62,11 +61,7 @@ export function registerSupportRoutes(router: IRouter, deps: SupportAppDeps) {
   tickets.use(supportErrorHandler);
 
   router.use('/tickets', tickets);
-}
-
-// Endpoint RF-8.6 / Pruebas de RabbitMQ (heredado de AE1)
-export function registerLegacyEventRoutes(router: IRouter) {
-  router[LEGACY_EVENT_ROUTE.method](LEGACY_EVENT_ROUTE.path, publicarEvento);
+  registerPenaltyRoutes(router, deps.ticketService, deps.identityVerifier, deps.penalties);
 }
 
 function loadOpenapi() {
@@ -83,8 +78,8 @@ function loadOpenapi() {
   return { fileContent, openapiDocument: YAML.parse(fileContent) };
 }
 
-// Aplicación HTTP de Support. Crearla no abre puertos ni conecta al broker:
-// eso lo hace el entrypoint (index.ts).
+// Aplicación HTTP de Support. Crearla no abre puertos: eso lo hace el
+// entrypoint (index.ts).
 export function createSupportApp(deps: SupportAppDeps): Express {
   const app = express();
   app.use(correlationId);
@@ -127,7 +122,6 @@ export function createSupportApp(deps: SupportAppDeps): Express {
         'GET /tickets/:id',
         'PATCH /tickets/:id/estado',
         'GET /tickets/:id/historial',
-        'POST /events/publish'
       ]
     });
   });
@@ -155,9 +149,6 @@ export function createSupportApp(deps: SupportAppDeps): Express {
   });
 
   registerSupportRoutes(app, deps);
-  if (deps.legacyEvents) {
-    registerLegacyEventRoutes(app);
-  }
 
   // Errores fuera de /tickets, como un cuerpo JSON malformado.
   app.use(supportErrorHandler);

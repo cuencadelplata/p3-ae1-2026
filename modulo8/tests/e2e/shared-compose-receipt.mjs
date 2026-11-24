@@ -6,12 +6,11 @@
 //   M6  crea el viaje, asigna, registra el arribo (QR de M8), inicia y finaliza
 //       (M6 consulta a M4 la distancia y a M7 la tarifa y el pago).
 //   M6 → RabbitMQ: TripCompleted (mobility.events, trip.completed).
-//   M8  consume el evento en m8.receipts.trip-completed, consulta M6, M3 y M7,
-//       autoriza con el fiscal simulado y guarda el PDF.
+//   M8  consume el evento en m8.receipts.trip-completed, consulta M6, M3 y M7
+//       y guarda el PDF.
 //   El cliente consulta su comprobante con su token de M1 y lo descarga.
 //
-// Requisitos: stack común levantado (ver INTEGRACION_COMPOSE.md) con M7 real o
-// con el simulador de su contrato (perfil m7-sandbox).
+// Requisitos: stack común levantado con M7 real (ver INTEGRACION_COMPOSE.md).
 // Uso, desde modulo8:  node tests/e2e/shared-compose-receipt.mjs
 import assert from 'node:assert/strict';
 import { randomInt, randomUUID } from 'node:crypto';
@@ -28,14 +27,32 @@ const m6 = url('M6_TEST_URL', process.env.M6_VIAJES_HOST_PORT || 15000);
 const m8 = url('M8_TEST_URL', process.env.M8_HOST_PORT || 18000);
 const receiptTimeoutMs = Number(process.env.RECEIPT_E2E_TIMEOUT_MS || 60000);
 
-// Medio de pago del viaje. Con tarjeta, M6 reenvía a M7 el token que generaría la
-// app del cliente con el checkout de Mercado Pago.
+// Medio de pago del viaje. Con tarjeta, la prueba hace lo que haría la app del
+// cliente: tokeniza en Mercado Pago la tarjeta de prueba "APRO" con las
+// credenciales de prueba de M7 (modulo7/.env), y M6 reenvía ese token a M7.
 const paymentMethod = process.env.RECEIPT_E2E_METODO_PAGO || 'tarjeta';
-const cardPayment = {
-  token: process.env.RECEIPT_E2E_CARD_TOKEN || 'card-token-e2e',
-  paymentMethodId: process.env.RECEIPT_E2E_PAYMENT_METHOD_ID || 'visa',
-  email: 'cliente.e2e@example.com',
-};
+const m7Env = dotenv.config({ path: fileURLToPath(new URL('../../../modulo7/.env', import.meta.url)), processEnv: {}, quiet: true }).parsed ?? {};
+
+async function cardPayment() {
+  let token = process.env.RECEIPT_E2E_CARD_TOKEN;
+  if (!token) {
+    const accessToken = process.env.MP_ACCESS_TOKEN || m7Env.MP_ACCESS_TOKEN;
+    assert.ok(accessToken, 'Para pagar con tarjeta hace falta MP_ACCESS_TOKEN (credenciales de prueba de M7 en modulo7/.env)');
+    const response = await fetch('https://api.mercadopago.com/v1/card_tokens', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({
+        card_number: '4509953566233704', security_code: '123', expiration_month: 11, expiration_year: 2030,
+        cardholder: { name: 'APRO', identification: { type: 'DNI', number: '12345678' } },
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const body = await response.json().catch(() => ({}));
+    assert.ok(response.ok && body.id, `Mercado Pago no tokenizó la tarjeta de prueba (HTTP ${response.status})`);
+    token = body.id;
+  }
+  return { token, paymentMethodId: process.env.RECEIPT_E2E_PAYMENT_METHOD_ID || 'visa', email: 'cliente.e2e@example.com' };
+}
 
 async function request(base, route, { method = 'GET', body, token, headers = {} } = {}) {
   const response = await fetch(`${base}${route}`, {
@@ -84,18 +101,16 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const customer = await m1Session('CLIENTE', 'Cliente');
 const driver = await m1Session('CONDUCTOR', 'Conductor');
 
-// 1b. Perfil del cliente en M2 (avisos por push) y su dispositivo en M8 (RF-8.7):
-// así los avisos del viaje recorren la entrega real (preferencias de M2 + push).
+// 1b. Perfil del cliente en M2 (avisos por push): los avisos del viaje recorren
+// la entrega real con sus preferencias. El push llega a un navegador suscripto
+// desde http://localhost:18000/push; sin navegador, la entrega queda registrada
+// como FAILED_NO_DEVICE_TOKEN.
 const m2 = url('M2_TEST_URL', 11000);
 const profile = await request(m2, '/v1/customers', {
   method: 'POST', token: customer.token,
   body: { preferences: { preferredVehicleType: 'auto', notificationChannel: 'push' } },
 });
 assert.equal(profile.status, 201, `M2 alta de perfil: ${show(profile)}`);
-const device = await request(m8, '/devices/tokens', {
-  method: 'POST', token: customer.token, body: { token: `device-e2e-${randomUUID()}`, platform: 'ANDROID' },
-});
-assert.equal(device.status, 201, `M8 registro de dispositivo: ${show(device)}`);
 
 // 2. Conductor y vehículo en M3
 const driverProfile = await request(m3Conductor, '/api/conductores', {
@@ -148,7 +163,7 @@ const finished = await request(m6, `/api/viajes/${tripId}/finalizacion`, {
     tipoVehiculo: 'auto',
     horaFin: new Date().toISOString(),
     metodoPago: paymentMethod,
-    ...(paymentMethod === 'tarjeta' ? { pago: cardPayment } : {}),
+    ...(paymentMethod === 'tarjeta' ? { pago: await cardPayment() } : {}),
   },
 });
 assert.equal(finished.status, 200, `M6 finalizar: ${show(finished)}`);
@@ -171,7 +186,7 @@ assert.equal(data.fare.total, finished.data.viaje.total);
 assert.equal(data.payment.method, paymentMethod.toUpperCase());
 // Tarjeta: M7 la autoriza. Efectivo y transferencia se cobran fuera de la pasarela y quedan pendientes.
 assert.equal(data.payment.status, paymentMethod === 'tarjeta' ? 'APROBADO' : 'PENDIENTE');
-assert.ok(data.fiscal?.authorizationCode, 'el comprobante debe tener autorización fiscal');
+assert.equal(data.fiscal, undefined, 'el comprobante ya no pasa por un autorizador fiscal');
 
 // Otro usuario no puede ver el comprobante (RF-8.4 con M1 real)
 const ajeno = await m1Session('CLIENTE', 'Ajeno');
@@ -206,7 +221,7 @@ const repeated = await request(m6, `/api/viajes/${tripId}/finalizacion`, {
   body: {
     origen: { latitude: -27.4692, longitude: -58.8306 }, destino: { latitude: -27.4459, longitude: -58.7619 },
     tipoVehiculo: 'auto', horaFin: new Date().toISOString(), metodoPago: paymentMethod,
-    ...(paymentMethod === 'tarjeta' ? { pago: cardPayment } : {}),
+    ...(paymentMethod === 'tarjeta' ? { pago: await cardPayment() } : {}),
   },
 });
 assert.equal(repeated.data?.idempotente, true, `M6 debe reconocer la finalización repetida: ${show(repeated)}`);

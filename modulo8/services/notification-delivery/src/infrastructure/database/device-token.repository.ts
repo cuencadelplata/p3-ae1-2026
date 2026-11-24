@@ -10,7 +10,8 @@ export interface DeviceTokenRepository {
   upsertToken(
     userId: number,
     token: string,
-    platform: 'ANDROID' | 'IOS' | 'WEB'
+    platform: 'ANDROID' | 'IOS' | 'WEB',
+    userRole?: DeviceTokenRecord['userRole'],
   ): Promise<DeviceTokenRecord>;
   deactivateToken(userId: number, token: string): Promise<boolean>;
   getActiveTokensByUserId(userId: number): Promise<DeviceTokenRecord[]>;
@@ -24,7 +25,8 @@ export class InMemoryDeviceTokenRepository implements DeviceTokenRepository {
   async upsertToken(
     userId: number,
     token: string,
-    platform: 'ANDROID' | 'IOS' | 'WEB'
+    platform: 'ANDROID' | 'IOS' | 'WEB',
+    userRole?: DeviceTokenRecord['userRole'],
   ): Promise<DeviceTokenRecord> {
     const now = new Date().toISOString();
     this.sequence += 1;
@@ -33,6 +35,7 @@ export class InMemoryDeviceTokenRepository implements DeviceTokenRepository {
       if (record.token === token) {
         record.userId = userId;
         record.platform = platform;
+        record.userRole = userRole;
         record.isActive = true;
         record.updatedAt = now;
         record.seq = this.sequence;
@@ -45,6 +48,7 @@ export class InMemoryDeviceTokenRepository implements DeviceTokenRepository {
       userId,
       token,
       platform,
+      ...(userRole ? { userRole } : {}),
       isActive: true,
       createdAt: now,
       updatedAt: now,
@@ -101,15 +105,16 @@ export class PgDeviceTokenRepository implements DeviceTokenRepository {
   async upsertToken(
     userId: number,
     token: string,
-    platform: 'ANDROID' | 'IOS' | 'WEB'
+    platform: 'ANDROID' | 'IOS' | 'WEB',
+    userRole?: DeviceTokenRecord['userRole'],
   ): Promise<DeviceTokenRecord> {
     const res = await this.pool.query(
-      `INSERT INTO notification_delivery.device_tokens (user_id, token, platform, is_active, updated_at)
-       VALUES ($1, $2, $3, true, NOW())
+      `INSERT INTO notification_delivery.device_tokens (user_id, token, platform, user_role, is_active, updated_at)
+       VALUES ($1, $2, $3, $4, true, NOW())
        ON CONFLICT (token) DO UPDATE
-         SET user_id = $1, platform = $3, is_active = true, updated_at = NOW()
-       RETURNING token_id, user_id, token, platform, is_active, created_at, updated_at`,
-      [userId, token, platform]
+         SET user_id = $1, platform = $3, user_role = $4, is_active = true, updated_at = NOW()
+       RETURNING token_id, user_id, token, platform, user_role, is_active, created_at, updated_at`,
+      [userId, token, platform, userRole ?? null]
     );
 
     const row = res.rows[0];
@@ -118,6 +123,7 @@ export class PgDeviceTokenRepository implements DeviceTokenRepository {
       userId: Number(row.user_id),
       token: row.token,
       platform: row.platform,
+      ...(row.user_role ? { userRole: row.user_role } : {}),
       isActive: row.is_active,
       createdAt: new Date(row.created_at).toISOString(),
       updatedAt: new Date(row.updated_at).toISOString(),
@@ -136,7 +142,7 @@ export class PgDeviceTokenRepository implements DeviceTokenRepository {
 
   async getActiveTokensByUserId(userId: number): Promise<DeviceTokenRecord[]> {
     const res = await this.pool.query(
-      `SELECT token_id, user_id, token, platform, is_active, created_at, updated_at
+      `SELECT token_id, user_id, token, platform, user_role, is_active, created_at, updated_at
        FROM notification_delivery.device_tokens
        WHERE user_id = $1 AND is_active = true
        ORDER BY updated_at DESC`,
@@ -147,6 +153,7 @@ export class PgDeviceTokenRepository implements DeviceTokenRepository {
       userId: Number(row.user_id),
       token: row.token,
       platform: row.platform,
+      ...(row.user_role ? { userRole: row.user_role } : {}),
       isActive: row.is_active,
       createdAt: new Date(row.created_at).toISOString(),
       updatedAt: new Date(row.updated_at).toISOString(),
@@ -155,7 +162,7 @@ export class PgDeviceTokenRepository implements DeviceTokenRepository {
 
   async getLatestActiveTokenByUserId(userId: number): Promise<DeviceTokenRecord | null> {
     const res = await this.pool.query(
-      `SELECT token_id, user_id, token, platform, is_active, created_at, updated_at
+      `SELECT token_id, user_id, token, platform, user_role, is_active, created_at, updated_at
        FROM notification_delivery.device_tokens
        WHERE user_id = $1 AND is_active = true
        ORDER BY updated_at DESC
@@ -169,6 +176,7 @@ export class PgDeviceTokenRepository implements DeviceTokenRepository {
       userId: Number(row.user_id),
       token: row.token,
       platform: row.platform,
+      ...(row.user_role ? { userRole: row.user_role } : {}),
       isActive: row.is_active,
       createdAt: new Date(row.created_at).toISOString(),
       updatedAt: new Date(row.updated_at).toISOString(),

@@ -7,7 +7,7 @@ import { InMemoryTicketRepository } from './models/ticket.model.js';
 import { buildSupportFromEnv, createSupportRuntime } from './support-runtime.js';
 
 const DATABASE_URL = 'postgres://m8_support@127.0.0.1:1/m8';
-const CONFIG = { port: 0, rabbitUrl: 'amqp://test', legacyEvents: false };
+const CONFIG = { port: 0, rabbitUrl: 'amqp://test' };
 
 function database(available: boolean, migrationsApplied: boolean) {
   return { isAvailable: async () => available, migrationsApplied };
@@ -135,7 +135,7 @@ describe('createSupportRuntime con verificador de identidad', () => {
 });
 
 describe('buildSupportFromEnv y SUPPORT_M1_IDENTITY_URL', () => {
-  const ENV = { SUPPORT_DATABASE_URL: DATABASE_URL, SUPPORT_LEGACY_EVENTS: 'off' };
+  const ENV = { SUPPORT_DATABASE_URL: DATABASE_URL };
 
   it('sin la variable arranca sin autenticación y lo avisa en el log', async () => {
     const support = buildSupportFromEnv(ENV);

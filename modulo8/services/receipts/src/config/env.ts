@@ -51,7 +51,7 @@ const port = readPort('PORT', 3008);
 export const env = {
   nodeEnv: readText('NODE_ENV', 'development'),
   serviceName: 'm8-documentos',
-  serviceVersion: readText('SERVICE_VERSION', '2.5.0'),
+  serviceVersion: readText('SERVICE_VERSION', '2.6.0'),
   port,
 
   /** Prefijo de la API REST versionada. */
@@ -100,18 +100,6 @@ export const env = {
 
   /** Espera entre intentos de preparar el esquema si PostgreSQL no esta disponible al arrancar. */
   databaseStartupRetryMs: readPositiveInt('DATABASE_STARTUP_RETRY_MS', 3000),
-
-  /** Autorizador fiscal externo (simulado en modulo8/infra/fiscal-sandbox). */
-  fiscalApiUrl: readText('FISCAL_API_URL', 'http://localhost:4010').replace(/\/+$/, ''),
-
-  /** Tiempo maximo de espera de una autorizacion, en milisegundos. */
-  fiscalTimeoutMs: readPositiveInt('FISCAL_TIMEOUT_MS', 2000),
-
-  /** Fallas seguidas del autorizador que abren el circuito. */
-  fiscalCircuitFailureThreshold: readPositiveInt('FISCAL_CIRCUIT_FAILURE_THRESHOLD', 3),
-
-  /** Tiempo que el circuito permanece abierto antes de probar de nuevo, en milisegundos. */
-  fiscalCircuitOpenMs: readPositiveInt('FISCAL_CIRCUIT_OPEN_MS', 10000),
 
   /**
    * API de pagos de M7 (GET /metodo-pago/{viajeId}), fuente de verdad del estado
@@ -162,7 +150,7 @@ export const env = {
   resendRateLimitWindowSeconds: readPositiveInt('RESEND_RATE_LIMIT_WINDOW_SECONDS', 60),
 
   /**
-   * RF-8.4 / M1: endpoint canónico que valida el Bearer recibido del usuario.
+   * RF-8.4 / M1: endpoint canÃ³nico que valida el Bearer recibido del usuario.
    * No se configura una clave compartida ni un mecanismo M2M no acordado.
    */
   m1IdentityUrl: readText('M1_IDENTITY_URL', '').replace(/\/+$/, ''),

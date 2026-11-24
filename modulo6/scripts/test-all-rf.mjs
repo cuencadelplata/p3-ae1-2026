@@ -13,6 +13,7 @@ const ports = {
   rabbitmq: process.env.M6_E2E_RABBITMQ_PORT ?? '15672',
   rabbitmqManagement: process.env.M6_E2E_RABBITMQ_MGMT_PORT ?? '25672',
   m8: process.env.M6_E2E_M8_PORT ?? '13103',
+  m7: process.env.M6_E2E_M7_PORT ?? '13107',
 };
 const composeArgs = [
   '-p', projectName,
@@ -32,6 +33,8 @@ const testEnvironment = {
   M6_RABBITMQ_HOST_PORT: ports.rabbitmq,
   M6_RABBITMQ_MGMT_HOST_PORT: ports.rabbitmqManagement,
   M6_E2E_M8_PORT: ports.m8,
+  M6_E2E_M7_PORT: ports.m7,
+  M7_TEST_URL: `http://127.0.0.1:${ports.m7}`,
   DB_HOST: '127.0.0.1',
   DB_PORT: ports.postgres,
   DB_USER: 'm6',

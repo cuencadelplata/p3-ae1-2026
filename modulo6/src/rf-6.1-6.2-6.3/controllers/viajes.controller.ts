@@ -11,7 +11,6 @@ import {
     ErrorServicioFinalizacion,
     type CoordenadasFinalizacion,
     type DatosFinalizacion,
-    type DatosPagoTarjeta,
 } from '../services/finalizacion.service.js';
 import { despacharEventosPendientes } from '../services/eventos-viaje.service.js';
 import { logger } from '../../observabilidad/logger.js';
@@ -92,6 +91,7 @@ function viajeRespuestaLegacy(viaje: Viaje, completadoAt?: Date | null) {
     return {
         id: viaje.id,
         clienteId: viaje.clienteId,
+        clientUserId: viaje.clientUserId ?? null,
         conductorId: viaje.conductorId ?? null,
         estado: viaje.estado,
         origen: viaje.origen,
@@ -288,29 +288,11 @@ function validarDatosFinalizacion(input: unknown, inicio: Date): DatosFinalizaci
         tipoVehiculo: body.tipoVehiculo,
         horaFin,
         metodoPago: body.metodoPago,
-        ...(body.metodoPago === 'tarjeta' ? { pago: validarDatosPagoTarjeta(body.pago) } : {}),
     };
 }
 
 /** Tolerancia ante relojes desincronizados entre la app del conductor y el servidor. */
 const MARGEN_RELOJ_MS = 2 * 60_000;
-
-// M7 autoriza tarjetas con Mercado Pago: la app del cliente tokeniza la tarjeta y M6
-// sólo reenvía el token. Estos datos no se persisten ni se registran en logs (RNF-23).
-function validarDatosPagoTarjeta(value: unknown): DatosPagoTarjeta {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        throw new ErrorValidacionFinalizacion('El pago con tarjeta requiere pago.token, pago.paymentMethodId y pago.email');
-    }
-    const { token, paymentMethodId, email } = value as Record<string, unknown>;
-    if (
-        typeof token !== 'string' || !token.trim() ||
-        typeof paymentMethodId !== 'string' || !paymentMethodId.trim() ||
-        typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
-    ) {
-        throw new ErrorValidacionFinalizacion('El pago con tarjeta requiere pago.token, pago.paymentMethodId y un pago.email válido');
-    }
-    return { token: token.trim(), paymentMethodId: paymentMethodId.trim(), email: email.trim() };
-}
 
 export const finalizarViaje = async (req: Request, res: Response): Promise<any> => {
     const { id } = req.params;

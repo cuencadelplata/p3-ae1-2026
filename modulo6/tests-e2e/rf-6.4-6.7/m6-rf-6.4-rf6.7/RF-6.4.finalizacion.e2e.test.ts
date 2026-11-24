@@ -1,11 +1,11 @@
 import amqp from 'amqplib';
 import { execFileSync } from 'node:child_process';
-import { crearViaje, datosFinalizacion, post } from './helpers.js';
+import { crearViaje, datosFinalizacion, post, prepararPago } from './helpers.js';
 
 const rabbitUrl = process.env.E2E_RABBITMQ_URL ?? 'amqp://guest:guest@127.0.0.1:5672';
 
 describe('RF-6.4 - Finalización del viaje en Docker', () => {
-  it('registra tiempo real, distancia, tarifa y autoriza el pago con tarjeta en M7', async () => {
+  it('registra tiempo real, distancia, tarifa y consulta el pago autorizado por M7', async () => {
     const viajeId = await crearViaje({ clienteId: `E2E-64-${Date.now()}`, iniciar: true });
 
     const { response, body } = await post(`/api/viajes/${viajeId}/finalizacion`, datosFinalizacion());
@@ -29,16 +29,17 @@ describe('RF-6.4 - Finalización del viaje en Docker', () => {
     });
   });
 
-  it('finaliza en efectivo dejando el pago pendiente', async () => {
+  it.each(['efectivo', 'transferencia'])('finaliza con %s previamente autorizado por M7', async (tipo) => {
     const viajeId = await crearViaje({ clienteId: `E2E-64-efectivo-${Date.now()}`, iniciar: true });
 
+    await prepararPago(viajeId, tipo);
     const { response, body } = await post(
       `/api/viajes/${viajeId}/finalizacion`,
-      datosFinalizacion({ metodoPago: 'efectivo', pago: undefined }),
+      datosFinalizacion({ metodoPago: tipo }),
     );
 
     expect(response.status).toBe(200);
-    expect(body.estadoPago).toBe('pendiente');
+    expect(body.estadoPago).toBe('autorizado');
   });
 
   it('rechaza finalizar un viaje que todavía no inició', async () => {
@@ -76,12 +77,13 @@ describe('RF-6.4 - Finalización del viaje en Docker', () => {
     expect(transiciones.filter((transicion) => transicion.to === 'completado')).toHaveLength(1);
   });
 
-  it('devuelve 402 si la pasarela rechaza la tarjeta y el viaje sigue en curso', async () => {
+  it.each(['pendiente', 'rechazado'])('devuelve 402 si M7 informa %s y el viaje sigue en curso', async (estado) => {
     const viajeId = await crearViaje({ clienteId: `E2E-64-rechazo-${Date.now()}`, iniciar: true });
 
+    await prepararPago(viajeId, 'tarjeta', estado);
     const rechazo = await post(
       `/api/viajes/${viajeId}/finalizacion`,
-      datosFinalizacion({ pago: { token: 'rechazado', paymentMethodId: 'visa', email: 'cliente@example.com' } }),
+      datosFinalizacion(),
     );
 
     expect(rechazo.response.status).toBe(402);

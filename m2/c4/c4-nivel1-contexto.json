@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C4 · Nivel 1 — Contexto del sistema Movilidad Urbana",
+    "locale": "es",
+    "output": "m2/c4/c4-nivel1-contexto.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
+      "provider": "github",
+      "revision": "bd6e17f43689ec617bd57b73553225693e13b0c0"
+    }
+  },
+  "layout": {
+    "mode": "auto"
+  },
+  "components": [
+    {
+      "id": "pasajero",
+      "type": "external",
+      "label": "Pasajero",
+      "sublabel": "Cliente de la plataforma",
+      "explanation": "Persona que se registra, gestiona su perfil y direcciones, pide y reserva viajes y califica al conductor.",
+      "sources": [
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 127,
+          "end_line": 137,
+          "label": "m2-client (web del pasajero)"
+        }
+      ]
+    },
+    {
+      "id": "conductor",
+      "type": "external",
+      "label": "Conductor",
+      "sublabel": "Opera vehículos y viajes",
+      "explanation": "Persona que gestiona su perfil de conductor y sus vehículos y recibe valoraciones de los viajes finalizados.",
+      "sources": [
+        {
+          "path": "modulo-3/compose.integracion.yml",
+          "line": 94,
+          "end_line": 107,
+          "label": "m3-conductor-frontend"
+        }
+      ]
+    },
+    {
+      "id": "plataforma",
+      "type": "backend",
+      "label": "Plataforma Movilidad Urbana",
+      "sublabel": "9 módulos (M1–M9) · Docker Compose",
+      "tag": "sistema en alcance",
+      "emphasis": true,
+      "explanation": "Stack movilidad-urbana: identidad, clientes, conductores y vehículos, ubicación, despacho, viajes, tarifas, notificaciones y reservas programadas. Se integran solo por HTTP y RabbitMQ; cada módulo tiene su propia base. Abrí el nodo para ver el Nivel 2.",
+      "href": "c4-nivel2-contenedores.html",
+      "sources": [
+        {
+          "path": "docker-compose.yml",
+          "line": 1,
+          "end_line": 12,
+          "label": "compose raíz (include de módulos)"
+        }
+      ]
+    },
+    {
+      "id": "nominatim",
+      "type": "external",
+      "label": "Nominatim (OpenStreetMap)",
+      "sublabel": "Geocodificación pública",
+      "explanation": "Proveedor de geocodificación que usa M4 por defecto; se puede reemplazar por un mock con USE_MOCK_GEOCODING=true.",
+      "sources": [
+        {
+          "path": "docker-compose.yml",
+          "line": 35,
+          "end_line": 36,
+          "label": "GEOCODING_PROVIDER_URL"
+        }
+      ]
+    },
+    {
+      "id": "fiscal",
+      "type": "external",
+      "label": "API fiscal",
+      "sublabel": "fiscal-sandbox por defecto",
+      "explanation": "Servicio fiscal externo al que M8 envía los comprobantes. En el stack local apunta a un sandbox.",
+      "sources": [
+        {
+          "path": "modulo8/compose.integracion.yaml",
+          "line": 34,
+          "label": "FISCAL_API_URL"
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "pasajero-usa",
+      "from": "pasajero",
+      "to": "plataforma",
+      "label": "perfil, direcciones, viajes y reservas (HTTPS)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "conductor-usa",
+      "from": "conductor",
+      "to": "plataforma",
+      "label": "perfil, vehículos y valoraciones (HTTPS)"
+    },
+    {
+      "id": "geocodifica",
+      "from": "plataforma",
+      "to": "nominatim",
+      "label": "geocodifica direcciones (HTTPS)"
+    },
+    {
+      "id": "comprobantes",
+      "from": "plataforma",
+      "to": "fiscal",
+      "label": "envía comprobantes (HTTP)"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Cómo leer este nivel",
+      "items": [
+        "Una sola caja para todo el sistema: el detalle está en el Nivel 2",
+        "Clic en la plataforma abre los contenedores (módulos)"
+      ]
+    }
+  ]
+}

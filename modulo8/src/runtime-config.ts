@@ -10,7 +10,6 @@ const requiredUrls: Record<string, readonly UrlScheme[]> = {
   M1_IDENTITY_URL: ['http:', 'https:'],
   M2_API_URL: ['http:', 'https:'],
   M7_PAYMENTS_URL: ['http:', 'https:'],
-  FISCAL_API_URL: ['http:', 'https:'],
 };
 
 const requiredSecrets = ['M1_JWT_SECRET', 'M2_INTERNAL_API_KEY'] as const;

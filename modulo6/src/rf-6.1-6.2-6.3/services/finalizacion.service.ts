@@ -8,13 +8,6 @@ export interface CoordenadasFinalizacion {
     address?: string;
 }
 
-/** Datos de Mercado Pago que la app del cliente obtiene al tokenizar la tarjeta. */
-export interface DatosPagoTarjeta {
-    token: string;
-    paymentMethodId: string;
-    email: string;
-}
-
 export type MetodoPago = 'efectivo' | 'tarjeta' | 'transferencia';
 
 export interface DatosFinalizacion {
@@ -23,7 +16,6 @@ export interface DatosFinalizacion {
     tipoVehiculo: 'auto' | 'moto';
     horaFin: Date;
     metodoPago: MetodoPago;
-    pago?: DatosPagoTarjeta;
 }
 
 export class ErrorServicioFinalizacion extends Error {
@@ -117,63 +109,28 @@ export function minutosTranscurridos(inicio: Date, fin: Date): number {
     return Math.max(1, Math.ceil((fin.getTime() - inicio.getTime()) / 60_000));
 }
 
-interface EstadoPago {
-    pagoId: string;
-    estado: 'pendiente' | 'autorizado';
-}
-
-function leerPago(body: Record<string, unknown>, contexto: string): { pagoId: string; estado: string } {
-    if (typeof body.pagoId !== 'string' || body.pagoId.length === 0 || typeof body.estado !== 'string') {
-        throw new ErrorServicioFinalizacion(`M7 devolvió una respuesta inválida al ${contexto}`, 502);
-    }
-    return { pagoId: body.pagoId, estado: body.estado };
-}
-
-/**
- * Registra y, si corresponde, autoriza el pago en M7.
- * Es idempotente: si un intento anterior ya registró o autorizó el pago del viaje
- * (por ejemplo, M7 autorizó pero falló el COMMIT en TripDB), se reutiliza.
- */
-async function procesarPago(
-    viaje: Viaje,
-    data: DatosFinalizacion,
-    total: number,
-    moneda: string,
-): Promise<EstadoPago> {
+/** Consulta el pago gestionado por M7 antes de completar el viaje. */
+async function consultarPagoAutorizado(viaje: Viaje, metodoPago: MetodoPago): Promise<{ pagoId: string; estado: 'autorizado' }> {
     const m7 = baseUrl('M7_URL');
-    const rutaPago = `${m7}/metodo-pago/${encodeURIComponent(viaje.id)}`;
-
-    const existente = await requestJson({ dependencia: 'm7', operacion: 'consultar_pago' }, 'GET', rutaPago, undefined, headersM7(), [404]);
-    let pago = existente.status === 404
-        ? leerPago((await requestJson({ dependencia: 'm7', operacion: 'registrar_pago' }, 'POST', `${m7}/metodo-pago`, {
-            clienteId: viaje.clienteId,
-            viajeId: viaje.id,
-            tipo: data.metodoPago,
-        }, headersM7())).body, 'registrar el método de pago')
-        : leerPago(existente.body, 'consultar el pago del viaje');
-
-    if (pago.estado === 'autorizado') return { pagoId: pago.pagoId, estado: 'autorizado' };
-    if (pago.estado !== 'pendiente') {
-        throw new ErrorServicioFinalizacion(`El pago del viaje está en estado ${pago.estado}`, 402);
+    const respuesta = await requestJson(
+        { dependencia: 'm7', operacion: 'consultar_pago' }, 'GET',
+        `${m7}/metodo-pago/${encodeURIComponent(viaje.id)}`, undefined, headersM7(), [404],
+    );
+    if (respuesta.status === 404) {
+        throw new ErrorServicioFinalizacion('El viaje no tiene un pago autorizado en M7', 402);
     }
-
-    // Efectivo y transferencia se cobran fuera de la pasarela: el pago queda pendiente en M7.
-    if (data.metodoPago !== 'tarjeta') return { pagoId: pago.pagoId, estado: 'pendiente' };
-
-    const autorizacion = await requestJson({ dependencia: 'm7', operacion: 'autorizar_pago' }, 'POST', `${rutaPago}/autorizar`, {
-        idOrden: `ORD-${viaje.id}`,
-        total,
-        moneda,
-        token: data.pago!.token,
-        paymentMethodId: data.pago!.paymentMethodId,
-        email: data.pago!.email,
-    }, headersM7(), [402]);
-    if (autorizacion.status === 402) {
-        throw new ErrorServicioFinalizacion('El pago con tarjeta fue rechazado por la pasarela', 402);
+    const pago = respuesta.body;
+    if (typeof pago.pagoId !== 'string' || !pago.pagoId || typeof pago.estado !== 'string') {
+        throw new ErrorServicioFinalizacion('M7 devolvió una respuesta inválida al consultar el pago', 502);
     }
-    pago = leerPago(autorizacion.body, 'autorizar el pago');
+    if (pago.viajeId !== undefined && pago.viajeId !== viaje.id) {
+        throw new ErrorServicioFinalizacion('M7 devolvió un pago de otro viaje', 502);
+    }
     if (pago.estado !== 'autorizado') {
-        throw new ErrorServicioFinalizacion('M7 no confirmó la autorización del pago', 502);
+        throw new ErrorServicioFinalizacion(`El pago del viaje está en estado ${pago.estado}; M7 debe confirmar su autorización`, 402);
+    }
+    if (pago.tipo !== undefined && pago.tipo !== metodoPago) {
+        throw new ErrorServicioFinalizacion('El medio de pago autorizado en M7 no coincide con el solicitado', 402);
     }
     return { pagoId: pago.pagoId, estado: 'autorizado' };
 }
@@ -216,7 +173,7 @@ export async function ejecutarServiciosFinalizacion(
     }
     const moneda = typeof tarifa.currency === 'string' && tarifa.currency ? tarifa.currency : 'ARS';
 
-    const pago = await procesarPago(viaje, data, tarifa.estimatedFare, moneda);
+    const pago = await consultarPagoAutorizado(viaje, data.metodoPago);
 
     return {
         inicio,

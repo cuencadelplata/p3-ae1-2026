@@ -1,8 +1,5 @@
 export interface SupportConfig {
   port: string | number;
-  rabbitUrl: string;
-  // Publicación de ticket.* y consumer RabbitMQ heredados de AE1.
-  legacyEvents: boolean;
 }
 
 export interface M6TripsConfig {
@@ -56,14 +53,5 @@ export function loadM1IdentityConfig(env: NodeJS.ProcessEnv = process.env): M1Id
 }
 
 export function loadSupportConfig(env: NodeJS.ProcessEnv = process.env): SupportConfig {
-  const legacyEvents = env.SUPPORT_LEGACY_EVENTS ?? 'on';
-  if (legacyEvents !== 'on' && legacyEvents !== 'off') {
-    throw new Error(`SUPPORT_LEGACY_EVENTS debe ser "on" u "off" (recibido: "${legacyEvents}")`);
-  }
-
-  return {
-    port: env.PORT || 3000,
-    rabbitUrl: env.RABBITMQ_URL?.trim() ?? '',
-    legacyEvents: legacyEvents === 'on',
-  };
+  return { port: env.PORT || 3000 };
 }

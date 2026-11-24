@@ -9,6 +9,30 @@ Los requisitos RF-6.1/6.2/6.3, RF-6.4/6.7 y RF-6.5/6.6 comparten un único proye
 
 ## Instalar y probar
 
+### Arranque con infraestructura compartida
+
+Desde `modulo6/`, ejecutar `npm run docker:integration:up`. El comando comprueba
+Docker, crea `reservas-network` si hace falta y espera a que Redis y RabbitMQ
+compartidos estén saludables antes de construir y levantar M6. Usa el Compose
+de la raíz y sus variables de entorno para mantener la misma red, credenciales
+y proyecto `movilidad-urbana` que el stack de integración.
+
+Los puertos predeterminados son 15000 para Viajes, 15001 para Cancelaciones y
+15002 para la fachada. Los módulos M4, M7 y M8 deben estar disponibles en la red
+compartida para completar los flujos que los utilizan. El estado puede consultarse
+desde la raíz con `docker compose ps`.
+
+### Entorno local y pruebas
+
+El balanceador obtiene sus DNS de `/etc/resolv.conf` mediante el entrypoint oficial
+de nginx. `/health` atraviesa el proxy hasta la API. La resolución DNS tiene un límite
+de 2 segundos y la consulta del healthcheck de 3 segundos, dentro del timeout de Docker
+de 5 segundos. El periodo inicial es de 30 segundos y se toleran 6 fallos consecutivos.
+Un mensaje `Connection refused while resolving` indica que el servidor DNS del
+contenedor está rechazando consultas. Se debe comprobar también el acceso directo
+al backend desde el contenedor y recrear los servicios de M6 en la red compartida
+después de corregir el DNS del entorno.
+
 Desde esta carpeta:
 
 ```sh
@@ -49,6 +73,14 @@ npm run test:rf-6.1-6.2-6.3
 npm run test:rf-6.4-6.7
 npm run test:rf-6.5-6.6
 ```
+
+## Pago previo a la finalización
+
+M7 gestiona el pago. Al finalizar, M6 consulta `GET /metodo-pago/{viajeId}` con
+la API key interna y requiere estado `autorizado` para el medio seleccionado.
+Un pago ausente, pendiente o rechazado devuelve 402 y conserva el viaje en curso.
+La finalización no solicita tokens de tarjeta. El evento `trip.completed` se guarda
+junto con la transición a completado después de confirmar la autorización en M7.
 
 ## Pruebas de carga con K6
 

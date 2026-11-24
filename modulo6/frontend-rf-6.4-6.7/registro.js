@@ -238,10 +238,6 @@ function pintarDetalle(viaje) {
 // ---------- Finalizar ----------
 function formularioFinalizar(viaje) {
   const formulario = $('#tpl-finalizar').content.firstElementChild.cloneNode(true);
-  const tarjeta = formulario.querySelector('.card');
-  formulario.addEventListener('change', () => {
-    tarjeta.hidden = formulario.elements.metodoPago.value !== 'tarjeta';
-  });
   formulario.addEventListener('submit', async (evento) => {
     evento.preventDefault();
     const datos = formulario.elements;
@@ -253,9 +249,6 @@ function formularioFinalizar(viaje) {
       tipoVehiculo: datos.tipoVehiculo.value,
       metodoPago,
       horaFin: new Date().toISOString(),
-      ...(metodoPago === 'tarjeta' ? {
-        pago: { token: datos.token.value, paymentMethodId: datos.paymentMethodId.value, email: datos.email.value },
-      } : {}),
     };
     const boton = formulario.querySelector('button[type="submit"]');
     boton.disabled = true;

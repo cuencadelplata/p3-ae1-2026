@@ -1,8 +1,7 @@
-export type Dependency = 'postgres' | 'fiscal' | 'payments' | 'trips' | 'drivers';
+export type Dependency = 'postgres' | 'payments' | 'trips' | 'drivers';
 
 const CODES: Record<Dependency, string> = {
   postgres: 'DATABASE_UNAVAILABLE',
-  fiscal: 'FISCAL_SERVICE_UNAVAILABLE',
   payments: 'PAYMENTS_SERVICE_UNAVAILABLE',
   trips: 'TRIPS_SERVICE_UNAVAILABLE',
   drivers: 'DRIVERS_SERVICE_UNAVAILABLE',

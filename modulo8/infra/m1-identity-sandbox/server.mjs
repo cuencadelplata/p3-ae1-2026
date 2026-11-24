@@ -17,7 +17,7 @@ const server = createServer((request, response) => {
 
   if (request.method === 'GET' && url.pathname === '/auth/validar-identidad-y-rol') {
     if (request.headers.authorization === e2eOperatorToken) {
-      json(response, 200, { userId: 1, role: 'OPERADOR' });
+      json(response, 200, { valid: true, userId: 1, role: 'OPERADOR' });
       return;
     }
     json(response, 401, { error: { code: 'INVALID_AUTH_TOKEN', message: 'Token no reconocido por M1' } });

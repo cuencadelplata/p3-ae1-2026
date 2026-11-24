@@ -1,4 +1,4 @@
-import { pool } from "../../infraestructura/basedatos";
+import { supabase } from "../../supabaseClient";
 
 export interface NuevoReintegro {
   idOrden: string;
@@ -8,23 +8,41 @@ export interface NuevoReintegro {
 }
 
 export async function insertarReintegro(r: NuevoReintegro): Promise<boolean> {
-  const sql = `
-    INSERT INTO reintegros (id_orden, viaje_id, monto_cancelacion, monto_reintegro)
-    VALUES ($1, $2, $3, $4)
-    ON CONFLICT (id_orden) DO NOTHING
-  `;
-  const result = await pool.query(sql, [r.idOrden, r.viajeId, r.montoCancelacion, r.montoReintegro]);
-  return (result.rowCount ?? 0) > 0;
+  const { error, count } = await supabase
+    .from("reintegros")
+    .upsert(
+      {
+        id_orden: r.idOrden,
+        viaje_id: r.viajeId,
+        monto_cancelacion: r.montoCancelacion,
+        monto_reintegro: r.montoReintegro,
+      },
+      { onConflict: "id_orden", ignoreDuplicates: true }
+    )
+    .select();
+
+  if (error) throw new Error(`insertarReintegro: ${error.message}`);
+  return (count ?? 1) > 0;
 }
 
 export async function existeOrden(idOrden: string): Promise<boolean> {
-  const sql = `SELECT id_orden FROM reintegros WHERE id_orden = $1`;
-  const result = await pool.query(sql, [idOrden]);
-  return (result.rowCount ?? 0) > 0;
+  const { data, error } = await supabase
+    .from("reintegros")
+    .select("id_orden")
+    .eq("id_orden", idOrden)
+    .maybeSingle();
+
+  if (error) throw new Error(`existeOrden: ${error.message}`);
+  return data !== null;
 }
 
 export async function existeViaje(viajeId: string): Promise<boolean> {
-  const sql = `SELECT viaje_id FROM reintegros WHERE viaje_id = $1`;
-  const result = await pool.query(sql, [viajeId]);
-  return (result.rowCount ?? 0) > 0;
+  const { data, error } = await supabase
+    .from("reintegros")
+    .select("viaje_id")
+    .eq("viaje_id", viajeId)
+    .maybeSingle();
+
+  if (error) throw new Error(`existeViaje: ${error.message}`);
+  return data !== null;
 }

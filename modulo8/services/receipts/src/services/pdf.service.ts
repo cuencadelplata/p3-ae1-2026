@@ -271,12 +271,6 @@ function drawPaymentSection(doc: Doc, receipt: Receipt): void {
   if (receipt.payment.authorizationCode) {
     rows.push(['Codigo de autorizacion', receipt.payment.authorizationCode]);
   }
-  if (receipt.fiscal) {
-    rows.push(
-      ['Autorizacion fiscal', receipt.fiscal.authorizationCode],
-      ['Vencimiento de la autorizacion', receipt.fiscal.expiresOn.split('-').reverse().join('/')],
-    );
-  }
 
   const top = doc.y;
   sectionTitle(doc, 'Pago', MARGIN, top, width);
@@ -306,7 +300,7 @@ function drawFooter(doc: Doc, receipt: Receipt): void {
     .fontSize(7.5)
     .fillColor(COLOR_MUTED)
     .text(
-      'Documento de demostracion emitido con fines academicos. La autorizacion fiscal proviene de un servicio simulado: no constituye comprobante fiscal ni representa una operacion de pago real.',
+      'Documento emitido con fines academicos. No constituye comprobante fiscal.',
       MARGIN,
       top + 10,
       { width, align: 'center' },

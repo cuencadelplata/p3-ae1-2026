@@ -56,11 +56,13 @@
     "express": "^5.2.1",
     "m8-documentos": "workspace:*",
     "m8-soporte": "workspace:*",
+    "nodemailer": "6.10.1",
     "pdfkit": "^0.20.1",
     "pg": "^8.23.0",
     "prom-client": "^15.1.3",
     "qrcode": "^1.5.4",
     "redis": "^6.2.1",
+    "web-push": "3.6.7",
     "yaml": "^2.5.0",
     "yamljs": "^0.3.0"
   },

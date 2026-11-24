@@ -16,13 +16,17 @@
     "@m8/shared": "workspace:*",
     "amqplib": "^0.10.4",
     "express": "^5.2.1",
-    "pg": "^8.13.1"
+    "nodemailer": "6.10.1",
+    "pg": "^8.13.1",
+    "web-push": "3.6.7"
   },
   "devDependencies": {
     "@types/amqplib": "^0.10.5",
     "@types/express": "^5.0.6",
     "@types/node": "^24.13.3",
+    "@types/nodemailer": "6.4.17",
     "@types/pg": "^8.11.10",
+    "@types/web-push": "3.6.4",
     "tsx": "^4.23.12",
     "typescript": "^5.5.4"
   }

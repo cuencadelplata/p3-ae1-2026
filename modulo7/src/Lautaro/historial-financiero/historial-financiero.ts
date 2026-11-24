@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { pool } from "../../infraestructura/basedatos";
+import { supabase } from "../../supabaseClient";
 
 export type OperationStatus = "pending" | "completed" | "failed" | "cancelled";
 export type OperationType = "payment" | "refund" | "transfer" | "payout";
@@ -12,101 +12,77 @@ export interface FinancialOperation {
   createdAt: string;
 }
 
-type OperationRow = {
-  id: string;
-  type: OperationType;
-  amount: string;
-  status: OperationStatus;
-  created_at: Date;
-};
-
 export class FinancialHistory {
   private memoryOperations: FinancialOperation[] = [];
 
   async initialize(): Promise<void> {
-    try {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS financial_operations (
-          id TEXT PRIMARY KEY,
-          type TEXT NOT NULL CHECK (type IN ('payment', 'refund', 'transfer', 'payout')),
-          amount NUMERIC NOT NULL,
-          status TEXT NOT NULL CHECK (status IN ('pending', 'completed', 'failed', 'cancelled')),
-          created_at TIMESTAMPTZ NOT NULL
-        )
-      `);
-    } catch {
-      // Si la BD no está disponible, funciona en memoria
-    }
+    // Supabase — la tabla ya existe en el proyecto
   }
 
   async registerOperation(operation: FinancialOperation): Promise<void> {
-    try {
-      await pool.query(
-        `INSERT INTO financial_operations (id, type, amount, status, created_at)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [operation.id, operation.type, operation.amount, operation.status, operation.createdAt]
-      );
-      return;
-    } catch {
+    const { error } = await supabase.from("financial_operations").insert({
+      id: operation.id,
+      type: operation.type,
+      amount: operation.amount,
+      status: operation.status,
+      created_at: operation.createdAt,
+    });
+    if (error) {
+      // fallback a memoria si Supabase falla
       this.memoryOperations.push(operation);
     }
   }
 
   async getHistory(): Promise<FinancialOperation[]> {
-    try {
-      const result = await pool.query<OperationRow>(
-        `SELECT id, type, amount, status, created_at
-         FROM financial_operations
-         ORDER BY created_at ASC`
-      );
-      return result.rows.map((row) => ({
-        id: row.id,
-        type: row.type,
-        amount: Number(row.amount),
-        status: row.status,
-        createdAt: row.created_at.toISOString(),
-      }));
-    } catch {
-      return this.memoryOperations;
-    }
+    const { data, error } = await supabase
+      .from("financial_operations")
+      .select("id, type, amount, status, created_at")
+      .order("created_at", { ascending: true });
+
+    if (error || !data) return this.memoryOperations;
+
+    return data.map((row) => ({
+      id: row.id,
+      type: row.type as OperationType,
+      amount: Number(row.amount),
+      status: row.status as OperationStatus,
+      createdAt: row.created_at,
+    }));
   }
 
   async updateStatus(id: string, newStatus: OperationStatus): Promise<FinancialOperation | undefined> {
-    try {
-      const result = await pool.query<OperationRow>(
-        `UPDATE financial_operations
-         SET status = $2
-         WHERE id = $1
-         RETURNING id, type, amount, status, created_at`,
-        [id, newStatus]
-      );
-      const row = result.rows[0];
-      return row === undefined ? undefined : this.fromRow(row);
-    } catch {
+    const { data, error } = await supabase
+      .from("financial_operations")
+      .update({ status: newStatus })
+      .eq("id", id)
+      .select("id, type, amount, status, created_at")
+      .maybeSingle();
+
+    if (error || !data) {
       const op = this.memoryOperations.find((item) => item.id === id);
       if (!op) return undefined;
       op.status = newStatus;
       return op;
     }
+
+    return {
+      id: data.id,
+      type: data.type as OperationType,
+      amount: Number(data.amount),
+      status: data.status as OperationStatus,
+      createdAt: data.created_at,
+    };
   }
 
   async exists(id: string): Promise<boolean> {
-    try {
-      const result = await pool.query("SELECT 1 FROM financial_operations WHERE id = $1", [id]);
-      return (result.rowCount ?? 0) > 0;
-    } catch {
-      return this.memoryOperations.some((op) => op.id === id);
-    }
-  }
+    const { data, error } = await supabase
+      .from("financial_operations")
+      .select("id")
+      .eq("id", id)
+      .maybeSingle();
 
-  private fromRow(row: OperationRow): FinancialOperation {
-    return {
-      id: row.id,
-      type: row.type,
-      amount: Number(row.amount),
-      status: row.status,
-      createdAt: row.created_at.toISOString(),
-    };
+    if (error) return this.memoryOperations.some((op) => op.id === id);
+    return data !== null;
   }
 }
 

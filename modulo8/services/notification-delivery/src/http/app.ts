@@ -134,7 +134,7 @@ export function createApp(deps: AppDependencies = {}): http.RequestListener {
               : 'ANDROID';
 
             // El userId se deriva SIEMPRE del JWT autenticado (numérico canónico)
-            const record = await tokenRepo.upsertToken(user.userId, token.trim(), validPlatform);
+            const record = await tokenRepo.upsertToken(user.userId, token.trim(), validPlatform, user.role);
 
             sendJson(201, {
               message: 'Device token registrado con éxito.',

@@ -133,13 +133,7 @@
           <label><input type="radio" name="metodoPago" value="transferencia"> Transferencia</label>
           <label><input type="radio" name="metodoPago" value="tarjeta"> Tarjeta</label>
         </fieldset>
-        <fieldset class="card" hidden>
-          <legend>Tarjeta (token de prueba)</legend>
-          <label class="stacked">Token <input name="token" autocomplete="off" value="tok-demo"></label>
-          <label class="stacked">Medio <input name="paymentMethodId" autocomplete="off" value="visa"></label>
-          <label class="stacked">Email <input name="email" type="email" autocomplete="off" value="cliente@example.com"></label>
-          <p class="hint">En el entorno de prueba, el token <code>rechazado</code> simula un pago rechazado.</p>
-        </fieldset>
+        <p class="hint">M7 debe confirmar el pago autorizado antes de finalizar el viaje.</p>
         <button class="button button-primary" type="submit">Finalizar viaje <span aria-hidden="true">↗</span></button>
       </form>
     </template>

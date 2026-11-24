@@ -3,13 +3,12 @@ import { buildSupportFromEnv } from './support-runtime.js';
 function start() {
   const support = buildSupportFromEnv();
 
-  support.app.listen(support.config.port, async () => {
+  support.app.listen(support.config.port, () => {
     console.log(`[Server] Microservicio M8-Soporte ejecutándose en puerto ${support.config.port}`);
 
     // En segundo plano: si la base todavía no está, Support atiende igual y
     // /health/ready informa unavailable hasta que las migraciones se apliquen.
     void support.database.prepare();
-    await support.startLegacyEvents();
   });
 }
 

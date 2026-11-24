@@ -14,7 +14,7 @@ let repository: InMemoryTicketRepository;
 beforeEach(() => {
   repository = new InMemoryTicketRepository();
   const ticketService = new TicketService(repository, new NoopSupportEventPublisher());
-  app = createSupportApp({ ticketService, legacyEvents: true });
+  app = createSupportApp({ ticketService });
 });
 
 afterEach(() => {
@@ -149,14 +149,12 @@ describe('correlationId', () => {
     expect(listed.headers['x-correlation-id']).toMatch(UUID);
   });
 
-  it('se devuelve en /health y en la ruta legacy de eventos', async () => {
+  it('se devuelve en /health y en la documentación', async () => {
     const health = await request(app).get('/health');
     expect(health.headers['x-correlation-id']).toMatch(UUID);
 
-    const published = await request(app)
-      .post('/events/publish')
-      .send({ routingKey: 'viaje.completado', payload: { viajeId: 'v-1' } });
-    expect(published.headers['x-correlation-id']).toMatch(UUID);
+    const docs = await request(app).get('/openapi.json');
+    expect(docs.headers['x-correlation-id']).toMatch(UUID);
   });
 });
 
@@ -168,7 +166,6 @@ describe('registerSupportRoutes en una app ajena', () => {
     host.use(express.json());
     registerSupportRoutes(host, {
       ticketService: new TicketService(new InMemoryTicketRepository(), new NoopSupportEventPublisher()),
-      legacyEvents: false,
     });
 
     const res = await request(host).get('/tickets/no-existe');

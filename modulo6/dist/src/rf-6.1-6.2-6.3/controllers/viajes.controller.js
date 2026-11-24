@@ -76,6 +76,7 @@ function viajeRespuestaLegacy(viaje, completadoAt) {
     return {
         id: viaje.id,
         clienteId: viaje.clienteId,
+        clientUserId: viaje.clientUserId ?? null,
         conductorId: viaje.conductorId ?? null,
         estado: viaje.estado,
         origen: viaje.origen,
@@ -191,7 +192,7 @@ export const cancelarViaje = async (req, res) => {
             error: `No se puede cancelar un viaje en estado ${viajeExistente.estado}`,
         });
     }
-    // viaje.cancelado (trip.events) quedó en el outbox; se publica ahora o lo reintenta el relay.
+    // viaje.cancelado (M4) y TripCancelled (M8) quedaron en el outbox; se publican ahora o los reintenta el relay.
     void despacharEventosPendientes();
     return res.json(viajeRespuestaLegacy(viaje));
 };
@@ -254,25 +255,10 @@ function validarDatosFinalizacion(input, inicio) {
         tipoVehiculo: body.tipoVehiculo,
         horaFin,
         metodoPago: body.metodoPago,
-        ...(body.metodoPago === 'tarjeta' ? { pago: validarDatosPagoTarjeta(body.pago) } : {}),
     };
 }
 /** Tolerancia ante relojes desincronizados entre la app del conductor y el servidor. */
 const MARGEN_RELOJ_MS = 2 * 60_000;
-// M7 autoriza tarjetas con Mercado Pago: la app del cliente tokeniza la tarjeta y M6
-// sólo reenvía el token. Estos datos no se persisten ni se registran en logs (RNF-23).
-function validarDatosPagoTarjeta(value) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        throw new ErrorValidacionFinalizacion('El pago con tarjeta requiere pago.token, pago.paymentMethodId y pago.email');
-    }
-    const { token, paymentMethodId, email } = value;
-    if (typeof token !== 'string' || !token.trim() ||
-        typeof paymentMethodId !== 'string' || !paymentMethodId.trim() ||
-        typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-        throw new ErrorValidacionFinalizacion('El pago con tarjeta requiere pago.token, pago.paymentMethodId y un pago.email válido');
-    }
-    return { token: token.trim(), paymentMethodId: paymentMethodId.trim(), email: email.trim() };
-}
 export const finalizarViaje = async (req, res) => {
     const { id } = req.params;
     if (typeof id !== 'string') {

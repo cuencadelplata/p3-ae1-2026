@@ -8,7 +8,6 @@ import { env } from './config/env';
 import { getAuthorizedDeliveryReference } from './controllers/receipt.controller';
 import { runMigrations } from './db/migrations';
 import { closePool, isDatabaseReady } from './db/pool';
-import { fiscalClient } from './integrations/fiscal-authorizer';
 import { paymentsClient } from './integrations/m7-payments';
 import { startConsumer, type RunningConsumer } from './messaging/consumer';
 import { startOutboxRelay, type RunningRelay } from './messaging/outbox-relay';
@@ -64,7 +63,6 @@ export function createReceiptsModule(options: ReceiptsModuleOptions = {}): Recei
     redis: isRedisReady,
     rabbitmq: async () =>
       Boolean(consumer?.isConnected() && relay?.isConnected() && (!tripConsumer || tripConsumer.isConnected())),
-    fiscal: () => fiscalClient.isReachable(),
     payments: () => paymentsClient.isReachable(),
   };
 
@@ -199,7 +197,7 @@ export function createReceiptsModule(options: ReceiptsModuleOptions = {}): Recei
     checks,
     async readiness() {
       const readiness = await checkReadiness(checks);
-      return { ...readiness, circuits: { fiscal: fiscalClient.circuitState() } };
+      return { ...readiness, circuits: {} };
     },
     start() {
       // Sin Redis el modulo arranca igual: solo quedan sin servicio los enlaces

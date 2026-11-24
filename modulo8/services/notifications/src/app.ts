@@ -1,13 +1,17 @@
 import express, { Router, type Express } from "express";
 
 import { errorHandler } from "./http/error-handler";
-import { mockPushProvider } from "./notifications/mock-push-provider";
 import { createProcessNotificationController } from "./notifications/notification.controller";
 import type { PushProvider } from "./notifications/push-provider";
 
-export function createNotificationsRouter(pushProvider: PushProvider = mockPushProvider, legacyHttpEnabled = true): Router {
+/**
+ * POST /notifications es la entrada HTTP heredada. Solo procesa si se le pasa
+ * un proveedor push; sin él responde 410 porque los avisos llegan por eventos
+ * RabbitMQ y la entrega real la hace RF-8.7.
+ */
+export function createNotificationsRouter(pushProvider?: PushProvider): Router {
   const router = Router();
-  if (legacyHttpEnabled) {
+  if (pushProvider) {
     router.use(express.json());
     router.post("/notifications", createProcessNotificationController(pushProvider));
   } else {
@@ -22,13 +26,11 @@ export function createNotificationsRouter(pushProvider: PushProvider = mockPushP
   return router;
 }
 
-export function createApp(pushProvider: PushProvider = mockPushProvider, legacyHttpEnabled = true): Express {
+export function createApp(pushProvider?: PushProvider): Express {
   const app = express();
   app.get("/health", (_request, response) => {
     response.status(200).json({ status: "ok", service: "m8" });
   });
-  app.use(createNotificationsRouter(pushProvider, legacyHttpEnabled));
+  app.use(createNotificationsRouter(pushProvider));
   return app;
 }
-
-export const app = createApp();

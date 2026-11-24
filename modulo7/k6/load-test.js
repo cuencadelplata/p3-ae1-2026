@@ -10,7 +10,7 @@ const duracionAutorizacion = new Trend("duracion_autorizacion_ms");
 // ─── Configuración: controlá desde la terminal con variables de entorno ───────
 //   VUS      = cantidad de usuarios simultáneos (default: 10)
 //   DURACION = tiempo de carga sostenida       (default: "1m")
-//   BASE_URL = URL del servidor                (default: "http://localhost:3000")
+//   BASE_URL = URL del servidor                (default: "http://localhost:17000")
 //
 // Ejemplo: k6 run -e VUS=50 -e DURACION=3m k6/load-test.js
 // ─────────────────────────────────────────────────────────────────────────────
@@ -19,9 +19,9 @@ const DURACION = __ENV.DURACION          || "3m";
 
 export const options = {
   stages: [
-    { duration: "30s",    target: VUS },   // rampa subida
-    { duration: DURACION, target: VUS },   // carga sostenida
-    { duration: "30s",    target: 0   },   // rampa bajada
+    { duration: "1m", target: 50 },
+    { duration: "2m", target: 50 },
+    { duration: "30s", target: 0 },
   ],
   thresholds: {
     http_req_failed:          ["rate<0.05"],
@@ -31,11 +31,11 @@ export const options = {
   },
 };
 
-const BASE_URL      = __ENV.BASE_URL    || "http://localhost:3000";
-const RABBIT_API    = __ENV.RABBIT_API  || "http://localhost:15672";
-const RABBIT_AUTH   = "Basic " + encoding.b64encode("m9:m9-local");
-const MP_PUBLIC_KEY = "TEST-bc8db768-1690-493a-9cfb-408e8646c0d1";
-const API_KEY       = "m7-123";
+const BASE_URL      = __ENV.BASE_URL    || "http://localhost:17000";
+const RABBIT_API    = __ENV.RABBIT_API  || "http://localhost:17002";
+const RABBIT_AUTH   = __ENV.RABBIT_AUTH || "Basic " + encoding.b64encode("guest:guest");
+const MP_PUBLIC_KEY = __ENV.MP_PUBLIC_KEY || "TEST-bc8db768-1690-493a-9cfb-408e8646c0d1";
+const API_KEY       = __ENV.API_KEY       || "m7-123";
 const HEADERS_JSON    = { "Content-Type": "application/json" };
 const HEADERS_API_KEY = { "Content-Type": "application/json", "x-api-key": API_KEY };
 
@@ -160,7 +160,7 @@ export default function () {
   // 11. Publicar evento de cancelación vía RabbitMQ (dispara RF-7.5 reintegro)
   const viajeIdCancelado = uid();
   publicarCancelacion(viajeIdCancelado);
-  sleep(3); // espera a que el consumer procese
+  sleep(25); // espera a que el consumer procese
 
   // 12. Verificar que el reintegro fue procesado (duplicado = true)
   const start12 = Date.now();

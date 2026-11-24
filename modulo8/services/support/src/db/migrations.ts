@@ -40,6 +40,17 @@ function statements(schema: string): string[] {
     `CREATE INDEX IF NOT EXISTS tickets_trip_id_idx ON ${schema}.tickets (trip_id)`,
     `CREATE INDEX IF NOT EXISTS tickets_status_idx ON ${schema}.tickets (status)`,
     `CREATE INDEX IF NOT EXISTS tickets_created_at_id_idx ON ${schema}.tickets (created_at DESC, id DESC)`,
+    `CREATE TABLE IF NOT EXISTS ${schema}.penalties (
+       ticket_id uuid PRIMARY KEY REFERENCES ${schema}.tickets (id),
+       trip_id text NOT NULL,
+       user_id bigint NOT NULL CHECK (user_id > 0),
+       reason text NOT NULL,
+       confirmed_by bigint NOT NULL CHECK (confirmed_by > 0),
+       confirmed_at timestamptz(3) NOT NULL,
+       expires_at timestamptz(3) NOT NULL,
+       UNIQUE (user_id, trip_id)
+     )`,
+    `CREATE INDEX IF NOT EXISTS penalties_user_expiration_idx ON ${schema}.penalties (user_id, expires_at)`,
     `CREATE TABLE IF NOT EXISTS ${schema}.ticket_history (
        id          bigint         GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
        ticket_id   uuid           NOT NULL REFERENCES ${schema}.tickets (id),

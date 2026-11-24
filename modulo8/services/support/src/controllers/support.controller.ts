@@ -6,7 +6,6 @@ import {
   leerIdempotencyKey,
   leerNuevoTicket,
 } from '../http/ticket-requests.js';
-import { RabbitMQConsumer } from '../rabbitmq/consumer.js';
 import { TicketService } from '../services/ticket.service.js';
 
 // Quién hace el pedido: el usuario autenticado por M1 si la autenticación
@@ -75,35 +74,4 @@ export function createSupportController({ ticketService }: SupportControllerDeps
       res.json(tickets);
     },
   };
-}
-
-// Endpoint: POST /events/publish (RF-8.6, heredado de AE1)
-// Permite publicar eventos en RabbitMQ (ej: viaje.completado, viaje.asignado, ticket.creado)
-// Permite incluir 'count' para emitir ráfagas de mensajes y observar la actividad en el panel de RabbitMQ.
-export async function publicarEvento(req: Request, res: Response) {
-  const { routingKey, payload, count } = req.body;
-
-  if (!routingKey || !payload) {
-    res.status(400).json({ error: 'routingKey y payload son requeridos' });
-    return;
-  }
-
-  const cantidad = Math.max(1, Math.min(Number(count) || 1, 50));
-  let exitosos = 0;
-
-  for (let i = 0; i < cantidad; i++) {
-    const ok = await RabbitMQConsumer.publishEvent(routingKey, {
-      ...payload,
-      _secuencia: i + 1,
-      _timestamp: new Date().toISOString()
-    });
-    if (ok) exitosos++;
-  }
-
-  res.status(200).json({
-    mensaje: 'Eventos enviados a RabbitMQ',
-    routingKey,
-    solicitados: cantidad,
-    enviadosExitosamente: exitosos
-  });
 }

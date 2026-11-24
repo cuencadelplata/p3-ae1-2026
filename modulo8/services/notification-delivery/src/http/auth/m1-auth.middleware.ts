@@ -8,6 +8,36 @@ export interface AuthenticatedUser {
   role?: M1Role;
 }
 
+export type M1IdentityStatus = 'active' | 'inactive' | 'unavailable';
+export type M1IdentityCheck = (authHeader: string) => Promise<M1IdentityStatus>;
+
+/**
+ * Confirma con M1 (GET /auth/validar-identidad-y-rol) que el usuario del token
+ * sigue habilitado. La firma no alcanza: M1 responde 200 con valid: false para
+ * un usuario bloqueado o inexistente, y 401 para credenciales revocadas.
+ */
+export function createM1IdentityCheck(
+  endpoint: string,
+  timeoutMs = 3000,
+  fetchImpl: typeof fetch = fetch,
+): M1IdentityCheck {
+  return async (authHeader: string) => {
+    let response: Response;
+    try {
+      response = await fetchImpl(endpoint, {
+        headers: { Authorization: authHeader },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch {
+      return 'unavailable';
+    }
+    if (response.status === 401 || response.status === 403) return 'inactive';
+    if (!response.ok) return 'unavailable';
+    const body = (await response.json().catch(() => null)) as { valid?: unknown } | null;
+    return body?.valid === true ? 'active' : 'inactive';
+  };
+}
+
 /**
  * Decodifica la carga útil (payload) de un token JSON o JWT.
  */
@@ -64,10 +94,9 @@ export function verifyJwtSignature(token: string, secret: string): boolean {
  *    - `exp`: si está presente en el payload, debe ser un timestamp Unix numérico en segundos
  *      y no estar vencido. Si expiró, se rechaza el token. Si M1_JWT_REQUIRE_EXP=true,
  *      la presencia de exp es obligatoria.
- * 2. Mecanismo Criptográfico (Integración Pendiente con M1):
- *    - El contrato funcional de claims fue confirmado con M1, pero el esquema de verificación
- *      criptográfica definitiva (distribución de secreto simétrico vs clave asimétrica/JWKS)
- *      sigue pendiente de confirmación formal por el equipo de M1.
+ * 2. Firma confirmada con M1:
+ *    - M1 firma los JWT con HS256 y M8 verifica la firma con el secreto compartido
+ *      `M1_JWT_SECRET`. M1 emite los claims `userId`, `role` y `exp`.
  *    - Política Fail-Closed: en producción (NODE_ENV=production), si no se configuró M1_JWT_SECRET,
  *      no se permite ningún bypass ni mecanismo ad-hoc: falla cerrado retornando null (401).
  *    - Se rechaza estrictamente cualquier token vencido o con firma no coincidente.

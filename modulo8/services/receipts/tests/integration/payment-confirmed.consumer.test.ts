@@ -208,7 +208,7 @@ describe('Consumidor de payment.confirmed (Integration RabbitMQ + PostgreSQL)', 
     await consume(topology, async (content) => {
       attempts += 1;
       if (attempts <= outageAttempts) {
-        throw new DependencyUnavailableError('fiscal', 'autorizador fiscal caido (simulado)');
+        throw new DependencyUnavailableError('payments', 'API de pagos de M7 caida');
       }
       return processPaymentConfirmed(content);
     });
@@ -222,25 +222,5 @@ describe('Consumidor de payment.confirmed (Integration RabbitMQ + PostgreSQL)', 
     assert.equal(attempts, outageAttempts + 1);
     assert.equal(await countReceipts(tripId), 1);
     assert.equal(await channel.get(topology.deadLetterQueue, { noAck: true }), false);
-  });
-
-  it('un comprobante rechazado por el autorizador fiscal debe ir a la DLQ sin reintentos', async () => {
-    const topology = testTopology('rechazo-fiscal');
-    let attempts = 0;
-    await consume(topology, async (content) => {
-      attempts += 1;
-      return processPaymentConfirmed(content);
-    });
-
-    // El autorizador simulado rechaza importes mayores a 10.000.000.
-    const tripId = `trip-mq-rechazo-${Date.now()}`;
-    const event = paymentConfirmedEvent(tripId);
-    event.data['fare'] = { currency: 'ARS', baseFare: 20_000_000, total: 20_000_000 };
-    publish(topology, toBuffer(event), event.messageId);
-
-    const dead = await waitFor(async () => (await channel.get(topology.deadLetterQueue, { noAck: true })) || null);
-    assert.equal(dead.properties.messageId, event.messageId);
-    assert.equal(attempts, 1);
-    assert.equal(await countReceipts(tripId), 0);
   });
 });

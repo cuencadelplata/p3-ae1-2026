@@ -102,7 +102,7 @@ describe('PostgresTicketRepository: base no disponible', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const pool = createSupportPool('postgres://m8_support:x@127.0.0.1:1/m8');
     const ticketService = new TicketService(new PostgresTicketRepository(pool, 'support'), new NoopSupportEventPublisher());
-    const app = createSupportApp({ ticketService, legacyEvents: false });
+    const app = createSupportApp({ ticketService });
 
     const res = await request(app)
       .post('/tickets')
@@ -127,7 +127,7 @@ describe('API de tickets sobre PostgreSQL', () => {
   it('crea, consulta, cambia de estado, lista y devuelve el historial', async () => {
     await vaciar();
     const ticketService = new TicketService(new PostgresTicketRepository(db.pool, db.schema), new NoopSupportEventPublisher());
-    const app = createSupportApp({ ticketService, legacyEvents: false });
+    const app = createSupportApp({ ticketService });
 
     const creado = await request(app)
       .post('/tickets')

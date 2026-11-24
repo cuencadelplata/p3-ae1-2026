@@ -1,13 +1,13 @@
 import http from 'node:http';
 import * as amqp from 'amqplib';
 import { createApp } from './app.js';
-import { getPgPool, closePgPool, isPostgresReady } from '../infrastructure/database/pg-client.js';
+import { getPgPool, closePgPool, ensureDeliveryTokenSchema, isPostgresReady } from '../infrastructure/database/pg-client.js';
 import { PgDeviceTokenRepository } from '../infrastructure/database/device-token.repository.js';
 import { PgDeliveryRepository } from '../infrastructure/database/delivery.repository.js';
 import { PgMessagingInboxRepository } from '../infrastructure/database/inbox.repository.js';
 import { PostgresTechnicalInbox } from '@m8/shared';
 import { CircuitBreakerM2PreferencesClient, HttpM2PreferencesClient } from '../infrastructure/clients/m2-preferences.client.js';
-import { SandboxPushProvider } from '../infrastructure/provider/sandbox-push-provider.js';
+import { WebPushProvider } from '../infrastructure/provider/web-push-provider.js';
 import { NotificationDeliveryService } from '../services/notification-delivery.service.js';
 import { RabbitMqDeliveryConsumer } from '../infrastructure/messaging/rabbitmq-delivery-consumer.js';
 
@@ -26,6 +26,7 @@ if (process.env.NODE_ENV === 'production' && !M2_INTERNAL_API_KEY) {
 
 async function bootstrap() {
   const pgPool = getPgPool();
+  await ensureDeliveryTokenSchema(pgPool);
   const tokenRepo = new PgDeviceTokenRepository(pgPool);
   const deliveryRepo = new PgDeliveryRepository(pgPool);
   const inboxStore = new PostgresTechnicalInbox(pgPool);
@@ -34,7 +35,7 @@ async function bootstrap() {
   const m2Client = new CircuitBreakerM2PreferencesClient(
     new HttpM2PreferencesClient(M2_API_URL, M2_INTERNAL_API_KEY, M2_TIMEOUT_MS),
   );
-  const pushProvider = new SandboxPushProvider();
+  const pushProvider = new WebPushProvider();
 
   const deliveryService = new NotificationDeliveryService(
     inboxRepo,
@@ -70,7 +71,7 @@ async function bootstrap() {
       checks: {
         postgres: pgOk ? 'ok' : 'down',
         rabbitmq: rmqOk ? 'ok' : 'down',
-        pushProvider: 'ok',
+        pushProvider: pushProvider.isConfigured() ? 'ok' : 'not_configured',
         m2_preferences: 'not_checked',
       },
     };

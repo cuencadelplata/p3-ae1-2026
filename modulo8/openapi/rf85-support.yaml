@@ -464,8 +464,89 @@ paths:
         '503':
           $ref: '#/components/responses/BaseNoDisponible'
 
+  /tickets/{id}/penalizacion:
+    post:
+      tags: [Tickets (RF8.5)]
+      summary: Confirma una penalización para el cliente de un ticket resuelto
+      description: Solo OPERADOR. Una penalización por cliente y viaje. Repetir la misma confirmación devuelve el registro existente.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '200': &confirmedPenalty
+          description: Penalización confirmada.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Penalizacion' }
+        '201': *confirmedPenalty
+        '400': { $ref: '#/components/responses/ErrorDeValidacion' }
+        '401': &penaltyUnauthorized
+          description: Credencial requerida o inválida.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+        '403': &penaltyError
+          description: No se pudo completar la operación.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+        '404': *penaltyError
+        '409': *penaltyError
+        '422': *penaltyError
+        '503': *penaltyError
+  /usuarios/{userId}/penalizaciones:
+    get:
+      tags: [Tickets (RF8.5)]
+      summary: Lista las penalizaciones vigentes de un cliente para M2
+      security:
+        - penaltiesServiceKey: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Penalizaciones confirmadas hace menos de 90 días.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [userId, total, penalizaciones]
+                properties:
+                  userId: { type: integer, minimum: 1 }
+                  total: { type: integer, minimum: 0 }
+                  penalizaciones:
+                    type: array
+                    items: { $ref: '#/components/schemas/Penalizacion' }
+        '400': { $ref: '#/components/responses/ErrorDeValidacion' }
+        '401': *penaltyUnauthorized
+        '503': *penaltyError
+
 components:
   securitySchemes:
+    penaltiesServiceKey:
+      type: apiKey
+      in: header
+      name: X-Secret-Key
     bearerAuth:
       type: http
       scheme: bearer
@@ -758,6 +839,14 @@ components:
         fechaActualizacion: '2026-10-04T02:59:23.890Z'
 
   schemas:
+    Penalizacion:
+      type: object
+      required: [ticketId, tripId, motivo, fecha]
+      properties:
+        ticketId: { type: string, format: uuid }
+        tripId: { type: string }
+        motivo: { type: string }
+        fecha: { type: string, format: date-time }
     TicketStatus:
       type: string
       enum: [ABIERTO, EN_PROCESO, RESUELTO]

@@ -12,7 +12,7 @@ let repository: InMemoryTicketRepository;
 beforeEach(() => {
   repository = new InMemoryTicketRepository();
   const ticketService = new TicketService(repository, new NoopSupportEventPublisher());
-  app = createSupportApp({ ticketService, legacyEvents: false });
+  app = createSupportApp({ ticketService });
 });
 
 afterEach(() => {

@@ -57,6 +57,22 @@ async function solicitarCancelacion(id: string, body: unknown = { actor: 'client
 }
 
 describe('Compatibilidad RF-6.5/RF-6.6 - rutas de viaje', () => {
+  it.each(['POST', 'PATCH'])('asigna un conductor mediante %s y permite cancelar el mismo viaje', async (method) => {
+    const created = await crearViaje();
+    const response = await fetch(`${baseUrl}/api/viajes/${created.id}/asignar`, {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ conductorId: 'conductor-integracion' }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      viaje: { id: created.id, conductorId: 'conductor-integracion', estado: 'CONDUCTOR_EN_CAMINO' },
+    });
+    const cancelled = await solicitarCancelacion(created.id);
+    expect(cancelled.status).toBe(200);
+    expect(await cancelled.json()).toMatchObject({ id: created.id, estado: 'CANCELADO' });
+  });
+
   it('GET devuelve el viaje directamente con los campos de integración', async () => {
     const created = await crearViaje();
     const response = await fetch(`${baseUrl}/api/viajes/${created.id}`);
@@ -67,6 +83,7 @@ describe('Compatibilidad RF-6.5/RF-6.6 - rutas de viaje', () => {
       id: created.id,
       clienteId: created.clienteId,
       conductorId: null,
+      clientUserId: null,
       estado: 'SOLICITADO',
       // M2 importa direcciones con estos campos.
       origen: 'Calle A',
@@ -107,6 +124,22 @@ describe('Compatibilidad RF-6.5/RF-6.6 - rutas de viaje', () => {
 
     const body = await (await fetch(`${baseUrl}/api/viajes/${created.id}`)).json();
     expect(body.rideRequestId).toBe('ride-req-123');
+  });
+
+  it('GET conserva el clientUserId de M1 informado al crear el viaje', async () => {
+    const response = await fetch(`${baseUrl}/api/viajes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ clienteId: 'cliente-m1', clientUserId: 123, origen: 'A', destino: 'B' }),
+    });
+    expect(response.status).toBe(201);
+    const created = await response.json() as { id: string };
+
+    const consulta = await fetch(`${baseUrl}/api/viajes/${created.id}`);
+    expect(consulta.status).toBe(200);
+    expect(await consulta.json()).toMatchObject({
+      id: created.id, clienteId: 'cliente-m1', clientUserId: 123,
+    });
   });
 
   it('GET responde 404 si el viaje no existe', async () => {

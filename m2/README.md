@@ -97,7 +97,7 @@ Los valores siguientes son los defaults de desarrollo; las credenciales reales d
 | `M6_SERVICE_URL` | `http://localhost:3000/__stubs/m6` (con stubs) | URL del servicio de viajes. |
 | `STUBS_ENABLED` | `false` | Monta los stubs locales solo cuando vale literalmente `true`. |
 | `M1_JWT_SECRET` | Solo default de desarrollo del stub | Secreto HS256 del stub de M1; no usar el default en un entorno compartido. |
-| `SOPORTE_SECRET_KEY` | `secret-m2` | Clave de servicio que M2 envía a Soporte (header `X-Secret-Key`). |
+| `SOPORTE_SECRET_KEY` | `secret-m2` | Clave compartida con Soporte (M8) en `X-Secret-Key`: M2 la envía al pedir penalizaciones y la exige en `POST /internal/usuarios/{userId}/desbloqueo`. |
 | `STATUS_SECRET_KEY` | `secret-status` | Clave que aceptan módulos internos en `GET /status` (header `X-Secret-Key`). |
 | `INTERNAL_API_KEY` | `internal-dev` en docker-compose; sin valor responde `401` | Clave que M8 envía en `x-api-key` a `GET /internal/preferences/{userId}`. Debe ser igual a `M2_INTERNAL_API_KEY` de M8. |
 | `INTERNAL_PREFERENCES_DEADLINE_MS` | `1800` | Plazo máximo de `GET /internal/preferences/{userId}`; al vencer responde `503`. |
@@ -185,7 +185,23 @@ Las respuestas de error siguen `{ "error": "...", "message": "..." }`; los error
 3. Si el nuevo estado difiere del guardado, lo persiste e invalida el perfil cacheado.
 4. **Si Soporte está caído** (timeout, error o circuito abierto) → devuelve el último estado guardado sin error (degradación elegante).
 
-Regla de desbloqueo automático: solo los bloqueos con `blockOrigin = AUTOMATICO` pueden revertirse solos cuando bajan las penalizaciones. Los bloqueos `MANUAL` (aplicados vía `PUT /status`) son intocables por este mecanismo.
+Regla de desbloqueo automático: solo `BLOQUEADO_TEMPORAL` con `blockOrigin = AUTOMATICO` se revierte solo cuando bajan las penalizaciones vigentes. `BLOQUEADO_PERMANENTE` no se recalcula: se mantiene aunque las penalizaciones expiren en M8 y solo lo levanta la revisión manual de Soporte. Los bloqueos `MANUAL` (aplicados vía `PUT /status`) tampoco se tocan. Mientras haya un bloqueo automático, `PUT /status` del cliente responde `409 CuentaBloqueada`.
+
+**Revisión manual (contrato con M8).** `POST /internal/usuarios/{userId}/desbloqueo`, con `X-Secret-Key: <SOPORTE_SECRET_KEY>` (la misma clave compartida con la que M2 consulta penalizaciones). `userId` es el id numérico de M1. Cuerpo:
+
+```json
+{ "motivo": "Revisión del ticket: la cancelación fue por falla de la app", "operador": "op-17", "ticketId": "tick_123" }
+```
+
+`motivo` (3–500 caracteres) y `operador` son obligatorios; `ticketId` es opcional. Levanta cualquier bloqueo (temporal o permanente) y `EN_REVISIÓN`, y guarda `reviewedAt`. Desde ahí el recálculo **solo cuenta las penalizaciones con fecha posterior a la revisión**: si el operador desbloquea a un cliente con tres penalizaciones vigentes, siguen vigentes en M8 pero no lo vuelven a bloquear. Una penalización nueva sí cuenta.
+
+| Respuesta | Significado |
+|---|---|
+| `200` | Estado resultante (`status: ACTIVO`, `reason`, `reviewedAt`). Si ya estaba `ACTIVO` se devuelve sin cambios (se puede reintentar). |
+| `400` | `userId` no numérico, o falta `motivo`/`operador`. |
+| `401` | `X-Secret-Key` ausente o incorrecta. |
+| `404` | No hay perfil de cliente para ese `userId`. |
+| `409` | La cuenta está dada de baja (`INACTIVO`). |
 
 El estado de cuenta vive solo en la tabla `AccountStatus`; el perfil lo lee con un `JOIN`. Las consultas de estado comparten el circuit breaker de PostgreSQL.
 

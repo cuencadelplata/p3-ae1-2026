@@ -10,7 +10,7 @@ let app: Express;
 
 beforeEach(() => {
   const ticketService = new TicketService(new InMemoryTicketRepository(), new NoopSupportEventPublisher());
-  app = createSupportApp({ ticketService, legacyEvents: false });
+  app = createSupportApp({ ticketService });
 });
 
 function crear(body: unknown) {

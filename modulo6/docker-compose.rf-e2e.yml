@@ -50,6 +50,8 @@ services:
       PROVIDER: m7
       INTERNAL_API_KEY: m6-rf-e2e-m7-secret
       PORT: 3000
+    ports:
+      - "127.0.0.1:${M6_E2E_M7_PORT:-13107}:3000"
     expose:
       - "3000"
     healthcheck:

@@ -557,13 +557,37 @@ Clasificación de fallas (misma política que 5.1):
 | --- | --- |
 | Sobre inválido, otro `eventType`, `version` distinta, `correlationId` ≠ `data.tripId`, `recipientId` no numérico | DLQ sin reintentos |
 | Conductor sin `userId` numérico o medio de pago desconocido | DLQ sin reintentos |
-| Pago rechazado en M7, rechazo del autorizador fiscal | DLQ sin reintentos |
-| M6, M3, M7, fiscal o PostgreSQL sin respuesta o con `5xx` | Espera en la cola de reintentos sin descontar intentos |
+| Pago rechazado en M7 | DLQ sin reintentos |
+| M6, M3, M7 o PostgreSQL sin respuesta o con `5xx` | Espera en la cola de reintentos sin descontar intentos |
 | Viaje todavía no visible como `COMPLETADO`, sin vehículo activo en M3, pago pendiente | Reintento con descuento; agotados, DLQ |
 | `messageId` ya procesado, o comprobante ya emitido para el `tripId` | Se descarta sin emitir otro |
 
 Prueba de punta a punta con todos los módulos reales:
 `modulo8/tests/e2e/shared-compose-receipt.mjs`.
+
+### 5.7 `auth.recuperacion_solicitada` (M1 → Entrega, correo de RF-1.4)
+
+M1 delega en M8 el correo de recuperación de contraseña. Lo publica en su
+exchange `m1.eventos` (topic, durable) con su propio sobre:
+
+```json
+{
+  "id": "0b6f0c0e-7c1e-4b62-9a0e-3f2f3b6c9d11",
+  "evento": "auth.recuperacion_solicitada",
+  "modulo": "M1",
+  "fecha": "2026-11-24T20:00:00.000Z",
+  "datos": { "userId": 12, "email": "cliente@example.com", "nombre": "Ana", "token": "…64 caracteres…", "expiraEnSegundos": 900 }
+}
+```
+
+- Cola de M8: `m8.delivery.password-recovery` (con `.retry` y `.dlq`).
+- `id` es el `messageId` para la idempotencia: un mismo pedido no manda dos correos.
+- El correo sale por SMTP (Gmail en el stack común) con el nombre, el código y
+  su vencimiento. M8 no guarda el email ni el código: solo la constancia de la
+  entrega en `notification_delivery.delivery_requests` (canal `EMAIL`).
+- Evento sin email o código válido, de otro módulo o con otra routing key: DLQ
+  sin reintentos. Falla de SMTP: reintento; agotados, DLQ.
+- Sin SMTP configurado la cola se declara igual y los pedidos esperan en ella.
 
 
 

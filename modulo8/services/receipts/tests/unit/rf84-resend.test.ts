@@ -68,7 +68,7 @@ describe('RF-8.4: Reenvio de comprobante (Lucas Cremaschi)', () => {
         100,
         async (_url, options) => {
           authorization = new Headers(options?.headers).get('authorization') ?? '';
-          return new Response(JSON.stringify({ userId: 101, role: 'CLIENTE' }), { status: 200 });
+          return new Response(JSON.stringify({ valid: true, userId: 101, role: 'CLIENTE' }), { status: 200 });
         },
       );
 
@@ -82,10 +82,21 @@ describe('RF-8.4: Reenvio de comprobante (Lucas Cremaschi)', () => {
       const validator = createM1IdentityValidator(
         'http://m1.test/auth/validar-identidad-y-rol',
         100,
-        async () => new Response(JSON.stringify({ userId: '101', role: 'CLIENTE' }), { status: 200 }),
+        async () => new Response(JSON.stringify({ valid: true, userId: '101', role: 'CLIENTE' }), { status: 200 }),
       );
       await assert.rejects(() => validator('Bearer token-de-m1'), (err: unknown) => {
         return err instanceof AppError && err.code === 'M1_IDENTITY_INVALID_RESPONSE';
+      });
+    });
+
+    it('debe rechazar con 401 a un usuario que M1 informa como no valido (bloqueado o inexistente)', async () => {
+      const validator = createM1IdentityValidator(
+        'http://m1.test/auth/validar-identidad-y-rol',
+        100,
+        async () => new Response(JSON.stringify({ valid: false, userId: 101, role: 'CLIENTE' }), { status: 200 }),
+      );
+      await assert.rejects(() => validator('Bearer token-de-usuario-bloqueado'), (err: unknown) => {
+        return err instanceof AppError && err.status === 401 && err.code === 'INVALID_AUTH_TOKEN';
       });
     });
 

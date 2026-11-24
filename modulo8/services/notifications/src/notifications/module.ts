@@ -167,7 +167,7 @@ export function createNotificationsModule(): NotificationsModule {
 
   return {
     name: 'notifications',
-    router: createNotificationsRouter(undefined, false),
+    router: createNotificationsRouter(),
     async readiness() {
       return { status: available && m3Consumer?.isReady() && m5Consumer?.isReady() && m6Consumer?.isReady() && outboxRelay?.isReady() && m3Connection ? 'ok' : 'unavailable' };
     },

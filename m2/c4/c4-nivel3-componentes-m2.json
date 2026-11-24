@@ -1,0 +1,587 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C4 · Nivel 3 — Componentes de M2 Clientes",
+    "locale": "es",
+    "output": "m2/c4/c4-nivel3-componentes-m2.html",
+    "quality_profile": "showcase",
+    "parentHref": "c4-nivel2-contenedores.html",
+    "repository": {
+      "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
+      "provider": "github",
+      "revision": "bd6e17f43689ec617bd57b73553225693e13b0c0"
+    }
+  },
+  "layout": {
+    "mode": "auto"
+  },
+  "components": [
+    {
+      "id": "m2web",
+      "type": "frontend",
+      "label": "M2 Web del cliente",
+      "sublabel": "React + nginx",
+      "sources": [
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 127,
+          "end_line": 137
+        }
+      ],
+      "pos": [
+        40,
+        320
+      ]
+    },
+    {
+      "id": "m8",
+      "type": "external",
+      "label": "M8 Notificaciones",
+      "sublabel": "otro módulo",
+      "sources": [
+        {
+          "path": "modulo8/services/notification-delivery/src/infrastructure/clients/m2-preferences.client.ts",
+          "line": 25,
+          "end_line": 32
+        }
+      ],
+      "pos": [
+        40,
+        480
+      ]
+    },
+    {
+      "id": "gateway",
+      "type": "cloud",
+      "label": "m2-gateway",
+      "sublabel": "nginx · alias m2-api · balancea 2 réplicas",
+      "explanation": "Punto de entrada único de M2 (RNF-15). Reparte entre m2-api-1 y m2-api-2 y saca de rotación la réplica que cae.",
+      "sources": [
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 81,
+          "end_line": 104
+        }
+      ],
+      "pos": [
+        360,
+        390
+      ]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "Middleware de autenticación",
+      "sublabel": "requireAuth · service key · x-api-key",
+      "explanation": "Valida el token de usuario contra M1 (con caché en Redis). /status acepta también X-Secret-Key de otros módulos y /internal/preferences exige la clave interna de M8.",
+      "sources": [
+        {
+          "path": "m2/src/middlewares/auth.middleware.ts",
+          "line": 1,
+          "end_line": 30
+        },
+        {
+          "path": "m2/src/app.ts",
+          "line": 80,
+          "end_line": 106,
+          "label": "rutas protegidas"
+        }
+      ],
+      "pos": [
+        680,
+        360
+      ],
+      "size": [
+        200,
+        120
+      ]
+    },
+    {
+      "id": "perfil",
+      "type": "backend",
+      "label": "Perfil de cliente",
+      "sublabel": "RF-2.1 · controller + service + repo",
+      "sources": [
+        {
+          "path": "m2/src/controllers/customer.controller.ts",
+          "line": 15,
+          "end_line": 45
+        },
+        {
+          "path": "m2/src/services/customer.service.ts",
+          "line": 1,
+          "end_line": 77
+        },
+        {
+          "path": "m2/src/repositories/customer.repository.ts",
+          "line": 47,
+          "end_line": 66
+        }
+      ],
+      "pos": [
+        940,
+        360
+      ]
+    },
+    {
+      "id": "estado",
+      "type": "backend",
+      "label": "Estado de cuenta",
+      "sublabel": "RF-2.5 · penalizaciones",
+      "sources": [
+        {
+          "path": "m2/src/services/account-status.service.ts",
+          "line": 1,
+          "end_line": 90
+        },
+        {
+          "path": "m2/src/app.ts",
+          "line": 96,
+          "end_line": 97
+        }
+      ],
+      "pos": [
+        940,
+        160
+      ]
+    },
+    {
+      "id": "viajes",
+      "type": "backend",
+      "label": "Historial de viajes",
+      "sublabel": "RF-2.3 · proxy a M6",
+      "sources": [
+        {
+          "path": "m2/src/services/trips.service.ts",
+          "line": 1,
+          "end_line": 48
+        },
+        {
+          "path": "m2/src/clients/m6.client.ts",
+          "line": 60,
+          "end_line": 84
+        }
+      ],
+      "pos": [
+        940,
+        260
+      ]
+    },
+    {
+      "id": "prefs",
+      "type": "backend",
+      "label": "Preferencias internas",
+      "sublabel": "contrato RF8.7 con M8",
+      "sources": [
+        {
+          "path": "m2/src/controllers/internal-preferences.controller.ts",
+          "line": 1,
+          "end_line": 82
+        },
+        {
+          "path": "m2/src/app.ts",
+          "line": 103
+        }
+      ],
+      "pos": [
+        940,
+        460
+      ]
+    },
+    {
+      "id": "direcciones",
+      "type": "backend",
+      "label": "Direcciones frecuentes",
+      "sublabel": "RF-2.2 · idempotencia + outbox",
+      "explanation": "Transacción SERIALIZABLE con reintentos; cada cambio incrementa la revisión del cliente y, si es favorita, escribe FavoriteAddressChanged.v1 en el outbox dentro del mismo commit.",
+      "sources": [
+        {
+          "path": "m2/src/direcciones/service.ts",
+          "line": 20,
+          "end_line": 50
+        },
+        {
+          "path": "m2/src/direcciones/routes.ts",
+          "line": 19,
+          "end_line": 55
+        }
+      ],
+      "pos": [
+        940,
+        580
+      ]
+    },
+    {
+      "id": "calificaciones",
+      "type": "backend",
+      "label": "Calificación de conductor",
+      "sublabel": "RF-2.4",
+      "sources": [
+        {
+          "path": "m2/src/services/calificacion.service.ts",
+          "line": 1,
+          "end_line": 80
+        }
+      ],
+      "pos": [
+        940,
+        680
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "m2-worker",
+      "sublabel": "consumidor de eventos + relay del outbox",
+      "explanation": "Proceso separado de la API. Consume la cola m2.trip-completed (ack manual, retry y DLQ), registra los puntos del viaje y publica el outbox con publisher confirms. Deja un heartbeat en Redis que la API usa en /health.",
+      "sources": [
+        {
+          "path": "m2/src/worker.ts",
+          "line": 22,
+          "end_line": 50
+        },
+        {
+          "path": "m2/src/messaging/broker.ts",
+          "line": 5,
+          "end_line": 40
+        },
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 118,
+          "end_line": 126
+        }
+      ],
+      "pos": [
+        1270,
+        800
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "m2-db",
+      "sublabel": "PostgreSQL 16 · base profiles (propia)",
+      "sources": [
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 139,
+          "end_line": 156
+        },
+        {
+          "path": "m2/prisma/schema.prisma"
+        }
+      ],
+      "pos": [
+        1270,
+        440
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": "compartido · caché con TTL",
+      "sources": [
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 26
+        }
+      ],
+      "pos": [
+        1580,
+        360
+      ]
+    },
+    {
+      "id": "rabbit",
+      "type": "messagebus",
+      "label": "RabbitMQ",
+      "sublabel": "exchange mobility.events",
+      "sources": [
+        {
+          "path": "m2/src/messaging/broker.ts",
+          "line": 5,
+          "end_line": 7
+        }
+      ],
+      "pos": [
+        1580,
+        800
+      ]
+    },
+    {
+      "id": "m1",
+      "type": "security",
+      "label": "M1 Identidad",
+      "sublabel": "otro módulo",
+      "sources": [
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 53
+        }
+      ],
+      "pos": [
+        680,
+        40
+      ]
+    },
+    {
+      "id": "m4",
+      "type": "external",
+      "label": "M4 Ubicación",
+      "sublabel": "otro módulo",
+      "sources": [
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 32
+        }
+      ],
+      "pos": [
+        1580,
+        580
+      ]
+    },
+    {
+      "id": "m6",
+      "type": "external",
+      "label": "M6 Viajes",
+      "sublabel": "otro módulo",
+      "sources": [
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 59
+        }
+      ],
+      "pos": [
+        1580,
+        260
+      ]
+    },
+    {
+      "id": "soporte",
+      "type": "external",
+      "label": "Soporte",
+      "sublabel": "stub interno de M2",
+      "sources": [
+        {
+          "path": "m2/src/clients/soporte.client.ts",
+          "line": 46,
+          "end_line": 61
+        }
+      ],
+      "pos": [
+        1580,
+        160
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "M2 Clientes",
+      "wraps": [
+        "gateway",
+        "auth",
+        "perfil",
+        "estado",
+        "viajes",
+        "prefs",
+        "direcciones",
+        "calificaciones",
+        "worker",
+        "db"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "m2-api (réplicas 1 y 2)",
+      "wraps": [
+        "auth",
+        "perfil",
+        "estado",
+        "viajes",
+        "prefs",
+        "direcciones",
+        "calificaciones"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "web-gw",
+      "from": "m2web",
+      "to": "gateway",
+      "label": "/api/v1 (HTTP)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m8-gw",
+      "from": "m8",
+      "to": "gateway",
+      "label": "/internal/preferences"
+    },
+    {
+      "id": "gw-auth",
+      "from": "gateway",
+      "to": "auth",
+      "label": "reparte pedidos",
+      "variant": "emphasis"
+    },
+    {
+      "id": "auth-m1",
+      "from": "auth",
+      "to": "m1",
+      "label": "valida token (HTTP)",
+      "variant": "security"
+    },
+    {
+      "id": "auth-perfil",
+      "from": "auth",
+      "to": "perfil"
+    },
+    {
+      "id": "auth-estado",
+      "from": "auth",
+      "to": "estado"
+    },
+    {
+      "id": "auth-viajes",
+      "from": "auth",
+      "to": "viajes"
+    },
+    {
+      "id": "auth-prefs",
+      "from": "auth",
+      "to": "prefs"
+    },
+    {
+      "id": "auth-dir",
+      "from": "auth",
+      "to": "direcciones"
+    },
+    {
+      "id": "auth-cal",
+      "from": "auth",
+      "to": "calificaciones"
+    },
+    {
+      "id": "perfil-m1",
+      "from": "perfil",
+      "to": "m1",
+      "label": "datos de identidad"
+    },
+    {
+      "id": "perfil-db",
+      "from": "perfil",
+      "to": "db",
+      "label": "SQL (pg)"
+    },
+    {
+      "id": "perfil-redis",
+      "from": "perfil",
+      "to": "redis",
+      "label": "caché de perfil"
+    },
+    {
+      "id": "estado-soporte",
+      "from": "estado",
+      "to": "soporte",
+      "label": "penalizaciones"
+    },
+    {
+      "id": "estado-db",
+      "from": "estado",
+      "to": "db",
+      "label": "SQL (pg)"
+    },
+    {
+      "id": "viajes-m6",
+      "from": "viajes",
+      "to": "m6",
+      "label": "GET /api/clientes/{id}/viajes"
+    },
+    {
+      "id": "prefs-perfil",
+      "from": "prefs",
+      "to": "perfil",
+      "label": "lee preferencias"
+    },
+    {
+      "id": "dir-m4",
+      "from": "direcciones",
+      "to": "m4",
+      "label": "POST /api/v1/geocode (2 s)"
+    },
+    {
+      "id": "dir-db",
+      "from": "direcciones",
+      "to": "db",
+      "label": "Prisma + outbox",
+      "labelDx": -70
+    },
+    {
+      "id": "dir-redis",
+      "from": "direcciones",
+      "to": "redis",
+      "label": "listas versionadas"
+    },
+    {
+      "id": "cal-m6",
+      "from": "calificaciones",
+      "to": "m6",
+      "label": "valida el viaje"
+    },
+    {
+      "id": "cal-db",
+      "from": "calificaciones",
+      "to": "db",
+      "label": "Prisma"
+    },
+    {
+      "id": "mq-worker",
+      "from": "rabbit",
+      "to": "worker",
+      "label": "trip.completed (m2.trip-completed)",
+      "variant": "dashed"
+    },
+    {
+      "id": "worker-m6",
+      "from": "worker",
+      "to": "m6",
+      "label": "pide origen y destino"
+    },
+    {
+      "id": "worker-db",
+      "from": "worker",
+      "to": "db",
+      "label": "inbox, recientes, lee outbox"
+    },
+    {
+      "id": "worker-mq",
+      "from": "worker",
+      "to": "rabbit",
+      "label": "FavoriteAddressChanged.v1",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Garantías",
+      "items": [
+        "Outbox + publisher confirms: entrega al menos una vez",
+        "Inbox por eventId y deduplicación por viajeId en el worker",
+        "Si M4/M6 caen: 503 explícito, lo guardado sigue disponible"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Fuera del diagrama",
+      "items": [
+        "m2-migrate (job de migraciones Prisma)",
+        "/health, /metrics y stubs de desarrollo"
+      ]
+    }
+  ]
+}

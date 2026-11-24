@@ -27,5 +27,4 @@ db.pathname = `/${get('POSTGRES_DB', 'm8')}`;
 process.env.RECEIPTS_DATABASE_URL ||= db.toString();
 process.env.RABBITMQ_URL ||= required('RABBITMQ_URL');
 process.env.REDIS_URL ||= `redis://127.0.0.1:${get('REDIS_HOST_PORT', '6379')}`;
-process.env.FISCAL_API_URL ||= `http://127.0.0.1:${get('FISCAL_HOST_PORT', '4010')}`;
 process.env.M7_PAYMENTS_URL ||= `http://127.0.0.1:${get('M7_HOST_PORT', '4020')}`;

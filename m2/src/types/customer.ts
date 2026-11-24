@@ -64,7 +64,22 @@ export type BlockOrigin = 'AUTOMATICO' | 'MANUAL';
  */
 export interface UpdateAccountStatusInternalDTO extends UpdateAccountStatusDTO {
   blockOrigin?: BlockOrigin;
+  /**
+   * Fecha de la última revisión manual de Soporte (ISO 8601). Solo se envía al desbloquear
+   * por revisión; si se omite, el repositorio conserva la que ya tenía.
+   */
+  reviewedAt?: string;
 }
+
+/**
+ * Cuerpo de POST /internal/usuarios/:userId/desbloqueo (revisión manual de Soporte, M8).
+ */
+export const DesbloqueoManualSchema = z.object({
+  motivo: z.string().trim().min(3, 'El motivo debe tener al menos 3 caracteres').max(500),
+  operador: z.string().trim().min(1, 'Falta el operador que hizo la revisión').max(100),
+  ticketId: z.string().trim().min(1).max(100).optional()
+}).strict();
+export type DesbloqueoManualDTO = z.infer<typeof DesbloqueoManualSchema>;
 
 // Interfaces del Dominio
 export const CustomerProfileSchema = z.object({
@@ -99,6 +114,11 @@ export interface AccountStatusResponse {
   updatedAt: string;
   /** Origen del bloqueo activo. Solo presente cuando status indica un bloqueo. */
   blockOrigin?: BlockOrigin;
+  /**
+   * Última revisión manual de Soporte. Las penalizaciones con fecha anterior ya fueron
+   * evaluadas por el operador y no vuelven a contar para el bloqueo automático.
+   */
+  reviewedAt?: string;
 }
 
 export interface TripSummary {

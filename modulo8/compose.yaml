@@ -28,7 +28,6 @@ services:
       M2_API_URL: "${M2_API_URL:-http://m2-preferences-sandbox:4012}"
       M2_TIMEOUT_MS: "${M2_TIMEOUT_MS:-3000}"
       M2_INTERNAL_API_KEY: "${M2_INTERNAL_API_KEY:?M2_INTERNAL_API_KEY must be configured}"
-      FISCAL_API_URL: http://fiscal-sandbox:4010
       M7_PAYMENTS_URL: "${M7_PAYMENTS_URL:-http://m7-payments-sandbox:4020}"
       M7_API_KEY: "${M7_API_KEY:-}"
     restart: unless-stopped
@@ -67,16 +66,6 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
-
-  fiscal-sandbox:
-    build:
-      context: ./infra/fiscal-sandbox
-    ports:
-      - "127.0.0.1:${FISCAL_HOST_PORT:-4010}:4010"
-    environment:
-      FISCAL_MODE: "${FISCAL_MODE:-normal}"
-      SLOW_DELAY_MS: "${FISCAL_SLOW_DELAY_MS:-5000}"
-    restart: unless-stopped
 
   m7-payments-sandbox:
     build:

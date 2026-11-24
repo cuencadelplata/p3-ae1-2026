@@ -53,10 +53,21 @@ export async function crearViaje(input: {
       throw new Error(`No se pudo iniciar el viaje: ${inicio.status} ${await inicio.text()}`);
     }
   }
+  if (input.iniciar) await prepararPago(viaje.id);
   return viaje.id;
 }
 
-/** Cuerpo de finalización válido: horaFin es "ahora" y el pago es con tarjeta tokenizada. */
+export async function prepararPago(viajeId: string, tipo = 'tarjeta', estado = 'autorizado'): Promise<void> {
+  const url = process.env.M7_TEST_URL ?? 'http://127.0.0.1:13107';
+  const response = await fetch(`${url}/__fixtures/pagos`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': process.env.M7_API_KEY ?? 'm6-rf-e2e-m7-secret' },
+    body: JSON.stringify({ viajeId, tipo, estado }),
+  });
+  if (!response.ok) throw new Error(`No se pudo preparar el pago de prueba: ${response.status}`);
+}
+
+/** Cuerpo de finalización: la autorización del pago ya debe existir en M7. */
 export function datosFinalizacion(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     origen: { latitude: 0, longitude: 0 },
@@ -64,7 +75,6 @@ export function datosFinalizacion(overrides: Record<string, unknown> = {}): Reco
     tipoVehiculo: 'auto',
     horaFin: new Date().toISOString(),
     metodoPago: 'tarjeta',
-    pago: { token: 'tok-e2e', paymentMethodId: 'visa', email: 'cliente@example.com' },
     ...overrides,
   };
 }

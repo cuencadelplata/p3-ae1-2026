@@ -1,5 +1,12 @@
 import { Pool, type PoolConfig } from 'pg';
 
+export async function ensureDeliveryTokenSchema(pool: Pool): Promise<void> {
+  await pool.query(`ALTER TABLE notification_delivery.device_tokens
+    ALTER COLUMN token TYPE TEXT,
+    ADD COLUMN IF NOT EXISTS user_role TEXT CHECK (user_role IN ('CLIENTE', 'CONDUCTOR', 'OPERADOR'))`);
+  await pool.query('ALTER TABLE notification_delivery.delivery_requests ALTER COLUMN device_token TYPE TEXT');
+}
+
 let poolInstance: Pool | null = null;
 
 export function buildDatabaseUrl(): string {

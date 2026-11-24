@@ -291,6 +291,28 @@ test('NotificationDeliveryService - Suite de Casos Obligatorios RF8.7', async (t
   });
 });
 
+test('un conductor suscrito recibe PUSH sin consultar a M2 y deja de recibirlo al desactivar', async () => {
+  const tokens = new InMemoryDeviceTokenRepository();
+  await tokens.upsertToken(91, 'subscription', 'WEB', 'CONDUCTOR');
+  const preferences = {
+    async getPreferences() { assert.fail('el conductor no consulta preferencias de M2'); },
+  };
+  const provider = new SandboxPushProvider({ mode: 'NORMAL', simulatedDelayMs: 0 });
+  const service = new NotificationDeliveryService(
+    new InMemoryMessagingInboxRepository(), new InMemoryDeliveryRepository(), tokens, preferences, provider,
+    { allowEventDestination: false },
+  );
+  const assignment = createMockEnvelope();
+  assignment.data.eventType = 'DRIVER_ASSIGNED';
+  assert.equal((await service.processNotificationRequest(assignment)).status, 'DELIVERED');
+  await tokens.deactivateToken(91, 'subscription');
+  const cancellation = createMockEnvelope('msg-cancel', 'notif-cancel');
+  cancellation.data.eventType = 'TRIP_CANCELLED';
+  cancellation.data.targetDestination = 'legacy-destination';
+  assert.equal((await service.processNotificationRequest(cancellation)).status, 'FAILED_NO_DEVICE_TOKEN');
+  assert.equal(provider.getSentPushes().length, 1);
+});
+
 test('CustomerNotFound omite PUSH, registra el resultado y completa Inbox sin reintento', async () => {
   const inbox = new InMemoryMessagingInboxRepository();
   const deliveries = new InMemoryDeliveryRepository();

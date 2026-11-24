@@ -1,7 +1,6 @@
 import { env } from '../config/env';
 import { isDatabaseUnavailable } from '../db/errors';
 import { DependencyUnavailableError } from '../errors/dependency-unavailable.error';
-import { FiscalAuthorizationRejectedError } from '../integrations/fiscal-authorizer';
 import { createDriversClient, type DriversClient } from '../integrations/m3-drivers';
 import { createTripsClient, type CompletedTrip, type TripsClient } from '../integrations/m6-trips';
 import { M7_PAYMENT_METHODS, PaymentNotAuthorizedError } from '../integrations/m7-payments';
@@ -151,8 +150,8 @@ function dependencies(): TripCompletedDependencies {
  * Misma idempotencia y clasificacion de errores que payment.confirmed:
  * - messageId ya registrado en la bandeja de entrada: se descarta.
  * - Emision idempotente por tripId (UNIQUE): una reentrega no duplica.
- * - PermanentMessageError (sobre invalido, pago rechazado, rechazo fiscal): DLQ.
- * - DependencyUnavailableError (PostgreSQL, M6, M3, M7 o fiscal sin respuesta):
+ * - PermanentMessageError (sobre invalido, pago rechazado): DLQ.
+ * - DependencyUnavailableError (PostgreSQL, M6, M3 o M7 sin respuesta):
  *   espera sin descontar intentos.
  * - Resto (viaje todavia no visible en M6, datos faltantes en M3, pago
  *   pendiente en M7): transitorio, se reintenta hasta agotar los intentos.
@@ -166,9 +165,6 @@ export async function processTripCompleted(
   } catch (error) {
     if (error instanceof PaymentNotAuthorizedError && !error.retryable) {
       throw new PermanentMessageError('M7 rechazo el pago del viaje', [`${error.code}: ${error.message}`]);
-    }
-    if (error instanceof FiscalAuthorizationRejectedError) {
-      throw new PermanentMessageError('El autorizador fiscal rechazo el comprobante', [`${error.code}: ${error.message}`]);
     }
     if (isDatabaseUnavailable(error)) {
       throw new DependencyUnavailableError('postgres', 'PostgreSQL no esta disponible', 5, { cause: error });

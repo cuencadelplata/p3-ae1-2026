@@ -37,7 +37,7 @@ function runDocker(args) {
 }
 
 const compose = ["compose", "--env-file", envFile];
-const dependencies = ["postgres", "redis", "rabbitmq", "fiscal-sandbox", "m1-identity-sandbox", "m7-payments-sandbox"];
+const dependencies = ["postgres", "redis", "rabbitmq", "m1-identity-sandbox", "m7-payments-sandbox"];
 
 if (mode === "stack") {
   runDocker([...compose, "up", "-d", "--build", "--wait"]);

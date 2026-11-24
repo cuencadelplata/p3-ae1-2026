@@ -94,6 +94,12 @@ export function createM1IdentityValidator(
       );
     }
 
+    // M1 responde 200 con valid: false para un usuario bloqueado o inexistente:
+    // esa identidad no se acepta aunque traiga userId y role.
+    if (typeof body === 'object' && body !== null && (body as { valid?: unknown }).valid !== true) {
+      throw AppError.unauthorized('INVALID_AUTH_TOKEN', 'El usuario no esta habilitado en M1');
+    }
+
     if (!isAuthenticatedUser(body)) {
       throw AppError.unavailable(
         'M1_IDENTITY_INVALID_RESPONSE',
@@ -101,7 +107,7 @@ export function createM1IdentityValidator(
       );
     }
 
-    return body;
+    return { userId: body.userId, role: body.role };
   };
 }
 

@@ -5,7 +5,6 @@ import type { Request, Response } from 'express';
 
 import { isDatabaseUnavailable } from '../../src/db/errors';
 import { DependencyUnavailableError } from '../../src/errors/dependency-unavailable.error';
-import { FiscalAuthorizationRejectedError } from '../../src/integrations/fiscal-authorizer';
 import { PaymentNotAuthorizedError } from '../../src/integrations/m7-payments';
 import { errorHandler } from '../../src/middlewares/error.middleware';
 
@@ -70,18 +69,11 @@ describe('Respuesta HTTP ante dependencias caidas (Unit)', () => {
     assert.equal(res.headers['retry-after'], '5');
   });
 
-  it('el autorizador fiscal caido debe responder 503 FISCAL_SERVICE_UNAVAILABLE', () => {
-    const res = respond(new DependencyUnavailableError('fiscal', 'circuito abierto', 8));
+  it('M6 caido debe responder 503 TRIPS_SERVICE_UNAVAILABLE con el Retry-After indicado', () => {
+    const res = respond(new DependencyUnavailableError('trips', 'circuito abierto', 8));
     assert.equal(res.status, 503);
-    assert.equal(res.body?.error.code, 'FISCAL_SERVICE_UNAVAILABLE');
+    assert.equal(res.body?.error.code, 'TRIPS_SERVICE_UNAVAILABLE');
     assert.equal(res.headers['retry-after'], '8');
-  });
-
-  it('un rechazo del autorizador debe responder 422 con el motivo', () => {
-    const res = respond(new FiscalAuthorizationRejectedError('AMOUNT_LIMIT_EXCEEDED', 'importe excesivo'));
-    assert.equal(res.status, 422);
-    assert.equal(res.body?.error.code, 'FISCAL_AUTHORIZATION_REJECTED');
-    assert.deepEqual(res.body?.error.details, { code: 'AMOUNT_LIMIT_EXCEEDED', message: 'importe excesivo' });
   });
 
   it('la API de pagos de M7 caida debe responder 503 PAYMENTS_SERVICE_UNAVAILABLE', () => {

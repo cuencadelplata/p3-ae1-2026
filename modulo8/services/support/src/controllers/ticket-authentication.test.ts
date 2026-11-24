@@ -24,7 +24,7 @@ let existe: ReturnType<typeof vi.fn<TripVerifier['existe']>>;
 function appCon(identityVerifier?: IdentityVerifier) {
   const tripVerifier: TripVerifier = { existe, isReachable: async () => true };
   const ticketService = new TicketService(new InMemoryTicketRepository(), new NoopSupportEventPublisher(), tripVerifier);
-  return createSupportApp({ ticketService, legacyEvents: true, identityVerifier });
+  return createSupportApp({ ticketService, identityVerifier });
 }
 
 beforeEach(() => {
@@ -204,12 +204,10 @@ describe('autenticación con M1 habilitada: token válido', () => {
 });
 
 describe('alcance de la autenticación', () => {
-  it('POST /events/publish (legacy AE1) y la documentación no exigen Bearer', async () => {
-    const publish = await request(app).post('/events/publish').send({});
+  it('la documentación y el health no exigen Bearer', async () => {
     const docs = await request(app).get('/openapi.json');
     const health = await request(app).get('/health/live');
 
-    expect(publish.status).toBe(400);
     expect(docs.status).toBe(200);
     expect(health.status).toBe(200);
     expect(verificar).not.toHaveBeenCalled();
