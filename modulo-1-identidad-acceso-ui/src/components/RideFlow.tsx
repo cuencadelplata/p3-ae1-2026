@@ -220,7 +220,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   }, [busy, canRestore, token, userId, journey.key, lookupAttempt])
 
   useEffect(() => {
-    if (!rideId || tripId || searchPaused) return
+    if (!rideId || tripId || searchPaused || busy) return
     const path = `/api/v1/ride-requests/${rideId}`
     return pollTrip(async (signal) => {
       try {
@@ -254,7 +254,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
         return false
       }
     })
-  }, [rideId, tripId, searchPaused, token, userId])
+  }, [rideId, tripId, searchPaused, token, userId, busy])
 
   useEffect(() => {
     if (!tripId || busy) return
@@ -347,6 +347,31 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
     setSearchPaused(false)
     setPickMode(null)
     update({ ride: created, route: chosen })
+  }
+
+  async function cancelSearch(reason: string) {
+    if (!rideId) return
+    setBusy('Cancelando búsqueda…')
+    setError('')
+    try {
+      const result = await request<{ status: string }>('M5', `/api/v1/ride-requests/${encodeURIComponent(rideId)}/cancel`, {
+        method: 'POST', token, body: { reason },
+      })
+      if (result.status !== 'CANCELLED') throw new Error('M5 no confirmó la cancelación de la búsqueda.')
+      setJourney((previous) => previous.ride?.id === rideId && !previous.trip
+        ? { ...previous, ride: { ...previous.ride, status: 'CANCELLED' }, qr: undefined }
+        : previous)
+      setSearchPaused(false)
+    } catch (err) {
+      if (err instanceof FlowError && err.code === 'REQUEST_ALREADY_ASSIGNED') {
+        const current = await request<RideRequest>('M5', `/api/v1/ride-requests/${encodeURIComponent(rideId)}`, { token })
+        update({ ride: current })
+        setError('Un conductor aceptó mientras cancelabas. Cuando cargue el viaje, podés cancelarlo desde esta pantalla.')
+      }
+      throw err
+    } finally {
+      setBusy('')
+    }
   }
 
   async function prepareStart(id: string) {
@@ -496,6 +521,9 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
                 {!requestClosed && !searchPaused && <p role="status">{assigned ? 'Estamos cargando tu viaje…' : 'El viaje se asigna cuando un conductor disponible acepta la oferta.'}</p>}
                 {!requestClosed && !assigned && requestSeconds > 0 && <p className="ride-muted">Tiempo de búsqueda {requestSeconds} s</p>}
                 {searchPaused && !requestClosed && <button className="btn-primary" onClick={() => { setError(''); setSearchPaused(false) }}>{assigned ? 'Reintentar consulta' : 'Reintentar búsqueda'}</button>}
+                {!requestClosed && !assigned && <TripCancellation key={`request-${ride.id}`}
+                  trip={{ id: ride.id, estado: 'SOLICITADO', origen: shown?.origin.address ?? 'Origen elegido', destino: shown?.destination.address ?? 'Destino elegido' }}
+                  actor="cliente" token={token} disabled={locked} requestCancellation={cancelSearch} />}
                 {requestClosed && <button className="btn-primary" onClick={reset}>Volver a solicitar</button>}
               </>}
 
@@ -515,7 +543,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
                     </>}
               </>}
 
-              {trip && !checkingTrip && ['SOLICITADO', 'CONDUCTOR_EN_CAMINO'].includes(trip.estado) &&
+              {trip && !checkingTrip && ['SOLICITADO', 'ASIGNADO', 'CONDUCTOR_EN_CAMINO', 'ARRIBADO', 'EN_CURSO'].includes(trip.estado) &&
                 <TripCancellation key={trip.id} trip={trip} actor="cliente" token={token} disabled={locked}
                   onCancelled={(cancelledTrip) => update({ trip: cancelledTrip, qr: undefined, payment: undefined, receipt: undefined })} />}
 

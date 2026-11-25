@@ -495,7 +495,7 @@ export async function cancelarSiCancelable(
             return null;
         }
         const estadoAnterior = current.rows[0].estado as string;
-        if (![EstadoViaje.SOLICITADO, EstadoViaje.CONDUCTOR_EN_CAMINO].includes(estadoAnterior as EstadoViaje)) {
+        if (![EstadoViaje.SOLICITADO, EstadoViaje.ASIGNADO, EstadoViaje.CONDUCTOR_EN_CAMINO, EstadoViaje.ARRIBADO, EstadoViaje.EN_CURSO].includes(estadoAnterior as EstadoViaje)) {
             await client.query('COMMIT');
             return null;
         }

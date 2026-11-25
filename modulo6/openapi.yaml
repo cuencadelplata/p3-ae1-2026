@@ -221,7 +221,7 @@ paths:
     patch:
       tags: [Integración RF-6]
       summary: Cancelar un viaje en la API central
-      description: Cancela atómicamente un viaje SOLICITADO o CONDUCTOR_EN_CAMINO. La API de cancelaciones M6 además publica su evento correspondiente.
+      description: Permite a cliente y conductor cancelar atómicamente un viaje en SOLICITADO, ASIGNADO, CONDUCTOR_EN_CAMINO, ARRIBADO o EN_CURSO. COMPLETADO y CANCELADO son estados terminales. La API de cancelaciones M6 además publica su evento correspondiente.
       operationId: cancelarViajeCentral
       parameters:
         - $ref: '#/components/parameters/ViajeId'
