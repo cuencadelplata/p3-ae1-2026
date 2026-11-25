@@ -1,0 +1,10 @@
+node_modules
+.env
+.env.*
+**/.env
+**/.env.*
+dist
+coverage
+.git
+performance/results
+observability/resultados
