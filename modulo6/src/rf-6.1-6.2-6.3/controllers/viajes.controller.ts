@@ -499,7 +499,7 @@ function parametroEntero(value: unknown, nombre: string, defecto: number, min: n
     return numero;
 }
 
-/** RF-6.7: GET /api/viajes?clienteId=&conductorId=&estado=&limit=&offset= */
+/** RF-6.7: GET /api/viajes?clienteId=&conductorId=&rideRequestId=&estado=&limit=&offset= */
 export const listarRegistroViajes = async (req: Request, res: Response): Promise<any> => {
     let filtros: viajeRepo.FiltrosRegistroViajes;
     try {
@@ -510,6 +510,7 @@ export const listarRegistroViajes = async (req: Request, res: Response): Promise
         filtros = {
             clienteId: parametroTexto(req.query.clienteId, 'clienteId'),
             conductorId: parametroTexto(req.query.conductorId, 'conductorId'),
+            rideRequestId: parametroTexto(req.query.rideRequestId, 'rideRequestId'),
             estado: estado as EstadoViaje | undefined,
             limit: parametroEntero(req.query.limit, 'limit', 20, 1, 100),
             offset: parametroEntero(req.query.offset, 'offset', 0, 0, 1_000_000),

@@ -512,7 +512,8 @@ export class RideRequestService {
     }
 
     // 3. Candado atómico en Redis (RNF-09): SET NX EX evita dos solicitudes activas del mismo cliente
-    const lockAcquired = await this.redisService.acquireClientActiveLock(clientId, 'PENDING_INIT', 180);
+    const lockAcquired = await this.redisService.acquireClientActiveLock(clientId, 'PENDING_INIT', 180)
+      || await this.acquireAfterCompletedTrip(clientId);
     if (!lockAcquired) {
       throw new ConflictError(
         'El cliente ya posee una solicitud de viaje en curso',
@@ -622,6 +623,27 @@ export class RideRequestService {
       // Si la creación falló después de tomar el candado, no dejar al cliente bloqueado 3 minutos
       await this.redisService.releaseClientActiveLock(clientId);
       throw error;
+    }
+  }
+
+  private async acquireAfterCompletedTrip(clientId: string): Promise<boolean> {
+    const requestId = await this.redisService.getActiveRequestIdForClient(clientId);
+    if (!requestId || requestId === 'PENDING_INIT') return false;
+
+    try {
+      const active = await this.getRideRequestById(requestId, clientId);
+      if (active.status !== 'ASSIGNED') return false;
+      const baseUrl = process.env.M6_SERVICE_URL || 'http://m6-viajes:3000';
+      const query = new URLSearchParams({ clienteId: clientId, rideRequestId: requestId, estado: 'COMPLETADO', limit: '1' });
+      const response = await fetch(`${baseUrl}/api/viajes?${query}`, { signal: AbortSignal.timeout(2000) });
+      if (!response.ok) return false;
+      const result = await response.json() as { viajes?: Array<{ clienteId?: string; rideRequestId?: string; estado?: string }> };
+      if (!result.viajes?.some(trip => trip.clienteId === clientId && trip.rideRequestId === requestId && trip.estado === 'COMPLETADO')) {
+        return false;
+      }
+      return await this.redisService.replaceCompletedClientLock(clientId, requestId, 180);
+    } catch {
+      return false;
     }
   }
 

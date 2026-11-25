@@ -74,6 +74,7 @@ paths:
       parameters:
         - { name: clienteId, in: query, required: false, schema: { type: string, maxLength: 50 } }
         - { name: conductorId, in: query, required: false, schema: { type: string, maxLength: 50 } }
+        - { name: rideRequestId, in: query, required: false, schema: { type: string, maxLength: 50 } }
         - name: estado
           in: query
           required: false

@@ -588,6 +588,28 @@ export class RedisService {
     });
   }
 
+  /** Reserva la nueva solicitud solamente si el candado sigue siendo del viaje comprobado. */
+  public async replaceCompletedClientLock(clientId: string, completedRequestId: string, ttlSeconds: number): Promise<boolean> {
+    const key = `m5:active_client:${clientId}`;
+    if (this.isConnected && this.client) {
+      try {
+        const result = await this.client.eval(
+          "local value = redis.call('GET', KEYS[1]); if value and value ~= ARGV[1] then return 0 end; redis.call('SET', KEYS[1], 'PENDING_INIT', 'EX', ARGV[2]); return 1",
+          1, key, completedRequestId, ttlSeconds,
+        );
+        return result === 1;
+      } catch {
+        return false;
+      }
+    }
+
+    const item = this.fallbackMemory.get(key);
+    const now = Date.now();
+    if (item && (!item.expiresAt || item.expiresAt > now) && item.value !== completedRequestId) return false;
+    this.fallbackMemory.set(key, { value: 'PENDING_INIT', expiresAt: now + ttlSeconds * 1000 });
+    return true;
+  }
+
   /**
    * Invalida y libera explícitamente el candado de solicitud activa del cliente
    */

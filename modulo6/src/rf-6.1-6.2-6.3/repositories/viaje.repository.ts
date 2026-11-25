@@ -381,6 +381,7 @@ export async function estadisticasTripDb(): Promise<{
 export interface FiltrosRegistroViajes {
     clienteId?: string;
     conductorId?: string;
+    rideRequestId?: string;
     estado?: EstadoViaje;
     limit: number;
     offset: number;
@@ -402,6 +403,7 @@ export async function buscarRegistroViajes(
     };
     if (filtros.clienteId) agregar('viajes.cliente_id = ?', filtros.clienteId);
     if (filtros.conductorId) agregar('viajes.conductor_id = ?', filtros.conductorId);
+    if (filtros.rideRequestId) agregar('viajes.ride_request_id = ?', filtros.rideRequestId);
     if (filtros.estado) agregar('viajes.estado = ?', filtros.estado);
     const where = condiciones.length > 0 ? `WHERE ${condiciones.join(' AND ')}` : '';
 
@@ -426,6 +428,7 @@ async function conHistorial(rows: any[]): Promise<ViajeConHistorial[]> {
         return {
             id: viaje.id,
             clienteId: viaje.clienteId,
+            ...(viaje.rideRequestId ? { rideRequestId: viaje.rideRequestId } : {}),
             ...(viaje.conductorId ? { conductorId: viaje.conductorId } : {}),
             estado: viaje.estado,
             origen: viaje.origen,
