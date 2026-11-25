@@ -145,7 +145,8 @@ export class InMemoryTicketRepository implements TicketRepository {
     return this.historial.filter(entrada => entrada.ticketId === ticketId).map(entrada => ({ ...entrada }));
   }
 
-  async listar({ tripId, autor, estado, limit, despuesDe }: FiltroDeTickets): Promise<Ticket[]> {
+  async listar({ tripId, autor, estado, orden = 'desc', limit, despuesDe }: FiltroDeTickets): Promise<Ticket[]> {
+    const direccion = orden === 'asc' ? 1 : -1;
     const propios = autor === undefined ? undefined : new Set(
       this.historial.filter(entrada => entrada.estadoAnterior === null && entrada.cambiadoPor === autor)
         .map(entrada => entrada.ticketId),
@@ -154,8 +155,8 @@ export class InMemoryTicketRepository implements TicketRepository {
       .filter(ticket => tripId === undefined || ticket.tripId === tripId)
       .filter(ticket => propios === undefined || propios.has(ticket.id))
       .filter(ticket => estado === undefined || ticket.estado === estado)
-      .sort((a, b) => compararPosicion(b, a))
-      .filter(ticket => despuesDe === undefined || compararPosicion(ticket, despuesDe) < 0)
+      .sort((a, b) => direccion * compararPosicion(a, b))
+      .filter(ticket => despuesDe === undefined || direccion * compararPosicion(ticket, despuesDe) > 0)
       .slice(0, limit)
       .map(ticket => ({ ...ticket }));
   }

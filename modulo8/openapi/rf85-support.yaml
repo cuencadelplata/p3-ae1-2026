@@ -171,12 +171,11 @@ paths:
         - {}
         - bearerAuth: []
       description: |
-        Devuelve un array de tickets ordenado por fecha de creación
-        descendente y, a igual fecha, por id descendente. El orden es estable:
-        un ticket creado entre dos páginas no altera las siguientes.
+        Ordena por fecha de creación y, a igual fecha, por id en la misma
+        dirección. El orden predeterminado es del más nuevo al más antiguo.
 
         Si hay más resultados, la respuesta incluye la cabecera
-        `X-Next-Cursor`; enviarla como `cursor` devuelve la página siguiente.
+        `X-Next-Cursor`; enviarla como `cursor` con el mismo orden devuelve la página siguiente.
         Sin esa cabecera no hay más páginas.
 
         Un parámetro presente pero vacío, repetido o fuera de rango responde
@@ -209,6 +208,7 @@ paths:
             minimum: 1
             maximum: 100
             default: 50
+        - $ref: '#/components/parameters/TicketOrder'
         - name: cursor
           in: query
           description: Valor opaco recibido en `X-Next-Cursor` de la página anterior.
@@ -270,6 +270,7 @@ paths:
         - in: query
           name: cursor
           schema: { type: string }
+        - $ref: '#/components/parameters/TicketOrder'
       responses:
         '200':
           description: Página de tickets propios.
@@ -357,6 +358,10 @@ paths:
         actual; si no, responde `409` `SUPPORT_CONCURRENCY_CONFLICT`, también
         cuando se pide el mismo estado. Sin `expectedVersion`, dos cambios
         simultáneos tampoco se aplican los dos: uno responde `409`.
+
+        Con `registrarRespuesta: true`, el operador puede publicar `motivo`
+        como respuesta visible en el historial aunque conserve el estado.
+        La respuesta requiere `expectedVersion`.
 
         Cada cambio real agrega una entrada al historial. El autor es
         `m1:<userId>` si la autenticación con M1 está habilitada; si no, el
@@ -453,7 +458,7 @@ paths:
   /tickets/{id}/historial:
     get:
       tags: [Tickets (RF8.5)]
-      summary: Devuelve el historial de estados de un ticket
+      summary: Devuelve el historial de estados y mensajes de un ticket
       operationId: obtenerHistorial
       security:
         - {}
@@ -499,6 +504,59 @@ paths:
           $ref: '#/components/responses/NoAutenticado'
         '403':
           $ref: '#/components/responses/SinPermiso'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/BaseNoDisponible'
+
+  /tickets/{id}/mensajes:
+    post:
+      tags: [Tickets (RF8.5)]
+      summary: Agrega un mensaje a la conversación de soporte
+      operationId: enviarMensaje
+      security:
+        - bearerAuth: []
+      description: Disponible para el creador y los operadores. El mensaje se agrega al historial y aumenta la versión del ticket.
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [texto, expectedVersion]
+              properties:
+                texto: { type: string, minLength: 1, maxLength: 2000 }
+                expectedVersion: { type: integer, minimum: 1 }
+      responses:
+        '201':
+          description: Mensaje persistido y ticket actualizado.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/ErrorDeValidacion'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '404':
+          $ref: '#/components/responses/TicketNoEncontrado'
+        '409':
+          description: El ticket cambió desde la última lectura.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '503':
@@ -659,6 +717,14 @@ components:
         Token emitido por M1 (`POST /auth/iniciar-sesion`). Sólo se exige con
         `SUPPORT_M1_IDENTITY_URL` definida.
   parameters:
+    TicketOrder:
+      in: query
+      name: orden
+      description: 'asc muestra las consultas más antiguas primero. desc muestra las más nuevas primero.'
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
     TicketId:
       name: id
       in: path
@@ -989,6 +1055,9 @@ components:
             Motivo del cambio; queda en el historial. Obligatorio y no vacío
             para reabrir un ticket (`RESUELTO` → `ABIERTO`).
           example: El problema volvió a ocurrir
+        registrarRespuesta:
+          type: boolean
+          description: Registrar motivo como respuesta de soporte, incluso si se mantiene el estado.
         expectedVersion:
           type: integer
           minimum: 1

@@ -352,6 +352,51 @@ describe('permisos por rol con M1 habilitada', () => {
     expect(cambio.body.estado).toBe('EN_PROCESO');
   });
 
+  it('el operador responde sin cambiar el estado y sólo el creador puede leer la respuesta', async () => {
+    const id = await crearComo(CLIENTE_7);
+    const payload = { estado: 'ABIERTO', motivo: 'Revisamos el viaje.', expectedVersion: 1, registrarRespuesta: true };
+    verificar.mockResolvedValueOnce(CLIENTE_7);
+    const propia = await request(app).patch(`/tickets/${id}/estado`).set('Authorization', TOKEN).send(payload);
+    expect(propia.status).toBe(403);
+    verificar.mockResolvedValueOnce(OPERADOR_9);
+    const respuesta = await request(app).patch(`/tickets/${id}/estado`).set('Authorization', TOKEN).send(payload);
+    expect(respuesta.status).toBe(200);
+    expect(respuesta.body).toMatchObject({ estado: 'ABIERTO', version: 2 });
+    verificar.mockResolvedValueOnce(OPERADOR_9);
+    const reintento = await request(app).patch(`/tickets/${id}/estado`).set('Authorization', TOKEN).send(payload);
+    expect(reintento.status).toBe(409);
+    verificar.mockResolvedValueOnce(CLIENTE_7);
+    const historial = await request(app).get(`/tickets/${id}/historial`).set('Authorization', TOKEN);
+    expect(historial.status).toBe(200);
+    expect(historial.body.filter((entrada: { motivo: string }) => entrada.motivo === payload.motivo)).toHaveLength(1);
+    verificar.mockResolvedValueOnce(CLIENTE_42);
+    const ajeno = await request(app).get(`/tickets/${id}/historial`).set('Authorization', TOKEN);
+    expect(ajeno.status).toBe(403);
+  });
+
+  it('el creador y soporte conversan en el mismo ticket sin compartirlo con otro cliente', async () => {
+    const id = await crearComo(CLIENTE_7);
+    const ruta = `/tickets/${id}/mensajes`;
+    async function enviar(usuario: typeof CLIENTE_7 | typeof OPERADOR_9, texto: string, expectedVersion: number) {
+      verificar.mockResolvedValueOnce(usuario);
+      return request(app).post(ruta).set('Authorization', TOKEN).send({ texto, expectedVersion });
+    }
+    expect((await request(app).post(ruta).send({ texto: 'Hola', expectedVersion: 1 })).status).toBe(401);
+    expect((await enviar(CLIENTE_42, 'Acceso ajeno', 1)).status).toBe(403);
+    expect((await enviar(CLIENTE_7, '   ', 1)).status).toBe(400);
+    expect((await enviar(OPERADOR_9, '¿Podés darme más detalles?', 1)).status).toBe(201);
+    const respuesta = await enviar(CLIENTE_7, 'El viaje se cobró dos veces.', 2);
+    expect(respuesta.status).toBe(201);
+    expect(respuesta.body).toMatchObject({ estado: 'ABIERTO', version: 3 });
+    expect((await enviar(CLIENTE_7, 'El viaje se cobró dos veces.', 2)).status).toBe(409);
+    verificar.mockResolvedValueOnce(OPERADOR_9);
+    const historial = await request(app).get(`/tickets/${id}/historial`).set('Authorization', TOKEN);
+    expect(historial.body.slice(1)).toMatchObject([
+      { cambiadoPor: 'm1:9', motivo: '¿Podés darme más detalles?' },
+      { cambiadoPor: 'm1:7', motivo: 'El viaje se cobró dos veces.' },
+    ]);
+  });
+
   it('un ticket inexistente sigue respondiendo 404 a un cliente', async () => {
     const res = await request(app).get('/tickets/no-existe').set('Authorization', TOKEN);
 

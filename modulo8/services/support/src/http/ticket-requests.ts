@@ -1,5 +1,6 @@
 import { validationError, type ErrorDetail } from '../errors/support-error.js';
 import type { TicketStatus } from '../models/ticket.model.js';
+import type { OrdenDeTickets } from '../repositories/ticket.repository.js';
 
 const ESTADOS_VALIDOS: TicketStatus[] = ['ABIERTO', 'EN_PROCESO', 'RESUELTO'];
 
@@ -52,8 +53,9 @@ export function leerCambioDeEstado(body: unknown): {
   estado: TicketStatus;
   motivo: string | null;
   expectedVersion?: number;
+  registrarRespuesta: boolean;
 } {
-  const { estado, motivo, expectedVersion } = comoObjeto(body);
+  const { estado, motivo, expectedVersion, registrarRespuesta } = comoObjeto(body);
 
   const details: ErrorDetail[] = [];
   if (!ESTADOS_VALIDOS.includes(estado as TicketStatus)) {
@@ -65,6 +67,12 @@ export function leerCambioDeEstado(body: unknown): {
   if (expectedVersion !== undefined && !(Number.isInteger(expectedVersion) && (expectedVersion as number) >= 1)) {
     details.push({ field: 'expectedVersion', reason: 'Debe ser un entero positivo.' });
   }
+  if (registrarRespuesta !== undefined && typeof registrarRespuesta !== 'boolean') {
+    details.push({ field: 'registrarRespuesta', reason: 'Debe ser un booleano.' });
+  }
+  if (registrarRespuesta === true && (!esTextoNoVacio(motivo) || expectedVersion === undefined)) {
+    details.push({ field: 'registrarRespuesta', reason: 'Una respuesta requiere texto y la versión actual del ticket.' });
+  }
   if (details.length > 0) {
     throw validationError(details);
   }
@@ -73,7 +81,21 @@ export function leerCambioDeEstado(body: unknown): {
     estado: estado as TicketStatus,
     motivo: esTextoNoVacio(motivo) ? motivo : null,
     expectedVersion: expectedVersion as number | undefined,
+    registrarRespuesta: registrarRespuesta === true,
   };
+}
+
+export function leerMensaje(body: unknown): { texto: string; expectedVersion: number } {
+  const { texto, expectedVersion } = comoObjeto(body);
+  const details: ErrorDetail[] = [];
+  if (!esTextoNoVacio(texto) || texto.trim().length > 2000) {
+    details.push({ field: 'texto', reason: 'Escribí un mensaje de entre 1 y 2000 caracteres.' });
+  }
+  if (!Number.isInteger(expectedVersion) || (expectedVersion as number) < 1) {
+    details.push({ field: 'expectedVersion', reason: 'Debe ser un entero positivo.' });
+  }
+  if (details.length) throw validationError(details);
+  return { texto: (texto as string).trim(), expectedVersion: expectedVersion as number };
 }
 
 export const LIMITE_MAXIMO = 100;
@@ -83,14 +105,18 @@ export const LIMITE_MAXIMO = 100;
 export function leerConsultaDeTickets(query: unknown): {
   tripId?: string;
   estado?: TicketStatus;
+  orden?: OrdenDeTickets;
   limit?: number;
   cursor?: string;
 } {
-  const { tripId, viajeId, estado, limit, cursor } = comoObjeto(query);
+  const { tripId, viajeId, estado, orden, limit, cursor } = comoObjeto(query);
 
   const details: ErrorDetail[] = tripId === undefined && viajeId === undefined ? [] : validarTripId(tripId, viajeId);
   if (estado !== undefined && !ESTADOS_VALIDOS.includes(estado as TicketStatus)) {
     details.push({ field: 'estado', reason: 'Valores permitidos: ABIERTO, EN_PROCESO, RESUELTO.' });
+  }
+  if (orden !== undefined && orden !== 'asc' && orden !== 'desc') {
+    details.push({ field: 'orden', reason: 'Valores permitidos: asc, desc.' });
   }
   const limite = typeof limit === 'string' && /^[0-9]+$/.test(limit) ? Number(limit) : NaN;
   if (limit !== undefined && !(limite >= 1 && limite <= LIMITE_MAXIMO)) {
@@ -106,6 +132,7 @@ export function leerConsultaDeTickets(query: unknown): {
   return {
     tripId: (tripId ?? viajeId) as string | undefined,
     estado: estado as TicketStatus | undefined,
+    orden: orden as OrdenDeTickets | undefined,
     limit: limit === undefined ? undefined : limite,
     cursor: cursor as string | undefined,
   };

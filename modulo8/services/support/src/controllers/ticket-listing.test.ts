@@ -48,6 +48,31 @@ async function recorrerPaginas(query: Record<string, string>) {
 }
 
 describe('GET /tickets: orden', () => {
+  it.each(['asc', 'desc'] as const)('aplica el filtro y el orden %s a todas las páginas, incluso con fechas iguales', async (orden) => {
+    const [a, b] = await crearEnOrden(['trip-x', 'trip-x']);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(b.fechaCreacion));
+    const c = await repository.crear('trip-x', 'Consulta con la misma fecha');
+    const excluido = await repository.crear('trip-x', 'Resuelto');
+    await repository.actualizarEstado(excluido.id, 'RESUELTO');
+    vi.useRealTimers();
+    const empatados = [b.id, c.id].sort();
+    const esperados = [a.id, ...empatados];
+    if (orden === 'desc') esperados.reverse();
+
+    const paginas = await recorrerPaginas({ orden, estado: 'ABIERTO', limit: '1' });
+    expect(paginas.map(pagina => pagina.map(ticket => ticket.id))).toEqual(esperados.map(id => [id]));
+  });
+
+  it('rechaza un orden desconocido y un cursor en la dirección opuesta', async () => {
+    await crearEnOrden(['trip-a', 'trip-b']);
+    const pagina = await listar({ orden: 'asc', limit: '1' });
+    expect((await listar({ orden: 'desc', cursor: pagina.headers['x-next-cursor'] })).status).toBe(400);
+    const invalido = await listar({ orden: 'otro' });
+    expect(invalido.status).toBe(400);
+    expect(invalido.body.error.details[0].field).toBe('orden');
+  });
+
   it('devuelve un array con los tickets más recientes primero', async () => {
     const [a, b, c] = await crearEnOrden(['trip-a', 'trip-b', 'trip-c']);
 

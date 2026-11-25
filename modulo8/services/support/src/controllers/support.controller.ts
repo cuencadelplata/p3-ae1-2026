@@ -5,6 +5,7 @@ import {
   leerCambioDeEstado,
   leerConsultaDeTickets,
   leerIdempotencyKey,
+  leerMensaje,
   leerNuevoTicket,
 } from '../http/ticket-requests.js';
 import { TicketService } from '../services/ticket.service.js';
@@ -53,10 +54,10 @@ export function createSupportController({ ticketService }: SupportControllerDeps
     // Endpoint: PATCH /tickets/:id/estado
     async actualizarEstado(req: Request, res: Response) {
       const id = req.params.id as string;
-      const { estado, motivo, expectedVersion } = leerCambioDeEstado(req.body);
+      const { estado, motivo, expectedVersion, registrarRespuesta } = leerCambioDeEstado(req.body);
       const actor = actorDelPedido(req, res);
 
-      const ticketActualizado = await ticketService.actualizarEstado(id, estado, { actor, motivo, expectedVersion });
+      const ticketActualizado = await ticketService.actualizarEstado(id, estado, { actor, motivo, expectedVersion }, registrarRespuesta);
 
       res.json(ticketActualizado);
     },
@@ -67,6 +68,14 @@ export function createSupportController({ ticketService }: SupportControllerDeps
       const historial = await ticketService.obtenerHistorial(id);
 
       res.json(historial);
+    },
+
+    async enviarMensaje(req: Request, res: Response) {
+      const actor = res.locals.actor;
+      if (typeof actor !== 'string') throw invalidToken();
+      const { texto, expectedVersion } = leerMensaje(req.body);
+      const ticket = await ticketService.enviarMensaje(String(req.params.id), texto, actor, expectedVersion);
+      res.status(201).json(ticket);
     },
 
     // Endpoint: GET /tickets?tripId=&estado=&limit=&cursor=

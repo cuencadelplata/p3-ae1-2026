@@ -32,6 +32,7 @@ const TICKET_ROUTES = [
   { method: 'get', path: '/:id', handler: 'obtenerTicket', permiso: 'operadorOCreador' },
   { method: 'patch', path: '/:id/estado', handler: 'actualizarEstado', permiso: 'operador' },
   { method: 'get', path: '/:id/historial', handler: 'obtenerHistorial', permiso: 'operadorOCreador' },
+  { method: 'post', path: '/:id/mensajes', handler: 'enviarMensaje', permiso: 'operadorOCreador' },
   { method: 'get', path: '/', handler: 'listarTodos', permiso: 'operador' },
 ] as const;
 
@@ -126,6 +127,7 @@ export function createSupportApp(deps: SupportAppDeps): Express {
         'GET /tickets/:id',
         'PATCH /tickets/:id/estado',
         'GET /tickets/:id/historial',
+        'POST /tickets/:id/mensajes',
       ]
     });
   });

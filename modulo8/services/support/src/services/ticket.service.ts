@@ -15,6 +15,7 @@ import { IdempotencyKeyConflictError, TicketVersionConflictError } from '../repo
 import type {
   CambioDeEstado,
   OpcionesDeCreacion,
+  OrdenDeTickets,
   PosicionDeListado,
   TicketRepository,
 } from '../repositories/ticket.repository.js';
@@ -28,6 +29,7 @@ export interface ConsultaDeTickets {
   tripId?: string;
   autor?: string;
   estado?: TicketStatus;
+  orden?: OrdenDeTickets;
   limit?: number;
   cursor?: string;
 }
@@ -37,14 +39,14 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // El cursor es opaco para el cliente: codifica la posición del último ticket
 // de la página.
-function codificarCursor({ fechaCreacion, id }: PosicionDeListado): string {
-  return Buffer.from(JSON.stringify([fechaCreacion, id])).toString('base64url');
+function codificarCursor({ fechaCreacion, id }: PosicionDeListado, orden: OrdenDeTickets): string {
+  return Buffer.from(JSON.stringify([fechaCreacion, id, orden])).toString('base64url');
 }
 
-function decodificarCursor(cursor: string): PosicionDeListado {
+function decodificarCursor(cursor: string, orden: OrdenDeTickets): PosicionDeListado {
   try {
-    const [fechaCreacion, id] = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
-    if (typeof fechaCreacion === 'string' && typeof id === 'string' && UUID.test(id) && !Number.isNaN(Date.parse(fechaCreacion))) {
+    const [fechaCreacion, id, ordenDelCursor = 'desc'] = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (ordenDelCursor === orden && typeof fechaCreacion === 'string' && typeof id === 'string' && UUID.test(id) && !Number.isNaN(Date.parse(fechaCreacion))) {
       return { fechaCreacion, id };
     }
   } catch {
@@ -130,7 +132,7 @@ export class TicketService {
     return ticket;
   }
 
-  async actualizarEstado(id: string, nuevoEstado: TicketStatus, cambio: CambioDeEstado = {}): Promise<Ticket> {
+  async actualizarEstado(id: string, nuevoEstado: TicketStatus, cambio: CambioDeEstado = {}, registrarRespuesta = false): Promise<Ticket> {
     const ticket = await this.obtenerTicket(id);
 
     // El cliente decidió sobre una versión que ya no es la actual.
@@ -141,11 +143,11 @@ export class TicketService {
     // Mismo estado: operación sin efecto. No deja historial, no sube la
     // versión ni publica evento, así un cliente puede reintentar el pedido
     // sin duplicar nada.
-    if (ticket.estado === nuevoEstado) {
+    if (ticket.estado === nuevoEstado && !registrarRespuesta) {
       return ticket;
     }
 
-    if (!TRANSICIONES_PERMITIDAS[ticket.estado].includes(nuevoEstado)) {
+    if (ticket.estado !== nuevoEstado && !TRANSICIONES_PERMITIDAS[ticket.estado].includes(nuevoEstado)) {
       throw invalidTransition(ticket.estado, nuevoEstado);
     }
     if (ticket.estado === 'RESUELTO' && nuevoEstado === 'ABIERTO' && !cambio.motivo) {
@@ -161,6 +163,14 @@ export class TicketService {
     }
     await this.eventPublisher.publish('ticket.actualizado', ticketActualizado);
     return ticketActualizado;
+  }
+
+  async enviarMensaje(id: string, texto: string, actor: string, expectedVersion: number): Promise<Ticket> {
+    const ticket = await this.obtenerTicket(id);
+    if (ticket.version !== expectedVersion) throw concurrencyConflict();
+    const actualizado = await this.cambiarEstadoSiSigueEn(ticket, ticket.estado, { actor, motivo: texto });
+    if (!actualizado) throw ticketNotFound();
+    return actualizado;
   }
 
   private async cambiarEstadoSiSigueEn(ticket: Ticket, nuevoEstado: TicketStatus, cambio: CambioDeEstado) {
@@ -184,13 +194,15 @@ export class TicketService {
 
   async listarTickets(consulta: ConsultaDeTickets = {}): Promise<{ tickets: Ticket[]; siguienteCursor?: string }> {
     const limit = consulta.limit ?? LIMITE_POR_DEFECTO;
-    const despuesDe = consulta.cursor === undefined ? undefined : decodificarCursor(consulta.cursor);
+    const orden = consulta.orden ?? 'desc';
+    const despuesDe = consulta.cursor === undefined ? undefined : decodificarCursor(consulta.cursor, orden);
 
     // Se pide uno de más para saber si hay otra página.
     const encontrados = await this.repository.listar({
       tripId: consulta.tripId,
       autor: consulta.autor,
       estado: consulta.estado,
+      orden,
       limit: limit + 1,
       despuesDe,
     });
@@ -199,6 +211,6 @@ export class TicketService {
     }
 
     const tickets = encontrados.slice(0, limit);
-    return { tickets, siguienteCursor: codificarCursor(tickets[tickets.length - 1]) };
+    return { tickets, siguienteCursor: codificarCursor(tickets[tickets.length - 1], orden) };
   }
 }

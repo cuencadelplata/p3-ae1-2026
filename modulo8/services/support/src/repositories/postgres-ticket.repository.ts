@@ -236,17 +236,20 @@ export class PostgresTicketRepository implements TicketRepository {
 
   // Paginación por posición (created_at, id): estable aunque se creen tickets
   // entre una página y la siguiente.
-  async listar({ tripId, autor, estado, limit, despuesDe }: FiltroDeTickets): Promise<Ticket[]> {
+  async listar({ tripId, autor, estado, orden = 'desc', limit, despuesDe }: FiltroDeTickets): Promise<Ticket[]> {
+    const ascendente = orden === 'asc';
+    const direccion = ascendente ? 'ASC' : 'DESC';
+    const comparador = ascendente ? '>' : '<';
     const { rows } = await this.query<TicketRow>(
       `SELECT * FROM ${this.tickets} AS ticket
         WHERE ($1::text IS NULL OR trip_id = $1)
           AND ($2::text IS NULL OR status = $2)
-          AND ($3::timestamptz IS NULL OR (created_at, id) < ($3::timestamptz, $4::uuid))
+          AND ($3::timestamptz IS NULL OR (created_at, id) ${comparador} ($3::timestamptz, $4::uuid))
           AND ($6::text IS NULL OR EXISTS (
             SELECT 1 FROM ${this.history} AS history
             WHERE history.ticket_id = ticket.id AND history.from_status IS NULL AND history.changed_by = $6
           ))
-        ORDER BY created_at DESC, id DESC
+        ORDER BY created_at ${direccion}, id ${direccion}
         LIMIT $5`,
       [tripId ?? null, estado ?? null, despuesDe?.fechaCreacion ?? null, despuesDe?.id ?? null, limit, autor ?? null],
     );

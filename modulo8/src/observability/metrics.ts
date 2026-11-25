@@ -121,6 +121,9 @@ export function classifyM8Route(method: string, rawPathname: string): RouteClass
   if (/^\/tickets\/[^/]+\/historial$/.test(pathname)) {
     return { route: '/tickets/:id/historial', rf: 'RF8.5', ignored: false };
   }
+  if (/^\/tickets\/[^/]+\/mensajes$/.test(pathname)) {
+    return { route: '/tickets/:id/mensajes', rf: 'RF8.5', ignored: false };
+  }
   if (/^\/tickets\/[^/]+\/penalizacion$/.test(pathname)) {
     return { route: '/tickets/:id/penalizacion', rf: 'RF8.5', ignored: false };
   }

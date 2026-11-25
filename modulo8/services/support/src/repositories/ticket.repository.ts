@@ -20,10 +20,13 @@ export interface PosicionDeListado {
   id: string;
 }
 
+export type OrdenDeTickets = 'asc' | 'desc';
+
 export interface FiltroDeTickets {
   tripId?: string;
   autor?: string;
   estado?: TicketStatus;
+  orden?: OrdenDeTickets;
   limit: number;
   // Devuelve sólo los tickets posteriores a esta posición en el orden del listado.
   despuesDe?: PosicionDeListado;
