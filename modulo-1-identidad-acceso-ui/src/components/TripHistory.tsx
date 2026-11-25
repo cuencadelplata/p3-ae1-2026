@@ -7,7 +7,8 @@ import SupportChat from './SupportChat'
 import SupportTicketFilters from './SupportTicketFilters'
 import './RideFlow.css'
 
-export default function TripHistory({ token, userId, onBack }: { token: string; userId: number; onBack: () => void }) {
+// Con conductor=true muestra los viajes que hizo como conductor y el soporte sirve para reportar al pasajero.
+export default function TripHistory({ token, userId, conductor = false, onBack }: { token: string; userId: number; conductor?: boolean; onBack: () => void }) {
   const [trips, setTrips] = useState<TripRecord[]>([])
   const [tripOrder, setTripOrder] = useState<TicketOrder>('desc')
   const [showSupport, setShowSupport] = useState(false)
@@ -27,13 +28,13 @@ export default function TripHistory({ token, userId, onBack }: { token: string; 
 
   useEffect(() => {
     const abort = new AbortController()
-    const filters = new URLSearchParams({ clienteId: String(userId), estado: 'COMPLETADO', limit: '100' })
+    const filters = new URLSearchParams({ [conductor ? 'conductorId' : 'clienteId']: String(userId), estado: 'COMPLETADO', limit: '100' })
     request<{ viajes: TripRecord[] }>('M6', '/api/viajes?' + filters, { token, signal: abort.signal })
       .then(({ viajes }) => { if (!abort.signal.aborted) setTrips(viajes) })
       .catch((cause: Error) => { if (!abort.signal.aborted) setError(cause.message) })
       .finally(() => { if (!abort.signal.aborted) setBusy(false) })
     return () => abort.abort()
-  }, [token, userId])
+  }, [token, userId, conductor])
 
   useEffect(() => {
     if (showSupport) supportTitle.current?.focus()
@@ -63,7 +64,8 @@ export default function TripHistory({ token, userId, onBack }: { token: string; 
   }
 
   async function createTicket(tripId: string) {
-    const motivo = reason.trim()
+    // El prefijo le indica al operador que el reporte es del conductor sobre el pasajero.
+    const motivo = reason.trim() && (conductor ? 'Reporte del conductor: ' : '') + reason.trim()
     if (!motivo) return
     if (pending.current?.tripId !== tripId || pending.current.reason !== motivo) {
       pending.current = { tripId, reason: motivo, key: crypto.randomUUID() }
@@ -103,10 +105,10 @@ export default function TripHistory({ token, userId, onBack }: { token: string; 
           <p className="font-semibold">{trip.origen} → {trip.destino}</p>
           <time className="ride-muted" dateTime={trip.fechaCreacion}>{new Date(trip.fechaCreacion).toLocaleString('es-AR')}</time>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button className="btn-secondary inline-flex items-center gap-2" disabled={busy} onClick={() => void perform(() => openReceipt(trip.id))}>
+            {!conductor && <button className="btn-secondary inline-flex items-center gap-2" disabled={busy} onClick={() => void perform(() => openReceipt(trip.id))}>
               <Download size={16} aria-hidden="true" /> Descargar PDF
-            </button>
-            <button className="btn-ghost" disabled={busy} onClick={() => openSupport(trip)}>Soporte del viaje</button>
+            </button>}
+            <button className="btn-ghost" disabled={busy} onClick={() => openSupport(trip)}>{conductor ? 'Reportar al pasajero' : 'Soporte del viaje'}</button>
           </div>
         </li>)}
       </ul>}
@@ -118,8 +120,8 @@ export default function TripHistory({ token, userId, onBack }: { token: string; 
           {selection && <button className="btn-ghost" disabled={busy} onClick={() => openSupport(null)}>Ver todas mis consultas</button>}
         </div>
         {selection && <form className="ride-form mt-3" onSubmit={(event) => { event.preventDefault(); void perform(() => createTicket(selection.id)) }}>
-          <label>Contanos qué pasó<textarea className="input-field" required value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-          <button className="btn-primary" type="submit" disabled={busy || !reason.trim()}>Crear consulta</button>
+          <label>{conductor ? 'Contanos qué pasó con el pasajero' : 'Contanos qué pasó'}<textarea className="input-field" required value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+          <button className="btn-primary" type="submit" disabled={busy || !reason.trim()}>{conductor ? 'Enviar reporte' : 'Crear consulta'}</button>
         </form>}
         <section className="mt-5" aria-label={selection ? 'Consultas del viaje' : 'Mis consultas'} aria-busy={list.loading}>
           <SupportTicketFilters {...list.filters} />
