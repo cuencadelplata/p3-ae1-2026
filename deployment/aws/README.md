@@ -1,5 +1,27 @@
 # AWS CloudTest
 
+## CI/CD automatico
+
+Cada push a `AWS-CloudTest` ejecuta `AWS CloudTest CI` (M9, frontend y M3).
+EC2 consulta su resultado cada cinco minutos y despliega solo el HEAD exacto con
+CI aprobado. Un CI pendiente o fallido no cambia los contenedores. No despliega
+main ni pull requests. GitHub no recibe claves SSH ni el archivo privado.
+
+El entorno sigue en `/home/ubuntu/movilidad/deployment/aws/.env`. Cada release
+tiene checkout propio en `/home/ubuntu/movilidad-cd/releases/SHA`; el enlace
+`/home/ubuntu/movilidad-cd/current` identifica el ultimo despliegue correcto.
+Para comandos manuales posteriores usar ese directorio. El proyecto Compose y
+los volumenes conservan su nombre `movilidad-aws`.
+
+Estado: `systemctl status movilidad-cd.timer` y
+`journalctl -u movilidad-cd.service --no-pager -n 80`.
+Pausar despliegues: `sudo systemctl stop movilidad-cd.timer`.
+Reintentar ahora: `sudo systemctl start movilidad-cd.service`.
+No hay rollback automatico ni migraciones destructivas de datos. Si falla el
+arranque, revisar logs; el marcador SHA solo cambia al pasar salud y HTTPS.
+Las releases se conservan para recuperacion y requieren mantenimiento de disco.
+El repositorio debe continuar publico para consultar GitHub sin token.
+
 Resultados reproducibles y limites: [VERIFICACION.md](VERIFICACION.md).
 Restauracion aislada: `bash deployment/aws/restore-check.sh DIRECTORIO_BACKUP`.
 No restaura sobre las bases activas ni publica puertos.

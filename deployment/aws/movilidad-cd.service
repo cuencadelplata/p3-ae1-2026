@@ -1,0 +1,12 @@
+[Unit]
+Description=Desplegar AWS-CloudTest con CI aprobado
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/movilidad
+ExecStart=/usr/bin/python3 /home/ubuntu/movilidad/deployment/aws/auto-deploy.py
+TimeoutStartSec=3600
+UMask=0077

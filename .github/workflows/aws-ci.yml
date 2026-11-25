@@ -1,0 +1,41 @@
+name: AWS CloudTest CI
+on:
+  push:
+    branches: [AWS-CloudTest]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: aws-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: M9 instalar, generar, compilar y probar
+        working-directory: M9-ReservasProgramadas
+        run: |
+          npm ci
+          npm run db:generate
+          npm run typecheck
+          npm run build
+          npm test
+      - name: Frontend compilar
+        working-directory: modulo-1-identidad-acceso-ui
+        run: |
+          npm ci
+          npm run build
+      - name: M3 pruebas unitarias
+        working-directory: modulo-3/M3-Conductor
+        run: |
+          npm ci
+          npx playwright test --project=unit --workers=1
+      - name: Validar scripts de despliegue
+        run: |
+          bash -n deployment/aws/deploy.sh deployment/aws/dc.sh deployment/aws/backup.sh deployment/aws/restore-check.sh
+          python3 -m py_compile deployment/aws/auto-deploy.py deployment/aws/validate.py
