@@ -6,13 +6,11 @@ import Dashboard from './components/Dashboard.tsx'
 import PasswordRecovery from './components/PasswordRecovery'
 import { completarOAuth2, proveedorPendiente, redirectUriOAuth2 } from './components/OAuth2Login'
 import { FlowError, request } from './rideFlowApi'
+import CompletarPerfilM2 from './components/CompletarPerfilM2'
 
 type AuthState = 'login' | 'register' | 'recovery' | 'dashboard'
 // RF-2.1: un CLIENTE necesita perfil en M2 antes de entrar al panel.
-type PerfilM2 = { estado: 'verificando' } | { estado: 'listo' } | { estado: 'error'; mensaje: string }
-
-// Front de M2 donde el cliente completa su perfil ("Completá tu perfil").
-const M2_PERFIL_URL = import.meta.env.VITE_M2_PERFIL_URL || 'http://localhost:11001'
+type PerfilM2 = { estado: 'verificando' } | { estado: 'completar' } | { estado: 'listo' } | { estado: 'error'; mensaje: string }
 
 function tokenPayload(token: string): Record<string, unknown> | undefined {
   const payload = token.split('.')[1]
@@ -32,13 +30,6 @@ function getSessionExpiry(token: string): number | undefined {
 
 function esCliente(token: string) {
   return tokenPayload(token)?.role === 'CLIENTE'
-}
-
-function irACompletarPerfil(token: string) {
-  const destino = new URL('/', M2_PERFIL_URL)
-  destino.searchParams.set('token', token)
-  destino.searchParams.set('volver', window.location.origin + '/')
-  window.location.assign(destino.toString())
 }
 
 function App() {
@@ -103,7 +94,7 @@ function App() {
   }, [token, handleLogout])
 
   // Después del login (o al volver con una sesión guardada): si es CLIENTE y no tiene perfil en M2,
-  // va a completarlo al front de M2, que lo devuelve acá. Conductor y operador siguen directo al panel.
+  // lo completa acá mismo (POST /v1/customers). Conductor y operador siguen directo al panel.
   const [perfilM2, setPerfilM2] = useState<PerfilM2>({ estado: 'verificando' })
   const [intentoPerfil, setIntentoPerfil] = useState(0)
 
@@ -120,7 +111,7 @@ function App() {
       .then(() => { if (!abort.signal.aborted) setPerfilM2({ estado: 'listo' }) })
       .catch((error: unknown) => {
         if (abort.signal.aborted) return
-        if (error instanceof FlowError && error.status === 404) return irACompletarPerfil(token)
+        if (error instanceof FlowError && error.status === 404) return setPerfilM2({ estado: 'completar' })
         if (error instanceof FlowError && error.status === 401) return handleLogout('Tu sesión ya no es válida. Iniciá sesión de nuevo.')
         // Sin respuesta de M2 no se puede validar la cuenta: no se deja entrar.
         setPerfilM2({ estado: 'error', mensaje: 'No pudimos validar tu perfil de cliente. Intentá de nuevo en unos minutos.' })
@@ -146,6 +137,12 @@ function App() {
       )}
       {authState === 'dashboard' && token && perfilM2.estado === 'listo' && (
         <Dashboard token={token} onLogout={handleLogout} />
+      )}
+      {authState === 'dashboard' && token && perfilM2.estado === 'completar' && (
+        <CompletarPerfilM2 token={token}
+          onCompletado={() => setPerfilM2({ estado: 'listo' })}
+          onSesionInvalida={() => handleLogout('Tu sesión ya no es válida. Iniciá sesión de nuevo.')}
+          onCancelar={() => handleLogout()} />
       )}
       {authState === 'dashboard' && token && perfilM2.estado === 'verificando' && (
         <p className="text-sm text-[var(--text-soft)]" role="status">Verificando tu perfil…</p>
