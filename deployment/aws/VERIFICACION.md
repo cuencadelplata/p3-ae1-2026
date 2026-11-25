@@ -1,5 +1,29 @@
 # Verificacion del 25 de noviembre de 2026
 
+## Recuperacion y concurrencia con infraestructura real
+
+En EC2 se ejecuto un proyecto independiente `m9-infrastructure-tests-a251be90`,
+sin puertos publicados ni conexion con la red de la aplicacion. PostgreSQL 17,
+Redis 7.4 y RabbitMQ 4.1 reales. Resultado: 17/17 pruebas aprobadas y otra
+pasada de 17/17 despues de reiniciar las tres dependencias.
+
+Se comprobo un unico claim entre 32 transiciones concurrentes, una sola clave
+durable entre 32 solicitudes concurrentes, recuperacion tras SIGKILL de un proceso
+que habia persistido ACTIVANDO, conservacion de su clave, locks con expiracion,
+consumidores duplicados, cancelacion contra activacion, Outbox transaccional,
+reintentos y DLQ. Tras reinicios se conservaron los datos de control de PostgreSQL
+y Redis; RabbitMQ volvio saludable y paso otra vez publicacion/consumo.
+
+El entorno de pruebas fue retirado al terminar. No se detuvo el stack activo.
+El ensayo no demuestra reinicio del proceso servidor completo con M5 real ni
+asignacion final de conductor. El SIGKILL verifica la recuperacion del claim y
+la idempotencia persistida desde un proceso independiente.
+
+Repetir: `COMPOSE_PROJECT_NAME=m9-infrastructure-tests-XXXXXXXX docker compose
+-f deployment/aws/compose.recovery-test.yml up --build --abort-on-container-exit
+--exit-code-from tests` (reemplazar XXXXXXXX por ocho caracteres hexadecimales).
+Retirar solo ese proyecto despues, incluyendo sus volumenes desechables.
+
 ## Actualizacion tras merge de main b817275a
 
 Merge en AWS-CloudTest a7de671f y reconstruccion secuencial completados.
