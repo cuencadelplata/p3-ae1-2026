@@ -1,5 +1,21 @@
 # Verificacion del 25 de noviembre de 2026
 
+## Actualizacion tras merge de main b817275a
+
+Merge en AWS-CloudTest a7de671f y reconstruccion secuencial completados.
+Frontend compilado en Docker; contenedores arrancados con espera de salud.
+Rutas /conductores/me y /conductores/pendientes devuelven 401 sin identidad.
+Las pruebas HTTPS M1/M9 volvieron a pasar (CRUD, fecha pasada y propiedad).
+El alta autenticada de conductor devuelve 503: el host Supabase configurado en M3
+no resuelve desde el contenedor (DNS ENOTFOUND). La aprobacion y el recorrido con
+conductor quedan bloqueados hasta corregir ese proyecto/URL. No se habilito un
+fallback para esconder este fallo. RabbitMQ conecta y no aparece el warning Kafka
+en los logs de arranque del nuevo M3.
+
+Prueba reproducible: `python3 deployment/aws/driver-profile-check.py`.
+No habilita conductores. Las pruebas unitarias M3 no se ejecutaron en el host EC2
+porque npm no esta instalado fuera de Docker.
+
 Alcance: M9 y herramientas de despliegue en sa-east-1. Observabilidad excluida por
 decision del usuario. No se afirma asignacion ni viaje completo sin M3 operativo.
 
