@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 import Login from './components/Login'
-import Register from './components/Register.tsx'
+import Register, { type DatosACompletar } from './components/Register.tsx'
+import axios from 'axios'
+import { API_URL } from './api'
 import Dashboard from './components/Dashboard.tsx'
 import PasswordRecovery from './components/PasswordRecovery'
 import { completarOAuth2, proveedorPendiente, redirectUriOAuth2 } from './components/OAuth2Login'
@@ -11,6 +13,9 @@ import CompletarPerfilM2 from './components/CompletarPerfilM2'
 type AuthState = 'login' | 'register' | 'recovery' | 'dashboard'
 // RF-2.1: un CLIENTE necesita perfil en M2 antes de entrar al panel.
 type PerfilM2 = { estado: 'verificando' } | { estado: 'completar' } | { estado: 'listo' } | { estado: 'error'; mensaje: string }
+// RF-1.5: quien entró con Google o Auth0 puede no tener DNI ni teléfono en M1. Antes del panel
+// se lo manda a la pantalla de registro para completarlos.
+type DatosM1 = { estado: 'verificando' } | { estado: 'completar'; perfil: DatosACompletar['perfil'] } | { estado: 'listo' }
 
 function tokenPayload(token: string): Record<string, unknown> | undefined {
   const payload = token.split('.')[1]
@@ -93,13 +98,39 @@ function App() {
     }
   }, [token, handleLogout])
 
-  // Después del login (o al volver con una sesión guardada): si es CLIENTE y no tiene perfil en M2,
-  // lo completa acá mismo (POST /v1/customers). Conductor y operador siguen directo al panel.
+  // Paso 1 después del login: ¿a la cuenta de M1 le faltan datos? (cuentas creadas con Google o Auth0)
+  const [datosM1, setDatosM1] = useState<DatosM1>({ estado: 'verificando' })
+
+  useEffect(() => {
+    if (authState !== 'dashboard' || !token) return
+
+    const abort = new AbortController()
+    setDatosM1({ estado: 'verificando' })
+    axios.get<DatosACompletar['perfil']>(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: abort.signal,
+    })
+      .then(({ data }) => {
+        if (abort.signal.aborted) return
+        const falta = [data.nombre, data.apellido, data.dni, data.telefono].some((valor) => !valor?.trim())
+        setDatosM1(falta ? { estado: 'completar', perfil: data } : { estado: 'listo' })
+      })
+      .catch((err) => {
+        if (abort.signal.aborted) return
+        if (err.response?.status === 401) return handleLogout('Tu sesión ya no es válida. Iniciá sesión de nuevo.')
+        // Cualquier otro error lo muestra el panel, que vuelve a consultar a M1.
+        setDatosM1({ estado: 'listo' })
+      })
+    return () => abort.abort()
+  }, [authState, token, handleLogout])
+
+  // Paso 2: si es CLIENTE y no tiene perfil en M2, lo completa acá mismo (POST /v1/customers).
+  // Conductor y operador siguen directo al panel.
   const [perfilM2, setPerfilM2] = useState<PerfilM2>({ estado: 'verificando' })
   const [intentoPerfil, setIntentoPerfil] = useState(0)
 
   useEffect(() => {
-    if (authState !== 'dashboard' || !token) return
+    if (authState !== 'dashboard' || !token || datosM1.estado !== 'listo') return
     if (!esCliente(token)) {
       setPerfilM2({ estado: 'listo' })
       return
@@ -117,7 +148,9 @@ function App() {
         setPerfilM2({ estado: 'error', mensaje: 'No pudimos validar tu perfil de cliente. Intentá de nuevo en unos minutos.' })
       })
     return () => abort.abort()
-  }, [authState, token, intentoPerfil, handleLogout])
+  }, [authState, token, intentoPerfil, handleLogout, datosM1.estado])
+
+  const enPanel = authState === 'dashboard' && token && datosM1.estado === 'listo'
 
   return (
     <div className="relative min-h-screen flex flex-col items-center justify-start sm:justify-center p-4 py-8 sm:py-12 overflow-y-auto">
@@ -135,19 +168,29 @@ function App() {
       {authState === 'recovery' && (
         <PasswordRecovery onBackToLogin={() => setAuthState('login')} />
       )}
-      {authState === 'dashboard' && token && perfilM2.estado === 'listo' && (
+      {authState === 'dashboard' && token && datosM1.estado === 'completar' && (
+        <Register
+          completar={{ token, perfil: datosM1.perfil }}
+          onRegisterSuccess={() => setDatosM1({ estado: 'listo' })}
+          onSwitchToLogin={() => handleLogout()}
+        />
+      )}
+      {authState === 'dashboard' && token && datosM1.estado === 'verificando' && (
+        <p className="text-sm text-[var(--text-soft)]" role="status">Verificando tu cuenta…</p>
+      )}
+      {enPanel && perfilM2.estado === 'listo' && (
         <Dashboard token={token} onLogout={handleLogout} />
       )}
-      {authState === 'dashboard' && token && perfilM2.estado === 'completar' && (
+      {enPanel && perfilM2.estado === 'completar' && (
         <CompletarPerfilM2 token={token}
           onCompletado={() => setPerfilM2({ estado: 'listo' })}
           onSesionInvalida={() => handleLogout('Tu sesión ya no es válida. Iniciá sesión de nuevo.')}
           onCancelar={() => handleLogout()} />
       )}
-      {authState === 'dashboard' && token && perfilM2.estado === 'verificando' && (
+      {enPanel && perfilM2.estado === 'verificando' && (
         <p className="text-sm text-[var(--text-soft)]" role="status">Verificando tu perfil…</p>
       )}
-      {authState === 'dashboard' && token && perfilM2.estado === 'error' && (
+      {enPanel && perfilM2.estado === 'error' && (
         <div className="glass w-full max-w-md rounded-[1.75rem] p-9 text-center" role="alert">
           <p className="eyebrow">Perfil de cliente</p>
           <p className="mt-4 text-[var(--text-soft)]">{perfilM2.mensaje}</p>
