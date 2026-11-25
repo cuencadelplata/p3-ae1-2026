@@ -172,13 +172,14 @@ export function pollTrip(task: (signal: AbortSignal) => Promise<boolean>) {
   }
 }
 
-export async function ensurePassenger(token: string) {
+export async function ensurePassenger(token: string, signal?: AbortSignal) {
   try {
-    await request('M2', '/v1/customers/me', { token })
+    await request('M2', '/v1/customers/me', { token, signal })
   } catch (error) {
+    if (signal?.aborted) throw error
     if (!(error instanceof FlowError) || error.status !== 404) throw error
     await request('M2', '/v1/customers', {
-      method: 'POST', token, body: { preferences: { preferredVehicleType: 'auto', notificationChannel: 'email' } },
+      method: 'POST', token, signal, body: { preferences: { preferredVehicleType: 'auto', notificationChannel: 'email' } },
     })
   }
 }
