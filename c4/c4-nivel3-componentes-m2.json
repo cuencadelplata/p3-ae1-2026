@@ -10,13 +10,38 @@
     "repository": {
       "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
       "provider": "github",
-      "revision": "687a636f0d66acc26bcde86dce442d4778e37dd8"
+      "revision": "9b32fd61584167b9eae17cc0cfc65a0cd310d078"
     }
   },
   "layout": {
     "mode": "auto"
   },
   "components": [
+    {
+      "id": "front",
+      "type": "frontend",
+      "label": "Front común (M1 UI)",
+      "sublabel": "/flujo-api/m2 · otro módulo",
+      "explanation": "Entrada principal del cliente. Por su proxy usa GET /v1/customers/me, POST /v1/customers (completar perfil) y GET /v1/customers/{id}/status; si la cuenta no está ACTIVA deshabilita \"Pedir un viaje\".",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso-ui/nginx.conf",
+          "line": 15,
+          "end_line": 16,
+          "label": "proxy a m2-gateway"
+        },
+        {
+          "path": "modulo-1-identidad-acceso-ui/src/components/CompletarPerfilM2.tsx",
+          "line": 24,
+          "end_line": 27,
+          "label": "POST /v1/customers"
+        }
+      ],
+      "pos": [
+        40,
+        160
+      ]
+    },
     {
       "id": "m2web",
       "type": "frontend",
@@ -412,6 +437,13 @@
     }
   ],
   "connections": [
+    {
+      "id": "front-gw",
+      "from": "front",
+      "to": "gateway",
+      "label": "perfil y estado",
+      "variant": "emphasis"
+    },
     {
       "id": "web-gw",
       "from": "m2web",

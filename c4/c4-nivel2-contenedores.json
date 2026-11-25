@@ -10,7 +10,7 @@
     "repository": {
       "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
       "provider": "github",
-      "revision": "687a636f0d66acc26bcde86dce442d4778e37dd8"
+      "revision": "9b32fd61584167b9eae17cc0cfc65a0cd310d078"
     }
   },
   "layout": {
@@ -45,18 +45,13 @@
       "id": "m1",
       "type": "security",
       "label": "M1 Identidad y acceso",
-      "sublabel": "API :10000 · UI :5173 · SQLite",
+      "sublabel": "API :10000 · SQLite",
       "explanation": "Emite y valida tokens y roles (CLIENTE, CONDUCTOR, OPERADOR). Todos los módulos le validan la identidad; además precarga el operador semilla, emite el token delegado de M9 y le da a M8 el nombre del conductor.",
       "sources": [
         {
           "path": "modulo-1-identidad-acceso/compose.integracion.yml",
           "line": 18,
           "end_line": 30
-        },
-        {
-          "path": "docker-compose.yml",
-          "line": 11,
-          "label": "m1-ui"
         }
       ],
       "row": 0,
@@ -124,8 +119,8 @@
           "label": "GEOCODING_PROVIDER_URL"
         }
       ],
-      "row": 1,
-      "col": 2,
+      "row": 3,
+      "col": 0,
       "size": [
         196,
         64
@@ -246,7 +241,7 @@
           "label": "M1 operador semilla"
         }
       ],
-      "row": 3,
+      "row": 0,
       "col": 0,
       "size": [
         196,
@@ -456,6 +451,40 @@
         196,
         64
       ]
+    },
+    {
+      "id": "front",
+      "type": "frontend",
+      "label": "Front común (M1 UI)",
+      "sublabel": "React + nginx · :5173 · /flujo-api",
+      "explanation": "Entrada única de pasajero, conductor y operador (app.…sslip.io en AWS). Su nginx reenvía /flujo-api/<módulo> a M1, M2, M3, M4, M5, M6, M8 y M9. Al cliente le pide completar el perfil en M2 antes de entrar al panel y le bloquea \"Pedir un viaje\" si su cuenta no está ACTIVA.",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/compose.integracion.yml",
+          "line": 71,
+          "end_line": 74,
+          "label": "m1-ui"
+        },
+        {
+          "path": "modulo-1-identidad-acceso-ui/nginx.conf",
+          "line": 15,
+          "end_line": 16,
+          "label": "proxy a M2"
+        },
+        {
+          "path": "modulo-1-identidad-acceso-ui/src/App.tsx",
+          "line": 184,
+          "end_line": 185,
+          "label": "completar perfil M2"
+        }
+      ],
+      "row": 1,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ],
+      "href": "c4-nivel3-componentes-m1.html"
     }
   ],
   "connections": [
@@ -532,7 +561,8 @@
       "id": "m6-m8",
       "from": "m6",
       "to": "m8",
-      "label": "QR / comprobante"
+      "label": "QR / comprobante",
+      "labelDy": -38
     },
     {
       "id": "m8-m7",
@@ -557,26 +587,6 @@
       "from": "m4",
       "to": "nominatim",
       "label": "geocodifica (HTTPS)"
-    },
-    {
-      "id": "op-m8",
-      "from": "operador",
-      "to": "m8",
-      "label": "tickets y penalizaciones"
-    },
-    {
-      "id": "pas-m1",
-      "from": "pasajero",
-      "to": "m1",
-      "label": "inicia sesión",
-      "variant": "security"
-    },
-    {
-      "id": "con-m1",
-      "from": "conductor",
-      "to": "m1",
-      "label": "inicia sesión",
-      "variant": "security"
     },
     {
       "id": "m2-m8",
@@ -644,6 +654,46 @@
       "from": "m7",
       "to": "mp",
       "label": "cobros"
+    },
+    {
+      "id": "pas-front",
+      "from": "pasajero",
+      "to": "front",
+      "label": "usa",
+      "variant": "emphasis"
+    },
+    {
+      "id": "con-front",
+      "from": "conductor",
+      "to": "front",
+      "label": "usa"
+    },
+    {
+      "id": "op-front",
+      "from": "operador",
+      "to": "front",
+      "label": "usa"
+    },
+    {
+      "id": "front-m1",
+      "from": "front",
+      "to": "m1",
+      "label": "login y token",
+      "variant": "security"
+    },
+    {
+      "id": "front-m2",
+      "from": "front",
+      "to": "m2",
+      "label": "perfil y estado",
+      "variant": "emphasis"
+    },
+    {
+      "id": "front-m8",
+      "from": "front",
+      "to": "m8",
+      "label": "tickets y reportes",
+      "variant": "emphasis"
     }
   ],
   "cards": [
@@ -651,6 +701,7 @@
       "dot": "violet",
       "title": "Infraestructura compartida",
       "items": [
+        "El front común también llama a M3, M4, M5, M6 y M9 por /flujo-api (flechas omitidas); solo se dibujan M1, M2 y M8",
         "Todos los módulos validan token y rol con M1; M8 también le pide el nombre del conductor y M9 usa un token delegado (flechas omitidas para no cruzar el diagrama)",
         "RabbitMQ y Redis son comunes a todo el stack (los define M9); los eventos están en el Nivel 2b",
         "Cada módulo tiene su propia base; M7 usa Supabase en la nube. No hay SQL entre módulos"
@@ -660,7 +711,7 @@
       "dot": "cyan",
       "title": "Circuito de penalizaciones",
       "items": [
-        "El operador confirma la penalización de un viaje en M8 (vigencia 90 días)",
+        "El conductor reporta al pasajero desde el historial (ticket en M8); el operador lo marca desfavorable y M8 penaliza (vigencia 90 días)",
         "M2 consulta las vigentes: 2 → BLOQUEADO_TEMPORAL, 3 → BLOQUEADO_PERMANENTE",
         "El permanente solo se levanta por revisión: M8 llama a POST /internal/usuarios/{id}/desbloqueo",
         "M2 → M8 (penalizaciones) y M8 → M2 (desbloqueo) usan la misma X-Secret-Key"
