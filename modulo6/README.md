@@ -256,3 +256,18 @@ modulo6/
 ├── docker-compose.yml
 └── package.json
 ```
+
+### Cancelación durante el viaje
+
+Cliente y conductor pueden cancelar en `SOLICITADO`, `ASIGNADO`, `CONDUCTOR_EN_CAMINO`, `ARRIBADO` y `EN_CURSO`. La regla se aplica en la API central, el servicio RF-6.5/6.6 y sus interfaces. `COMPLETADO` y `CANCELADO` son terminales: no se vuelven a cancelar. Se conserva el actor, el motivo, el historial y los eventos existentes de cancelación.
+
+### Regresiones del frontend de cancelación
+
+Antes de la asignación existe una solicitud de M5, no necesariamente un viaje `SOLICITADO` de M6. El botón **Cancelar búsqueda** usa el endpoint existente `POST /api/v1/ride-requests/{id}/cancel` de M5. Después de crear el viaje, **Cancelar viaje** usa M6. Si un conductor acepta mientras se cancela la búsqueda, se recupera la asignación para cancelarla desde el viaje.
+
+Las pruebas de navegador están en `tests-frontend/cancelacion-flujo.mjs`: comprueban la retirada del formulario QR tras cancelar y la confirmación/reintento de cancelación de búsqueda. No requieren servicios reales: simulan las respuestas HTTP.
+
+1. Desde `modulo-1-identidad-acceso-ui`, ejecutar `npm run dev -- --host 127.0.0.1 --port 5178`.
+2. Desde `modulo6`, ejecutar `npm run test:frontend`. Requiere Chromium instalado (por defecto `/usr/bin/chromium`; configurar `CHROMIUM_PATH` si corresponde). `FRONTEND_TEST_URL` permite cambiar la URL de Vite.
+
+La prueba crea un punto de entrada temporal en la interfaz y lo elimina al terminar.

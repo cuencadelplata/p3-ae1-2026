@@ -126,7 +126,7 @@ export function createViajeApi(options) {
             if (String(viaje.id) !== viajeId) {
                 return send(response, 502, { error: 'RF-6 devolvió un ID distinto al solicitado' });
             }
-            if (!['SOLICITADO', 'CONDUCTOR_EN_CAMINO'].includes(viaje.estado)) {
+            if (!['SOLICITADO', 'ASIGNADO', 'CONDUCTOR_EN_CAMINO', 'ARRIBADO', 'EN_CURSO'].includes(viaje.estado)) {
                 return send(response, 400, { error: `No se puede cancelar un viaje en estado ${viaje.estado}` });
             }
             const viajeCancelado = await options.rf6Api.cancelViaje({ viajeId, actor, motivo });

@@ -77,4 +77,19 @@ describe('RF-6.6 - Cancelación por conductor', () => {
     expect(response.status).toBe(400);
     expect((await response.json()).error).toContain('estado COMPLETADO');
   });
+  it.each(['SOLICITADO', 'ASIGNADO', 'CONDUCTOR_EN_CAMINO', 'ARRIBADO', 'EN_CURSO'])(
+    'permite cancelar como conductor en %s y publica el evento', async (estado) => {
+      const viaje = { id: 'V-ACTIVO', clienteId: 'C', conductorId: 'D', estado };
+      const running = await startServices(new Map([[viaje.id, viaje]]));
+      services.api = running.api;
+      const response = await fetch(`${running.url}/api/viajes/V-ACTIVO/cancelacion-conductor`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ motivo: 'No puedo continuar' }),
+      });
+      expect(response.status).toBe(200);
+      expect((await response.json()).viaje.estado).toBe('CANCELADO');
+      expect(running.events.messages).toHaveLength(1);
+    }
+  );
+
 });
