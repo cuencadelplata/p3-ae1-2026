@@ -34,6 +34,10 @@ No necesita instalar dependencias. Cada corrida crea usuarios nuevos, así que s
 
 Opciones: `METODO_PAGO=tarjeta` paga con una tarjeta de prueba de Mercado Pago (usa `MP_ACCESS_TOKEN` de `modulo7/.env`); cada URL de módulo se puede cambiar con `M1_URL`, `M2_URL`, …, `M9_URL`.
 
+- `E2E_TIPO_VEHICULO=MOTO` registra y activa una moto, verifica que quede fuera de la búsqueda de autos y completa el recorrido.
+- `E2E_RECHAZO_TARJETA=1` genera un rechazo en Mercado Pago TEST antes de finalizar el viaje con el `METODO_PAGO` alternativo (`efectivo` o `transferencia`).
+- Con `M1_OPERADOR_PASSWORD` en el archivo de entorno, la suite comprueba que el operador responde y que el historial queda visible para el cliente que hizo la consulta.
+
 ## M7 real o simulador
 
 El M7 real necesita `modulo7/.env` con `DATABASE_URL`, `M7_API_KEY`, `MP_ACCESS_TOKEN` y las claves de Supabase. Si no está disponible, se puede usar el simulador del contrato de M7 que trae M8:
