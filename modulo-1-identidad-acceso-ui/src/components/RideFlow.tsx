@@ -56,9 +56,12 @@ function readJourney(key: string): Journey {
   try {
     const saved = sessionStorage.getItem(key)
     if (saved) {
-      // Conserva el viaje y elimina la sesión secundaria guardada por la versión anterior.
+      // Conserva solo solicitudes o viajes realmente activos; si el anterior se cerró o terminó,
+      // "Pedir un viaje" vuelve a empezar limpio en el paso 1 (Solicitud).
       const { key: id, ride, trip, qr, payment, receipt, route } = JSON.parse(saved) as Journey
-      return { key: id, ride, trip, qr, payment, receipt, route }
+      if (trip && terminalTrip(trip.estado)) return newJourney()
+      if (!trip && ride && closed(ride.status)) return newJourney()
+      return { key: id || crypto.randomUUID(), ride, trip, qr, payment, receipt, route }
     }
   } catch {
     return newJourney()
@@ -358,10 +361,8 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
         method: 'POST', token, body: { reason },
       })
       if (result.status !== 'CANCELLED') throw new Error('M5 no confirmó la cancelación de la búsqueda.')
-      setJourney((previous) => previous.ride?.id === rideId && !previous.trip
-        ? { ...previous, ride: { ...previous.ride, status: 'CANCELLED' }, qr: undefined }
-        : previous)
-      setSearchPaused(false)
+      // Vuelve al paso 1 (Solicitud) con un nuevo Idempotency-Key para poder pedir otro viaje sin quedar en Asignación.
+      reset()
     } catch (err) {
       if (err instanceof FlowError && err.code === 'REQUEST_ALREADY_ASSIGNED') {
         const current = await request<RideRequest>('M5', `/api/v1/ride-requests/${encodeURIComponent(rideId)}`, { token })
@@ -433,7 +434,9 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
   }
 
   function reset() {
+    sessionStorage.removeItem(storageKey)
     setError('')
+    setExistingTripError('')
     setSearchPaused(false)
     setCheckingExistingTrip(true)
     setPickMode('origin')
