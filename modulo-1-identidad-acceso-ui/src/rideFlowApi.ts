@@ -94,7 +94,7 @@ export class FlowError extends Error {
   }
 }
 
-type Service = 'M2' | 'M3' | 'M3-vehiculos' | 'M4' | 'M5' | 'M6' | 'M6-cancelacion' | 'M8' | 'M9'
+type Service = 'M2' | 'M3' | 'M3-vehiculos' | 'M4' | 'M5' | 'M6' | 'M6-cancelacion' | 'M7' | 'M8' | 'M9'
 interface Options {
   method?: 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: object
@@ -125,6 +125,54 @@ async function fetchService(service: Service, path: string, options: Options): P
   }
 
   return response
+}
+
+// RF-7.1: tarifa estimada ANTES de confirmar el viaje.
+// Al crear el pedido, M5 le pide la tarifa a M7 (POST /tarifa/estimacion) con la distancia en línea
+// recta entre origen y destino. Acá se arma exactamente el mismo pedido, así el monto que ve el
+// pasajero antes de confirmar es el mismo que después muestra el viaje.
+export interface FareQuote {
+  amount: number
+  currency: string
+}
+
+// Misma fórmula que RideRequestValidator.calculateDistanceMeters de M5 (Haversine), en km.
+function distanciaComoM5Km(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }): number {
+  const R = 6371e3
+  const lat1 = (a.latitude * Math.PI) / 180
+  const lat2 = (b.latitude * Math.PI) / 180
+  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180
+  const dLng = ((b.longitude - a.longitude) * Math.PI) / 180
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return (R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))) / 1000
+}
+
+export async function estimarTarifa(
+  origin: { latitude: number; longitude: number; address: string },
+  destination: { latitude: number; longitude: number; address: string },
+  vehicleType: 'AUTO' | 'MOTO',
+  signal?: AbortSignal,
+): Promise<FareQuote | null> {
+  const distanceKm = distanciaComoM5Km(origin, destination)
+  const distanciaKm = Math.round(distanceKm * 10) / 10
+  // M7 no estima recorridos de 0 km (y M5 rechaza pedidos de menos de 100 m).
+  if (distanciaKm <= 0) return null
+
+  const data = await request<{ estimatedFare: number; currency?: string }>('M7', '/tarifa/estimacion', {
+    method: 'POST',
+    signal,
+    body: {
+      origen: { lat: origin.latitude, lng: origin.longitude, direccion: origin.address },
+      destino: { lat: destination.latitude, lng: destination.longitude, direccion: destination.address },
+      distanciaKm,
+      tiempoEstimadoMin: Math.max(5, Math.round(distanceKm * 2.5)),
+      vehicleType: vehicleType.toLowerCase(),
+    },
+  })
+
+  return typeof data.estimatedFare === 'number'
+    ? { amount: data.estimatedFare, currency: data.currency || 'ARS' }
+    : null
 }
 
 export async function request<T>(service: Service, path: string, options: Options = {}): Promise<T> {
