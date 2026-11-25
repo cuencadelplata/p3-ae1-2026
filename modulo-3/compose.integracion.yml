@@ -121,6 +121,7 @@ services:
       - "4000:80"
     networks:
       - m3-frontend-network
+      - reservas-network
     depends_on:
       m3-conductor-api:
         condition: service_healthy
@@ -130,4 +131,3 @@ networks:
     driver: bridge
   m3-frontend-network:
     driver: bridge
-    internal: true

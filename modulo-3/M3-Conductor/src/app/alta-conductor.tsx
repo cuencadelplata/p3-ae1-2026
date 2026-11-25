@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import {
+  CLAVE_IDENTIDAD,
+  cerrarSesionM1,
+  headersAuthM1,
+  normalizarUsuarioM1,
+  resolverSesionM1,
+  type SesionM1,
+  type UsuarioM1
+} from "./m1Session";
+import { LoginM1Card } from "./LoginM1Card";
 
 /**
  * Alta de conductor (mismo look que valoraciones.tsx), en 5 pasos:
@@ -35,7 +45,6 @@ type TipoServicio = (typeof TIPOS)[number]["valor"];
 
 // Misma regla que vehiculo-service.ts
 const PATENTE_REGEX = /^([A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/;
-const CLAVE_IDENTIDAD = "m1.usuario";
 
 // Fotos de licencia
 const TIPOS_IMAGEN = ["image/jpeg", "image/png", "image/webp"];
@@ -46,18 +55,6 @@ const MAX_DATA_URL = 90_000;
 
 type Paso = "alta" | "vehiculo" | "cedula" | "licencia" | "final";
 const ORDEN_PASOS: Paso[] = ["alta", "vehiculo", "cedula", "licencia", "final"];
-
-// UserResponse de M1 (src/api/autenticacion/m1-Auth-openapi.yaml)
-type UsuarioM1 = {
-  id: number | string;
-  nombre?: string;
-  apellido?: string;
-  dni?: string;
-  telefono?: string;
-  email?: string;
-  rol?: string;
-  estado?: string;
-};
 
 type Conductor = {
   usuarioID: string;
@@ -241,7 +238,14 @@ function mensajeDe(error: unknown, porDefecto: string) {
 }
 
 async function pedirJson<T>(url: string, porDefecto: string, init?: RequestInit): Promise<T> {
-  const respuesta = await fetch(url, { ...init, headers: { Accept: "application/json", ...(init?.headers || {}) } });
+  const respuesta = await fetch(url, {
+    ...init,
+    headers: {
+      Accept: "application/json",
+      ...headersAuthM1(),
+      ...(init?.headers || {})
+    }
+  });
   const cuerpo = await leerJson(respuesta);
   if (!respuesta.ok) throw new Error((cuerpo as { error?: string }).error || porDefecto);
   return cuerpo as T;
@@ -432,8 +436,15 @@ function SelectorTipo({
 
 // ---------- Paso 1: alta de conductor / tipo de vehículo ----------
 
-function PasoAlta() {
-  const [usuario] = useState<UsuarioM1 | null>(() => leerIdentidadM1());
+function PasoAlta({
+  usuario,
+  cargandoSesion,
+  onLogin
+}: {
+  usuario: UsuarioM1 | null;
+  cargandoSesion: boolean;
+  onLogin: (sesion: SesionM1) => void;
+}) {
   const [tipo, setTipo] = useState<TipoServicio | "">("");
   const [existente, setExistente] = useState<Conductor | null>(null);
   const [verificando, setVerificando] = useState(true);
@@ -443,22 +454,29 @@ function PasoAlta() {
   const problema = usuario ? problemaIdentidad(usuario) : "";
 
   useEffect(() => {
+    if (cargandoSesion) return;
     if (!usuario || problema) {
+      setExistente(null);
+      setTipo("");
       setVerificando(false);
       return;
     }
+    setVerificando(true);
+    setError("");
     // Si el conductor ya existe en M3 no se vuelve a crear: se puede cambiar el tipo
-    fetch(urlConductor(String(usuario.id)))
+    fetch(urlConductor(String(usuario.id)), { headers: { Accept: "application/json", ...headersAuthM1() } })
       .then(async (res) => {
         if (res.ok) {
           const conductor = (await res.json()) as Conductor;
           setExistente(conductor);
           setTipo(aTipo(conductor.tipovehiculo));
+        } else {
+          setExistente(null);
         }
       })
       .catch(() => setError("No hay conexión con la API de conductores"))
       .finally(() => setVerificando(false));
-  }, []);
+  }, [usuario?.id, cargandoSesion, problema]);
 
   async function continuar() {
     if (!usuario || !tipo || enviando) return;
@@ -502,14 +520,10 @@ function PasoAlta() {
       <h1>Alta de conductor</h1>
       <p className="val-subtitulo">Datos de registro de M1</p>
 
-      {!usuario ? (
-        <article className="val-card">
-          <h2 className="val-card-titulo">Sin datos de M1</h2>
-          <p className="val-vacio">
-            Esta pantalla se abre después de registrarse en M1. No llegó ningún usuario: abrila con
-            los datos del registro (por ejemplo <code>?usuario=…</code>) o probá con <a className="val-volver" href="?demo=1">el ejemplo de M1</a>.
-          </p>
-        </article>
+      {cargandoSesion ? (
+        <Cargando texto="Verificando sesión con M1…" />
+      ) : !usuario ? (
+        <LoginM1Card onLogin={onLogin} />
       ) : (
         <TarjetaIdentidad usuario={usuario} />
       )}
@@ -1145,7 +1159,9 @@ function PasoFinal({ driverId }: { driverId: string }) {
     setCargando(true);
     try {
       const [conductor, vehiculos, documentos] = await Promise.all([
-        fetch(urlConductor(driverId)).then(async (r) => (r.ok ? ((await r.json()) as Conductor) : null)),
+        fetch(urlConductor(driverId), { headers: { Accept: "application/json", ...headersAuthM1() } }).then(async (r) =>
+          r.ok ? ((await r.json()) as Conductor) : null
+        ),
         pedirJson<Vehiculo[]>(urlVehiculos(driverId), "No se pudieron leer los vehículos"),
         pedirJson<Documento[]>(urlDocumentos(driverId), "No se pudieron leer los documentos")
       ]);
@@ -1268,6 +1284,8 @@ function leerPaso(): { paso: Paso; driverId: string } {
 
 export default function AltaConductor() {
   const [ruta, setRuta] = useState(leerPaso);
+  const [usuario, setUsuario] = useState<UsuarioM1 | null>(() => leerIdentidadM1());
+  const [cargandoSesion, setCargandoSesion] = useState(true);
 
   useEffect(() => {
     const alCambiar = () => setRuta(leerPaso());
@@ -1275,18 +1293,54 @@ export default function AltaConductor() {
     return () => window.removeEventListener("popstate", alCambiar);
   }, []);
 
+  useEffect(() => {
+    resolverSesionM1()
+      .then((sesion) => {
+        if (sesion) {
+          setUsuario(sesion.usuario);
+        }
+      })
+      .finally(() => setCargandoSesion(false));
+  }, []);
+
+  function alIngresar(sesion: SesionM1) {
+    setUsuario(sesion.usuario);
+    setCargandoSesion(false);
+  }
+
+  function alSalir() {
+    cerrarSesionM1();
+    setUsuario(null);
+    window.history.replaceState({}, "", window.location.pathname);
+    setRuta({ paso: "alta", driverId: "" });
+  }
+
   return (
     <main className="val-page">
       <style>{estilos}</style>
       <div className="val-columna">
-        <a className="val-volver" href="/">
-          Panel
-        </a>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <a className="val-volver" href="/">
+              Panel
+            </a>
+            <a className="val-volver" href="/valoraciones.html">
+              Valoraciones
+            </a>
+          </div>
+          {usuario ? (
+            <button type="button" className="val-link" onClick={alSalir}>
+              Cerrar sesión (#{usuario.id})
+            </button>
+          ) : null}
+        </div>
         {ruta.paso === "vehiculo" ? <PasoVehiculo key={ruta.driverId} driverId={ruta.driverId} /> : null}
         {ruta.paso === "cedula" ? <PasoDocumento key={`cedula-${ruta.driverId}`} driverId={ruta.driverId} config={CEDULA} /> : null}
         {ruta.paso === "licencia" ? <PasoDocumento key={`licencia-${ruta.driverId}`} driverId={ruta.driverId} config={LICENCIA} /> : null}
         {ruta.paso === "final" ? <PasoFinal key={ruta.driverId} driverId={ruta.driverId} /> : null}
-        {ruta.paso === "alta" ? <PasoAlta /> : null}
+        {ruta.paso === "alta" ? (
+          <PasoAlta usuario={usuario} cargandoSesion={cargandoSesion} onLogin={alIngresar} />
+        ) : null}
       </div>
     </main>
   );
