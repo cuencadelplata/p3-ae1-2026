@@ -12,6 +12,29 @@
         respond @internal 404
         reverse_proxy m1-identidad-acceso:3001
     }
+    # Alta de conductor (la misma de localhost:4000) en el sitio de M1.
+    # /api y /m1-api los resuelve el nginx de ese frontend.
+    handle /alta-conductor.html {
+        reverse_proxy m3-conductor-frontend:80
+    }
+    handle /alta-conductor.js {
+        reverse_proxy m3-conductor-frontend:80
+    }
+    handle /valoraciones.html {
+        reverse_proxy m3-conductor-frontend:80
+    }
+    handle /valoraciones.js {
+        reverse_proxy m3-conductor-frontend:80
+    }
+    handle /api/* {
+        reverse_proxy m3-conductor-frontend:80
+    }
+    handle /m1-api/* {
+        reverse_proxy m3-conductor-frontend:80
+    }
+    handle /vehiculos-api/* {
+        reverse_proxy m3-conductor-frontend:80
+    }
     handle {
         reverse_proxy m1-ui:80
     }

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
+import axios from 'axios'
+import { API_URL } from '../api'
 import { request } from '../rideFlowApi'
 
 interface VehiculoPendiente {
@@ -24,6 +26,7 @@ interface DocumentoVehiculo {
 interface PendingDriver {
   usuarioID: string
   createdAt?: string
+  actualizadoEn?: string
   vehiculo?: VehiculoPendiente | null
   documentacionVehiculo?: DocumentoVehiculo[]
 }
@@ -69,8 +72,11 @@ export default function OperatorDriverApprovals({ token, onBack }: { token: stri
 
   useEffect(() => {
     const abort = new AbortController()
-    request<PendingDriver[]>('M3', '/api/conductores/pendientes', { token, signal: abort.signal }).then((lista) => {
-      if (!abort.signal.aborted) setPendientes(lista.toSorted((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? '')))
+    axios.get<PendingDriver[]>(`${API_URL}/auth/altas-vehiculo`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: abort.signal,
+    }).then(({ data }) => {
+      if (!abort.signal.aborted) setPendientes(data.toSorted((a, b) => (a.createdAt ?? a.actualizadoEn ?? '').localeCompare(b.createdAt ?? b.actualizadoEn ?? '')))
     }).catch((cause: unknown) => {
       if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : 'No se pudieron consultar las solicitudes.')
     }).finally(() => {
@@ -106,7 +112,7 @@ export default function OperatorDriverApprovals({ token, onBack }: { token: stri
         setActualizaciones((valor) => valor + 1)
       }}>Actualizar</button>
     </div>
-    <p className="mt-2 text-sm text-[var(--text-soft)]">Cada solicitud incluye el vehículo y la documentación cargados en el alta.</p>
+    <p className="mt-2 text-sm text-[var(--text-soft)]">Estas solicitudes quedaron guardadas en M1 con el vehículo y la documentación enviados por M3.</p>
     {error && <p className="alert-error mt-4" role="alert">{error}</p>}
     {mensaje && <p className="mt-4 text-[var(--accent)]" role="status">{mensaje}</p>}
     {cargando && <p className="mt-4 text-[var(--text-soft)]" role="status">Cargando solicitudes…</p>}
@@ -118,7 +124,7 @@ export default function OperatorDriverApprovals({ token, onBack }: { token: stri
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="font-semibold">Conductor #{solicitud.usuarioID}</p>
-              {solicitud.createdAt && <time className="text-sm text-[var(--text-soft)]" dateTime={solicitud.createdAt}>{fecha.format(new Date(solicitud.createdAt))}</time>}
+              {(solicitud.actualizadoEn || solicitud.createdAt) && <time className="text-sm text-[var(--text-soft)]" dateTime={solicitud.actualizadoEn || solicitud.createdAt}>{fecha.format(new Date(solicitud.actualizadoEn || solicitud.createdAt || ''))}</time>}
               <p className="mt-2 text-sm">{solicitud.vehiculo ? describirVehiculo(solicitud.vehiculo) : 'Sin vehículo registrado'}</p>
             </div>
             <button className="btn-secondary" disabled={cargando || Boolean(habilitando)} aria-label={`Habilitar conductor #${solicitud.usuarioID}`}

@@ -42,4 +42,41 @@ async function validarIdentidad(token) {
   return { userId: String(data.userId), role: data.role };
 }
 
-module.exports = { M1_URL, M1Error, validarIdentidad };
+/**
+ * Guarda en M1 el vehículo y la documentación que el operador va a revisar.
+ * @param {string} usuarioId
+ * @param {{ vehiculo: object, documentacion: object[] }} alta
+ */
+async function guardarAltaVehiculo(usuarioId, alta) {
+  const clave = process.env.M1_INTERNAL_API_KEY?.trim();
+  if (!clave) {
+    throw new M1Error("M1_INTERNAL_API_KEY no está configurada", 503);
+  }
+
+  let res;
+  try {
+    res = await fetch(`${M1_URL}/auth/usuarios/${encodeURIComponent(usuarioId)}/alta-vehiculo`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-Internal-Api-Key": clave
+      },
+      body: JSON.stringify({
+        vehiculo: alta.vehiculo,
+        documentacion: alta.documentacion
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+  } catch (err) {
+    throw new M1Error(`M1 no disponible en ${M1_URL}: ${err.message}`, 503);
+  }
+
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new M1Error(data?.error || `M1 respondió ${res.status}`, res.status >= 500 ? 503 : res.status);
+  }
+  return data;
+}
+
+module.exports = { M1_URL, M1Error, validarIdentidad, guardarAltaVehiculo };

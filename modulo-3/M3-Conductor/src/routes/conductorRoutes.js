@@ -4,6 +4,7 @@ const {
   obtenerConductores,
   obtenerPendientesDeHabilitacion,
   obtenerConductorPorId,
+  enviarAltaAM1,
   asegurarPerfilConductor,
   crearConductor,
   actualizarTipoVehiculo,
@@ -56,6 +57,7 @@ router.get("/conductores/:id/disponible", obtenerDisponible);
 router.get("/conductores/:id/estado", obtenerEstadoConductor);
 // Cambios de estado: emiten eventos asíncronos en RabbitMQ (RNF-07)
 router.put("/conductores/:id/habilitado", operador, actualizarHabilitado);
+router.post("/conductores/:id/enviar-alta", requerirRol("CONDUCTOR"), enviarAltaAM1);
 router.put("/conductores/:id/disponible", actualizarDisponible);
 router.get("/conductores/:id", obtenerConductorPorId);
 // Corrección del tipo de vehículo elegido en el alta (front alta-conductor)

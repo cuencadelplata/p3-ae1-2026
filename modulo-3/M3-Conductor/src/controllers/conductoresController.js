@@ -43,6 +43,28 @@ const obtenerPendientesDeHabilitacion = async (_req, res) => {
   }
 };
 
+/**
+ * POST /conductores/:id/enviar-alta
+ * Toma el vehículo y la documentación de m3-vehiculos y los guarda en M1.
+ */
+const enviarAltaAM1 = async (req, res) => {
+  const { id } = req.params;
+  if (req.identidadM1?.userId !== id) {
+    return res.status(403).json({ error: 'Solo podés enviar tu propia alta.' });
+  }
+  try {
+    const { vehiculo, documentacion } = await vehiculosClient.obtenerDocumentacionVehiculo(id);
+    if (!vehiculo) {
+      return res.status(409).json({ error: 'Todavía no hay un vehículo para enviar a M1.' });
+    }
+    const guardada = await m1Client.guardarAltaVehiculo(id, { vehiculo, documentacion });
+    return res.status(201).json(guardada);
+  } catch (error) {
+    const status = error.status || 503;
+    return res.status(status).json({ error: error.message || 'No se pudo guardar el alta en M1.' });
+  }
+};
+
 const asegurarPerfilConductor = async (req, res) => {
   const { userId } = req.identidadM1;
   if (!/^[1-9][0-9]*$/.test(userId)) return res.status(401).json({ error: 'La sesión no identifica a un conductor válido.' });
@@ -374,6 +396,7 @@ module.exports = {
   obtenerConductores,
   obtenerPendientesDeHabilitacion,
   obtenerConductorPorId,
+  enviarAltaAM1,
   asegurarPerfilConductor,
   crearConductor,
   actualizarTipoVehiculo,

@@ -115,17 +115,21 @@ function guardarAlmacen(clave: string, valor: string) {
 }
 
 /**
- * Base URL de m3-vehiculos (configurable):
- *   ?vehiculosUrl=http://host:8083  >  window.M3_VEHICULOS_URL  >  http://<host actual>:8083
- * m3-vehiculos expone cors() abierto, así que el navegador puede llamarlo directo.
+ * Base URL de m3-vehiculos.
+ * En localhost sigue yendo a :8083. En el deploy usa /vehiculos-api, que nginx
+ * reenvía a m3-vehiculos, porque ese puerto no está publicado.
  */
 function baseVehiculos() {
   const params = new URLSearchParams(window.location.search);
   const porUrl = params.get("vehiculosUrl");
   if (porUrl) guardarAlmacen("m3.vehiculosUrl", porUrl);
   const global = (window as unknown as { M3_VEHICULOS_URL?: string }).M3_VEHICULOS_URL;
-  const base = porUrl || leerAlmacen("m3.vehiculosUrl") || global || `http://${window.location.hostname || "localhost"}:8083`;
-  return base.replace(/\/$/, "");
+  const explicita = porUrl || leerAlmacen("m3.vehiculosUrl") || global;
+  if (explicita) return explicita.replace(/\/$/, "");
+  const { port, hostname } = window.location;
+  const local = hostname === "localhost" || hostname === "127.0.0.1" || port === "4000" || port === "3000" || port === "3001";
+  if (local) return `http://${hostname || "localhost"}:8083`;
+  return "/vehiculos-api";
 }
 
 const urlVehiculos = (driverId: string) => `${baseVehiculos()}/api/v1/drivers/${encodeURIComponent(driverId)}/vehicles`;
@@ -1192,6 +1196,20 @@ function PasoFinal({ driverId }: { driverId: string }) {
     { texto: "Licencia · dorso", ok: Boolean(licencia.DORSO), paso: "licencia" }
   ];
   const completo = requisitos.every((r) => r.ok);
+  useEffect(() => {
+    if (!completo) return;
+    let activo = true;
+    pedirJson(
+      urlApi(`/api/conductores/${encodeURIComponent(driverId)}/enviar-alta`),
+      "No se pudo guardar el alta en M1",
+      { method: "POST" }
+    ).catch((error: unknown) => {
+      if (activo) setAviso(mensajeDe(error, "No se pudo guardar el alta en M1"));
+    });
+    return () => {
+      activo = false;
+    };
+  }, [completo, driverId]);
   // Validado = las cuatro fotos vigentes (cédula y licencia, frente y dorso) aprobadas por m3-vehiculos
   const fotos = [
     { doc: cedula.FRENTE, paso: "cedula" as Paso },
@@ -1247,7 +1265,7 @@ function PasoFinal({ driverId }: { driverId: string }) {
 
           {completo && !validado && !rechazada ? (
             <p className="val-vacio val-nota">
-              Recibimos todo. La revisión puede demorar un rato; te avisamos cuando termine.
+              Recibimos todo y quedó guardado en M1 para que un operador lo valide.
             </p>
           ) : null}
         </article>
