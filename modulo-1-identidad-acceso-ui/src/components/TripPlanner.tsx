@@ -117,9 +117,9 @@ export default function TripPlanner({ draft, onChange, route, routeLoading, pick
   disabled: boolean
   warning: string
 }) {
-  const vehicles: Array<{ type: VehicleType; label: string; detail: string; icon: LucideIcon; available: boolean }> = [
-    { type: 'AUTO', label: 'Automóvil', detail: 'Hasta 4 personas', icon: CarFront, available: true },
-    { type: 'MOTO', label: 'Moto', detail: 'Por ahora no disponible', icon: Bike, available: false },
+  const vehicles: Array<{ type: VehicleType; label: string; detail: string; icon: LucideIcon }> = [
+    { type: 'AUTO', label: 'Automóvil', detail: 'Hasta 4 personas', icon: CarFront },
+    { type: 'MOTO', label: 'Moto', detail: 'Una persona', icon: Bike },
   ]
 
   return (
@@ -133,9 +133,9 @@ export default function TripPlanner({ draft, onChange, route, routeLoading, pick
 
       <fieldset className="ride-vehicles" disabled={disabled}>
         <legend>Elegí cómo viajar</legend>
-        {vehicles.map(({ type, label, detail, icon: Icon, available }) => (
-          <label key={type} className="ride-vehicle-option" data-selected={draft.vehicleType === type} data-disabled={!available}>
-            <input type="radio" name="vehiculo" value={type} checked={draft.vehicleType === type} disabled={!available}
+        {vehicles.map(({ type, label, detail, icon: Icon }) => (
+          <label key={type} className="ride-vehicle-option" data-selected={draft.vehicleType === type}>
+            <input type="radio" name="vehiculo" value={type} checked={draft.vehicleType === type}
               onChange={() => onChange({ ...draft, vehicleType: type })} />
             <Icon size={20} aria-hidden="true" />
             <span><strong>{label}</strong><small>{detail}</small></span>

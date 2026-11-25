@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 import Login from './components/Login'
 import Register from './components/Register.tsx'
@@ -7,6 +7,18 @@ import PasswordRecovery from './components/PasswordRecovery'
 import { completarOAuth2, proveedorPendiente, redirectUriOAuth2 } from './components/OAuth2Login'
 
 type AuthState = 'login' | 'register' | 'recovery' | 'dashboard'
+
+function getSessionExpiry(token: string): number | undefined {
+  const payload = token.split('.')[1]
+  if (!payload) return
+
+  try {
+    const { exp } = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')))
+    if (typeof exp === 'number' && Number.isFinite(exp)) return exp * 1000
+  } catch {
+    // M1 sigue validando el token en el servidor.
+  }
+}
 
 function App() {
   const storedToken = localStorage.getItem('token')
@@ -40,13 +52,34 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleLogout = (mensaje?: string) => {
+  const handleLogout = useCallback((mensaje?: string) => {
     setAviso(mensaje ?? '')
     setToken(null)
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     setAuthState('login')
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!token) return
+    const expiresAt = getSessionExpiry(token)
+    if (expiresAt === undefined) return
+
+    const checkExpiry = () => {
+      if (Date.now() >= expiresAt) {
+        handleLogout('Tu sesión venció. Iniciá sesión de nuevo para retomar tu viaje.')
+      }
+    }
+
+    const timeout = window.setTimeout(checkExpiry, Math.max(0, expiresAt - Date.now()))
+    window.addEventListener('focus', checkExpiry)
+    document.addEventListener('visibilitychange', checkExpiry)
+    return () => {
+      window.clearTimeout(timeout)
+      window.removeEventListener('focus', checkExpiry)
+      document.removeEventListener('visibilitychange', checkExpiry)
+    }
+  }, [token, handleLogout])
 
   return (
     <div className="relative min-h-screen flex flex-col items-center justify-start sm:justify-center p-4 py-8 sm:py-12 overflow-y-auto">

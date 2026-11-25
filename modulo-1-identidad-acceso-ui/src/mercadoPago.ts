@@ -95,5 +95,9 @@ export async function tokenizeCard(card: CardInput, email: string) {
   if (!response?.ok || !data?.id) {
     throw new Error(`Mercado Pago no validó la tarjeta${data?.message ? `: ${data.message}` : '. Revisá los datos e intentá de nuevo.'}`)
   }
-  return { token: data.id, paymentMethodId: await paymentMethodId(number), email }
+  // Mercado Pago TEST rechaza el dominio reservado .test de las cuentas E2E.
+  const payerEmail = mpPublicKey.startsWith('TEST-') && email.toLowerCase().endsWith('.test')
+    ? 'comprador@example.com'
+    : email
+  return { token: data.id, paymentMethodId: await paymentMethodId(number), email: payerEmail }
 }

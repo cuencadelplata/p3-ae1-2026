@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Bell } from 'lucide-react'
+import { Bell, ChevronDown, ChevronUp } from 'lucide-react'
 import { ensurePassenger, FlowError, request } from '../rideFlowApi'
 
 interface Customer {
@@ -98,8 +98,10 @@ async function enableCustomerPush(token: string) {
   })
 }
 
-export default function BrowserNotifications({ token, role }: { token: string; role: 'CLIENTE' | 'CONDUCTOR' }) {
+export default function BrowserNotifications({ token, role, userId }: { token: string; role: 'CLIENTE' | 'CONDUCTOR'; userId: number }) {
   const supported = window.isSecureContext && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+  const displayKey = `movilidad.avisos.minimizados.${userId}`
+  const [expanded, setExpanded] = useState(() => localStorage.getItem(displayKey) !== 'true')
   const [active, setActive] = useState(false)
   const [busy, setBusy] = useState(supported)
   const [error, setError] = useState('')
@@ -165,22 +167,34 @@ export default function BrowserNotifications({ token, role }: { token: string; r
 
   return (
     <section aria-labelledby="browser-notifications" className="detail-card mt-5">
-      <h2 id="browser-notifications" className="flex items-center gap-2 font-semibold">
-        <Bell className="h-4 w-4 text-[var(--gold)]" aria-hidden="true" /> Avisos del viaje
-      </h2>
-      <RecentNotifications token={token} />
-      <details className="mt-4 border-t border-[var(--line)] pt-3">
-        <summary className="cursor-pointer text-sm font-semibold">Avisos fuera de la aplicación</summary>
-        <p className="mt-2 text-sm" role="status">
-          {!supported ? 'Este navegador o sitio no admite notificaciones.' : busy ? 'Actualizando avisos…' : active
-            ? 'Activadas en este navegador. Podés cerrar la pestaña.'
-            : 'Activá los avisos para recibir actualizaciones de tus viajes.'}
-        </p>
-        {supported && <button className="btn-secondary mt-3" disabled={busy} onClick={() => void toggle()}>
-          {active ? 'Desactivar en este navegador' : 'Activar avisos'}
-        </button>}
-        {error && <p className="alert-error mt-3" role="alert">{error}</p>}
-      </details>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="browser-notifications" className="flex items-center gap-2 font-semibold">
+          <Bell className="h-4 w-4 text-[var(--gold)]" aria-hidden="true" /> Avisos del viaje
+        </h2>
+        <button type="button" className="btn-ghost inline-flex items-center gap-1" aria-expanded={expanded}
+          aria-controls="browser-notifications-content" onClick={() => {
+            setExpanded(!expanded)
+            localStorage.setItem(displayKey, String(expanded))
+          }}>
+          {expanded ? <ChevronUp size={16} aria-hidden="true" /> : <ChevronDown size={16} aria-hidden="true" />}
+          {expanded ? 'Minimizar avisos' : 'Mostrar avisos'}
+        </button>
+      </div>
+      <div id="browser-notifications-content" hidden={!expanded}>
+        <RecentNotifications token={token} />
+        <details className="mt-4 border-t border-[var(--line)] pt-3">
+          <summary className="cursor-pointer text-sm font-semibold">Avisos fuera de la aplicación</summary>
+          <p className="mt-2 text-sm" role="status">
+            {!supported ? 'Este navegador o sitio no admite notificaciones.' : busy ? 'Actualizando avisos…' : active
+              ? 'Activadas en este navegador. Podés cerrar la pestaña.'
+              : 'Activá los avisos para recibir actualizaciones de tus viajes.'}
+          </p>
+          {supported && <button className="btn-secondary mt-3" disabled={busy} onClick={() => void toggle()}>
+            {active ? 'Desactivar en este navegador' : 'Activar avisos'}
+          </button>}
+          {error && <p className="alert-error mt-3" role="alert">{error}</p>}
+        </details>
+      </div>
     </section>
   )
 }

@@ -1,3 +1,5 @@
+import type { VehicleType } from './places'
+
 export const origin = { latitude: -27.4692, longitude: -58.8306, address: 'Av. 3 de Abril 1050, Corrientes' }
 export const destination = { latitude: -27.4459, longitude: -58.7619, address: 'Aeropuerto Internacional Corrientes' }
 
@@ -10,6 +12,15 @@ export interface Identity {
 }
 
 export type Account = Identity & { token: string }
+export interface DriverVehicle {
+  id: string
+  patente: string
+  marca?: string
+  modelo?: string
+  anio: number
+  tipoServicio: VehicleType
+  activo: boolean
+}
 export interface RideRequest {
   id: string
   status: string
@@ -23,6 +34,7 @@ export interface RideRequest {
 }
 export interface Offer {
   id: string
+  vehicleType: VehicleType
   requestId: string
   status: string
   createdAt: string
@@ -116,13 +128,17 @@ async function fetchService(service: Service, path: string, options: Options): P
 }
 
 export async function request<T>(service: Service, path: string, options: Options = {}): Promise<T> {
+  return (await requestWithHeaders<T>(service, path, options)).data
+}
+
+export async function requestWithHeaders<T>(service: Service, path: string, options: Options = {}) {
   const response = await fetchService(service, path, options)
   const data = await response.json().catch(() => null)
   if (!response.ok || data === null) {
     const detail = data?.message || data?.error?.message || data?.error?.mensaje || data?.error?.code || data?.error
     throw new FlowError(`${service} (${response.status})${typeof detail === 'string' ? ` · ${detail}` : ' · Respuesta inesperada'}`, response.status, data?.code ?? data?.error?.code ?? data?.error?.codigo)
   }
-  return data as T
+  return { data: data as T, headers: response.headers }
 }
 
 export async function downloadReceipt(tripId: string, receiptNumber: string, token: string) {
@@ -172,15 +188,15 @@ export async function prepareDriver(driver: Account) {
   const { token } = driver
   const status = await request<{ estado: string; habilitado: boolean }>('M3', path, { token })
   if (!status.habilitado) throw new Error('Tu perfil de conductor debe estar habilitado antes de recibir viajes.')
-  const vehicles = await request<{ patente: string; tipoServicio: string; activo: boolean }[]>(
+  const vehicles = await request<DriverVehicle[]>(
     'M3-vehiculos', '/api/v1/drivers/' + driver.userId + '/vehicles', { token },
   )
-  const active = vehicles.find((vehicle) => vehicle.activo && vehicle.tipoServicio === 'AUTO')
-  if (!active) throw new Error('Registrá y activá un auto en tu perfil de conductor para recibir viajes.')
-  return active.patente
+  const active = vehicles.find((vehicle) => vehicle.activo && (vehicle.tipoServicio === 'AUTO' || vehicle.tipoServicio === 'MOTO'))
+  if (!active) throw new Error('Registrá y activá un vehículo para recibir viajes.')
+  return active
 }
 
-export async function publishDriverLocation(driverId: number, token: string, available: boolean, signal?: AbortSignal) {
+export async function publishDriverLocation(driverId: number, token: string, vehicleType: VehicleType, available: boolean, signal?: AbortSignal) {
   const coords = await new Promise<GeolocationCoordinates>((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error('El navegador no permite compartir tu ubicación.'))
@@ -195,7 +211,7 @@ export async function publishDriverLocation(driverId: number, token: string, ava
   const location = { latitude: coords.latitude, longitude: coords.longitude, address: 'Tu ubicación' }
   try {
     await request('M4', '/api/v1/drivers/' + driverId + '/location', {
-      method: 'PUT', token, signal, body: { latitude: location.latitude, longitude: location.longitude, vehicleType: 'AUTO', available },
+      method: 'PUT', token, signal, body: { latitude: location.latitude, longitude: location.longitude, vehicleType, available },
     })
   } catch (error) {
     if (error instanceof FlowError && error.status === 401) throw new DriverSessionExpired()

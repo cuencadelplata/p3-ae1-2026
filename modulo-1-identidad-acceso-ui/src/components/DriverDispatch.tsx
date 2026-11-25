@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, CarFront, CircleCheck, Clock3, LockKeyhole, MapPin, Navigation, Power, Radar } from 'lucide-react'
+import { ArrowLeft, Bike, CarFront, CircleCheck, Clock3, LockKeyhole, MapPin, Navigation, Power, Radar } from 'lucide-react'
 import RideMap from './RideMap'
 import TripCancellation from './TripCancellation'
 import { fetchRoute } from '../places'
 import type { RouteInfo } from '../places'
 import { destination, DriverSessionExpired, FlowError, origin, pollTrip, prepareDriver, publishDriverLocation, request } from '../rideFlowApi'
-import type { Account, Offer, Trip, TripRecord } from '../rideFlowApi'
+import type { Account, DriverVehicle, Offer, Trip, TripRecord } from '../rideFlowApi'
 import './RideFlow.css'
 import TripClock from './TripClock'
 import DriverVehicles from './DriverVehicles'
@@ -69,7 +69,7 @@ export default function DriverDispatch({ driver, onBack, onSessionExpired }: { d
   const [online, setOnline] = useState(false)
   const [ready, setReady] = useState(false)
   const [busy, setBusy] = useState('')
-  const [plate, setPlate] = useState('')
+  const [activeVehicle, setActiveVehicle] = useState<DriverVehicle>()
   const [showVehicles, setShowVehicles] = useState(false)
   const [offer, setOffer] = useState<Offer | null>(null)
   const [assignment, setAssignment] = useState(() => readAssignment(storageKey))
@@ -80,14 +80,12 @@ export default function DriverDispatch({ driver, onBack, onSessionExpired }: { d
   const [driverLocation, setDriverLocation] = useState<typeof origin>()
   const [now, setNow] = useState(Date.now)
   const offerId = offer?.id
-  // Patente del auto activo en M3. M8 la necesita para emitir el comprobante del viaje: si el
-  // conductor toma un viaje sin auto activo, el comprobante falla y termina en la DLQ de M8.
-  const vehicle = useRef('')
+  const vehicle = useRef<DriverVehicle>(undefined)
 
-  async function ensureVehicle() {
-    if (!vehicle.current) {
+  async function ensureVehicle(refresh = false) {
+    if (refresh || !vehicle.current) {
       vehicle.current = await prepareDriver(driver)
-      setPlate(vehicle.current)
+      setActiveVehicle(vehicle.current)
     }
     return vehicle.current
   }
@@ -130,12 +128,10 @@ export default function DriverDispatch({ driver, onBack, onSessionExpired }: { d
         const occupied = Boolean(current ? isActive(current) : assignment)
         if (!online) return occupied
         const available = !occupied
-        // Al quedar en línea por un viaje retomado, "Conectarme" no corrió: se prepara el auto
-        // antes de volver a recibir ofertas.
-        if (available) await ensureVehicleRef.current()
+        const selected = await ensureVehicleRef.current()
         if (signal.aborted) return false
         if (available !== lastAvailability || Date.now() - lastPublication >= (current?.estado === 'EN_CURSO' && !current.destinoConfirmadoAt ? 5000 : 20_000)) {
-          const position = await publishDriverLocation(userId, token, available, signal)
+          const position = await publishDriverLocation(userId, token, selected.tipoServicio, available, signal)
           if (!signal.aborted) setDriverLocation(position)
           lastAvailability = available
           lastPublication = Date.now()
@@ -146,7 +142,7 @@ export default function DriverDispatch({ driver, onBack, onSessionExpired }: { d
         if (signal.aborted) return false
         const instant = Date.now()
         setNow(instant)
-        setOffer(offers.find((item) => item.status === 'PENDING' && Date.parse(item.expiresAt) > instant) ?? null)
+        setOffer(offers.find((item) => item.status === 'PENDING' && item.vehicleType === selected.tipoServicio && Date.parse(item.expiresAt) > instant) ?? null)
         return true
       } catch (err) {
         if (signal.aborted) return false
@@ -225,15 +221,15 @@ export default function DriverDispatch({ driver, onBack, onSessionExpired }: { d
       }
 
       if (online) {
-        await publishDriverLocation(userId, token, false)
+        const selected = await ensureVehicle()
+        await publishDriverLocation(userId, token, selected.tipoServicio, false)
         setOnline(false)
         setOffer(null)
         return
       }
 
-      vehicle.current = ''
-      await ensureVehicle()
-      setDriverLocation(await publishDriverLocation(userId, token, true))
+      const selected = await ensureVehicle(true)
+      setDriverLocation(await publishDriverLocation(userId, token, selected.tipoServicio, true))
       setTrip(null)
       setCompletedOffer(null)
       setOnline(true)
@@ -250,7 +246,10 @@ export default function DriverDispatch({ driver, onBack, onSessionExpired }: { d
     if (!online || active || Date.parse(pending.expiresAt) <= Date.now()) return
     await perform(action === 'accept' ? 'Confirmando el viaje…' : 'Rechazando la oferta…', async () => {
       try {
-        if (action === 'accept') await ensureVehicle()
+        if (action === 'accept' && (await ensureVehicle(true))?.tipoServicio !== pending.vehicleType) {
+          setOffer(null)
+          throw new Error('El vehículo activo cambió. Esperá una oferta para ese tipo de vehículo.')
+        }
         const response = await request<{ requestStatus: string }>('M5', `/api/v1/offers/${pending.id}/${action}`, {
           method: 'POST', token, body: {},
         })
@@ -388,9 +387,9 @@ export default function DriverDispatch({ driver, onBack, onSessionExpired }: { d
         {!online && !active && ready && <div className="driver-trip-card">
           <button className="btn-ghost" type="button" disabled={Boolean(busy)} aria-expanded={showVehicles}
             onClick={() => setShowVehicles((value) => !value)}>{showVehicles ? 'Ocultar vehículos' : 'Gestionar vehículos'}</button>
-          {showVehicles && <DriverVehicles driver={driver} onActivate={(activePlate) => {
-            vehicle.current = ''
-            setPlate(activePlate)
+          {showVehicles && <DriverVehicles driver={driver} onActivate={(selected) => {
+            vehicle.current = selected
+            setActiveVehicle(selected)
             setError('')
           }} />}
         </div>}
@@ -419,10 +418,10 @@ export default function DriverDispatch({ driver, onBack, onSessionExpired }: { d
           </dl>}
         </div>}
 
-        <div className="driver-details">
-          <CarFront size={17} aria-hidden="true" />
-          {plate && <span>Auto activo <strong>{plate}</strong></span>}
-        </div>
+        {activeVehicle && <div className="driver-details">
+          {activeVehicle.tipoServicio === 'MOTO' ? <Bike size={17} aria-hidden="true" /> : <CarFront size={17} aria-hidden="true" />}
+          <span>{activeVehicle.tipoServicio === 'MOTO' ? 'Moto activa' : 'Auto activo'} <strong>{activeVehicle.patente}</strong></span>
+        </div>}
       </section>
     </main>
   )

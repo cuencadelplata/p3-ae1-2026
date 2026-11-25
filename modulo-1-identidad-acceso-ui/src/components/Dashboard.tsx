@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import axios from 'axios'
 import Reservations from './Reservations'
 import BrowserNotifications from './BrowserNotifications'
+import OperatorSupport from './OperatorSupport'
 import TripHistory from './TripHistory'
 import {
   LogOut,
@@ -73,6 +74,7 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   const [verViaje, setVerViaje] = useState(false)
   const [verReservas, setVerReservas] = useState(false)
   const [verHistorial, setVerHistorial] = useState(false)
+  const [verSoporte, setVerSoporte] = useState(false)
 
   const headers = { Authorization: `Bearer ${token}` }
 
@@ -145,6 +147,9 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   const nombreCompleto = perfil ? `${perfil.nombre} ${perfil.apellido}` : ''
   const iniciales = perfil ? `${perfil.nombre[0] ?? ''}${perfil.apellido[0] ?? ''}`.toUpperCase() : '?'
 
+  if (verSoporte && perfil?.rol === 'OPERADOR') {
+    return <OperatorSupport token={token} onBack={() => setVerSoporte(false)} />
+  }
   if (verHistorial && perfil?.rol === 'CLIENTE') {
     return <TripHistory token={token} userId={perfil.userId} onBack={() => setVerHistorial(false)} />
   }
@@ -211,8 +216,10 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
               <button className="btn-secondary" onClick={() => setVerHistorial(true)}>Historial de viajes</button>
             </div>}
 
+            {perfil.rol === 'OPERADOR' &&
+              <button className="btn-primary mt-6" onClick={() => setVerSoporte(true)}>Bandeja de soporte</button>}
             {(perfil.rol === 'CLIENTE' || perfil.rol === 'CONDUCTOR') && (
-              <BrowserNotifications key={perfil.userId} token={token} role={perfil.rol} />
+              <BrowserNotifications key={perfil.userId} token={token} role={perfil.rol} userId={perfil.userId} />
             )}
 
             <p className="eyebrow mt-10">Mis datos</p>

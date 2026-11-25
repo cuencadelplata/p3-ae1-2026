@@ -29,7 +29,7 @@ const defaultDraft: Draft = { origin, destination, vehicleType: 'AUTO' }
 function readDraft(key: string): Draft {
   try {
     const saved = JSON.parse(sessionStorage.getItem(key) ?? 'null') as Draft | null
-    if (saved?.origin?.address && saved.destination?.address) return { ...saved, vehicleType: 'AUTO' }
+    if (saved?.origin?.address && saved.destination?.address) return { ...saved, vehicleType: saved.vehicleType === 'MOTO' ? 'MOTO' : 'AUTO' }
   } catch {
     // Si no hay un borrador usable, el planificador vuelve a su encuadre inicial.
   }
@@ -378,7 +378,9 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
     try {
       update({ receipt: await fetchReceipt(id, token) })
     } catch (err) {
-      if (err instanceof FlowError && err.status === 404) throw new Error('M8 todavía está emitiendo el comprobante. Volvé a consultarlo en unos segundos.')
+      if (err instanceof FlowError && err.status === 404) {
+        throw new Error('El comprobante aún no está disponible. Si sigue sin aparecer, abrí Soporte del viaje desde el historial.')
+      }
       throw err
     }
   }
@@ -481,7 +483,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
 
               {!ride && !trip && <>
                 <h2>Pedí un viaje</h2>
-                <p>{checkingExistingTrip ? 'Buscando si tenés un viaje en curso…' : existingTripError ? 'No pudimos comprobar si tenés un viaje activo. Reintentá antes de solicitar otro.' : 'Elegí el origen y el destino escribiendo la dirección o tocando el mapa. Al confirmar, buscamos autos disponibles cerca del origen.'}</p>
+                <p>{checkingExistingTrip ? 'Buscando si tenés un viaje en curso…' : existingTripError ? 'No pudimos comprobar si tenés un viaje activo. Reintentá antes de solicitar otro.' : 'Elegí el origen, el destino y el tipo de vehículo. Al confirmar, buscamos conductores disponibles cerca del origen.'}</p>
                 {existingTripError && <>
                   <p role="alert">{existingTripError}</p>
                   <button className="btn-ghost" disabled={locked || checkingExistingTrip} onClick={() => setLookupAttempt((attempt) => attempt + 1)}>Reintentar consulta de viaje</button>
@@ -520,7 +522,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
               {trip && !checkingTrip && started && <>
                 <h2>Viaje en curso</h2>
                 <TripClock startedAt={trip.iniciadoAt} endedAt={trip.destinoConfirmadoAt} />
-                {!trip.destinoConfirmadoAt && <p role="status">{livePosition ? 'Seguí la ubicación del auto en el mapa.' : 'Esperando la ubicación del conductor.'} El pago se habilita cuando el conductor confirma la llegada.</p>}
+                {!trip.destinoConfirmadoAt && <p role="status">{livePosition ? 'Seguí la ubicación del conductor en el mapa.' : 'Esperando la ubicación del conductor.'} El pago se habilita cuando el conductor confirma la llegada.</p>}
                 {trip.destinoConfirmadoAt && <form className="ride-form" onSubmit={(event) => { event.preventDefault(); void run('Calculando la tarifa y registrando el pago…', () => finish(trip.id), []) }}>
                   <fieldset className="ride-pay-methods" disabled={locked}>
                     <legend>Medio de pago</legend>
@@ -585,8 +587,7 @@ export default function RideFlow({ passenger, onBack }: { passenger: Account; on
                     <button className="btn-primary" disabled={locked} onClick={() => void run('Descargando comprobante…', () => downloadReceipt(trip.id, receipt.receiptNumber, token))}>Descargar PDF</button>
                   </>
                   : <button className="btn-primary" disabled={locked} onClick={() => void run('Consultando comprobante…', () => readReceipt(trip.id))}>Ver comprobante</button>}
-                {requestSeconds > 0 && <p className="ride-muted">Podés solicitar otro viaje con esta cuenta en {requestSeconds} s.</p>}
-                <button className="btn-ghost" disabled={locked || requestSeconds > 0} onClick={reset}>Hacer otro viaje</button>
+                <button className="btn-ghost" disabled={locked} onClick={reset}>Hacer otro viaje</button>
               </>}
               {replacingDriver && <>
                 <h2>Buscando otro conductor</h2>
