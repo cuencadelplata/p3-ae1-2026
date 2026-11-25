@@ -1,0 +1,146 @@
+name: movilidad-aws
+
+services:
+  caddy:
+    image: caddy:2.11.9-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Definir APP_DOMAIN}
+      M9_DOMAIN: ${M9_DOMAIN:?Definir M9_DOMAIN}
+      M8_DOMAIN: ${M8_DOMAIN:?Definir M8_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?Definir ACME_EMAIL}
+    volumes:
+      - ./deployment/aws/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [reservas-network]
+
+  m1-identidad-acceso:
+    ports: !reset []
+    environment:
+      NODE_ENV: production
+      # Caddy es el único ingreso público; conservar la IP real para el rate limit.
+      TRUST_PROXY: 'true'
+      GOOGLE_REDIRECT_URI: https://${APP_DOMAIN}/
+      AUTH0_REDIRECT_URI: https://${APP_DOMAIN}/
+  m1-ui:
+    ports: !reset []
+    build:
+      args:
+        VITE_API_URL: https://${APP_DOMAIN}/identity
+  m2-client:
+    ports: !reset []
+  m2-gateway:
+    ports: !reset []
+  m3-conductor-api:
+    profiles: [m3]
+    ports: !reset []
+    env_file: !reset []
+    environment:
+      M1_REQUIRE_AUTH: 'true'
+      SUPABASE_URL: ${SUPABASE_URL:-${M3_SUPABASE_URL:-}}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-${M3_SUPABASE_SERVICE_ROLE_KEY:-}}
+  m3-conductor-frontend:
+    profiles: [m3]
+    ports: !reset []
+  m3-vehiculos:
+    profiles: [m3]
+    ports: !reset []
+    env_file: !reset []
+  m4-api:
+    ports: !reset []
+    environment:
+      SKIP_AUTH_VALIDATION: 'false'
+      USE_MOCK_GEOCODING: 'false'
+  m3-conductor-consumer:
+    profiles: [m3]
+  m4-ui:
+    ports: !reset []
+  m5-dispatch-service:
+    ports: !reset []
+    env_file: !reset []
+    environment:
+      AUTH_MODE: jwt
+      M1_AUTH_URL: http://m1-identidad-acceso:3001
+      M4_SERVICE_URL: http://m4-api:3004/api/v1
+      M6_SERVICE_URL: http://m6-viajes:3000
+      M7_URL: http://m7-api:3000
+  m6-cancelacion:
+    ports: !reset []
+  m6-fachada:
+    ports: !reset []
+  m6-viajes:
+    ports: !reset []
+  m6-viajes-app:
+    environment:
+      M7_URL: http://m7-api:3000
+  m7-api:
+    build:
+      context: ./modulo7
+      dockerfile: Dockerfile
+    ports: !reset []
+    # No heredar las credenciales locales ni usar el sandbox de M7 en AWS.
+    env_file: !reset []
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://m7:${M7_DB_PASSWORD:?Generar M7_DB_PASSWORD}@m7-db:5432/historial?sslmode=disable
+      SUPABASE_URL: ${M7_SUPABASE_URL:-}
+      SUPABASE_KEY: ${M7_SUPABASE_KEY:-}
+      M7_API_KEY: ${M7_API_KEY:?Generar las claves con prepare.mjs}
+      MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN:-}
+    depends_on:
+      m7-db:
+        condition: service_healthy
+  m7-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: m7
+      POSTGRES_DB: historial
+      POSTGRES_PASSWORD: ${M7_DB_PASSWORD:?Generar M7_DB_PASSWORD}
+    volumes: [m7-data:/var/lib/postgresql/data]
+    networks: [reservas-network]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U m7 -d historial']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  m8-app:
+    ports: !reset []
+    environment:
+      PUBLIC_BASE_URL: https://${M8_DOMAIN}
+      PUSH_M1_PUBLIC_URL: https://${APP_DOMAIN}/identity
+      M7_PAYMENTS_URL: http://m7-api:3000
+  m9-reservas:
+    ports: !reset []
+    environment:
+      M9_AUTH_MODE: m1
+      ROUTE_RESOLVER_MODE: m4
+      M1_BASE_URL: http://m1-identidad-acceso:3001
+      M4_BASE_URL: http://m4-api:3004
+      M5_BASE_URL: http://m5-dispatch-service:3005
+      M7_BASE_URL: http://m7-api:3000
+      M9_DISPATCH_AUTH_URL: http://m1-identidad-acceso:3001/auth/token-delegado
+      M9_DISPATCH_AUTH_TOKEN: ${M9_DISPATCH_AUTH_TOKEN:?Generar las claves con prepare.mjs}
+      M5_SERVICE_TOKEN: ''
+      DEPLOYMENT_ENVIRONMENT: aws-ec2
+  postgres:
+    ports: !reset []
+  rabbitmq:
+    ports: !reset []
+  redis:
+    ports: !reset []
+
+networks:
+  reservas-network:
+    name: reservas-network
+    external: true
+    driver: !reset null
+
+volumes:
+  m7-data:
+  caddy-data:
+  caddy-config:

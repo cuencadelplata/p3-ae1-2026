@@ -3,7 +3,43 @@ import { Request, Response } from "express";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
 import { findUserById } from "../repositories/user.repository";
 import { AuthError } from "../services/auth.service";
-import { obtenerPerfilPropio } from "../services/user-profile.service";
+import {
+    completarDatosPropios,
+    obtenerPerfilPropio
+} from "../services/user-profile.service";
+
+// PATCH /auth/me: el usuario completa los datos que le faltan (DNI, teléfono, nombre, apellido).
+// Pensado para quienes entraron con Google o Auth0. Un dato ya cargado no se modifica.
+export function completarMiPerfil(
+    req: AuthenticatedRequest,
+    res: Response
+): void {
+    const userId = req.usuarioAutenticado?.userId;
+
+    if (userId === undefined) {
+        res.status(401).json({
+            error: "Token requerido"
+        });
+        return;
+    }
+
+    try {
+        res.status(200).json(completarDatosPropios(userId, req.body));
+    } catch (error) {
+        if (error instanceof AuthError) {
+            res.status(error.statusCode).json({
+                error: error.message
+            });
+            return;
+        }
+
+        console.error(error);
+
+        res.status(500).json({
+            error: "Error interno del servidor"
+        });
+    }
+}
 
 // GET /auth/me: devuelve los datos del usuario dueño del token.
 // El userId sale del token ya validado, así que cada usuario solo puede ver sus propios datos.

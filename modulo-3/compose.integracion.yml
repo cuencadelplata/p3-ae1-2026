@@ -6,10 +6,9 @@ services:
     image: m3-vehiculos
     container_name: m3-vehiculos
     restart: unless-stopped
-    env_file:
-      - path: ./m3-vehiculos/.env.docker
-        required: false
     environment:
+      SUPABASE_URL: ${SUPABASE_URL:-${M3_SUPABASE_URL:-}}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-${M3_SUPABASE_SERVICE_ROLE_KEY:-}}
       PORT: 8083
       M1_URL: "${M1_URL:-http://m1-identidad-acceso:3001}"
       JWT_SECRET: "${M1_JWT_SECRET:-${JWT_SECRET:?Configurar M1_JWT_SECRET o JWT_SECRET con la misma clave privada para todos los modulos}}"
@@ -44,13 +43,14 @@ services:
     image: m3-conductor-api
     container_name: m3-conductor-api
     restart: unless-stopped
-    env_file:
-      - path: ./M3-Conductor/.env
-        required: false
     environment:
       PORT: 3000
+      SUPABASE_URL: "${SUPABASE_URL:-${M3_SUPABASE_URL:?Configurar SUPABASE_URL o M3_SUPABASE_URL en el .env de la raiz}}"
+      SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:-${M3_SUPABASE_SERVICE_ROLE_KEY:?Configurar SUPABASE_SERVICE_ROLE_KEY o M3_SUPABASE_SERVICE_ROLE_KEY en el .env de la raiz}}"
       M1_URL: "${M1_URL:-http://m1-identidad-acceso:3001}"
+      M1_INTERNAL_API_KEY: "${M1_INTERNAL_API_KEY:-}"
       M6_VIAJES_URL: "${M6_VIAJES_URL:-http://m6-viajes:3000}"
+      M3_VEHICULOS_URL: "${M3_VEHICULOS_URL:-http://m3-vehiculos:8083}"
       JWT_SECRET: "${M1_JWT_SECRET:-${JWT_SECRET:?Configurar M1_JWT_SECRET o JWT_SECRET con la misma clave privada para todos los modulos}}"
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -65,6 +65,8 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-m9-local}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672
       RABBITMQ_EXCHANGE: m3.conductores.events
+      # El Compose común usa RabbitMQ. Activar el respaldo solo si se despliega Kafka.
+      KAFKA_FALLBACK_ENABLED: "${M3_KAFKA_FALLBACK_ENABLED:-false}"
       OTEL_SERVICE_NAME: m3-conductor-service
       # El collector es opcional: habilitar solo cuando este desplegado.
       OTEL_SDK_DISABLED: "${M3_OTEL_SDK_DISABLED:-true}"

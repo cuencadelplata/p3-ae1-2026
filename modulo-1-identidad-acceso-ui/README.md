@@ -79,24 +79,13 @@ su propia activación.
    avisos de asignación. Para probar también Web Push, activá la opción en
    ambos perfiles antes de pedir el viaje y configurá las claves VAPID en M8.
 
-Si el conductor acaba de registrarse y todavía carece de perfil en M3, el
-equipo que administra el entorno debe crearlo y habilitarlo. En un Compose
-local de prueba se puede preparar desde PowerShell con su cuenta de conductor.
+### Habilitar a un conductor nuevo
 
-```powershell
-$credencial = Get-Credential -Message 'Cuenta de conductor de prueba'
-$login = Invoke-RestMethod 'http://localhost:10000/auth/iniciar-sesion' -Method Post -ContentType 'application/json' -Body (@{
-  email = $credencial.UserName
-  password = $credencial.GetNetworkCredential().Password
-} | ConvertTo-Json)
-$headers = @{ Authorization = "Bearer $($login.token)" }
-$conductor = Invoke-RestMethod 'http://localhost:10000/auth/validar-identidad-y-rol' -Headers $headers
-Invoke-RestMethod 'http://localhost:5000/api/conductores' -Method Post -Headers $headers -ContentType 'application/json' -Body '{"ciudad":"Corrientes","tipovehiculo":"auto"}'
-Invoke-RestMethod "http://localhost:5000/api/conductores/$($conductor.userId)/habilitado" -Method Put -ContentType 'application/json' -Body '{"habilitado":"activo"}'
-```
+1. Iniciá sesión como conductor y abrí **Tu cuenta**. Si aún no tiene perfil en M3, la app lo crea en estado **Pendiente de habilitación**. En esa misma vista figura el número de usuario.
+2. En otra sesión, ingresá como operador y elegí **Tu cuenta → Habilitar conductores**. Buscá el número y seleccioná **Habilitar**. Usá **Actualizar** si tenías la bandeja abierta antes de que se creara el perfil.
+3. Volvé a la sesión del conductor. Con el vehículo activo, elegí **Abrir despacho → Conectarme**. En **Tu cuenta** también podés consultar el estado con **Actualizar estado**.
 
-El alta de M3 se hace una vez. Si el perfil ya existe, usá su estado actual y
-continuá con el vehículo activo en el paso 2.
+La cuenta de operador se configura en M1. M3 valida el JWT y el rol de operador para listar las solicitudes y aprobarlas. En AWS, desplegá juntos `m1-ui` y `m3-conductor-api` para que las nuevas rutas estén disponibles.
 
 ## Qué pide a M1 cada pantalla
 

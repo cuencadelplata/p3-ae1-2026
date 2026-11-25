@@ -18,7 +18,8 @@ import {
 import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware";
 import { authenticateInternalApiKey } from "../middleware/internal-api-key.middleware";
 import { loginRateLimit } from "../middleware/login-rate-limit.middleware";
-import { obtenerMiPerfil, obtenerNombreUsuarioInterno } from "../controllers/me.controller";
+import { completarMiPerfil, obtenerMiPerfil, obtenerNombreUsuarioInterno } from "../controllers/me.controller";
+import { listarAltasParaOperador, recibirAltaVehiculo } from "../controllers/alta-vehiculo.controller";
 import { emitirTokenDelegadoHandler } from "../controllers/delegated-token.controller";
 import { autenticarCredencialDelegacion } from "../middleware/delegation-credential.middleware";
 
@@ -50,11 +51,32 @@ router.get(
     obtenerMiPerfil
 );
 
+// RF-1.1 / RF-1.5: completar los datos que faltan (DNI y teléfono de quien entró con Google o Auth0)
+router.patch(
+    "/me",
+    authenticateToken,
+    completarMiPerfil
+);
+
 // Consulta interna entre servicios (ej. M8): nombre y apellido por userId con X-Internal-Api-Key
 router.get(
     "/usuarios/:id/nombre",
     authenticateInternalApiKey,
     obtenerNombreUsuarioInterno
+);
+
+// M3 envía el vehículo y la documentación del alta. Quedan guardados para el operador.
+router.post(
+    "/usuarios/:id/alta-vehiculo",
+    authenticateInternalApiKey,
+    recibirAltaVehiculo
+);
+
+router.get(
+    "/altas-vehiculo",
+    authenticateToken,
+    authorizeRoles("OPERADOR"),
+    listarAltasParaOperador
 );
 
 // ============ RF-1.4: Recuperación de Contraseña ============

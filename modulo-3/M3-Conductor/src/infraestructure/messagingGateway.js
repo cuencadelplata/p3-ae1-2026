@@ -2,6 +2,7 @@ const { connectRabbitMQ, probeRabbitMQ } = require("./rabbimq.client");
 const { createCircuitBreaker } = require("./circuitBreaker");
 const kafkaFallback = require("./kafkaFallback");
 const kafkaLifecycle = require("./kafkaLifecycle");
+const kafkaEnabled = process.env.KAFKA_FALLBACK_ENABLED !== "false";
 
 const breaker = createCircuitBreaker({
   failureThreshold: Number(process.env.CIRCUIT_FAILURE_THRESHOLD || 2),
@@ -18,7 +19,7 @@ function status() {
   return {
     circuit,
     rabbitmq: circuit === "CLOSED" ? "up" : "down",
-    fallback: circuit === "CLOSED" && !recovering ? "off" : "kafka"
+    fallback: kafkaEnabled && (circuit !== "CLOSED" || recovering) ? "kafka" : "off"
   };
 }
 
@@ -54,6 +55,10 @@ async function recover() {
     if (onRabbitReady) {
       await onRabbitReady();
     }
+    if (!kafkaEnabled) {
+      console.log("[Circuit] RabbitMQ respondió. El circuito volvió a RabbitMQ.");
+      return;
+    }
     console.log("[Circuit] RabbitMQ respondió. Drenando la cola temporal de Kafka.");
     await kafkaFallback.drain(republishToRabbit);
     await kafkaLifecycle.stopKafka();
@@ -69,7 +74,7 @@ async function recover() {
 
 breaker.onChange((previous, current) => {
   console.warn(`[Circuit] ${previous} -> ${current}`);
-  if (current === "OPEN") {
+  if (current === "OPEN" && kafkaEnabled) {
     ensureKafka().catch((error) => {
       console.error(`[Kafka] No quedó disponible como respaldo: ${error.message}`);
     });
@@ -101,8 +106,11 @@ async function publish({ exchange, routingKey, content, options, prepare }) {
     } catch (error) {
       console.error(`[Circuit] RabbitMQ no aceptó ${routingKey}: ${error.message}`);
       breaker.recordFailure();
+      if (!kafkaEnabled) throw error;
     }
   }
+
+  if (!kafkaEnabled) throw new Error("RabbitMQ no está disponible y el respaldo Kafka está desactivado.");
 
   await ensureKafka();
   await kafkaFallback.publish({
@@ -134,7 +142,7 @@ function start(hooks = {}) {
 
   probeRabbitMQ().then((up) => {
     if (up) {
-      kafkaLifecycle.stopKafka().catch(() => {});
+      if (kafkaEnabled) kafkaLifecycle.stopKafka().catch(() => {});
       if (onRabbitReady) {
         return onRabbitReady();
       }

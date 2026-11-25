@@ -8,8 +8,8 @@ describe('RF-6.5 - Cancelación por cliente en e2e', () => {
     await Promise.all(listeners.splice(0).map((listener) => listener.close()));
   });
 
-  it('cancela el viaje RF-6 y publica cancelacion_cliente', async () => {
-    const viajeId = await crearViajeRf6('SOLICITADO');
+  it.each(['SOLICITADO', 'ASIGNADO', 'CONDUCTOR_EN_CAMINO', 'ARRIBADO', 'EN_CURSO'] as const)('cancela en %s y publica el evento', async (estado) => {
+    const viajeId = await crearViajeRf6(estado);
     const listener = await escucharEvento('cancelacion_cliente');
     listeners.push(listener);
 

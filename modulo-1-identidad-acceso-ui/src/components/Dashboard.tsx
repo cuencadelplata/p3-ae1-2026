@@ -3,6 +3,9 @@ import axios from 'axios'
 import Reservations from './Reservations'
 import BrowserNotifications from './BrowserNotifications'
 import OperatorSupport from './OperatorSupport'
+import OperatorDriverApprovals from './OperatorDriverApprovals'
+import OperatorTripLog from './OperatorTripLog'
+import DriverProfileStatus from './DriverProfileStatus'
 import TripHistory from './TripHistory'
 import {
   LogOut,
@@ -22,6 +25,23 @@ import {
 import { API_URL } from '../api'
 import DriverDispatch from './DriverDispatch'
 import RideFlow from './RideFlow'
+import MisDirecciones from './MisDirecciones'
+import { FlowError, request } from '../rideFlowApi'
+
+// RF-2.5: estado de la cuenta del cliente según M2 (penalizaciones de Soporte). Solo ACTIVO puede pedir viajes.
+type CuentaM2 =
+  | { estado: 'consultando' }
+  | { estado: 'ok'; status: string; reason?: string }
+  | { estado: 'error'; mensaje: string }
+
+const estadoCuentaLabel = (status: string) =>
+  ({
+    ACTIVO: 'Activo',
+    INACTIVO: 'Inactivo',
+    BLOQUEADO_TEMPORAL: 'Bloqueado temporal',
+    BLOQUEADO_PERMANENTE: 'Bloqueado permanente',
+    'EN_REVISIÓN': 'En revisión',
+  } as Record<string, string>)[status] || status
 
 interface DashboardProps {
   token: string
@@ -74,7 +94,33 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   const [verViaje, setVerViaje] = useState(false)
   const [verReservas, setVerReservas] = useState(false)
   const [verHistorial, setVerHistorial] = useState(false)
+  const [verDirecciones, setVerDirecciones] = useState(false)
   const [verSoporte, setVerSoporte] = useState(false)
+  const [verHabilitaciones, setVerHabilitaciones] = useState(false)
+  const [verRegistroViajes, setVerRegistroViajes] = useState(false)
+  const [cuentaM2, setCuentaM2] = useState<CuentaM2>({ estado: 'consultando' })
+  const [intentoCuenta, setIntentoCuenta] = useState(0)
+  const esCliente = perfil?.rol === 'CLIENTE'
+
+  // M2 recalcula el estado con las penalizaciones vigentes de M8 al consultarlo.
+  useEffect(() => {
+    if (!esCliente) return
+    const abort = new AbortController()
+    setCuentaM2({ estado: 'consultando' })
+    request<{ customerId: string }>('M2', '/v1/customers/me', { token, signal: abort.signal })
+      .then(({ customerId }) => request<{ status: string; reason?: string }>(
+        'M2', '/v1/customers/' + encodeURIComponent(customerId) + '/status', { token, signal: abort.signal }))
+      .then(({ status, reason }) => { if (!abort.signal.aborted) setCuentaM2({ estado: 'ok', status, reason }) })
+      .catch((err: unknown) => {
+        if (abort.signal.aborted) return
+        if (err instanceof FlowError && err.status === 401) return onLogout('Tu sesión ya no es válida. Iniciá sesión de nuevo.')
+        // Sin respuesta de M2 no se puede validar la cuenta: no se habilita pedir viajes.
+        setCuentaM2({ estado: 'error', mensaje: 'No pudimos validar el estado de tu cuenta. Por ahora no podés pedir viajes.' })
+      })
+    return () => abort.abort()
+  }, [esCliente, token, intentoCuenta, onLogout])
+
+  const puedePedirViaje = !esCliente || (cuentaM2.estado === 'ok' && cuentaM2.status === 'ACTIVO')
 
   const headers = { Authorization: `Bearer ${token}` }
 
@@ -150,8 +196,17 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   if (verSoporte && perfil?.rol === 'OPERADOR') {
     return <OperatorSupport token={token} onBack={() => setVerSoporte(false)} />
   }
-  if (verHistorial && perfil?.rol === 'CLIENTE') {
-    return <TripHistory token={token} userId={perfil.userId} onBack={() => setVerHistorial(false)} />
+  if (verHabilitaciones && perfil?.rol === 'OPERADOR') {
+    return <OperatorDriverApprovals token={token} onBack={() => setVerHabilitaciones(false)} />
+  }
+  if (verRegistroViajes && perfil?.rol === 'OPERADOR') {
+    return <OperatorTripLog token={token} onBack={() => setVerRegistroViajes(false)} />
+  }
+  if (verHistorial && (perfil?.rol === 'CLIENTE' || perfil?.rol === 'CONDUCTOR')) {
+    return <TripHistory token={token} userId={perfil.userId} conductor={perfil.rol === 'CONDUCTOR'} onBack={() => setVerHistorial(false)} />
+  }
+  if (verDirecciones && perfil?.rol === 'CLIENTE') {
+    return <MisDirecciones token={token} onBack={() => setVerDirecciones(false)} />
   }
   if (verReservas && perfil?.rol === 'CLIENTE') {
     return <Reservations token={token} onBack={() => setVerReservas(false)} onOpenTrip={() => {
@@ -159,13 +214,12 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
       setVerViaje(true)
     }} />
   }
-  if (verViaje && perfil?.rol === 'CLIENTE') {
+  if (verViaje && perfil?.rol === 'CLIENTE' && puedePedirViaje) {
     return <RideFlow key={perfil.userId} passenger={{ ...perfil, token }} onBack={() => setVerViaje(false)} />
   }
   if (verViaje && perfil?.rol === 'CONDUCTOR') {
     return <DriverDispatch key={perfil.userId} driver={{ ...perfil, token }} onSessionExpired={() => onLogout('Tu sesión terminó. Iniciá sesión de nuevo para compartir tu ubicación.')} onBack={() => setVerViaje(false)} />
   }
-
   return (
     <div className="w-full max-w-3xl">
       <div className="glass rounded-[1.75rem] p-9 md:p-12">
@@ -200,13 +254,32 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
                   <span>·</span>
                   <span>Usuario #{perfil.userId}</span>
                   <span>·</span>
-                  <span className={perfil.estado === 'ACTIVO' ? 'text-[var(--gold)]' : 'text-red-400'}>{perfil.estado}</span>
+                  {esCliente ? (
+                    // Para el cliente se muestra el estado de cuenta de M2 (penalizaciones), no el de M1.
+                    <span className={cuentaM2.estado === 'ok' && cuentaM2.status === 'ACTIVO' ? 'text-[var(--gold)]' : 'text-red-400'}>
+                      {cuentaM2.estado === 'ok' ? estadoCuentaLabel(cuentaM2.status) : cuentaM2.estado === 'consultando' ? 'Consultando…' : 'Sin validar'}
+                    </span>
+                  ) : (
+                    <span className={perfil.estado === 'ACTIVO' ? 'text-[var(--gold)]' : 'text-red-400'}>{perfil.estado}</span>
+                  )}
                 </div>
               </div>
             </div>
 
+            {esCliente && cuentaM2.estado === 'ok' && cuentaM2.status !== 'ACTIVO' && (
+              <div className="alert-error mt-6 text-sm" role="alert">
+                Tu cuenta está {estadoCuentaLabel(cuentaM2.status).toLowerCase()}{cuentaM2.reason ? `: ${cuentaM2.reason}` : ''}. No podés pedir viajes; si creés que es un error, contactá a Soporte.
+              </div>
+            )}
+            {esCliente && cuentaM2.estado === 'error' && (
+              <div className="alert-error mt-6 flex flex-wrap items-center justify-between gap-3 text-sm" role="alert">
+                <span>{cuentaM2.mensaje}</span>
+                <button className="btn-ghost" onClick={() => setIntentoCuenta((n) => n + 1)}>Reintentar</button>
+              </div>
+            )}
             {(perfil.rol === 'CLIENTE' || perfil.rol === 'CONDUCTOR') && (
-              <button className="btn-primary mt-6 inline-flex items-center gap-2" onClick={() => setVerViaje(true)}>
+              <button className="btn-primary mt-6 inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!puedePedirViaje} onClick={() => setVerViaje(true)}>
                 <Route className="w-4 h-4" aria-hidden="true" /> {perfil.rol === 'CLIENTE' ? 'Pedir un viaje' : 'Abrir despacho'}
               </button>
             )}
@@ -214,10 +287,20 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
             {perfil.rol === 'CLIENTE' && <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <button className="btn-secondary" onClick={() => setVerReservas(true)}>Mis reservas</button>
               <button className="btn-secondary" onClick={() => setVerHistorial(true)}>Historial de viajes</button>
+              <button className="btn-secondary sm:col-span-2" onClick={() => setVerDirecciones(true)}>Mis direcciones</button>
             </div>}
+            {/* El conductor puede reportar al pasajero de un viaje que hizo (ticket de M8). */}
+            {perfil.rol === 'CONDUCTOR' &&
+              <button className="btn-secondary mt-3" onClick={() => setVerHistorial(true)}>Historial de viajes</button>}
 
-            {perfil.rol === 'OPERADOR' &&
-              <button className="btn-primary mt-6" onClick={() => setVerSoporte(true)}>Bandeja de soporte</button>}
+            {perfil.rol === 'CONDUCTOR' && <DriverProfileStatus key={perfil.userId} token={token} />}
+            {perfil.rol === 'CONDUCTOR' &&
+              <button className="btn-secondary mt-3" onClick={() => { window.location.assign('/alta-conductor.html?token=' + encodeURIComponent(token)) }}>Completar alta de conductor</button>}
+            {perfil.rol === 'OPERADOR' && <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <button className="btn-primary" onClick={() => setVerSoporte(true)}>Bandeja de soporte</button>
+              <button className="btn-secondary" onClick={() => setVerHabilitaciones(true)}>Habilitar conductores</button>
+              <button className="btn-secondary sm:col-span-2" onClick={() => setVerRegistroViajes(true)}>Registro de viajes</button>
+            </div>}
             {(perfil.rol === 'CLIENTE' || perfil.rol === 'CONDUCTOR') && (
               <BrowserNotifications key={perfil.userId} token={token} role={perfil.rol} userId={perfil.userId} />
             )}

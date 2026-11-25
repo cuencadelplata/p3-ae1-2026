@@ -51,7 +51,43 @@ async function obtenerConductorPorId(id) {
   } catch (err) {
     console.warn(`[Redis] Fallo al buscar conductor por ID, usando memoria: ${err.message}`);
   }
-  return inMemoryConductores.get(id) || null;
+  return inMemoryConductores.get(id) || conductorDBRepository.obtenerPerfilPorId(id);
+}
+
+async function asegurarPerfilConductor(id) {
+  const existente = await obtenerConductorPorId(id);
+  if (existente) return existente;
+
+  const perfil = {
+    usuarioID: id,
+    ciudad: "No especificada",
+    tipovehiculo: "auto",
+    licenciaId: "",
+    vehiculoId: "",
+    habilitado: "pendiente",
+    estado_conexion: "desconectado",
+    createdAt: new Date().toISOString()
+  };
+  await conductorDBRepository.crearConductor(perfil, { conservarExistente: true });
+  const guardado = await conductorDBRepository.obtenerPerfilPorId(id);
+  if (!guardado) throw new Error("No se pudo recuperar el perfil registrado.");
+  try {
+    await redis.set(`conductor:${id}`, JSON.stringify(guardado), "NX");
+    await redis.sadd("conductores:ids", id);
+  } catch (err) {
+    console.warn(`[Redis] Fallo al cachear el alta de '${id}': ${err.message}`);
+  }
+  return obtenerConductorPorId(id);
+}
+
+async function obtenerPendientesDeHabilitacion() {
+  const [locales, persistidos] = await Promise.all([
+    obtenerConductores(),
+    conductorDBRepository.obtenerPendientes()
+  ]);
+  const perfiles = new Map(persistidos.map(perfil => [perfil.usuarioID, perfil]));
+  for (const perfil of locales) perfiles.set(perfil.usuarioID, perfil);
+  return Array.from(perfiles.values()).filter(perfil => perfil.habilitado === "pendiente");
 }
 
 /**
@@ -261,8 +297,9 @@ async function actualizarHabilitado(id, habilitado) {
   // Mantener sincronizado el registro completo (lo usa GET /conductor/:id/estado)
   if (redisHealth.isUp()) try {
     const raw = await redis.get(`conductor:${id}`);
-    if (raw) {
-      await redis.set(`conductor:${id}`, JSON.stringify({ ...JSON.parse(raw), habilitado }));
+    const perfil = raw ? JSON.parse(raw) : await conductorDBRepository.obtenerPerfilPorId(id);
+    if (perfil) {
+      await redis.set(`conductor:${id}`, JSON.stringify({ ...perfil, habilitado }));
     }
   } catch (err) {
     redisHealth.markDown(err);
@@ -362,7 +399,9 @@ async function listarValoracionesPendientes() {
 
 module.exports = {
   obtenerConductores,
+  obtenerPendientesDeHabilitacion,
   obtenerConductorPorId,
+  asegurarPerfilConductor,
   crearConductor,
   actualizarTipoVehiculo,
   obtenerValoraciones,

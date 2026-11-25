@@ -36,6 +36,23 @@ export default function SupportChat({ ticket, token, operator = false, onTicketU
   const creator = changes?.find(change => change.estadoAnterior === null)?.cambiadoPor
   const lastEntry = changes?.at(-1)?.id
   const selectedStatus = target && transitions[current.estado].includes(target) ? target : ''
+  // El operador marca el reporte como desfavorable: M8 penaliza al cliente del viaje y M2 recalcula su estado.
+  const [penalty, setPenalty] = useState<{ sending: boolean; message: string; failed: boolean }>({ sending: false, message: '', failed: false })
+
+  async function markUnfavorable() {
+    setPenalty({ sending: true, message: '', failed: false })
+    try {
+      // Motivo fijo por ticket: si se repite, M8 responde 200 con la misma penalización.
+      const motivo = ('Reporte desfavorable confirmado por Soporte: ' + ticket.motivo).slice(0, 500)
+      await request('M8', path + '/penalizacion', { token, method: 'POST', body: { motivo } })
+      setPenalty({ sending: false, message: 'Penalización registrada para el pasajero de este viaje.', failed: false })
+    } catch (error) {
+      const message = error instanceof FlowError && error.status === 409
+        ? 'Ya hay una penalización registrada para el pasajero de este viaje.'
+        : error instanceof Error ? error.message : 'No se pudo registrar la penalización.'
+      setPenalty({ sending: false, message, failed: true })
+    }
+  }
 
   useEffect(() => {
     const abort = new AbortController()
@@ -152,5 +169,11 @@ export default function SupportChat({ ticket, token, operator = false, onTicketU
       </div>
       {sendError && <p className="support-chat__notice" role="alert">{sendError}</p>}
     </form>
+    {operator && current.estado === 'RESUELTO' && <div className="support-chat__composer">
+      <button className="btn-secondary" type="button" disabled={penalty.sending} onClick={() => void markUnfavorable()}>
+        {penalty.sending ? 'Registrando…' : 'Marcar desfavorable para el pasajero'}
+      </button>
+      {penalty.message && <p className="support-chat__notice" role={penalty.failed ? 'alert' : 'status'}>{penalty.message}</p>}
+    </div>}
   </section>
 }

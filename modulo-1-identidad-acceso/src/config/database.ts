@@ -139,6 +139,16 @@ if (!existingOauthColumns.has("last_login_at")) {
     }
 }
 
+db.exec(`
+    CREATE TABLE IF NOT EXISTS altas_vehiculo (
+        usuario_id INTEGER PRIMARY KEY,
+        vehiculo_json TEXT NOT NULL,
+        documentacion_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+    )
+`);
+
 // RF-1.3: usuario OPERADOR semilla (ver operador-semilla.ts).
 asegurarOperadorSemilla(db);
 

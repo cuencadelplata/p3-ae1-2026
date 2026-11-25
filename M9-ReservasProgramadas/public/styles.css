@@ -244,13 +244,15 @@ h2 {
   font-size: 10px;
   margin: 9px 0 26px;
 }
-.workspace {
+.planner-grid {
   display: grid;
-  grid-template-columns: 330px minmax(0, 1fr);
-  align-items: start;
+  grid-template-columns: 400px minmax(0, 1fr);
+  align-items: stretch;
   gap: 24px;
+  margin-bottom: 24px;
 }
 .form-panel,
+.map-panel,
 .reservations-panel {
   border: 1px solid var(--border);
   background: var(--surface);
@@ -259,6 +261,270 @@ h2 {
 }
 .form-panel {
   padding: 24px;
+}
+.map-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 520px;
+}
+.map-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+  background: #141612;
+  flex-wrap: wrap;
+}
+.map-toolbar p {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 3px;
+}
+.map-mode-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.map-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #10120f;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.map-mode-btn:hover {
+  border-color: #626b4c;
+  color: var(--text);
+}
+.map-mode-btn.active {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: #141610;
+}
+.pin-dot {
+  width: 8px;
+  height: 8px;
+  display: inline-block;
+}
+.origin-dot {
+  border-radius: 50%;
+  background: var(--lime);
+}
+.map-mode-btn.active .origin-dot {
+  background: #141610;
+}
+.dest-dot {
+  border-radius: 2px;
+  background: #fff;
+}
+.map-mode-btn.active .dest-dot {
+  background: #141610;
+}
+.map-center-btn {
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 11px;
+}
+.map-stage {
+  position: relative;
+  flex: 1;
+  min-height: 440px;
+  background: #121417;
+}
+.reservation-map {
+  width: 100%;
+  height: 100%;
+  min-height: 440px;
+  z-index: 1;
+  background: #121417;
+  cursor: crosshair;
+}
+.reservation-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) saturate(0.28) brightness(0.82);
+}
+.reservation-map .leaflet-tooltip,
+.reservation-map .leaflet-control-zoom a {
+  background: #13151a;
+  border-color: #424650;
+  color: var(--text);
+}
+.reservation-map.leaflet-container .leaflet-control-attribution {
+  background: rgba(17, 18, 16, 0.88);
+  color: var(--muted);
+}
+.reservation-map .leaflet-control-attribution a {
+  color: var(--lime);
+}
+.custom-pin-origin {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--lime);
+  border: 3px solid #141610;
+  box-shadow: 0 0 0 3px rgba(213, 255, 64, 0.35), 0 0 12px var(--lime);
+}
+.custom-pin-dest {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  background: #ffffff;
+  border: 3px solid #141610;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.25), 0 2px 10px rgba(0, 0, 0, 0.65);
+}
+.map-hint {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 500;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--lime);
+  background: rgba(15, 17, 13, 0.94);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.map-offline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 440px;
+  padding: 24px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+.field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.map-pick-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid #3e4237;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  min-height: 24px;
+}
+.map-pick-chip:hover:not(:disabled) {
+  border-color: var(--lime);
+  color: var(--text);
+}
+.map-pick-chip.active {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: #141610;
+}
+.address-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+.search-addr-button {
+  min-height: 43px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid #3e4237;
+  background: #10120f;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+.search-addr-button:hover:not(:disabled) {
+  border-color: var(--lime);
+  color: var(--lime);
+}
+.location-field {
+  position: relative;
+}
+.autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: #13151a;
+  border: 1px solid #4d5342;
+  border-radius: 10px;
+  max-height: 190px;
+  overflow-y: auto;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.65);
+  z-index: 900;
+  display: none;
+}
+.autocomplete-item {
+  width: 100%;
+  text-align: left;
+  padding: 9px 11px;
+  border: 0;
+  border-bottom: 1px solid #262922;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  display: grid;
+  gap: 2px;
+}
+.autocomplete-item:last-child {
+  border-bottom: 0;
+}
+.autocomplete-item:hover,
+.autocomplete-item:focus-visible {
+  background: #232a17;
+  color: var(--text);
+}
+.autocomplete-item strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.autocomplete-item span {
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.route-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  border-radius: 10px;
+  border: 1px solid #3a422c;
+  background: #141711;
+}
+.route-summary span {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.route-summary strong {
+  font-size: 15px;
+  color: var(--lime);
+}
+.route-caption {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: var(--muted);
 }
 .panel-heading {
   display: flex;
@@ -671,8 +937,8 @@ dd {
   top: 12px;
 }
 @media (max-width: 1150px) {
-  .workspace {
-    grid-template-columns: 290px minmax(0, 1fr);
+  .planner-grid {
+    grid-template-columns: 350px minmax(0, 1fr);
     gap: 16px;
   }
   .form-panel {
@@ -683,8 +949,13 @@ dd {
   }
 }
 @media (max-width: 900px) {
-  .workspace {
+  .planner-grid {
     grid-template-columns: 1fr;
+  }
+  .map-panel,
+  .map-stage,
+  .reservation-map {
+    min-height: 340px;
   }
   .session-panel {
     align-items: stretch;

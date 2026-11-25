@@ -359,6 +359,7 @@ services:
       M1_REQUIRE_AUTH: ${M1_REQUIRE_AUTH:-false}
       # Ciclo real de viaje para habilitar valoraciones desde el frontend
       M6_VIAJES_URL: ${M6_VIAJES_URL:-http://viajes:3000}
+      M3_VEHICULOS_URL: ${M3_VEHICULOS_URL:-http://m3-vehiculos:8083}
     ports:
       - "5000:3000"
     volumes:

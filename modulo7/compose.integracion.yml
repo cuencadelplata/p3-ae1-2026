@@ -5,10 +5,12 @@ services:
       context: .
     ports:
       - "17000:3000"
-    env_file:
-      - path: .env
-        required: false
     environment:
+      M7_API_KEY: ${M7_API_KEY:?Configurar M7_API_KEY}
+      MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN:-}
+      SUPABASE_URL: ${M7_SUPABASE_URL:-}
+      SUPABASE_KEY: ${M7_SUPABASE_KEY:-}
+      DATABASE_URL: ${M7_DATABASE_URL:-postgresql://postgres:postgres@db:5432/historial}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672
       REDIS_URL: redis://redis:6379
       CARGO_CANCELACION_URL: http://m7-api:3000

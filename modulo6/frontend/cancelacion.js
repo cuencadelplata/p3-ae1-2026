@@ -74,13 +74,13 @@ async function loadCurrentTrip() {
       const response = await fetch(`/api/${listPath}/${encodeURIComponent(identityId)}/viajes`);
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || `No se pudieron consultar los viajes (HTTP ${response.status}).`);
-      currentTrip = (payload.viajes ?? []).find((viaje) => ['SOLICITADO', 'CONDUCTOR_EN_CAMINO'].includes(viaje.estado));
+      currentTrip = (payload.viajes ?? []).find((viaje) => ['SOLICITADO', 'ASIGNADO', 'CONDUCTOR_EN_CAMINO', 'ARRIBADO', 'EN_CURSO'].includes(viaje.estado));
     } else {
       throw new Error(`No se recibió el contexto de la cuenta. Abre esta pantalla desde el viaje activo o pasa ${actorIdName} en la URL.`);
     }
 
     if (!currentTrip) throw new Error('No hay un viaje cancelable asociado a esta sesión.');
-    if (!['SOLICITADO', 'CONDUCTOR_EN_CAMINO'].includes(currentTrip.estado)) {
+    if (!['SOLICITADO', 'ASIGNADO', 'CONDUCTOR_EN_CAMINO', 'ARRIBADO', 'EN_CURSO'].includes(currentTrip.estado)) {
       throw new Error(`El viaje no se puede cancelar en estado ${currentTrip.estado}.`);
     }
 

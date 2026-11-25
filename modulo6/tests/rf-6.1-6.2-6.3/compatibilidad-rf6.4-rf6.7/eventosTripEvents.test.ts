@@ -225,15 +225,13 @@ describe('Contrato trip.events para M4', () => {
         }
     });
 
-    it('si la cancelación no procede, no queda ningún evento', async () => {
+    it.each([EstadoViaje.COMPLETADO, EstadoViaje.CANCELADO])('no publica eventos al intentar cancelar un viaje terminal %s', async (estado) => {
         const id = await crearViaje();
-        await viajeRepo.actualizarEstado(id, EstadoViaje.CONDUCTOR_EN_CAMINO, 'conductor-luis', 55);
-        await viajeRepo.marcarArribado(id);
-        await viajeRepo.iniciarSiArribado(id);
+        await pool.query('UPDATE viajes SET estado = $1 WHERE id = $2', [estado, id]);
 
         const resultado = await viajeRepo.cancelarSiCancelable(id, 'cliente', 'Tarde');
 
         expect(resultado).toBeNull();
-        expect((await eventosTrip(id)).map((e) => e.routing_key)).toEqual(['viaje.iniciado']);
+        expect((await eventosTrip(id)).map((e) => e.routing_key)).toEqual([]);
     });
 });

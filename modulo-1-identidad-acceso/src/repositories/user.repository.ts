@@ -19,6 +19,41 @@ export function findUserByEmail(
         .get(email) as UserRow | undefined;
 }
 
+// Columnas que un usuario puede completar después del alta (ver user-profile.service.ts).
+export type CampoCompletable = "nombre" | "apellido" | "dni" | "telefono";
+
+// Completa los campos indicados solo si siguen vacíos, todo en una transacción:
+// si otro pedido llegó a cargar alguno en el medio, no se guarda nada. Devuelve false en ese caso.
+export function completarDatosDeUsuario(
+    id: number,
+    cambios: Partial<Record<CampoCompletable, string>>
+): boolean {
+    const columnas = Object.keys(cambios) as CampoCompletable[];
+
+    const aplicar = db.transaction(() => {
+        for (const columna of columnas) {
+            // El nombre de la columna sale de la lista fija CampoCompletable, nunca del pedido.
+            const resultado = db
+                .prepare(`UPDATE usuarios SET ${columna} = ? WHERE id = ? AND TRIM(${columna}) = ''`)
+                .run(cambios[columna], id);
+
+            if (resultado.changes !== 1) {
+                throw new Error("campo_ya_cargado");
+            }
+        }
+    });
+
+    try {
+        aplicar();
+        return true;
+    } catch (error) {
+        if ((error as Error).message === "campo_ya_cargado") {
+            return false;
+        }
+        throw error;
+    }
+}
+
 export function findUserByDni(
     dni: string
 ): UserRow | undefined {

@@ -2,6 +2,7 @@ const redisRepository = require('../repositories/redisRepository');
 const Conductor = require('../models/Conductor');
 const eventPublisher = require('../events/eventPublisher');
 const m1Client = require('../infraestructure/m1Client');
+const vehiculosClient = require('../infraestructure/vehiculosClient');
 
 // Valores válidos según el CHECK de la tabla `conductores` (src/schema/conductores.sql)
 const ESTADOS_HABILITACION = ['pendiente', 'activo', 'suspendido', 'rechazado'];
@@ -19,10 +20,64 @@ const obtenerConductores = async (req, res) => {
   }
 };
 
+async function documentacionParaSoporte(usuarioID) {
+  try {
+    return await vehiculosClient.obtenerDocumentacionVehiculo(usuarioID);
+  } catch (error) {
+    console.warn(`[M3] No se pudo leer la documentación del vehículo de '${usuarioID}': ${error.message}`);
+    return { vehiculo: null, documentacion: [] };
+  }
+}
+
+const obtenerPendientesDeHabilitacion = async (_req, res) => {
+  try {
+    const perfiles = await redisRepository.obtenerPendientesDeHabilitacion();
+    const candidatos = perfiles.filter(({ usuarioID }) => /^[1-9][0-9]*$/.test(usuarioID));
+    const solicitudes = await Promise.all(candidatos.map(async ({ usuarioID, createdAt }) => {
+      const { vehiculo, documentacion } = await documentacionParaSoporte(usuarioID);
+      return { usuarioID, createdAt, vehiculo, documentacionVehiculo: documentacion };
+    }));
+    return res.status(200).json(solicitudes);
+  } catch (error) {
+    return res.status(503).json({ error: 'No se pudieron consultar las habilitaciones pendientes.' });
+  }
+};
+
 /**
- * GET /conductores/:id
- * Obtener un conductor por ID desde Redis
+ * POST /conductores/:id/enviar-alta
+ * Toma el vehículo y la documentación de m3-vehiculos y los guarda en M1.
  */
+const enviarAltaAM1 = async (req, res) => {
+  const { id } = req.params;
+  if (req.identidadM1?.userId !== id) {
+    return res.status(403).json({ error: 'Solo podés enviar tu propia alta.' });
+  }
+  try {
+    const { vehiculo, documentacion } = await vehiculosClient.obtenerDocumentacionVehiculo(id);
+    if (!vehiculo) {
+      return res.status(409).json({ error: 'Todavía no hay un vehículo para enviar a M1.' });
+    }
+    const guardada = await m1Client.guardarAltaVehiculo(id, { vehiculo, documentacion });
+    return res.status(201).json(guardada);
+  } catch (error) {
+    const status = error.status || 503;
+    return res.status(status).json({ error: error.message || 'No se pudo guardar el alta en M1.' });
+  }
+};
+
+const asegurarPerfilConductor = async (req, res) => {
+  const { userId } = req.identidadM1;
+  if (!/^[1-9][0-9]*$/.test(userId)) return res.status(401).json({ error: 'La sesión no identifica a un conductor válido.' });
+  try {
+    const perfil = await redisRepository.asegurarPerfilConductor(userId);
+    return res.status(200).json(construirRespuestaEstado(perfil));
+  } catch (error) {
+    console.warn(`[M3] No se pudo preparar el perfil de conductor '${userId}': ${error.message}`);
+    return res.status(503).json({ error: 'No se pudo preparar tu perfil de conductor. Volvé a intentar.' });
+  }
+};
+
+/** GET /conductores/:id */
 const obtenerConductorPorId = async (req, res) => {
   try {
     const { id } = req.params;
@@ -109,11 +164,13 @@ const crearConductor = async (req, res) => {
       tipovehiculo: nuevoConductorModel.tipovehiculo || req.body.tipovehiculo,
       licenciaId: nuevoConductorModel.licenciaId || req.body.licenciaId,
       vehiculoId: nuevoConductorModel.vehiculoId || req.body.vehiculoId,
-      habilitado: nuevoConductorModel.habilitado || 'pendiente',
+      // El alta publica no debe permitir autoaprobacion del conductor.
+      habilitado: 'pendiente',
       estado_conexion: nuevoConductorModel.estado_conexion || 'desconectado'
     };
 
     const conductorCreado = await redisRepository.crearConductor(datos);
+    await redisRepository.actualizarHabilitado(conductorCreado.usuarioID, datos.habilitado);
     return res.status(201).json(conductorCreado);
   } catch (error) {
     return res.status(400).json({ error: 'Solicitud inválida al crear conductor', detalle: error.message });
@@ -337,7 +394,10 @@ const obtenerDisponibleConductor = async (req, res) => {
 
 module.exports = {
   obtenerConductores,
+  obtenerPendientesDeHabilitacion,
   obtenerConductorPorId,
+  enviarAltaAM1,
+  asegurarPerfilConductor,
   crearConductor,
   actualizarTipoVehiculo,
   obtenerHabilitado,

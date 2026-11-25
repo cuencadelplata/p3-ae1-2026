@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: m9
+      POSTGRES_PASSWORD: isolated-test-only
+      POSTGRES_DB: m9_tests
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U m9 -d m9_tests']
+      interval: 2s
+      retries: 30
+  redis:
+    image: redis:7.4-alpine
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      retries: 30
+  rabbitmq:
+    image: rabbitmq:4.1-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: m9
+      RABBITMQ_DEFAULT_PASS: isolated-test-only
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, ping]
+      interval: 3s
+      retries: 30
+  tests:
+    build:
+      context: ../../M9-ReservasProgramadas
+      dockerfile: tests/infrastructure/Dockerfile
+    environment:
+      M9_TEST_INFRA_PROJECT: ${COMPOSE_PROJECT_NAME:?Proyecto aislado obligatorio}
+      DATABASE_URL: postgresql://m9:isolated-test-only@postgres:5432/m9_tests
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://m9:isolated-test-only@rabbitmq:5672
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+networks:
+  default:
+    internal: true

@@ -44,9 +44,19 @@ export const createApp = ({
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          imgSrc: ["'self'", 'data:'],
-          scriptSrc: ["'self'", "'unsafe-inline'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
+          connectSrc: [
+            "'self'",
+            'https://nominatim.openstreetmap.org',
+            'https://router.project-osrm.org',
+          ],
+          imgSrc: [
+            "'self'",
+            'data:',
+            'https://tile.openstreetmap.org',
+            'https://*.tile.openstreetmap.org',
+          ],
+          scriptSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com'],
+          styleSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com'],
         },
       },
     }),

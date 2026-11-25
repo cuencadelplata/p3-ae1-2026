@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { RedisReservationCache } from '../../src/cache/redis-reservation-cache.js';
@@ -92,6 +93,60 @@ const track = <T extends { id: string }>(reservation: T): T => {
 };
 
 describe('backing services reales', () => {
+  it('solo un claim gana entre 32 activaciones concurrentes y comparten clave durable', async () => {
+    const repository = new PrismaReservaRepository(postgres.client);
+    const created = track(await repository.crear(reservationInput()));
+    const results = await Promise.all(
+      Array.from({ length: 32 }, () =>
+        repository.cambiarEstado(created.id, 'PROGRAMADA', 'ACTIVANDO'),
+      ),
+    );
+    expect(results.filter(Boolean)).toHaveLength(1);
+    const store = new PrismaDispatchOperationStore(postgres.client);
+    const keys = await Promise.all(Array.from({ length: 32 }, () => store.getOrCreate(created.id)));
+    expect(new Set(keys).size).toBe(1);
+  });
+
+  it('recupera claim y clave tras SIGKILL de un proceso independiente', async () => {
+    const repository = new PrismaReservaRepository(postgres.client);
+    const created = track(await repository.crear(reservationInput()));
+    const crashKey = randomUUID();
+    const code = `
+      import { PrismaClient } from '@prisma/client';
+      const p = new PrismaClient();
+      await p.reservation.update({where:{id:process.env.CRASH_RESERVATION_ID},data:{status:'ACTIVANDO',dispatchIdempotencyKey:process.env.CRASH_KEY,updatedAt:new Date(Date.now()-180000)}});
+      console.log('CLAIM_PERSISTED');
+      setInterval(()=>{},1000);
+    `;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', code], {
+      env: { ...process.env, CRASH_RESERVATION_ID: created.id, CRASH_KEY: crashKey },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('El proceso no persistio el claim')), 8000);
+        child.once('error', reject);
+        child.stdout.on('data', (data: Buffer) => {
+          if (data.toString().includes('CLAIM_PERSISTED')) {
+            clearTimeout(timer);
+            resolve();
+          }
+        });
+      });
+      const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+      child.kill('SIGKILL');
+      await exited;
+      expect(await repository.recuperarActivacion(created.id, new Date(Date.now() - 120000))).toBe(
+        true,
+      );
+      expect(await new PrismaDispatchOperationStore(postgres.client).getOrCreate(created.id)).toBe(
+        crashKey,
+      );
+      expect(await repository.obtenerPorId(created.id)).toMatchObject({ estado: 'PROGRAMADA' });
+    } finally {
+      child.kill('SIGKILL');
+    }
+  });
   it('persiste identidades numericas y filtra por propietario antes de paginar', async () => {
     const repository = new PrismaReservaRepository(postgres.client);
     const one = track(await repository.crear({ ...reservationInput(), clienteId: '101' }));

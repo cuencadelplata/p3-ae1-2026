@@ -155,34 +155,37 @@ describe('Compatibilidad RF-6.5/RF-6.6 - rutas de viaje', () => {
     expect(response.status).toBe(503);
   });
 
-  it.each([
-    ['SOLICITADO', 'cliente'],
-    ['CONDUCTOR_EN_CAMINO', 'conductor'],
-  ])('cancela atómicamente un viaje en estado %s y devuelve el viaje directamente', async (estado, actor) => {
+  it.each(['cliente', 'conductor'].flatMap((actor) =>
+    ['SOLICITADO', 'ASIGNADO', 'CONDUCTOR_EN_CAMINO', 'ARRIBADO', 'EN_CURSO'].map((estado) => [estado, actor])
+  ))('permite cancelar en %s como %s, registra actor y conserva historial', async (estado, actor) => {
     const created = await crearViaje();
-    if (estado === 'CONDUCTOR_EN_CAMINO') {
-      const assignment = await fetch(`${baseUrl}/api/viajes/${created.id}/asignar`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ conductorId: 'conductor-test' }),
-      });
-      expect(assignment.status).toBe(200);
-    }
-
-    const response = await solicitarCancelacion(created.id, { actor, motivo: 'Cancelación de prueba' });
-    const body = await response.json();
-
+    await pool.query('UPDATE viajes SET estado = $1, conductor_id = $2 WHERE id = $3', [estado, 'conductor-test', created.id]);
+    const response = await solicitarCancelacion(created.id, { actor, motivo: 'No puedo continuar' });
     expect(response.status).toBe(200);
-    expect(body).toMatchObject({
-      id: created.id,
-      clienteId: created.clienteId,
-      conductorId: estado === 'CONDUCTOR_EN_CAMINO' ? 'conductor-test' : null,
-      estado: 'CANCELADO',
-    });
-    expect(body).not.toHaveProperty('viaje');
+    expect(await response.json()).toMatchObject({ id: created.id, estado: 'CANCELADO', canceladoPor: actor });
+    const stored = await viajeRepo.buscarPorId(created.id);
+    expect(stored?.estado).toBe('CANCELADO');
+    expect(stored?.canceladoPor).toBe(actor);
+    const { rows } = await pool.query('SELECT estado_anterior, estado_nuevo FROM viaje_transiciones WHERE viaje_id = $1 ORDER BY id DESC LIMIT 1', [created.id]);
+    expect(rows[0]).toEqual({ estado_anterior: estado, estado_nuevo: 'CANCELADO' });
+    const repeat = await solicitarCancelacion(created.id, { actor, motivo: 'Reintento' });
+    expect(repeat.status).toBe(400);
   });
 
-  it.each(['ASIGNADO', 'ARRIBADO', 'EN_CURSO', 'COMPLETADO', 'CANCELADO'])(
+  it('serializa cancelaciones simultáneas y registra un solo hecho y evento', async () => {
+    const created = await crearViaje();
+    await pool.query('UPDATE viajes SET estado = $1, conductor_id = $3, driver_user_id = $4 WHERE id = $2', ['EN_CURSO', created.id, '55', 55]);
+    const responses = await Promise.all(['cliente', 'conductor'].map((actor) =>
+      solicitarCancelacion(created.id, { actor, motivo: 'Cancelación concurrente' })
+    ));
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 400]);
+    const history = await pool.query("SELECT count(*)::int AS total FROM viaje_transiciones WHERE viaje_id = $1 AND estado_nuevo = 'CANCELADO'", [created.id]);
+    expect(history.rows[0].total).toBe(1);
+    const events = await pool.query("SELECT count(*)::int AS total FROM viaje_eventos_outbox WHERE viaje_id = $1 AND routing_key = 'viaje.cancelado'", [created.id]);
+    expect(events.rows[0].total).toBe(1);
+  });
+
+  it.each(['COMPLETADO', 'CANCELADO'])(
     'rechaza la cancelación cuando el estado es %s',
     async (estado) => {
       const created = await crearViaje();

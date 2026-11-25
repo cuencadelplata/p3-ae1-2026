@@ -8,6 +8,40 @@ const getSupabaseClient = require("../config/SupabaseClient");
 // REST de M3 (ver conductoresController).
 const inMemoryDB = new Map();
 
+const camposPerfil = "usuario_id, ciudad, tipo_vehiculo, licencia_id, vehiculo_id, habilitado, created_at";
+
+function perfilDesdeDB(data) {
+  return {
+    usuarioID: data.usuario_id,
+    ciudad: data.ciudad,
+    tipovehiculo: data.tipo_vehiculo,
+    licenciaId: data.licencia_id || "",
+    vehiculoId: data.vehiculo_id || "",
+    habilitado: data.habilitado,
+    estado_conexion: "desconectado",
+    createdAt: data.created_at
+  };
+}
+
+async function obtenerPerfilPorId(id) {
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    const { data, error } = await supabase.from("conductores").select(camposPerfil).eq("usuario_id", id).maybeSingle();
+    if (error) throw error;
+    if (data) return perfilDesdeDB(data);
+  }
+  return inMemoryDB.get(id) || null;
+}
+
+async function obtenerPendientes() {
+  const supabase = getSupabaseClient();
+  if (!supabase) return Array.from(inMemoryDB.values()).filter(perfil => perfil.habilitado === "pendiente");
+
+  const { data, error } = await supabase.from("conductores").select(camposPerfil).eq("habilitado", "pendiente");
+  if (error) throw error;
+  return data.map(perfilDesdeDB);
+}
+
 /**
  * Alta (idempotente) de un conductor en la base de datos persistente. Sin esto,
  * un conductor creado por la API no tenía habilitación consultable (RF 3.1)
@@ -15,7 +49,7 @@ const inMemoryDB = new Map();
  *
  * @param {{ usuarioID: string, ciudad: string, tipovehiculo: string, licenciaId?: string, vehiculoId?: string, habilitado?: string }} datos
  */
-async function crearConductor(datos) {
+async function crearConductor(datos, { conservarExistente = false } = {}) {
   const registro = {
     usuarioID: datos.usuarioID,
     ciudad: datos.ciudad,
@@ -23,7 +57,8 @@ async function crearConductor(datos) {
     licenciaId: datos.licenciaId || "",
     vehiculoId: datos.vehiculoId || "",
     habilitado: datos.habilitado || "pendiente",
-    disponible: datos.estado_conexion === "conectado"
+    disponible: datos.estado_conexion === "conectado",
+    createdAt: datos.createdAt
   };
 
   const supabase = getSupabaseClient();
@@ -40,17 +75,21 @@ async function crearConductor(datos) {
           habilitado: registro.habilitado,
           updated_at: new Date().toISOString()
         },
-        { onConflict: "usuario_id" }
+        conservarExistente ? { onConflict: "usuario_id", ignoreDuplicates: true } : { onConflict: "usuario_id" }
       );
 
       if (error) throw error;
     } catch (err) {
+      if (conservarExistente) throw err;
       console.warn(
         `[DB] Fallo al dar de alta a '${registro.usuarioID}' en Supabase, usando fallback en memoria: ${err.message}`
       );
     }
   }
 
+  if (conservarExistente && inMemoryDB.has(registro.usuarioID)) {
+    return inMemoryDB.get(registro.usuarioID);
+  }
   inMemoryDB.set(registro.usuarioID, { ...(inMemoryDB.get(registro.usuarioID) || {}), ...registro });
   return registro;
 }
@@ -109,18 +148,11 @@ async function actualizarHabilitado(id, habilitado) {
   const supabase = getSupabaseClient();
 
   if (supabase) {
-    try {
-      const { error } = await supabase
-        .from("conductores")
-        .update({ habilitado, updated_at: new Date().toISOString() })
-        .eq("usuario_id", id);
-
-      if (error) throw error;
-    } catch (err) {
-      console.warn(
-        `[DB] Fallo al actualizar habilitación de '${id}' en Supabase, usando fallback en memoria: ${err.message}`
-      );
-    }
+    const { error } = await supabase
+      .from("conductores")
+      .update({ habilitado, updated_at: new Date().toISOString() })
+      .eq("usuario_id", id);
+    if (error) throw error;
   }
 
   const conductor = inMemoryDB.get(id);
@@ -194,6 +226,8 @@ async function actualizarDisponible(id, disponible) {
 
 module.exports = {
   crearConductor,
+  obtenerPerfilPorId,
+  obtenerPendientes,
   obtenerDisponiblePorId,
   actualizarDisponible,
   obtenerHabilitadoPorId,

@@ -1,0 +1,57 @@
+{
+    email {$ACME_EMAIL}
+    admin off
+}
+
+{$APP_DOMAIN} {
+    encode zstd gzip
+    header -Server
+    # M1 se consume desde el mismo origen HTTPS del frontend.
+    handle_path /identity/* {
+        @internal path /auth/token-delegado /internal/* /metrics
+        respond @internal 404
+        reverse_proxy m1-identidad-acceso:3001
+    }
+    # Alta de conductor (la misma de localhost:4000) en el sitio de M1.
+    # /api y /m1-api los resuelve el nginx de ese frontend.
+    handle /alta-conductor.html {
+        reverse_proxy m3-conductor-frontend:80
+    }
+    handle /alta-conductor.js {
+        reverse_proxy m3-conductor-frontend:80
+    }
+    handle /valoraciones.html {
+        reverse_proxy m3-conductor-frontend:80
+    }
+    handle /valoraciones.js {
+        reverse_proxy m3-conductor-frontend:80
+    }
+    handle /api/* {
+        reverse_proxy m3-conductor-frontend:80
+    }
+    handle /m1-api/* {
+        reverse_proxy m3-conductor-frontend:80
+    }
+    handle /vehiculos-api/* {
+        reverse_proxy m3-conductor-frontend:80
+    }
+    handle {
+        reverse_proxy m1-ui:80
+    }
+}
+
+{$M9_DOMAIN} {
+    encode zstd gzip
+    header -Server
+    @internal path /metrics /internal/*
+    respond @internal 404
+    reverse_proxy m9-reservas:3000
+}
+
+{$M8_DOMAIN} {
+    encode zstd gzip
+    header -Server
+    @internal path /metrics /internal/* /usuarios/*/penalizaciones
+    respond @internal 404
+    reverse_proxy m8-app:3000
+}
