@@ -63,6 +63,8 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-m9-local}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-m9}:${RABBITMQ_PASSWORD:-m9-local}@rabbitmq:5672
       RABBITMQ_EXCHANGE: m3.conductores.events
+      # El Compose común usa RabbitMQ. Activar el respaldo solo si se despliega Kafka.
+      KAFKA_FALLBACK_ENABLED: "${M3_KAFKA_FALLBACK_ENABLED:-false}"
       OTEL_SERVICE_NAME: m3-conductor-service
       # El collector es opcional: habilitar solo cuando este desplegado.
       OTEL_SDK_DISABLED: "${M3_OTEL_SDK_DISABLED:-true}"

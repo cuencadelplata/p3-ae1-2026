@@ -19,10 +19,30 @@ const obtenerConductores = async (req, res) => {
   }
 };
 
-/**
- * GET /conductores/:id
- * Obtener un conductor por ID desde Redis
- */
+const obtenerPendientesDeHabilitacion = async (_req, res) => {
+  try {
+    const perfiles = await redisRepository.obtenerPendientesDeHabilitacion();
+    return res.status(200).json(perfiles
+      .filter(({ usuarioID }) => /^[1-9][0-9]*$/.test(usuarioID))
+      .map(({ usuarioID, createdAt }) => ({ usuarioID, createdAt })));
+  } catch (error) {
+    return res.status(503).json({ error: 'No se pudieron consultar las habilitaciones pendientes.' });
+  }
+};
+
+const asegurarPerfilConductor = async (req, res) => {
+  const { userId } = req.identidadM1;
+  if (!/^[1-9][0-9]*$/.test(userId)) return res.status(401).json({ error: 'La sesión no identifica a un conductor válido.' });
+  try {
+    const perfil = await redisRepository.asegurarPerfilConductor(userId);
+    return res.status(200).json(construirRespuestaEstado(perfil));
+  } catch (error) {
+    console.warn(`[M3] No se pudo preparar el perfil de conductor '${userId}': ${error.message}`);
+    return res.status(503).json({ error: 'No se pudo preparar tu perfil de conductor. Volvé a intentar.' });
+  }
+};
+
+/** GET /conductores/:id */
 const obtenerConductorPorId = async (req, res) => {
   try {
     const { id } = req.params;
@@ -337,7 +357,9 @@ const obtenerDisponibleConductor = async (req, res) => {
 
 module.exports = {
   obtenerConductores,
+  obtenerPendientesDeHabilitacion,
   obtenerConductorPorId,
+  asegurarPerfilConductor,
   crearConductor,
   actualizarTipoVehiculo,
   obtenerHabilitado,

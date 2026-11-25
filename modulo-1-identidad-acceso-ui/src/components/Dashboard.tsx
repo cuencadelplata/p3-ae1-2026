@@ -3,6 +3,8 @@ import axios from 'axios'
 import Reservations from './Reservations'
 import BrowserNotifications from './BrowserNotifications'
 import OperatorSupport from './OperatorSupport'
+import OperatorDriverApprovals from './OperatorDriverApprovals'
+import DriverProfileStatus from './DriverProfileStatus'
 import TripHistory from './TripHistory'
 import {
   LogOut,
@@ -75,6 +77,7 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   const [verReservas, setVerReservas] = useState(false)
   const [verHistorial, setVerHistorial] = useState(false)
   const [verSoporte, setVerSoporte] = useState(false)
+  const [verHabilitaciones, setVerHabilitaciones] = useState(false)
 
   const headers = { Authorization: `Bearer ${token}` }
 
@@ -150,6 +153,9 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   if (verSoporte && perfil?.rol === 'OPERADOR') {
     return <OperatorSupport token={token} onBack={() => setVerSoporte(false)} />
   }
+  if (verHabilitaciones && perfil?.rol === 'OPERADOR') {
+    return <OperatorDriverApprovals token={token} onBack={() => setVerHabilitaciones(false)} />
+  }
   if (verHistorial && perfil?.rol === 'CLIENTE') {
     return <TripHistory token={token} userId={perfil.userId} onBack={() => setVerHistorial(false)} />
   }
@@ -216,8 +222,11 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
               <button className="btn-secondary" onClick={() => setVerHistorial(true)}>Historial de viajes</button>
             </div>}
 
-            {perfil.rol === 'OPERADOR' &&
-              <button className="btn-primary mt-6" onClick={() => setVerSoporte(true)}>Bandeja de soporte</button>}
+            {perfil.rol === 'CONDUCTOR' && <DriverProfileStatus key={perfil.userId} token={token} />}
+            {perfil.rol === 'OPERADOR' && <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <button className="btn-primary" onClick={() => setVerSoporte(true)}>Bandeja de soporte</button>
+              <button className="btn-secondary" onClick={() => setVerHabilitaciones(true)}>Habilitar conductores</button>
+            </div>}
             {(perfil.rol === 'CLIENTE' || perfil.rol === 'CONDUCTOR') && (
               <BrowserNotifications key={perfil.userId} token={token} role={perfil.rol} userId={perfil.userId} />
             )}

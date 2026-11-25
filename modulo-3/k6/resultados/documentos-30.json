@@ -1,0 +1,163 @@
+{
+    "root_group": {
+        "groups": {},
+        "checks": {
+            "registro devuelve 201 e ID": {
+                "path": "::registro devuelve 201 e ID",
+                "id": "4ab28700f6a4c735f07db31524c840c0",
+                "passes": 151,
+                "fails": 0,
+                "name": "registro devuelve 201 e ID"
+            }
+        },
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "metrics": {
+        "checks": {
+            "passes": 151,
+            "fails": 0,
+            "value": 1
+        },
+        "errores_documentales": {
+            "rate": 0,
+            "count": 0,
+            "thresholds": {
+                "count==0": false
+            }
+        },
+        "data_received": {
+            "count": 194029,
+            "rate": 604.0642210698458
+        },
+        "http_req_tls_handshaking": {
+            "avg": 0,
+            "med": 0,
+            "p(95)": 0,
+            "max": 0
+        },
+        "documentos_rechazados": {
+            "rate": 0.09651129910047065,
+            "count": 31
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 331,
+            "value": 0
+        },
+        "data_sent": {
+            "count": 84247,
+            "rate": 262.28346501023714
+        },
+        "iterations": {
+            "count": 151,
+            "rate": 0.4701034246506796
+        },
+        "http_req_receiving": {
+            "avg": 1.651872054380666,
+            "med": 0.173788,
+            "p(95)": 1.7484625,
+            "max": 396.856171
+        },
+        "registro_http_ms": {
+            "avg": 38.963165,
+            "med": 12.389142,
+            "p(95)": 117.312613,
+            "max": 1246.466446
+        },
+        "http_req_sending": {
+            "avg": 0.2136856223564955,
+            "med": 0.071333,
+            "p(95)": 0.570546,
+            "max": 9.201844
+        },
+        "http_req_waiting": {
+            "avg": 34.70465312386704,
+            "med": 10.893223,
+            "p(95)": 124.306123,
+            "max": 1461.181308
+        },
+        "vus": {
+            "value": 0,
+            "min": 0,
+            "max": 1
+        },
+        "http_reqs": {
+            "count": 331,
+            "rate": 1.0304916129759931
+        },
+        "iteration_duration": {
+            "avg": 154.5488641655629,
+            "med": 45.562712,
+            "p(95)": 534.757526,
+            "max": 2333.949633
+        },
+        "http_req_connecting": {
+            "avg": 6.5002200755287,
+            "med": 0,
+            "p(95)": 15.481347,
+            "max": 411.052894
+        },
+        "documentos_procesados": {
+            "count": 151,
+            "rate": 0.4701034246506796
+        },
+        "documentos_aprobados": {
+            "count": 120,
+            "rate": 0.373592125550209
+        },
+        "validacion_observada_ms": {
+            "avg": 153.20529801324503,
+            "med": 45,
+            "p(95)": 534.5,
+            "max": 2334
+        },
+        "http_req_duration{expected_response:true}": {
+            "max": 1461.32617,
+            "avg": 36.57021080060422,
+            "med": 11.388878,
+            "p(95)": 125.09515200000001
+        },
+        "http_req_blocked": {
+            "med": 0.013972,
+            "p(95)": 18.416078499999998,
+            "max": 412.756049,
+            "avg": 7.603836791540784
+        },
+        "documentos_pendientes_al_timeout": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+                "count==0": false
+            }
+        },
+        "http_req_duration": {
+            "max": 1461.32617,
+            "avg": 36.57021080060422,
+            "med": 11.388878,
+            "p(95)": 125.09515200000001
+        },
+        "documentos_recibidos": {
+            "rate": 0.4701034246506796,
+            "count": 151
+        },
+        "vus_max": {
+            "value": 25,
+            "min": 25,
+            "max": 25
+        },
+        "dropped_iterations": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+                "count==0": false
+            }
+        }
+    },
+    "setup_data": {
+        "driverBase": 1737241119,
+        "expires": "2027-11-24",
+        "run": "mwv3okhz"
+    }
+}
