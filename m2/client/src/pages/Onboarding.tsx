@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { api, getToken } from '../api';
+import { api, getToken, hayVueltaPendiente, volverALaApp } from '../api';
 import type { VehicleType, NotificationChannel } from '../types';
 
 /**
@@ -27,6 +27,8 @@ export default function Onboarding() {
       const customer = await api.createCustomer({
         preferences: { preferredVehicleType, notificationChannel },
       });
+      // Si vino derivado desde la app, vuelve ahí con el perfil ya creado.
+      if (volverALaApp()) return;
       navigate(`/customers/${customer.customerId}`, { replace: true });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error inesperado');
@@ -39,6 +41,7 @@ export default function Onboarding() {
       <h1 className="page-title">Completá tu perfil</h1>
       <p className="page-lead">
         Tu identidad ya está verificada por M1. Elegí tus preferencias para terminar de crear tu perfil.
+        {hayVueltaPendiente() && ' Después volvés a la app para pedir tu viaje.'}
       </p>
 
       <div className="card">

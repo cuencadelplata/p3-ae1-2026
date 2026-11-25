@@ -172,3 +172,43 @@ export async function prepararPerfilDePrueba(userId: number): Promise<CustomerPr
     });
   }
 }
+
+// ─── Vuelta a la app que derivó al usuario (front común) ───────────────────
+// El front común manda ?volver=<url> cuando un CLIENTE todavía no tiene perfil en M2.
+// Solo se aceptan orígenes permitidos, para no redirigir a sitios ajenos.
+const ORIGENES_VOLVER = (import.meta.env.VITE_VOLVER_PERMITIDOS || 'http://localhost:5173,http://127.0.0.1:5173')
+  .split(',')
+  .map((origen: string) => origen.trim())
+  .filter(Boolean);
+
+const CLAVE_VOLVER = 'm2_volver';
+
+/** Lee ?volver= de la URL, lo guarda si el origen está permitido y lo saca de la barra de direcciones. */
+export function initVolverFromUrl(): void {
+  const params = new URLSearchParams(window.location.search);
+  const volver = params.get('volver');
+  if (volver === null) return;
+
+  try {
+    const url = new URL(volver);
+    if (ORIGENES_VOLVER.includes(url.origin)) sessionStorage.setItem(CLAVE_VOLVER, url.toString());
+  } catch {
+    // URL inválida: se ignora.
+  }
+  params.delete('volver');
+  const query = params.toString();
+  window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
+}
+
+/** Si el usuario llegó desde otra app, lo devuelve ahí. Devuelve true si redirigió. */
+export function volverALaApp(): boolean {
+  const volver = sessionStorage.getItem(CLAVE_VOLVER);
+  if (!volver) return false;
+  sessionStorage.removeItem(CLAVE_VOLVER);
+  window.location.replace(volver);
+  return true;
+}
+
+export function hayVueltaPendiente(): boolean {
+  return sessionStorage.getItem(CLAVE_VOLVER) !== null;
+}
