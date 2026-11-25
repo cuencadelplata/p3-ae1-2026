@@ -14,7 +14,7 @@ try:
     fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
 except BlockingIOError:
     raise SystemExit('Otro despliegue esta en curso')
-REPOSITORY='IgnacioParra20/p3-ae1-2026-'
+REPOSITORY='cuencadelplata/p3-ae1-2026'
 API='https://api.github.com/repos/'+REPOSITORY
 def get(path):
     req=urllib.request.Request(API+path,headers={'Accept':'application/vnd.github+json','User-Agent':'movilidad-cloudtest-cd'})
