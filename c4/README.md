@@ -1,15 +1,31 @@
 # Modelo C4 de Movilidad Urbana
 
-Diagramas C4 de la plataforma completa (M1–M9), generados con [archify](https://github.com/tt-a1i/archify) v3.3.0. Cada `.html` es autocontenido: se abre directo en el navegador.
+Diagramas C4 de la plataforma completa (M1–M9), generados con [archify](https://github.com/tt-a1i/archify) v3.3.0. Cada `.html` es autocontenido.
 
-| Nivel | Diagrama |
-| --- | --- |
-| 1 · Contexto | [c4-nivel1-contexto.html](c4-nivel1-contexto.html) |
-| 2 · Contenedores | [c4-nivel2-contenedores.html](c4-nivel2-contenedores.html) |
-| 2b · Eventos (RabbitMQ) | [c4-nivel2-eventos.html](c4-nivel2-eventos.html) |
-| 3 · Componentes | [M1](c4-nivel3-componentes-m1.html) · [M2](c4-nivel3-componentes-m2.html) · [M3](c4-nivel3-componentes-m3.html) · [M4](c4-nivel3-componentes-m4.html) · [M5](c4-nivel3-componentes-m5.html) · [M6](c4-nivel3-componentes-m6.html) · [M7](c4-nivel3-componentes-m7.html) · [M8](c4-nivel3-componentes-m8.html) · [M9](c4-nivel3-componentes-m9.html) |
+## Ver los diagramas
 
-Desde el Nivel 2, un clic en un módulo abre su Nivel 3.
+GitHub muestra el código de los `.html`, no el diagrama. Para verlos en el navegador, usá los enlaces de **Ver online** (sirven el archivo de la rama `main` mediante [raw.githack.com](https://raw.githack.com), un servicio externo):
+
+**[▶ Abrir el C4 online (empieza en el Nivel 1)](https://raw.githack.com/cuencadelplata/p3-ae1-2026/main/c4/c4-nivel1-contexto.html)**
+
+| Nivel | Ver online | Archivo |
+| --- | --- | --- |
+| 1 · Contexto | [abrir](https://raw.githack.com/cuencadelplata/p3-ae1-2026/main/c4/c4-nivel1-contexto.html) | [c4-nivel1-contexto.html](c4-nivel1-contexto.html) |
+| 2 · Contenedores | [abrir](https://raw.githack.com/cuencadelplata/p3-ae1-2026/main/c4/c4-nivel2-contenedores.html) | [c4-nivel2-contenedores.html](c4-nivel2-contenedores.html) |
+| 2b · Eventos (RabbitMQ) | [abrir](https://raw.githack.com/cuencadelplata/p3-ae1-2026/main/c4/c4-nivel2-eventos.html) | [c4-nivel2-eventos.html](c4-nivel2-eventos.html) |
+| 3 · M1 Identidad y acceso | [abrir](https://raw.githack.com/cuencadelplata/p3-ae1-2026/main/c4/c4-nivel3-componentes-m1.html) | [c4-nivel3-componentes-m1.html](c4-nivel3-componentes-m1.html) |
+| 3 · M2 Perfil, historial y estado | [abrir](https://raw.githack.com/cuencadelplata/p3-ae1-2026/main/c4/c4-nivel3-componentes-m2.html) | [c4-nivel3-componentes-m2.html](c4-nivel3-componentes-m2.html) |
+| 3 · M3 Conductores y vehículos | [abrir](https://raw.githack.com/cuencadelplata/p3-ae1-2026/main/c4/c4-nivel3-componentes-m3.html) | [c4-nivel3-componentes-m3.html](c4-nivel3-componentes-m3.html) |
+| 3 · M4 Ubicación y disponibilidad | [abrir](https://raw.githack.com/cuencadelplata/p3-ae1-2026/main/c4/c4-nivel3-componentes-m4.html) | [c4-nivel3-componentes-m4.html](c4-nivel3-componentes-m4.html) |
+| 3 · M5 Solicitud y despacho | [abrir](https://raw.githack.com/cuencadelplata/p3-ae1-2026/main/c4/c4-nivel3-componentes-m5.html) | [c4-nivel3-componentes-m5.html](c4-nivel3-componentes-m5.html) |
+| 3 · M6 Viajes | [abrir](https://raw.githack.com/cuencadelplata/p3-ae1-2026/main/c4/c4-nivel3-componentes-m6.html) | [c4-nivel3-componentes-m6.html](c4-nivel3-componentes-m6.html) |
+| 3 · M7 Tarifas y pagos | [abrir](https://raw.githack.com/cuencadelplata/p3-ae1-2026/main/c4/c4-nivel3-componentes-m7.html) | [c4-nivel3-componentes-m7.html](c4-nivel3-componentes-m7.html) |
+| 3 · M8 QR, comprobantes y notificaciones | [abrir](https://raw.githack.com/cuencadelplata/p3-ae1-2026/main/c4/c4-nivel3-componentes-m8.html) | [c4-nivel3-componentes-m8.html](c4-nivel3-componentes-m8.html) |
+| 3 · M9 Reservas programadas | [abrir](https://raw.githack.com/cuencadelplata/p3-ae1-2026/main/c4/c4-nivel3-componentes-m9.html) | [c4-nivel3-componentes-m9.html](c4-nivel3-componentes-m9.html) |
+
+Desde el Nivel 1 se navega hacia abajo: clic en la plataforma abre el Nivel 2, y clic en un módulo abre su Nivel 3.
+
+También se pueden abrir localmente: con el repo clonado, doble clic en cualquier `.html`.
 
 ## De dónde sale
 
