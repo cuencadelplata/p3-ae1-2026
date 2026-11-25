@@ -41,8 +41,8 @@ services:
     env_file: !reset []
     environment:
       M1_REQUIRE_AUTH: 'true'
-      SUPABASE_URL: ${M3_SUPABASE_URL:-}
-      SUPABASE_SERVICE_ROLE_KEY: ${M3_SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_URL: ${SUPABASE_URL:-${M3_SUPABASE_URL:-}}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-${M3_SUPABASE_SERVICE_ROLE_KEY:-}}
   m3-conductor-frontend:
     profiles: [m3]
     ports: !reset []

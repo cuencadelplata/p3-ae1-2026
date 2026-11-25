@@ -34,7 +34,7 @@ export function generateEnvironment(domain, email) {
     M8_SMTP_USER: '', M8_SMTP_PASSWORD: '', M8_MAIL_FROM: '',
     GRAFANA_CLOUD_REMOTE_WRITE_URL: '', GRAFANA_CLOUD_USER: '', GRAFANA_CLOUD_TOKEN: '',
     M7_DB_PASSWORD: secret(), M7_SUPABASE_URL: '', M7_SUPABASE_KEY: '', MP_ACCESS_TOKEN: '', MP_PUBLIC_KEY: '',
-    M3_SUPABASE_URL: '', M3_SUPABASE_SERVICE_ROLE_KEY: '',
+    SUPABASE_URL: '', SUPABASE_SERVICE_ROLE_KEY: '',
   };
   return Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n') + '\n';
 }

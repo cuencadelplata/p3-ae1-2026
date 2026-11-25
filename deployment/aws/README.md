@@ -65,7 +65,7 @@ node deployment/aws/prepare.mjs 1-2-3-4.sslip.io tu-email@example.com
 ```
 
 Genera `deployment/aws/.env`, ignorado por Git. No sobrescribe claves existentes.
-Completar allí, por privado, `M3_SUPABASE_URL`, `M3_SUPABASE_SERVICE_ROLE_KEY`,
+Completar allí, por privado, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (M3),
 `M7_SUPABASE_URL`, `M7_SUPABASE_KEY`, `MP_ACCESS_TOKEN`,
 `M8_SMTP_USER`, `M8_SMTP_PASSWORD` y `M8_MAIL_FROM`. La contraseña SMTP debe ser
 una contraseña de aplicación nueva; no reutilizar una que haya sido publicada o compartida.
