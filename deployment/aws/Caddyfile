@@ -1,0 +1,34 @@
+{
+    email {$ACME_EMAIL}
+    admin off
+}
+
+{$APP_DOMAIN} {
+    encode zstd gzip
+    header -Server
+    # M1 se consume desde el mismo origen HTTPS del frontend.
+    handle_path /identity/* {
+        @internal path /auth/token-delegado /internal/* /metrics
+        respond @internal 404
+        reverse_proxy m1-identidad-acceso:3001
+    }
+    handle {
+        reverse_proxy m1-ui:80
+    }
+}
+
+{$M9_DOMAIN} {
+    encode zstd gzip
+    header -Server
+    @internal path /metrics /internal/*
+    respond @internal 404
+    reverse_proxy m9-reservas:3000
+}
+
+{$M8_DOMAIN} {
+    encode zstd gzip
+    header -Server
+    @internal path /metrics /internal/* /usuarios/*/penalizaciones
+    respond @internal 404
+    reverse_proxy m8-app:3000
+}

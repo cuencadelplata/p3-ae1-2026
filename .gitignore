@@ -48,3 +48,6 @@ web_modules/
 
 # Resultados locales de k6 de M9
 /M9-ReservasProgramadas/performance/results/
+
+# Claves SSH privadas de AWS
+/deployment/aws/*.pem

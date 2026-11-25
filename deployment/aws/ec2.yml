@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Movilidad urbana - servidor de demostracion EC2 con Docker Compose y HTTPS
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subred publica con ruta a Internet Gateway
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+  SshCidr:
+    Type: String
+    Description: Tu IP publica seguida de /32; no abrir SSH a todo Internet
+    AllowedPattern: '^(?!0\.0\.0\.0/0$)([0-9]{1,3}\.){3}[0-9]{1,3}/(3[0-2]|[12]?[0-9])$'
+  InstanceType:
+    Type: String
+    Default: m7i-flex.large
+    AllowedValues: [m7i-flex.large, t3.large, t3.xlarge]
+  UbuntuAmi:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+Resources:
+  Firewall:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: HTTPS publico y SSH desde la IP autorizada
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref SshCidr}
+        - {IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0}
+        - {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0}
+  Server:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref UbuntuAmi
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      MetadataOptions: {HttpTokens: required, HttpEndpoint: enabled}
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          AssociatePublicIpAddress: true
+          SubnetId: !Ref SubnetId
+          GroupSet: [!Ref Firewall]
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs: {VolumeSize: 80, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true}
+      Tags:
+        - {Key: Name, Value: movilidad-cloudtest}
+  PublicIp:
+    Type: AWS::EC2::EIP
+    Properties: {Domain: vpc}
+  Association:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt PublicIp.AllocationId
+      InstanceId: !Ref Server
+Outputs:
+  PublicIp:
+    Value: !Ref PublicIp
+  InstanceId:
+    Value: !Ref Server
+  DomainBase:
+    Value: !Sub
+      - '${IpLabel}.sslip.io'
+      - IpLabel: !Join ['-', !Split ['.', !Ref PublicIp]]

@@ -1,1 +1,2 @@
 modulo8/infra/postgres/init/*.sh text eol=lf
+deployment/aws/*.sh text eol=lf
