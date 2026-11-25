@@ -1,5 +1,26 @@
 # AWS CloudTest
 
+Resultados reproducibles y limites: [VERIFICACION.md](VERIFICACION.md).
+Restauracion aislada: `bash deployment/aws/restore-check.sh DIRECTORIO_BACKUP`.
+No restaura sobre las bases activas ni publica puertos.
+
+## Entornos centrales
+
+El Compose compartido usa `.env` en local y `deployment/aws/.env` en AWS.
+M3 y M7 reciben variables explicitamente; el Compose compartido ya no carga sus
+archivos privados separados. Los Compose independientes de cada modulo conservan
+su configuracion propia por compatibilidad.
+
+Local: `docker compose --env-file .env up -d --build`.
+AWS: `bash deployment/aws/deploy.sh check` y `bash deployment/aws/deploy.sh up`.
+Las variables Supabase de M7 se llaman `M7_SUPABASE_URL` y `M7_SUPABASE_KEY`;
+la SQL local se llama `M7_DATABASE_URL`. No usar un host `db` sin un servicio real
+con ese nombre. En AWS se usa `m7-db`, creado por el overlay.
+
+`consolidate-env.mjs` permite migrar los valores de M7 existentes. Conserva las
+claves de motores y solo sustituye campos AWS ausentes o marcados como placeholder.
+No sincroniza EC2 ni cambia usuarios en los motores.
+
 Infraestructura creada en São Paulo (`sa-east-1`): instancia
 `i-07c64b9137e9e8e14`, Elastic IP `56.126.65.182` y dominio base
 `56-126-65-182.sslip.io`. La infraestructura anterior de Virginia fue reemplazada.
@@ -97,6 +118,36 @@ requieren registrar también la URL HTTPS de retorno del frontend en Google/Auth
 SMTP requiere las credenciales de M8; tener HTTPS y claves VAPID no habilita correo por sí solo.
 
 ## 5. Apagar
+
+## Administracion, backups y evidencias
+
+Desde `/home/ubuntu/movilidad`, el comando reproducible es
+`bash deployment/aws/dc.sh --profile m3 logs --tail 100 SERVICIO` o
+`bash deployment/aws/dc.sh --profile m3 up -d --no-deps SERVICIO`.
+No se requiere un alias `dc` ni ejecutar `restart` para aplicar variables nuevas.
+
+Backup completo local: `bash deployment/aws/backup.sh /home/ubuntu/backup-FECHA`.
+El destino debe ser nuevo. Incluye siete PostgreSQL y SQLite M1 con backup online,
+verifica catalogos, integridad SQLite y hashes. Copiarlo fuera de EC2 y probar una
+restauracion aislada antes de considerar el respaldo recuperable. No cubre los datos
+externos de Supabase, que requieren su propio respaldo.
+
+Para rotar una clave externa, crear reemplazo, actualizar consumidores, comprobar
+funcionamiento y finalmente revocar la anterior. JWT puede cerrar sesiones y VAPID
+requiere renovar suscripciones. Para PostgreSQL/RabbitMQ se debe cambiar tambien la
+credencial dentro del motor; editar solo `.env` no modifica usuarios existentes.
+
+M9 requiere endpoint, instance ID y token OTLP propios. El token remote_write de M8
+no demuestra permisos de trazas/logs. Completar `GRAFANA_CLOUD_OTLP_ENDPOINT`,
+`GRAFANA_CLOUD_OTLP_INSTANCE_ID` y `GRAFANA_CLOUD_OTLP_TOKEN` en el entorno privado.
+Agregar `-f deployment/aws/compose.m9-observability.yml` al comando Compose para
+habilitarlo. Este collector no publica puertos. Verificar recepcion con consultas
+recientes en Grafana; Alloy activo no basta como evidencia.
+
+Costos: registrar consumo bruto, creditos y costo neto con fecha de consulta. Costo
+neto cero puede incluir creditos y retrasos de facturacion; no significa consumo cero.
+La asignacion completa sigue pendiente de M3. RF-9.7 fue eliminado: no validar una
+prioridad por calificacion como requisito de M9.
 
 ```bash
 bash deployment/aws/deploy.sh down

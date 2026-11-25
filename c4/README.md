@@ -1,5 +1,17 @@
 # Modelo C4 de Movilidad Urbana
 
+## Despliegue AWS de demostracion
+
+El stack AWS ejecuta los mismos modulos en una EC2 de sa-east-1 con Docker Compose.
+Caddy termina HTTPS y es el unico contenedor que publica 80/443; cada modulo
+conserva sus contratos internos y sus datos. M9 pide tokens delegados a M1, resuelve
+rutas con M4, estima tarifas con M7 y despacha a M5. La asignacion pertenece a M5;
+RF-9.7 fue retirado. No hay una dependencia directa M9 -> M8 para despachar.
+
+Los HTML existentes describen componentes; no representan un despliegue de alta
+disponibilidad ni certifican integraciones probadas. Estado y limites actuales:
+[verificacion AWS](../deployment/aws/VERIFICACION.md).
+
 Diagramas C4 de la plataforma completa (M1–M9), generados con [archify](https://github.com/tt-a1i/archify) v3.3.0. Cada `.html` es autocontenido.
 
 ## Ver los diagramas

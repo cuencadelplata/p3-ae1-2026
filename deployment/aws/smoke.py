@@ -48,6 +48,18 @@ reservation = request('/flujo-api/m9/reservas', 'POST', {
 reservation_id = reservation['id']
 try:
     request('/flujo-api/m9/reservas/' + reservation_id, token=token)
+    request('/flujo-api/m9/reservas/' + reservation_id, 'PATCH', {
+        'fechaHoraProgramada':(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=3)).isoformat(),
+    }, token=token)
+    request('/flujo-api/m9/reservas', 'POST', {
+        'origen':'A','destino':'B','vehiculo':'AUTO','fechaHoraProgramada':'2000-01-01T00:00:00Z',
+    }, token=token, expected=(400,))
+    second_email = 'aws-owner-check-' + suffix + '@example.com'
+    request('/identity/auth/registrar-usuario','POST',{'nombre':'Prueba','apellido':'Propiedad','dni':str(secrets.randbelow(80000000)+10000000),'telefono':'3794000000','email':second_email,'password':password,'rol':'CLIENTE'},expected=(201,))
+    second_login=request('/identity/auth/iniciar-sesion','POST',{'email':second_email,'password':password})
+    second_token=second_login['token']
+    for method,data in [('GET',None),('PATCH',{'vehiculo':'MOTO'}),('DELETE',None)]:
+        request('/flujo-api/m9/reservas/'+reservation_id,method,data,second_token,expected=(403,404))
 finally:
     request('/flujo-api/m9/reservas/' + reservation_id, 'DELETE', token=token)
 print('HTTPS, bloqueo sin identidad y login M1 -> consulta M9: OK')

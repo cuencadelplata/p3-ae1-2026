@@ -10,6 +10,7 @@ export default function DriverVehicles({ driver, onActivate }: { driver: Account
   const [busy, setBusy] = useState(true)
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState('')
+  const [profileMessage, setProfileMessage] = useState('')
   const pending = useRef<{ body: string; key: string } | null>(null)
 
   useEffect(() => {
@@ -70,6 +71,34 @@ export default function DriverVehicles({ driver, onActivate }: { driver: Account
         ? <span className="text-[var(--accent)]" role="status">Activo</span>
         : <button type="button" className="btn-secondary" disabled={busy} onClick={() => void activate(vehicle)}>Activar</button>}
     </li>)}</ul>
+    {loaded && vehicles.some(v => v.activo) && <form className="ride-form" onSubmit={(event) => {
+      event.preventDefault()
+      const fields = new FormData(event.currentTarget)
+      const active = vehicles.find(v => v.activo)!
+      void update(async () => {
+        try {
+          await request('M3', '/api/conductores/' + userId + '/estado', { token })
+          setProfileMessage('Tu perfil ya existe. Si está pendiente, debe aprobarlo el equipo de M3.')
+          return
+        } catch (cause) {
+          if (!(cause instanceof Error) || !('status' in cause) || cause.status !== 404) throw cause
+        }
+        await request('M3', '/api/conductores', { method: 'POST', token, body: {
+          usuarioID: String(userId), ciudad: String(fields.get('ciudad')).trim(),
+          licenciaId: String(fields.get('licencia')).trim(), vehiculoId: active.id,
+          tipovehiculo: active.tipoServicio.toLowerCase(),
+        } })
+        setProfileMessage('Perfil creado. Está pendiente de habilitación por el equipo de M3; después podrás conectarte.')
+      })
+    }}>
+      <fieldset disabled={busy} className="grid gap-2">
+        <legend className="font-semibold">Solicitar alta de conductor</legend>
+        <label>Ciudad <input className="input-field" name="ciudad" required maxLength={100} /></label>
+        <label>Identificador de licencia <input className="input-field" name="licencia" required maxLength={100} /></label>
+        <button className="btn-secondary" type="submit">Solicitar alta del perfil</button>
+      </fieldset>
+      {profileMessage && <p role="status">{profileMessage}</p>}
+    </form>}
     {loaded && <form className="ride-form" onSubmit={(event) => void register(event)}>
       <fieldset className="grid gap-2" disabled={busy}>
         <legend className="font-semibold">Registrar vehículo</legend>

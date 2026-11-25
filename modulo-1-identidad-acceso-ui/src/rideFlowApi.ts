@@ -186,7 +186,14 @@ export async function ensurePassenger(token: string) {
 export async function prepareDriver(driver: Account) {
   const path = '/api/conductores/' + driver.userId + '/estado'
   const { token } = driver
-  const status = await request<{ estado: string; habilitado: boolean }>('M3', path, { token })
+  let status: { estado: string; habilitado: boolean }
+  try {
+    status = await request('M3', path, { token })
+  } catch (error) {
+    if (error instanceof FlowError && error.status === 404)
+      throw new Error('Falta tu perfil de conductor. Abrí Tus vehículos y solicitá el alta del perfil con tu ciudad y licencia.')
+    throw error
+  }
   if (!status.habilitado) throw new Error('Tu perfil de conductor debe estar habilitado antes de recibir viajes.')
   const vehicles = await request<DriverVehicle[]>(
     'M3-vehiculos', '/api/v1/drivers/' + driver.userId + '/vehicles', { token },
