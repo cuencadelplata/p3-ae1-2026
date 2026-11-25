@@ -25,6 +25,7 @@ import {
 import { API_URL } from '../api'
 import DriverDispatch from './DriverDispatch'
 import RideFlow from './RideFlow'
+import MisDirecciones from './MisDirecciones'
 import { FlowError, request } from '../rideFlowApi'
 
 // RF-2.5: estado de la cuenta del cliente según M2 (penalizaciones de Soporte). Solo ACTIVO puede pedir viajes.
@@ -93,6 +94,7 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   const [verViaje, setVerViaje] = useState(false)
   const [verReservas, setVerReservas] = useState(false)
   const [verHistorial, setVerHistorial] = useState(false)
+  const [verDirecciones, setVerDirecciones] = useState(false)
   const [verSoporte, setVerSoporte] = useState(false)
   const [verHabilitaciones, setVerHabilitaciones] = useState(false)
   const [verRegistroViajes, setVerRegistroViajes] = useState(false)
@@ -203,6 +205,9 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   if (verHistorial && (perfil?.rol === 'CLIENTE' || perfil?.rol === 'CONDUCTOR')) {
     return <TripHistory token={token} userId={perfil.userId} conductor={perfil.rol === 'CONDUCTOR'} onBack={() => setVerHistorial(false)} />
   }
+  if (verDirecciones && perfil?.rol === 'CLIENTE') {
+    return <MisDirecciones token={token} onBack={() => setVerDirecciones(false)} />
+  }
   if (verReservas && perfil?.rol === 'CLIENTE') {
     return <Reservations token={token} onBack={() => setVerReservas(false)} onOpenTrip={() => {
       setVerReservas(false)
@@ -282,6 +287,7 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
             {perfil.rol === 'CLIENTE' && <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <button className="btn-secondary" onClick={() => setVerReservas(true)}>Mis reservas</button>
               <button className="btn-secondary" onClick={() => setVerHistorial(true)}>Historial de viajes</button>
+              <button className="btn-secondary sm:col-span-2" onClick={() => setVerDirecciones(true)}>Mis direcciones</button>
             </div>}
             {/* El conductor puede reportar al pasajero de un viaje que hizo (ticket de M8). */}
             {perfil.rol === 'CONDUCTOR' &&
