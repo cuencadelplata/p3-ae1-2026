@@ -58,21 +58,23 @@ function headersM7(): Record<string, string> {
 /** Llamada a otro módulo, medida en m6_dependencia_request_duration_seconds. */
 function requestJson(
     destino: { dependencia: 'm4' | 'm7'; operacion: string },
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PATCH',
     url: string,
     input?: unknown,
     headers: Record<string, string> = {},
     statusAceptados: number[] = [],
+    requestTimeoutMs = timeoutMs,
 ): Promise<RespuestaExterna> {
-    return medir(llamadasDependencia, destino, () => requestJsonSinMedir(method, url, input, headers, statusAceptados));
+    return medir(llamadasDependencia, destino, () => requestJsonSinMedir(method, url, input, headers, statusAceptados, requestTimeoutMs));
 }
 
 async function requestJsonSinMedir(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PATCH',
     url: string,
     input: unknown,
     headers: Record<string, string>,
     statusAceptados: number[],
+    requestTimeoutMs: number,
 ): Promise<RespuestaExterna> {
     let response: Response;
     try {
@@ -83,7 +85,7 @@ async function requestJsonSinMedir(
                 ...headers,
             },
             body: input !== undefined ? JSON.stringify(input) : undefined,
-            signal: AbortSignal.timeout(timeoutMs),
+            signal: AbortSignal.timeout(requestTimeoutMs),
         });
     } catch {
         throw new ErrorServicioFinalizacion(`Servicio externo no disponible: ${url}`, 503);
@@ -156,7 +158,18 @@ async function procesarPago(
         throw new ErrorServicioFinalizacion('M7 devolvió un pago de otro viaje', 502);
     }
     if (existente.status !== 404 && existente.body.tipo !== undefined && existente.body.tipo !== data.metodoPago) {
-        throw new ErrorServicioFinalizacion('El medio de pago registrado en M7 no coincide con el solicitado', 402);
+        if (pago.estado !== 'pendiente' || existente.body.tipo !== 'tarjeta' || data.metodoPago === 'tarjeta') {
+            throw new ErrorServicioFinalizacion('El medio de pago registrado en M7 no coincide con el solicitado', 402);
+        }
+        const cambio = await requestJson({ dependencia: 'm7', operacion: 'cambiar_medio_pago' }, 'PATCH', rutaPago,
+            { tipo: data.metodoPago }, headersM7(), [409], Math.max(timeoutMs, 8_000));
+        if (cambio.status === 409) {
+            throw new ErrorServicioFinalizacion('Mercado Pago todavía no confirma el rechazo de la tarjeta. Actualizá el estado antes de cambiar el medio.', 402);
+        }
+        pago = leerPago(cambio.body, 'cambiar el método de pago');
+        if (cambio.body.tipo !== data.metodoPago || cambio.body.viajeId !== viaje.id || pago.estado !== 'pendiente') {
+            throw new ErrorServicioFinalizacion('M7 devolvió un pago incompatible al cambiar el medio', 502);
+        }
     }
 
     if (pago.estado === 'autorizado') return { pagoId: pago.pagoId, estado: 'autorizado' };
@@ -176,9 +189,12 @@ async function procesarPago(
         token: tarjeta.token,
         paymentMethodId: tarjeta.paymentMethodId,
         email: tarjeta.email,
-    }, headersM7(), [402]);
+    }, headersM7(), [402, 409], Math.max(timeoutMs, 15_000));
+    if (autorizacion.status === 409) {
+        throw new ErrorServicioFinalizacion('El pago con tarjeta sigue en verificación. Esperá la confirmación de Mercado Pago.', 402);
+    }
     if (autorizacion.status === 402) {
-        throw new ErrorServicioFinalizacion('El pago con tarjeta fue rechazado por la pasarela', 402);
+        throw new ErrorServicioFinalizacion('La tarjeta fue rechazada. Podés elegir efectivo o transferencia.', 402);
     }
     pago = leerPago(autorizacion.body, 'autorizar el pago');
     if (pago.estado !== 'autorizado') {

@@ -1,6 +1,8 @@
 services:
   m7-api:
-    image: aylen0/m7-tarifas-ae2:latest
+    image: "${M7_IMAGE:-movilidad-urbana-m7:local}"
+    build:
+      context: .
     ports:
       - "17000:3000"
     env_file:
