@@ -21,15 +21,10 @@
 
 ## Cómo correrlo
 
-1. Crear la red compartida (los compose de M6 y M7 la declaran externa):
-
-   ```sh
-   docker network create reservas-network
-   ```
-
-2. Completar las claves de cada módulo y `M9_DISPATCH_AUTH_TOKEN` en el `.env` raíz. Usar `ROUTE_RESOLVER_MODE=m4` para probar las rutas reales; `stub` solo valida la conexión con un recorrido simulado.
-3. Levantar el stack desde la raíz: `docker compose up -d --build`.
-4. Correr el test desde la raíz:
+1. Seguí el [arranque del stack completo](../README.md#levantar-el-stack-completo)
+   para preparar la red, el `.env` raíz y `modulo7/.env`. Usá
+   `ROUTE_RESOLVER_MODE=m4` para probar las rutas reales.
+2. Corré el test desde la raíz:
 
    ```sh
    node --env-file=.env --test tests-integracion/flujo-completo.e2e.mjs

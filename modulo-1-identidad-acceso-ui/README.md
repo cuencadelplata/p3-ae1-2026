@@ -68,19 +68,13 @@ su propia activación.
 
 ### Probar con dos cuentas desde un clon limpio
 
-1. Instalá Docker Desktop. En la raíz del repositorio, copiá `.env.example` a
-   `.env` y usá `modulo8/integracion.env.example` como referencia para completar
-   las variables privadas del stack común. Para reservas programadas, configurá
-   `M9_DISPATCH_AUTH_TOKEN`. Si vas a finalizar el viaje con tarjeta, completá
-   `modulo7/.env` con la configuración TEST de M7 y poné `MP_PUBLIC_KEY` en el
-   `.env` de la raíz.
-2. Ejecutá `docker compose up -d --build` y verificá los servicios con
-   `docker compose ps`.
-3. Abrí `http://localhost:5173` en dos perfiles de navegador. Registrá un
+1. Seguí el [arranque del stack completo](../README.md#levantar-el-stack-completo)
+   para configurar los archivos de entorno, crear la red y comprobar los servicios.
+2. Abrí `http://localhost:5173` en dos perfiles de navegador. Registrá un
    **cliente** y un **conductor** con datos distintos. El conductor necesita un
    perfil habilitado en M3. En **Abrir despacho**, registrá y activá un auto,
    permití la ubicación y elegí **Conectarme** cerca del origen.
-4. Con el cliente, pedí un viaje o programá una reserva. Aceptá la oferta
+3. Con el cliente, pedí un viaje o programá una reserva. Aceptá la oferta
    con el conductor. Volvé a **Tu cuenta** en ambas sesiones y comprobá sus
    avisos de asignación. Para probar también Web Push, activá la opción en
    ambos perfiles antes de pedir el viaje y configurá las claves VAPID en M8.
@@ -102,7 +96,7 @@ Invoke-RestMethod "http://localhost:5000/api/conductores/$($conductor.userId)/ha
 ```
 
 El alta de M3 se hace una vez. Si el perfil ya existe, usá su estado actual y
-continuá con el vehículo activo en el paso 3.
+continuá con el vehículo activo en el paso 2.
 
 ## Qué pide a M1 cada pantalla
 

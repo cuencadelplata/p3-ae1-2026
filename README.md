@@ -21,23 +21,58 @@ Los detalles de cada modulo (endpoints, variables, pruebas) estan en el README d
 
 ## Levantar el stack completo
 
-1. Copiar las variables de ejemplo y completar `JWT_SECRET` (es la unica obligatoria):
+Instalá Git, Docker Desktop con Compose v2 y Node.js 22 o superior para
+ejecutar las verificaciones. Desde un clon nuevo, abrí PowerShell en la raíz.
 
-   ```sh
-   cp .env.example .env
-   ```
+```powershell
+git switch main
+git pull --ff-only origin main
+Copy-Item .env.example .env
+Copy-Item .\modulo7\.env.example .\modulo7\.env
+```
 
-2. Levantar todos los modulos:
+Si los archivos ya existen, editá los que tenés. Cada integrante puede generar
+sus propias claves internas si levanta una instalación local independiente.
 
-   ```sh
-   docker compose up -d --build
-   ```
+- **`.env` de la raíz.** Configurá un `JWT_SECRET` privado para la instalación,
+  `QR_INTERNAL_API_KEY` para el inicio de viaje y `M7_API_KEY` para que M6 y M8
+  consulten pagos. Para reservas automáticas, definí `M9_DISPATCH_AUTH_TOKEN`.
+  Elegí claves distintas para cada integración. Para tarjeta en el frontend,
+  agregá `MP_PUBLIC_KEY` del mismo entorno TEST que M7.
+- **`modulo7/.env`.** El equipo de M7 debe proporcionar acceso a un entorno de
+  pruebas ya preparado. Completá `DATABASE_URL`, `SUPABASE_URL`,
+  `SUPABASE_KEY`, `MP_ACCESS_TOKEN` de Mercado Pago TEST y la misma
+  `M7_API_KEY` usada en la raíz. Compose toma la configuración de este archivo
+  para el servicio M7.
+- **M8.** El Compose común toma las variables de la raíz. Los valores de
+  PostgreSQL que trae Compose habilitan una instalación local nueva. Para
+  Web Push, SMTP, consultas internas o Grafana, completá sus variables en el
+  `.env` según [la plantilla de M8](modulo8/integracion.env.example). La bandeja
+  interna de avisos funciona con la sesión de M1.
 
-3. Comprobar que todos respondan:
+```powershell
+docker compose config --quiet
+docker network inspect reservas-network *> $null
+if ($LASTEXITCODE -ne 0) { docker network create reservas-network }
+docker compose up -d --build --wait --wait-timeout 180
+docker compose ps
+node --env-file=.env tests-integracion/salud.mjs
+```
 
-   ```sh
-   node tests-integracion/salud.mjs
-   ```
+La red se crea una sola vez por máquina. El Compose común la comparte entre
+los módulos.
+
+Abrí **http://localhost:5173**. La
+[guía del frontend](modulo-1-identidad-acceso-ui/README.md#probar-con-dos-cuentas-desde-un-clon-limpio)
+muestra cómo registrar cliente y conductor, habilitar el conductor en M3 y
+probar una asignación con dos sesiones.
+
+Si ya usás `modulo8/.env.integracion` como archivo común, pasá
+`--env-file .\modulo8\.env.integracion` a Compose y
+`--env-file=.\modulo8\.env.integracion` a Node. Las credenciales de pagos
+siguen en `modulo7/.env`. Para compartir la instalación,
+pasá las plantillas de Git y entregá el acceso al entorno de pruebas de M7
+por separado. Evitá distribuir archivos que contengan credenciales personales.
 
 ## Test integral
 
