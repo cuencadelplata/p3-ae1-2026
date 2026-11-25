@@ -9,7 +9,17 @@
       content="Programá tus viajes y administrá tus reservas en UCPRideShare."
     />
     <title>Reservas · UCPRideShare</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      crossorigin=""
+    />
     <link rel="stylesheet" href="/styles.css" />
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      crossorigin=""
+      defer
+    ></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
@@ -31,7 +41,7 @@
         <div>
           <p class="section-label">Tus viajes, con tiempo</p>
           <h1 id="page-title">Reservas programadas</h1>
-          <p>Elegí cuándo salir. Consultá y organizá tus próximos viajes.</p>
+          <p>Elegí origen y destino en el mapa, definí cuándo salir y organizá tus próximos viajes.</p>
         </div>
         <a class="secondary-button" href="#reserva-form">＋ Nueva reserva</a>
       </section>
@@ -60,38 +70,93 @@
       <p class="privacy-note">
         Tu token se mantiene solo en esta pestaña y se descarta al cerrar la sesión o recargar.
       </p>
-      <div class="workspace">
+      <div class="planner-grid">
         <section class="form-panel" aria-labelledby="form-title">
           <div class="panel-heading">
             <span class="calendar-icon" aria-hidden="true">▦</span>
             <div>
               <h2 id="form-title">Nueva reserva</h2>
-              <p>Prepará tu próximo viaje</p>
+              <p>Buscá una dirección o marcala directamente en el mapa</p>
             </div>
           </div>
           <form id="reserva-form">
             <fieldset id="reservation-fields" disabled>
               <div class="route-fields">
-                <div class="field">
-                  <label for="origen">Origen</label
-                  ><input
-                    id="origen"
-                    name="origen"
-                    placeholder="Dirección de salida"
-                    maxlength="500"
-                    required
-                  />
+                <div class="field location-field">
+                  <div class="field-header">
+                    <label for="origen">Origen</label>
+                    <button
+                      type="button"
+                      id="pick-origin-button"
+                      class="map-pick-chip active"
+                      aria-pressed="true"
+                    >
+                      Elegir en mapa
+                    </button>
+                  </div>
+                  <div class="address-input-row">
+                    <input
+                      id="origen"
+                      name="origen"
+                      placeholder="Dirección de salida"
+                      autocomplete="off"
+                      maxlength="500"
+                      required
+                    />
+                    <button
+                      type="button"
+                      id="search-origin-button"
+                      class="search-addr-button"
+                      aria-label="Buscar origen"
+                    >
+                      Buscar
+                    </button>
+                  </div>
+                  <div id="origin-suggestions" class="autocomplete-dropdown" role="listbox"></div>
                 </div>
-                <div class="field">
-                  <label for="destino">Destino</label
-                  ><input
-                    id="destino"
-                    name="destino"
-                    placeholder="¿A dónde vas?"
-                    maxlength="500"
-                    required
-                  />
+                <div class="field location-field">
+                  <div class="field-header">
+                    <label for="destino">Destino</label>
+                    <button
+                      type="button"
+                      id="pick-dest-button"
+                      class="map-pick-chip"
+                      aria-pressed="false"
+                    >
+                      Elegir en mapa
+                    </button>
+                  </div>
+                  <div class="address-input-row">
+                    <input
+                      id="destino"
+                      name="destino"
+                      placeholder="¿A dónde vas?"
+                      autocomplete="off"
+                      maxlength="500"
+                      required
+                    />
+                    <button
+                      type="button"
+                      id="search-dest-button"
+                      class="search-addr-button"
+                      aria-label="Buscar destino"
+                    >
+                      Buscar
+                    </button>
+                  </div>
+                  <div id="dest-suggestions" class="autocomplete-dropdown" role="listbox"></div>
                 </div>
+              </div>
+              <div id="route-summary" class="route-summary" hidden>
+                <div>
+                  <span>Distancia</span>
+                  <strong id="route-distance">-- km</strong>
+                </div>
+                <div>
+                  <span>Tiempo aprox.</span>
+                  <strong id="route-duration">-- min</strong>
+                </div>
+                <p id="route-caption" class="route-caption">Recorrido estimado por calles.</p>
               </div>
               <fieldset class="vehicle-field">
                 <legend>Tipo de vehículo</legend>
@@ -115,7 +180,7 @@
                 /><small>Seleccioná una fecha y hora futuras.</small>
               </div>
               <p class="form-note">
-                La tarifa se consulta al guardar. El conductor se asigna cuando comienza el
+                La tarifa se consulta en M7 al guardar. El conductor se asigna cuando comienza el
                 despacho.
               </p>
               <div class="form-actions">
@@ -132,60 +197,87 @@
             <p>Podés modificar una reserva mientras siga programada.</p>
           </div>
         </section>
-        <section class="reservations-panel" aria-labelledby="reservations-title">
-          <div class="list-heading">
+
+        <section class="map-panel" aria-labelledby="map-title">
+          <div class="map-toolbar">
             <div>
-              <h2 id="reservations-title">Mis reservas</h2>
-              <p id="list-description">Conectá tu sesión para comenzar.</p>
+              <h2 id="map-title">Mapa de recorrido</h2>
+              <p id="map-route-label">Hacé clic en el mapa o arrastrá los marcadores</p>
             </div>
-            <button class="secondary-button" id="refresh-button" type="button" disabled>
-              ↻ Actualizar
-            </button>
-          </div>
-          <div class="list-toolbar">
-            <div class="filter-control">
-              <label for="estado-filter">Estado</label
-              ><select id="estado-filter">
-                <option value="TODOS">Todos los estados</option>
-                <option value="PROGRAMADA">Programada</option>
-                <option value="ACTIVANDO">Activando</option>
-                <option value="ACTIVADA">Activada</option>
-                <option value="CANCELADA">Cancelada</option>
-                <option value="FALLIDA">Fallida</option>
-              </select>
+            <div class="map-mode-group" role="group" aria-label="Modo de selección en el mapa">
+              <button type="button" id="map-toggle-origin" class="map-mode-btn active">
+                <span class="pin-dot origin-dot" aria-hidden="true"></span>Origen
+              </button>
+              <button type="button" id="map-toggle-dest" class="map-mode-btn">
+                <span class="pin-dot dest-dot" aria-hidden="true"></span>Destino
+              </button>
+              <button type="button" id="map-center-button" class="secondary-button map-center-btn">
+                Centrar
+              </button>
             </div>
-            <span id="result-count" class="result-count" aria-live="polite">0 reservas</span>
           </div>
-          <p id="list-error" class="list-error" role="alert" hidden></p>
-          <div class="table-frame" id="table-frame" hidden>
-            <table>
-              <caption class="sr-only">
-                Reservas de la sesión actual
-              </caption>
-              <thead>
-                <tr>
-                  <th>Recorrido</th>
-                  <th>Salida</th>
-                  <th>Estado</th>
-                  <th>Tarifa estimada</th>
-                  <th><span class="sr-only">Acciones</span></th>
-                </tr>
-              </thead>
-              <tbody id="reservas-body"></tbody>
-            </table>
-          </div>
-          <div class="empty-state" id="empty-state">
-            <span class="empty-calendar" aria-hidden="true">▦</span>
-            <h3 id="empty-title">Tu próximo viaje empieza acá</h3>
-            <p id="empty-description">Conectá tu sesión para consultar o programar una reserva.</p>
-          </div>
-          <div class="pagination" id="pagination" hidden>
-            <button id="previous-page" class="secondary-button" type="button">Anterior</button
-            ><span id="page-label">Página 1</span
-            ><button id="next-page" class="secondary-button" type="button">Siguiente</button>
+          <div class="map-stage">
+            <div id="reservation-map" class="reservation-map" role="region" aria-label="Mapa interactivo de origen y destino"></div>
+            <p id="map-hint" class="map-hint" role="status">
+              Hacé clic en el mapa para marcar el origen
+            </p>
           </div>
         </section>
       </div>
+
+      <section class="reservations-panel" aria-labelledby="reservations-title">
+        <div class="list-heading">
+          <div>
+            <h2 id="reservations-title">Mis reservas</h2>
+            <p id="list-description">Conectá tu sesión para comenzar.</p>
+          </div>
+          <button class="secondary-button" id="refresh-button" type="button" disabled>
+            ↻ Actualizar
+          </button>
+        </div>
+        <div class="list-toolbar">
+          <div class="filter-control">
+            <label for="estado-filter">Estado</label
+            ><select id="estado-filter">
+              <option value="TODOS">Todos los estados</option>
+              <option value="PROGRAMADA">Programada</option>
+              <option value="ACTIVANDO">Activando</option>
+              <option value="ACTIVADA">Activada</option>
+              <option value="CANCELADA">Cancelada</option>
+              <option value="FALLIDA">Fallida</option>
+            </select>
+          </div>
+          <span id="result-count" class="result-count" aria-live="polite">0 reservas</span>
+        </div>
+        <p id="list-error" class="list-error" role="alert" hidden></p>
+        <div class="table-frame" id="table-frame" hidden>
+          <table>
+            <caption class="sr-only">
+              Reservas de la sesión actual
+            </caption>
+            <thead>
+              <tr>
+                <th>Recorrido</th>
+                <th>Salida</th>
+                <th>Estado</th>
+                <th>Tarifa estimada</th>
+                <th><span class="sr-only">Acciones</span></th>
+              </tr>
+            </thead>
+            <tbody id="reservas-body"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="empty-state">
+          <span class="empty-calendar" aria-hidden="true">▦</span>
+          <h3 id="empty-title">Tu próximo viaje empieza acá</h3>
+          <p id="empty-description">Conectá tu sesión para consultar o programar una reserva.</p>
+        </div>
+        <div class="pagination" id="pagination" hidden>
+          <button id="previous-page" class="secondary-button" type="button">Anterior</button
+          ><span id="page-label">Página 1</span
+          ><button id="next-page" class="secondary-button" type="button">Siguiente</button>
+        </div>
+      </section>
       <footer class="page-footer">
         <span>UCPRideShare · M9 Reservas</span>
         <nav aria-label="Recursos técnicos">
