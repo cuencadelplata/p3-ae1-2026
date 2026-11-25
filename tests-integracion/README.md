@@ -36,7 +36,7 @@ Opciones: `METODO_PAGO=tarjeta` paga con una tarjeta de prueba de Mercado Pago (
 
 - `E2E_TIPO_VEHICULO=MOTO` registra y activa una moto, verifica que quede fuera de la búsqueda de autos y completa el recorrido.
 - `E2E_RECHAZO_TARJETA=1` genera un rechazo en Mercado Pago TEST antes de finalizar el viaje con el `METODO_PAGO` alternativo (`efectivo` o `transferencia`).
-- Con `M1_OPERADOR_PASSWORD` en el archivo de entorno, la suite comprueba que el operador responde y que el historial queda visible para el cliente que hizo la consulta.
+- Configurá `M1_OPERADOR_PASSWORD` para que la suite habilite al conductor usando una sesión de operador. La misma configuración permite verificar la respuesta a un ticket y su historial en el área del cliente.
 
 ## M7 real o simulador
 

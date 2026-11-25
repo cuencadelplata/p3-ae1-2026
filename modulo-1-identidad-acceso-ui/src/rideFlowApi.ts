@@ -183,10 +183,22 @@ export async function ensurePassenger(token: string) {
   }
 }
 
+export function ensureDriverProfile(token: string, signal?: AbortSignal) {
+  return request<{ estado: string; habilitado: boolean }>('M3', '/api/conductores/me', { method: 'POST', token, signal })
+}
+
 export async function prepareDriver(driver: Account) {
   const path = '/api/conductores/' + driver.userId + '/estado'
   const { token } = driver
-  const status = await request<{ estado: string; habilitado: boolean }>('M3', path, { token })
+  const status = await request<{ estado: string; habilitado: boolean }>('M3', path, { token }).catch((error: unknown) => {
+    if (error instanceof FlowError && error.status === 404) {
+      return ensureDriverProfile(token)
+    }
+    throw error
+  })
+  if (!status.habilitado && status.estado === 'pendiente') {
+    throw new Error('Tu perfil de conductor está pendiente de habilitación. Cuando el equipo lo apruebe, volvé a conectarte.')
+  }
   if (!status.habilitado) throw new Error('Tu perfil de conductor debe estar habilitado antes de recibir viajes.')
   const vehicles = await request<DriverVehicle[]>(
     'M3-vehiculos', '/api/v1/drivers/' + driver.userId + '/vehicles', { token },

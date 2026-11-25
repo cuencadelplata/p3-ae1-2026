@@ -196,10 +196,28 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
 
   test('3. M3: conductor habilitado con vehículo activo', async () => {
     const { userId, token } = s.conductor;
-    const alta = await pedir(M3_CONDUCTORES, '/api/conductores', { method: 'POST', token, body: { ciudad: 'Corrientes', tipovehiculo: TIPO_VEHICULO.toLowerCase() } });
-    assert.equal(alta.status, 201, `M3 alta de conductor: ${mostrar(alta)}`);
-    const habilitado = await pedir(M3_CONDUCTORES, `/api/conductores/${userId}/habilitado`, { method: 'PUT', body: { habilitado: 'activo' } });
+    const alta = await pedir(M3_CONDUCTORES, '/api/conductores/me', { method: 'POST', token });
+    assert.equal(alta.status, 200, `M3 alta de conductor: ${mostrar(alta)}`);
+    assert.equal(alta.data.usuarioID, String(userId));
+    assert.equal(alta.data.estado, 'pendiente');
+    assert.ok(process.env.M1_OPERADOR_PASSWORD, 'Configurar M1_OPERADOR_PASSWORD para la aprobación de M3');
+    const sesion = await pedir(M1, '/auth/iniciar-sesion', {
+      method: 'POST',
+      body: { email: process.env.M1_OPERADOR_EMAIL || 'operador@movilidad.com', password: process.env.M1_OPERADOR_PASSWORD },
+    });
+    assert.equal(sesion.status, 200, 'M1 debe iniciar sesión como operador');
+    const ruta = `/api/conductores/${userId}/habilitado`;
+    const aprobacion = { method: 'PUT', body: { habilitado: 'activo' } };
+    assert.equal((await pedir(M3_CONDUCTORES, ruta, aprobacion)).status, 401);
+    assert.equal((await pedir(M3_CONDUCTORES, ruta, { ...aprobacion, token })).status, 403);
+    const pendientes = await pedir(M3_CONDUCTORES, '/api/conductores/pendientes', { token: sesion.data.token });
+    assert.equal(pendientes.status, 200);
+    assert.ok(pendientes.data.some((perfil) => perfil.usuarioID === String(userId)));
+    const habilitado = await pedir(M3_CONDUCTORES, ruta, { ...aprobacion, token: sesion.data.token });
     assert.equal(habilitado.status, 200, `M3 habilitar conductor: ${mostrar(habilitado)}`);
+    const reintento = await pedir(M3_CONDUCTORES, '/api/conductores/me', { method: 'POST', token });
+    assert.equal(reintento.status, 200);
+    assert.equal(reintento.data.habilitado, true, 'El reintento del alta conserva la aprobación');
     const letras = Array.from({ length: 4 }, () => String.fromCharCode(randomInt(65, 91)));
     s.patente = TIPO_VEHICULO === 'MOTO'
       ? `${letras[0]}${randomInt(100, 1000)}${letras.slice(1).join('')}`

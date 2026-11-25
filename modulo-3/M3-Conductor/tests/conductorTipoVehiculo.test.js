@@ -25,6 +25,7 @@ const controllerPath = path.join(SRC, 'controllers', 'conductoresController.js')
 const redis = createFakeRedis();
 mockModule(redisClientPath, redis);
 mockModule(dbRepoPath, {
+  obtenerPerfilPorId: createMockFn().mockResolvedValue(null),
   obtenerHabilitadoPorId: createMockFn(),
   actualizarHabilitado: createMockFn(),
   obtenerDisponiblePorId: createMockFn(),

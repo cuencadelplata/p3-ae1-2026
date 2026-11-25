@@ -18,6 +18,7 @@ const redis = createFakeRedis();
 mockModule(redisClientPath, redis);
 
 const conductorDBRepository = {
+  obtenerPerfilPorId: createMockFn(),
   obtenerHabilitadoPorId: createMockFn(),
   actualizarHabilitado: createMockFn(),
   obtenerDisponiblePorId: createMockFn(),
@@ -43,6 +44,7 @@ test.beforeEach(() => {
     redis.sadd,
     redis.lrange,
     redis.rpush,
+    conductorDBRepository.obtenerPerfilPorId,
     conductorDBRepository.obtenerHabilitadoPorId,
     conductorDBRepository.actualizarHabilitado,
     conductorDBRepository.obtenerDisponiblePorId,
@@ -53,6 +55,7 @@ test.beforeEach(() => {
   redis.get.mockResolvedValue(null);
   redis.set.mockResolvedValue('OK');
   redisHealth.isUp.mockReturnValue(true);
+  conductorDBRepository.obtenerPerfilPorId.mockResolvedValue(null);
   conductorDBRepository.obtenerDisponiblePorId.mockResolvedValue(null);
   conductorDBRepository.actualizarDisponible.mockResolvedValue({ usuarioID: 'cond_001', disponible: false });
 });
