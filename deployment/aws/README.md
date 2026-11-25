@@ -137,12 +137,7 @@ funcionamiento y finalmente revocar la anterior. JWT puede cerrar sesiones y VAP
 requiere renovar suscripciones. Para PostgreSQL/RabbitMQ se debe cambiar tambien la
 credencial dentro del motor; editar solo `.env` no modifica usuarios existentes.
 
-M9 requiere endpoint, instance ID y token OTLP propios. El token remote_write de M8
-no demuestra permisos de trazas/logs. Completar `GRAFANA_CLOUD_OTLP_ENDPOINT`,
-`GRAFANA_CLOUD_OTLP_INSTANCE_ID` y `GRAFANA_CLOUD_OTLP_TOKEN` en el entorno privado.
-Agregar `-f deployment/aws/compose.m9-observability.yml` al comando Compose para
-habilitarlo. Este collector no publica puertos. Verificar recepcion con consultas
-recientes en Grafana; Alloy activo no basta como evidencia.
+La observabilidad de M9 queda fuera del despliegue AWS actual.
 
 Costos: registrar consumo bruto, creditos y costo neto con fecha de consulta. Costo
 neto cero puede incluir creditos y retrasos de facturacion; no significa consumo cero.
