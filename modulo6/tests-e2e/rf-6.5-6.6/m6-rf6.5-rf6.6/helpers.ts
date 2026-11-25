@@ -1,10 +1,11 @@
+import pool from '../../../src/rf-6.1-6.2-6.3/db/pool.js';
 import amqp, { type Channel, type ChannelModel } from 'amqplib';
 
 export const apiUrl = process.env.E2E_CANCELACION_URL ?? process.env.E2E_API_URL ?? 'http://127.0.0.1:3001';
 export const rf6ApiUrl = process.env.RF6_API_URL ?? 'http://127.0.0.1:3000';
 export const rabbitMqUrl = process.env.RABBITMQ_URL ?? 'amqp://127.0.0.1:5672';
 
-export async function crearViajeRf6(estado: 'SOLICITADO' | 'CONDUCTOR_EN_CAMINO'): Promise<string> {
+export async function crearViajeRf6(estado: 'SOLICITADO' | 'ASIGNADO' | 'CONDUCTOR_EN_CAMINO' | 'ARRIBADO' | 'EN_CURSO'): Promise<string> {
   const testId = `E2E-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const response = await fetch(`${rf6ApiUrl}/api/viajes`, {
     method: 'POST',
@@ -23,7 +24,7 @@ export async function crearViajeRf6(estado: 'SOLICITADO' | 'CONDUCTOR_EN_CAMINO'
   if (viaje.id === undefined) throw new Error('RF-6 creó el viaje pero no devolvió su ID');
 
   const id = String(viaje.id);
-  if (estado === 'CONDUCTOR_EN_CAMINO') {
+  if (estado !== 'SOLICITADO') {
     const asignacion = await fetch(`${rf6ApiUrl}/api/viajes/${encodeURIComponent(id)}/asignar`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -32,6 +33,9 @@ export async function crearViajeRf6(estado: 'SOLICITADO' | 'CONDUCTOR_EN_CAMINO'
     if (!asignacion.ok) {
       throw new Error(`No se pudo asignar el viaje RF-6: ${asignacion.status} ${await asignacion.text()}`);
     }
+  }
+  if (['ASIGNADO', 'ARRIBADO', 'EN_CURSO'].includes(estado)) {
+    await pool.query('UPDATE viajes SET estado = $1 WHERE id = $2', [estado, id]);
   }
   return id;
 }

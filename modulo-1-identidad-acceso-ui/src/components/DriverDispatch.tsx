@@ -278,9 +278,9 @@ export default function DriverDispatch({ driver, onBack, onSessionExpired }: { d
     })
   }
 
-  // RF-6.6: mientras va en camino, el conductor puede cancelar. M6 cierra el viaje y le pide a M5
+  // RF-6.6: el conductor puede cancelar durante cualquier etapa activa. M6 le pide a M5
   // que vuelva a buscar conductor para el pasajero; el conductor queda libre para otra oferta.
-  const cancellable = active && trip?.estado === 'CONDUCTOR_EN_CAMINO'
+  const cancellable = active && trip && ['SOLICITADO', 'ASIGNADO', 'CONDUCTOR_EN_CAMINO', 'ARRIBADO', 'EN_CURSO'].includes(trip.estado)
 
   const secondsLeft = offer ? Math.max(0, Math.ceil((Date.parse(offer.expiresAt) - now) / 1000)) : 0
   const pending = secondsLeft > 0 && !active ? offer : null
@@ -293,7 +293,7 @@ export default function DriverDispatch({ driver, onBack, onSessionExpired }: { d
   const title = active ? (trip && rideStatus[trip.estado]) || 'Viaje asignado'
     : pending ? 'Nueva oferta de viaje'
       : online ? (trip && rideStatus[trip.estado]) || 'Buscando viajes' : 'Estás desconectado'
-  const description = cancellable ? 'Cuando llegues, pedile al pasajero que te muestre el código de inicio. Si no vas a llegar, podés cancelar el viaje.'
+  const description = cancellable ? 'Podés cancelar el viaje si no podés continuar. Antes de iniciarlo, validá el código del pasajero.'
     : active ? 'La desconexión se habilita cuando el viaje termina o se cancela.'
     : pending ? 'Revisá el recorrido y confirmá si querés tomarlo.'
       : online ? 'Aceptar viaje se habilita cuando recibís una oferta.' : 'Conectate para recibir ofertas en esta zona.'
@@ -359,7 +359,7 @@ export default function DriverDispatch({ driver, onBack, onSessionExpired }: { d
         {trip?.estado === 'COMPLETADO' && trip.iniciadoAt && trip.completadoAt && (
           <TripClock startedAt={trip.iniciadoAt} endedAt={trip.completadoAt} />
         )}
-        {trip?.estado === 'ARRIBADO' && <form className="ride-form" key={trip.id} onSubmit={(event) => {
+        {trip?.estado === 'ARRIBADO' && <form className="ride-form" key={`start-${trip.id}`} onSubmit={(event) => {
           event.preventDefault()
           if (startCode.trim()) void startAssignedTrip(trip.id, startCode)
         }}>
@@ -377,7 +377,7 @@ export default function DriverDispatch({ driver, onBack, onSessionExpired }: { d
             onChange={(event) => setStartCode(event.target.value)} required />
           <button className="btn-primary" type="submit" disabled={Boolean(busy) || !startCode.trim()}>Validar e iniciar viaje</button>
         </form>}
-        {cancellable && trip && <TripCancellation key={trip.id} trip={trip} actor="conductor" token={token} disabled={Boolean(busy)}
+        {cancellable && trip && <TripCancellation key={`cancel-${trip.id}`} trip={trip} actor="conductor" token={token} disabled={Boolean(busy)}
           onCancelled={(cancelledTrip) => {
             setTrip(cancelledTrip)
             setCompletedOffer(assignment?.offer ?? null)

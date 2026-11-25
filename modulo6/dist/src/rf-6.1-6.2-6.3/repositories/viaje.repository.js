@@ -344,7 +344,7 @@ export async function cancelarSiCancelable(id, actor = 'cliente', motivo = '') {
             return null;
         }
         const estadoAnterior = current.rows[0].estado;
-        if (![EstadoViaje.SOLICITADO, EstadoViaje.CONDUCTOR_EN_CAMINO].includes(estadoAnterior)) {
+        if (![EstadoViaje.SOLICITADO, EstadoViaje.ASIGNADO, EstadoViaje.CONDUCTOR_EN_CAMINO, EstadoViaje.ARRIBADO, EstadoViaje.EN_CURSO].includes(estadoAnterior)) {
             await client.query('COMMIT');
             return null;
         }
