@@ -4,6 +4,7 @@ import { PostgresTechnicalInbox } from '@m8/shared';
 
 import { createNotificationsRouter } from '../app';
 import { createNotificationsPool } from '../db/pool';
+import { createNotificationFeed } from '../http/notification-feed';
 import {
   M3DriverDocumentRegisteredConsumer,
   type RabbitMqConnection,
@@ -12,7 +13,7 @@ import { NotificationOutboxRelay } from '../messaging/notification-outbox-relay'
 import { M6TripEventsConsumer } from '../messaging/m6-trip-events.consumer';
 import { M5TripEventsConsumer } from '../messaging/m5-trip-events.consumer';
 import { createRf81Application, type Rf81Application } from './rf81-application';
-import { createM3DriverNameLookup } from './m3-driver-profile.client';
+import { createM1DriverNameLookup } from './m1-driver-name.client';
 import { createM3ActiveVehicleLookup } from './m3-vehicle.client';
 
 export interface NotificationsModule {
@@ -35,15 +36,20 @@ export function createNotificationsModule(): NotificationsModule {
     connect(url: string): Promise<RabbitMqConnection>;
   };
   const databaseUrl = process.env.NOTIFICATIONS_DATABASE_URL;
-  const m3ConductorBaseUrl = process.env.M3_CONDUCTOR_BASE_URL?.trim();
+  const m1ProfilesBaseUrl = process.env.M1_PROFILES_BASE_URL?.trim();
+  const m1InternalApiKey = process.env.M1_INTERNAL_API_KEY?.trim();
   const m3VehiclesBaseUrl = process.env.M3_VEHICLES_BASE_URL?.trim();
   const runtime: Rf81Application = createRf81Application({
     databaseUrl,
-    driverNameLookup: m3ConductorBaseUrl ? createM3DriverNameLookup(m3ConductorBaseUrl) : undefined,
+    driverNameLookup: m1ProfilesBaseUrl && m1InternalApiKey
+      ? createM1DriverNameLookup(m1ProfilesBaseUrl, m1InternalApiKey)
+      : undefined,
     activeVehicleLookup: m3VehiclesBaseUrl ? createM3ActiveVehicleLookup(m3VehiclesBaseUrl) : undefined,
   });
   // El Inbox es infraestructura de RF8.6 y usa CommunicationsDB, nunca datos de M3.
   const messagingPool = createNotificationsPool(databaseUrl);
+  const router = createNotificationsRouter();
+  router.get('/notifications/me', createNotificationFeed(messagingPool, process.env.M1_IDENTITY_URL?.trim()));
   let available = false;
   let closing = false;
   let retryTimer: NodeJS.Timeout | undefined;
@@ -167,7 +173,7 @@ export function createNotificationsModule(): NotificationsModule {
 
   return {
     name: 'notifications',
-    router: createNotificationsRouter(),
+    router,
     async readiness() {
       return { status: available && m3Consumer?.isReady() && m5Consumer?.isReady() && m6Consumer?.isReady() && outboxRelay?.isReady() && m3Connection ? 'ok' : 'unavailable' };
     },

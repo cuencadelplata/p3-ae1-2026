@@ -1,9 +1,11 @@
 import { Request, Response } from 'express';
+import { invalidToken } from '../errors/support-error.js';
 import {
   leerActor,
   leerCambioDeEstado,
   leerConsultaDeTickets,
   leerIdempotencyKey,
+  leerMensaje,
   leerNuevoTicket,
 } from '../http/ticket-requests.js';
 import { TicketService } from '../services/ticket.service.js';
@@ -20,6 +22,13 @@ export interface SupportControllerDeps {
 
 // Los errores se lanzan como SupportError y los convierte supportErrorHandler.
 export function createSupportController({ ticketService }: SupportControllerDeps) {
+  async function listar(req: Request, res: Response, autor?: string) {
+    const consulta = leerConsultaDeTickets(req.query);
+    const { tickets, siguienteCursor } = await ticketService.listarTickets({ ...consulta, autor });
+    if (siguienteCursor) res.setHeader('X-Next-Cursor', siguienteCursor);
+    res.json(tickets);
+  }
+
   return {
 
     // Endpoint: POST /tickets
@@ -45,10 +54,10 @@ export function createSupportController({ ticketService }: SupportControllerDeps
     // Endpoint: PATCH /tickets/:id/estado
     async actualizarEstado(req: Request, res: Response) {
       const id = req.params.id as string;
-      const { estado, motivo, expectedVersion } = leerCambioDeEstado(req.body);
+      const { estado, motivo, expectedVersion, registrarRespuesta } = leerCambioDeEstado(req.body);
       const actor = actorDelPedido(req, res);
 
-      const ticketActualizado = await ticketService.actualizarEstado(id, estado, { actor, motivo, expectedVersion });
+      const ticketActualizado = await ticketService.actualizarEstado(id, estado, { actor, motivo, expectedVersion }, registrarRespuesta);
 
       res.json(ticketActualizado);
     },
@@ -61,17 +70,23 @@ export function createSupportController({ ticketService }: SupportControllerDeps
       res.json(historial);
     },
 
+    async enviarMensaje(req: Request, res: Response) {
+      const actor = res.locals.actor;
+      if (typeof actor !== 'string') throw invalidToken();
+      const { texto, expectedVersion } = leerMensaje(req.body);
+      const ticket = await ticketService.enviarMensaje(String(req.params.id), texto, actor, expectedVersion);
+      res.status(201).json(ticket);
+    },
+
     // Endpoint: GET /tickets?tripId=&estado=&limit=&cursor=
     async listarTodos(req: Request, res: Response) {
-      const consulta = leerConsultaDeTickets(req.query);
-      const { tickets, siguienteCursor } = await ticketService.listarTickets(consulta);
+      await listar(req, res);
+    },
 
-      // El cuerpo sigue siendo un array: el cursor de la página siguiente va
-      // en una cabecera, y sólo si hay más resultados.
-      if (siguienteCursor) {
-        res.setHeader('X-Next-Cursor', siguienteCursor);
-      }
-      res.json(tickets);
+    async listarPropios(req: Request, res: Response) {
+      const autor = res.locals.actor;
+      if (typeof autor !== 'string') throw invalidToken();
+      await listar(req, res, autor);
     },
   };
 }

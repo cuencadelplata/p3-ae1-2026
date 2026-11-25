@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import {
+  cerrarSesionM1,
+  headersAuthM1,
+  resolverSesionM1,
+  type SesionM1,
+  type UsuarioM1
+} from "./m1Session";
+import { LoginM1Card } from "./LoginM1Card";
 
 const LIMA = "#D5FF40";
 const GRIS = "#C0C2B8";
@@ -188,6 +196,8 @@ function TarjetaViaje({
 }
 
 export default function ValoracionesConductor() {
+  const [usuario, setUsuario] = useState<UsuarioM1 | null>(null);
+  const [cargandoSesion, setCargandoSesion] = useState(true);
   const [pendientes, setPendientes] = useState<Pendiente[]>([]);
   const [enviadas, setEnviadas] = useState<ValoracionHecha[]>([]);
   const [borradores, setBorradores] = useState<Record<string, Borrador>>({});
@@ -197,24 +207,44 @@ export default function ValoracionesConductor() {
   const [demoError, setDemoError] = useState("");
   const [demoCorriendo, setDemoCorriendo] = useState(false);
 
-  async function cargar() {
+  const conductorId = usuario ? String(usuario.id) : "";
+
+  useEffect(() => {
+    resolverSesionM1()
+      .then((sesion) => {
+        if (sesion) setUsuario(sesion.usuario);
+      })
+      .finally(() => setCargandoSesion(false));
+  }, []);
+
+  async function cargar(idActual = conductorId) {
+    if (!idActual) {
+      setPendientes([]);
+      setEnviadas([]);
+      setCargando(false);
+      return;
+    }
     try {
-      const respuesta = await fetch(urlApi("/api/valoraciones/pendientes"));
-      if (!respuesta.ok) throw new Error("No se pudieron leer los viajes pendientes");
-      const lista = (await respuesta.json()) as Pendiente[];
-      setPendientes(Array.isArray(lista) ? lista : []);
+      const headers = { Accept: "application/json", ...headersAuthM1() };
+      const [resPendientes, resHistorial] = await Promise.all([
+        fetch(urlApi("/api/valoraciones/pendientes"), { headers }),
+        fetch(urlApi(`/api/conductor/valoraciones?evaluadorId=${encodeURIComponent(idActual)}`), { headers })
+      ]);
+      if (!resPendientes.ok) throw new Error("No se pudieron leer los viajes pendientes");
+      const lista = (await resPendientes.json()) as Pendiente[];
+      const propias = (Array.isArray(lista) ? lista : []).filter(
+        (item) => String(item.evaluadorId) === idActual
+      );
+      setPendientes(propias);
       setAviso("");
 
-      const conductores = [...new Set((lista || []).map((item) => item.evaluadorId).filter(Boolean))];
-      const historial = await Promise.all(
-        conductores.map(async (evaluadorId) => {
-          const res = await fetch(urlApi(`/api/conductor/valoraciones?evaluadorId=${encodeURIComponent(evaluadorId)}`));
-          if (!res.ok) return [] as ValoracionHecha[];
-          const data = (await res.json()) as ValoracionHecha[];
-          return Array.isArray(data) ? data : [];
-        })
-      );
-      setEnviadas(historial.flat().sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "")));
+      if (resHistorial.ok) {
+        const data = (await resHistorial.json()) as ValoracionHecha[];
+        const listaHistorial = Array.isArray(data) ? data : [];
+        setEnviadas(listaHistorial.sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "")));
+      } else {
+        setEnviadas([]);
+      }
     } catch (error) {
       setAviso(error instanceof Error ? error.message : "No hay conexión con la API");
     } finally {
@@ -223,13 +253,31 @@ export default function ValoracionesConductor() {
   }
 
   useEffect(() => {
-    cargar();
+    if (cargandoSesion) return;
+    if (!conductorId) {
+      setCargando(false);
+      return;
+    }
+    setCargando(true);
+    cargar(conductorId);
     const stream = new EventSource(urlApi("/api/valoraciones/notificaciones/stream"));
     stream.onmessage = () => {
-      cargar();
+      cargar(conductorId);
     };
     return () => stream.close();
-  }, []);
+  }, [conductorId, cargandoSesion]);
+
+  function alIngresar(sesion: SesionM1) {
+    setUsuario(sesion.usuario);
+    setCargandoSesion(false);
+  }
+
+  function alSalir() {
+    cerrarSesionM1();
+    setUsuario(null);
+    setPendientes([]);
+    setEnviadas([]);
+  }
 
   function actualizar(viajeId: string, parcial: Partial<Borrador>) {
     setBorradores((actual) => ({
@@ -246,9 +294,13 @@ export default function ValoracionesConductor() {
     try {
       const respuesta = await fetch(urlApi("/api/conductor/valoraciones"), {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...headersAuthM1()
+        },
         body: JSON.stringify({
-          evaluadorId: pendiente.evaluadorId,
+          evaluadorId: conductorId || pendiente.evaluadorId,
           evaluadoId: pendiente.evaluadoId,
           valoracion: borrador.estrellas,
           comentario: borrador.comentario.trim(),
@@ -270,17 +322,21 @@ export default function ValoracionesConductor() {
   }
 
   async function finalizarViajePrueba() {
-    if (demoCorriendo) return;
+    if (demoCorriendo || !conductorId) return;
     setDemoCorriendo(true);
     setDemoError("");
     setDemoEstado("Creando y finalizando viaje en M6…");
     try {
       const respuesta = await fetch(urlApi("/api/valoraciones/demo-viaje-finalizado"), {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...headersAuthM1()
+        },
         body: JSON.stringify({
           clienteId: "cliente-001",
-          conductorId: "conductor-001"
+          conductorId
         })
       });
       const cuerpo = await respuesta.json().catch(() => ({}));
@@ -289,8 +345,8 @@ export default function ValoracionesConductor() {
         throw new Error((cuerpo.error || "No se pudo finalizar el viaje de prueba") + paso);
       }
       setDemoEstado(`Viaje ${cuerpo.viajeId} finalizado. Esperando valoración pendiente…`);
-      await cargar();
-      window.setTimeout(() => cargar(), 1500);
+      await cargar(conductorId);
+      window.setTimeout(() => cargar(conductorId), 1500);
     } catch (error) {
       setDemoEstado("");
       setDemoError(error instanceof Error ? error.message : "Error al finalizar el viaje");
@@ -303,75 +359,105 @@ export default function ValoracionesConductor() {
     <main className="val-page">
       <style>{estilos}</style>
       <div className="val-columna">
-        <a className="val-volver" href="/">
-          Panel
-        </a>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <a className="val-volver" href="/">
+              Panel
+            </a>
+            <a className="val-volver" href="/alta-conductor.html">
+              Alta conductor
+            </a>
+          </div>
+          {usuario ? (
+            <button type="button" className="val-link" onClick={alSalir}>
+              Cerrar sesión (#{usuario.id})
+            </button>
+          ) : null}
+        </div>
         <h1>Valoraciones</h1>
-        <p className="val-subtitulo">Conductor al cliente</p>
+        <p className="val-subtitulo">
+          {usuario
+            ? `Conductor #${usuario.id}${usuario.nombre ? ` · ${usuario.nombre}` : ""}`
+            : "Conductor al cliente"}
+        </p>
 
-        <article className="val-card">
-          <h2 className="val-card-titulo">Probar comunicación con Viajes</h2>
-          <p className="val-vacio">
-            Dispara el ciclo real de M6 (crear, asignar, arribo, iniciar y finalizar). Al completar,
-            M6 publica viaje.finalizado y aparece la tarjeta para valorar.
-          </p>
-          <button
-            type="button"
-            className="val-enviar"
-            disabled={demoCorriendo}
-            onClick={finalizarViajePrueba}
-          >
-            {demoCorriendo ? "Finalizando viaje…" : "Finalizar viaje de prueba"}
-          </button>
-          {demoEstado ? <p className="val-etiqueta" style={{ marginTop: "0.75rem" }}>{demoEstado}</p> : null}
-          {demoError ? <p className="val-error val-aviso">{demoError}</p> : null}
-        </article>
-
-        {cargando ? (
+        {cargandoSesion ? (
           <article className="val-card">
-            <p className="val-etiqueta">Buscando viajes finalizados…</p>
+            <p className="val-etiqueta">Verificando sesión con M1…</p>
           </article>
-        ) : null}
-
-        {!cargando && aviso ? <p className="val-error val-aviso">{aviso}</p> : null}
-
-        {!cargando && pendientes.length === 0 ? (
-          <article className="val-card">
-            <h2 className="val-card-titulo">Sin viajes para valorar</h2>
-            <p className="val-vacio">
-              Cuando un viaje finaliza, el cliente aparece en esta tarjeta para que lo califiques.
-            </p>
-          </article>
-        ) : null}
-
-        {pendientes.map((pendiente) => (
-          <TarjetaViaje
-            key={pendiente.viajeId}
-            pendiente={pendiente}
-            borrador={borradores[pendiente.viajeId] || borradorVacio()}
-            onChange={(parcial) => actualizar(pendiente.viajeId, parcial)}
-            onEnviar={() => enviar(pendiente)}
+        ) : !usuario ? (
+          <LoginM1Card
+            subtitulo="Ingresá con tu cuenta CONDUCTOR de M1 para ver tus viajes finalizados y calificar clientes."
+            onLogin={alIngresar}
           />
-        ))}
+        ) : (
+          <>
+            <article className="val-card">
+              <h2 className="val-card-titulo">Probar comunicación con Viajes</h2>
+              <p className="val-vacio">
+                Dispara el ciclo real de M6 (crear, asignar, arribo, iniciar y finalizar) con tu ID
+                de conductor ({conductorId}). Al completar, M6 publica viaje.finalizado y aparece la
+                tarjeta para valorar.
+              </p>
+              <button
+                type="button"
+                className="val-enviar"
+                disabled={demoCorriendo}
+                onClick={finalizarViajePrueba}
+              >
+                {demoCorriendo ? "Finalizando viaje…" : "Finalizar viaje de prueba"}
+              </button>
+              {demoEstado ? <p className="val-etiqueta" style={{ marginTop: "0.75rem" }}>{demoEstado}</p> : null}
+              {demoError ? <p className="val-error val-aviso">{demoError}</p> : null}
+            </article>
 
-        {enviadas.length > 0 ? (
-          <section className="val-historial">
-            <h2>Enviadas</h2>
-            {enviadas.map((item) => (
-              <article key={item.id} className="val-mini">
-                <div>
-                  <p className="val-lugar">{item.evaluadoId}</p>
-                  <p className="val-etiqueta">{item.viajeId || "Sin viaje"} · {fechaDe(item.fecha)}</p>
-                  {item.comentario ? <p className="val-mini-nota">{item.comentario}</p> : null}
-                </div>
-                <p className="val-mini-nota val-mini-puntos" aria-label={`${item.valoracion} de 5`}>
-                  {"★".repeat(item.valoracion)}
-                  <span>{"★".repeat(Math.max(0, 5 - item.valoracion))}</span>
+            {cargando ? (
+              <article className="val-card">
+                <p className="val-etiqueta">Buscando viajes finalizados…</p>
+              </article>
+            ) : null}
+
+            {!cargando && aviso ? <p className="val-error val-aviso">{aviso}</p> : null}
+
+            {!cargando && pendientes.length === 0 ? (
+              <article className="val-card">
+                <h2 className="val-card-titulo">Sin viajes para valorar</h2>
+                <p className="val-vacio">
+                  Cuando un viaje finaliza, el cliente aparece en esta tarjeta para que lo califiques.
                 </p>
               </article>
+            ) : null}
+
+            {pendientes.map((pendiente) => (
+              <TarjetaViaje
+                key={pendiente.viajeId}
+                pendiente={pendiente}
+                borrador={borradores[pendiente.viajeId] || borradorVacio()}
+                onChange={(parcial) => actualizar(pendiente.viajeId, parcial)}
+                onEnviar={() => enviar(pendiente)}
+              />
             ))}
-          </section>
-        ) : null}
+
+            {enviadas.length > 0 ? (
+              <section className="val-historial">
+                <h2>Enviadas</h2>
+                {enviadas.map((item) => (
+                  <article key={item.id} className="val-mini">
+                    <div>
+                      <p className="val-lugar">{item.evaluadoId}</p>
+                      <p className="val-etiqueta">{item.viajeId || "Sin viaje"} · {fechaDe(item.fecha)}</p>
+                      {item.comentario ? <p className="val-mini-nota">{item.comentario}</p> : null}
+                    </div>
+                    <p className="val-mini-nota val-mini-puntos" aria-label={`${item.valoracion} de 5`}>
+                      {"★".repeat(item.valoracion)}
+                      <span>{"★".repeat(Math.max(0, 5 - item.valoracion))}</span>
+                    </p>
+                  </article>
+                ))}
+              </section>
+            ) : null}
+          </>
+        )}
       </div>
     </main>
   );
@@ -543,6 +629,27 @@ const estilos = `
   .val-mini-nota { margin: 6px 0 0; color: ${GRIS}; font-size: 12px; }
   .val-mini-puntos { letter-spacing: 1px; color: ${LIMA}; white-space: nowrap; }
   .val-mini-puntos span { color: rgba(192, 194, 184, 0.35); }
+  .val-campo { display: block; }
+  .val-campo span { display: block; font-size: 12px; color: ${GRIS}; margin-bottom: 6px; }
+  .val-campo input {
+    box-sizing: border-box;
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid rgba(192, 194, 184, 0.2);
+    background: #101010;
+    color: ${BLANCO};
+    font: 400 14px/1.4 Poppins, sans-serif;
+    padding: 11px 12px;
+  }
+  .val-campo input:focus { outline: none; border-color: ${LIMA}; }
+  .val-link {
+    border: 0;
+    background: none;
+    padding: 0;
+    color: ${LIMA};
+    font: 600 12px Poppins, sans-serif;
+    cursor: pointer;
+  }
 `;
 
 const root = document.getElementById("valoraciones-root");

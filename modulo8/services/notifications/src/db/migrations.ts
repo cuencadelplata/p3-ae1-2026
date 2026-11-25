@@ -203,6 +203,14 @@ const migrations = [
          )`,
     ],
   },
+  {
+    version: 8,
+    name: "index_recipient_notification_feed",
+    statements: [
+      `CREATE INDEX IF NOT EXISTS notifications_recipient_created_idx
+         ON notifications.notifications (recipient_id, created_at DESC, notification_id DESC)`,
+    ],
+  },
 ] as const;
 
 export async function runMigrations(pool: Pool): Promise<void> {

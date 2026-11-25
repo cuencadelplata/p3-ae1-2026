@@ -50,6 +50,7 @@ services:
     environment:
       PORT: 3000
       M1_URL: "${M1_URL:-http://m1-identidad-acceso:3001}"
+      M6_VIAJES_URL: "${M6_VIAJES_URL:-http://m6-viajes:3000}"
       JWT_SECRET: "${M1_JWT_SECRET:-${JWT_SECRET:?Configurar M1_JWT_SECRET o JWT_SECRET con la misma clave privada para todos los modulos}}"
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -121,6 +122,7 @@ services:
       - "4000:80"
     networks:
       - m3-frontend-network
+      - reservas-network
     depends_on:
       m3-conductor-api:
         condition: service_healthy
@@ -130,4 +132,3 @@ networks:
     driver: bridge
   m3-frontend-network:
     driver: bridge
-    internal: true

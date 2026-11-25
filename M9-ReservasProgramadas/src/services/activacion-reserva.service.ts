@@ -65,6 +65,17 @@ export class ActivacionReservaService {
     }
     if (actual.estado === 'ACTIVANDO' && actual.idSolicitud !== null) {
       const request = await this.dispatchClient.getRequest(actual.idSolicitud, actual.clienteId);
+      if (
+        this.dispatchMode === 'rest' &&
+        this.dispatchClient.sendOffers !== undefined &&
+        (request.status === 'SEARCHING' || request.status === 'PENDING')
+      ) {
+        await this.dispatchClient.sendOffers(actual.idSolicitud, actual.clienteId);
+        return this.aplicarEstadoM5(
+          actual,
+          await this.dispatchClient.getRequest(actual.idSolicitud, actual.clienteId),
+        );
+      }
       return this.aplicarEstadoM5(actual, request);
     }
 

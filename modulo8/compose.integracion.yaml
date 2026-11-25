@@ -30,6 +30,8 @@ services:
       M1_JWT_SECRET: "${M1_JWT_SECRET:-${JWT_SECRET:-}}"
       M1_JWT_REQUIRE_EXP: "${M1_JWT_REQUIRE_EXP:-true}"
       M1_IDENTITY_URL: "${M8_M1_IDENTITY_URL:-http://m1-identidad-acceso:3001/auth/validar-identidad-y-rol}"
+      M1_PROFILES_BASE_URL: "${M8_M1_PROFILES_BASE_URL:-http://m1-identidad-acceso:3001}"
+      M1_INTERNAL_API_KEY: "${M1_INTERNAL_API_KEY:-}"
       # RF-8.5: con M1 configurado, /tickets exige un Bearer válido de M1 (sin esto queda abierto).
       SUPPORT_M1_IDENTITY_URL: "${M8_SUPPORT_M1_IDENTITY_URL:-http://m1-identidad-acceso:3001}"
       SUPPORT_PENALTIES_API_KEY: "${M2_SOPORTE_SECRET_KEY:-}"

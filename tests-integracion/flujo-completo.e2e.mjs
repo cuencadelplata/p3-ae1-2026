@@ -14,11 +14,11 @@
 //   RabbitMQ (infraestructura de M9): ninguna cola de mensajes muertos crece durante la prueba.
 //
 // Requisitos: stack común levantado desde la raíz (docker compose up -d --build) con el .env
-// de la raíz y modulo7/.env. Para la reserva de M9 hace falta ROUTE_RESOLVER_MODE=stub en el
-// .env de la raíz (el valor por defecto, "blocked", no resuelve rutas).
+// de la raíz y modulo7/.env. Para M9 usar ROUTE_RESOLVER_MODE=m4 y configurar
+// M9_DISPATCH_AUTH_TOKEN, compartido con el emisor delegado de M1.
 //
 // Uso, desde la raíz del repositorio:
-//   node --test tests-integracion/flujo-completo.e2e.mjs
+//   node --env-file=.env --test tests-integracion/flujo-completo.e2e.mjs
 // Si M7 real no está disponible, el test sirve igual con el simulador de su contrato que trae M8
 // (modulo8/infra/m7-payments-sandbox), arrancado con UNREGISTERED_TRIPS=not_found para que responda
 // como M7: apuntar M6_M7_URL, M8_M7_PAYMENTS_URL, M7_URL y M7_BASE_URL del .env de la raíz a ese
@@ -45,6 +45,9 @@ const M9 = url('M9_URL', 'http://localhost:3000');
 const RABBITMQ_ADMIN = url('RABBITMQ_ADMIN_URL', 'http://localhost:15672');
 const RABBITMQ_AUTH = Buffer.from(`${process.env.RABBITMQ_USER || 'm9'}:${process.env.RABBITMQ_PASSWORD || 'm9-local'}`).toString('base64');
 const METODO_PAGO = process.env.METODO_PAGO || 'efectivo';
+const TIPO_VEHICULO = process.env.E2E_TIPO_VEHICULO === 'MOTO' ? 'MOTO' : 'AUTO';
+const RECHAZAR_TARJETA_PRIMERO = process.env.E2E_RECHAZO_TARJETA === '1';
+const RESERVA_PROGRAMADA = process.env.E2E_RESERVA_PROGRAMADA === '1';
 const ESPERA_COMPROBANTE_MS = Number(process.env.ESPERA_COMPROBANTE_MS || 60000);
 
 // Corrientes: el conductor espera en el centro y el pasajero viaja al aeropuerto.
@@ -90,8 +93,8 @@ async function sesionM1(rol, nombre) {
   return { token: login.data.token, userId: Number(identidad.data.userId) };
 }
 
-async function conductorDisponibleEnM4(driverId, esperado) {
-  const query = new URLSearchParams({ latitude: String(ORIGEN.latitude), longitude: String(ORIGEN.longitude), vehicleType: 'AUTO', radiusKm: '1' });
+async function conductorDisponibleEnM4(driverId, esperado, ubicacion = ORIGEN, vehicleType = TIPO_VEHICULO) {
+  const query = new URLSearchParams({ latitude: String(ubicacion.latitude), longitude: String(ubicacion.longitude), vehicleType, radiusKm: '1' });
   for (let intento = 0; intento < 30; intento += 1) {
     const r = await pedir(M4, `/drivers/nearby?${query}`);
     assert.equal(r.status, 200, `M4 búsqueda de conductores: ${mostrar(r)}`);
@@ -115,15 +118,15 @@ function tokenMercadoPagoDisponible() {
   return readFileSync(archivo, 'utf8').match(/^MP_ACCESS_TOKEN=(.+)$/m)?.[1]?.trim();
 }
 
-async function pagoConTarjeta() {
+async function pagoConTarjeta(titular = 'APRO') {
   const accessToken = tokenMercadoPagoDisponible();
-  assert.ok(accessToken, 'METODO_PAGO=tarjeta necesita MP_ACCESS_TOKEN (credenciales de prueba de M7 en modulo7/.env)');
+  assert.ok(accessToken?.startsWith('TEST-'), 'Esta prueba requiere un MP_ACCESS_TOKEN de prueba de M7');
   const response = await fetch('https://api.mercadopago.com/v1/card_tokens', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({
       card_number: '4509953566233704', security_code: '123', expiration_month: 11, expiration_year: 2030,
-      cardholder: { name: 'APRO', identification: { type: 'DNI', number: '12345678' } },
+      cardholder: { name: titular, identification: { type: 'DNI', number: '12345678' } },
     }),
     signal: AbortSignal.timeout(15000),
   });
@@ -173,108 +176,242 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     assert.ok(s.clienteM2, `M2 debe devolver el id del cliente: ${mostrar(perfil)}`);
   });
 
+  test('1b. M1: autorización delegada privada para el cliente activo', async () => {
+    assert.ok(process.env.M9_DISPATCH_AUTH_TOKEN, 'Ejecutar con node --env-file=.env --test para cargar M9_DISPATCH_AUTH_TOKEN');
+    const body = { clientId: String(s.pasajero.userId), audience: 'm5', scope: 'ride-requests:write' };
+    const sinCredencial = await pedir(M1, '/auth/token-delegado', { method: 'POST', body });
+    assert.equal(sinCredencial.status, 401);
+    const delegado = await pedir(M1, '/auth/token-delegado', { method: 'POST', token: process.env.M9_DISPATCH_AUTH_TOKEN, body });
+    assert.equal(delegado.status, 200, `M1 emisión delegada: HTTP ${delegado.status}`);
+    assert.equal(delegado.data.expires_in, 300);
+    const identidad = await pedir(M1, '/auth/validar-identidad-y-rol', { token: delegado.data.access_token });
+    assert.equal(identidad.status, 200);
+    assert.equal(String(identidad.data.userId), String(s.pasajero.userId));
+    const conductor = await pedir(M1, '/auth/token-delegado', {
+      method: 'POST', token: process.env.M9_DISPATCH_AUTH_TOKEN,
+      body: { ...body, clientId: String(s.conductor.userId) },
+    });
+    assert.equal(conductor.status, 403, 'M1 no debe delegar identidad de conductor como cliente');
+  });
+
   test('3. M3: conductor habilitado con vehículo activo', async () => {
     const { userId, token } = s.conductor;
-    const alta = await pedir(M3_CONDUCTORES, '/api/conductores', { method: 'POST', token, body: { ciudad: 'Corrientes', tipovehiculo: 'auto' } });
+    const alta = await pedir(M3_CONDUCTORES, '/api/conductores', { method: 'POST', token, body: { ciudad: 'Corrientes', tipovehiculo: TIPO_VEHICULO.toLowerCase() } });
     assert.equal(alta.status, 201, `M3 alta de conductor: ${mostrar(alta)}`);
     const habilitado = await pedir(M3_CONDUCTORES, `/api/conductores/${userId}/habilitado`, { method: 'PUT', body: { habilitado: 'activo' } });
     assert.equal(habilitado.status, 200, `M3 habilitar conductor: ${mostrar(habilitado)}`);
-    s.patente = `AB${randomInt(100, 999)}CD`;
+    const letras = Array.from({ length: 4 }, () => String.fromCharCode(randomInt(65, 91)));
+    s.patente = TIPO_VEHICULO === 'MOTO'
+      ? `${letras[0]}${randomInt(100, 1000)}${letras.slice(1).join('')}`
+      : `${letras.slice(0, 2).join('')}${randomInt(100, 1000)}${letras.slice(2).join('')}`;
     const vehiculo = await pedir(M3_VEHICULOS, `/api/v1/drivers/${userId}/vehicles`, {
       method: 'POST', headers: { 'Idempotency-Key': randomUUID() },
-      body: { patente: s.patente, marca: 'Toyota', modelo: 'Etios', anio: 2022, tipoServicio: 'AUTO' },
+      body: { patente: s.patente, marca: 'Honda', modelo: TIPO_VEHICULO === 'MOTO' ? 'Wave' : 'Civic', anio: 2022, tipoServicio: TIPO_VEHICULO },
     });
     assert.equal(vehiculo.status, 201, `M3 alta de vehículo: ${mostrar(vehiculo)}`);
     const activado = await pedir(M3_VEHICULOS, `/api/v1/drivers/${userId}/vehicles/${vehiculo.data.id}/activar`, { method: 'PATCH' });
     assert.equal(activado.status, 200, `M3 activar vehículo: ${mostrar(activado)}`);
+    assert.equal(activado.data.tipoServicio, TIPO_VEHICULO);
   });
 
   test('4. M4: el conductor publica su ubicación y queda disponible', async () => {
     const { userId, token } = s.conductor;
-    s.ubicacionConductor = { latitude: ORIGEN.latitude, longitude: ORIGEN.longitude, vehicleType: 'AUTO', available: true };
+    s.ubicacionConductor = { latitude: ORIGEN.latitude, longitude: ORIGEN.longitude, vehicleType: TIPO_VEHICULO, available: true };
     const publicada = await pedir(M4, `/drivers/${userId}/location`, { method: 'PUT', token, body: s.ubicacionConductor });
     assert.equal(publicada.status, 200, `M4 publicar ubicación: ${mostrar(publicada)}`);
     await conductorDisponibleEnM4(userId, true);
+    await conductorDisponibleEnM4(userId, false, ORIGEN, TIPO_VEHICULO === 'MOTO' ? 'AUTO' : 'MOTO');
+    // La ubicación de M4 vence: mantenerla mientras espera el scheduler de M9.
+    s.heartbeat = setInterval(() => pedir(M4, `/drivers/${userId}/location`, {
+      method: 'PUT', token, body: s.ubicacionConductor,
+    }).catch(() => {}), 15000);
   });
 
   test('5. M9: el pasajero programa una reserva (M1 + tarifa de M7)', async () => {
     const fecha = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
     const reserva = await pedir(M9, '/reservas', {
       method: 'POST', token: s.pasajero.token,
-      body: { origen: ORIGEN.address, destino: DESTINO.address, vehiculo: 'AUTO', fechaHoraProgramada: fecha },
+      body: { origen: ORIGEN.address, destino: DESTINO.address, vehiculo: TIPO_VEHICULO, fechaHoraProgramada: fecha },
     });
     assert.equal(reserva.status, 201, `M9 crear reserva (si responde que no puede resolver la ruta, poner ROUTE_RESOLVER_MODE=stub en el .env de la raíz): ${mostrar(reserva)}`);
     assert.equal(reserva.data.estado, 'PROGRAMADA');
     assert.equal(String(reserva.data.clienteId), String(s.pasajero.userId), 'M9 debe tomar el cliente de la sesión de M1');
     assert.ok(Number(reserva.data.tarifaEstimada) > 0, `M9 debe traer la tarifa estimada por M7: ${mostrar(reserva)}`);
+    // Usar las coordenadas reales resueltas por M4 también para el conductor y M6.
+    if (reserva.data.routeSnapshot) {
+      Object.assign(ORIGEN, reserva.data.routeSnapshot.origin);
+      Object.assign(DESTINO, reserva.data.routeSnapshot.destination);
+      s.ubicacionConductor = { ...s.ubicacionConductor, latitude: ORIGEN.latitude, longitude: ORIGEN.longitude };
+      const ubicada = await pedir(M4, `/drivers/${s.conductor.userId}/location`, {
+        method: 'PUT', token: s.conductor.token, body: s.ubicacionConductor,
+      });
+      assert.equal(ubicada.status, 200, `M4 ubicación en el origen real: ${mostrar(ubicada)}`);
+    }
     const consulta = await pedir(M9, `/reservas/${reserva.data.id}`, { token: s.pasajero.token });
     assert.equal(consulta.status, 200, `M9 consultar reserva: ${mostrar(consulta)}`);
     const cancelada = await pedir(M9, `/reservas/${reserva.data.id}`, { method: 'DELETE', token: s.pasajero.token });
     assert.ok([200, 204].includes(cancelada.status), `M9 cancelar reserva: ${mostrar(cancelada)}`);
   });
 
-  test('5b. M9 → M5: la reserva se activa y pide el viaje a M5', {
-    todo: 'El scheduler de M9 activa la reserva fuera de una petición del pasajero y necesita un token delegado de M1 (M9_DISPATCH_AUTH_URL) que M1 todavía no publica. Sin eso responde DELEGACION_NO_CONFIGURADA.',
-  }, () => {});
+  test('5b. M9 → M5: la reserva programada genera una oferta sin intervención del pasajero', {
+    skip: !RESERVA_PROGRAMADA,
+  }, async () => {
+    const origen = 'Brasil 200, Corrientes Capital, Argentina';
+    const geocode = await pedir(M4, '/geocode', { method: 'POST', body: { address: origen } });
+    assert.equal(geocode.status, 200, `M4 geocodificación: ${mostrar(geocode)}`);
+    s.origenProgramado = geocode.data;
+    s.ubicacionConductor = { latitude: geocode.data.latitude, longitude: geocode.data.longitude, vehicleType: TIPO_VEHICULO, available: true };
+    const ubicacion = await pedir(M4, `/drivers/${s.conductor.userId}/location`, {
+      method: 'PUT', token: s.conductor.token,
+      body: s.ubicacionConductor,
+    });
+    assert.equal(ubicacion.status, 200, `M4 ubicación de prueba: ${mostrar(ubicacion)}`);
+    const creada = await pedir(M9, '/reservas', {
+      method: 'POST', token: s.pasajero.token,
+      body: {
+        origen, destino: 'Lavalle 50, Corrientes Capital, Argentina', vehiculo: TIPO_VEHICULO,
+        fechaHoraProgramada: new Date(Date.now() + 12_000).toISOString(),
+      },
+    });
+    assert.equal(creada.status, 201, `M9 programar despacho: ${mostrar(creada)}`);
+    assert.equal(creada.data.estado, 'PROGRAMADA');
+    s.reservaProgramada = creada.data.id;
+    const ajena = await pedir(M9, `/reservas/${s.reservaProgramada}`, { token: s.conductor.token });
+    assert.ok([403, 404].includes(ajena.status), 'Otro usuario no debe consultar la reserva');
+    let consulta;
+    const limite = Date.now() + 45_000;
+    while (Date.now() < limite) {
+      consulta = await pedir(M9, `/reservas/${s.reservaProgramada}`, { token: s.pasajero.token });
+      assert.equal(consulta.status, 200, `M9 estado de la reserva: ${mostrar(consulta)}`);
+      assert.notEqual(consulta.data.estado, 'FALLIDA', 'M9 debe despachar con un conductor disponible');
+      if (consulta.data.idSolicitud) {
+        const ofertas = await pedir(M5, `/drivers/${s.conductor.userId}/offers`, { token: s.conductor.token });
+        assert.equal(ofertas.status, 200, `M5 consultar ofertas: ${mostrar(ofertas)}`);
+        const oferta = ofertas.data.offers.find((oferta) =>
+          oferta.requestId === consulta.data.idSolicitud && oferta.status === 'PENDING');
+        if (oferta) {
+          s.ofertaProgramada = oferta;
+          s.rideRequestId = consulta.data.idSolicitud;
+          const solicitud = await pedir(M5, `/ride-requests/${s.rideRequestId}`, { token: s.pasajero.token });
+          assert.equal(solicitud.status, 200, `M5 consultar el recorrido: ${mostrar(solicitud)}`);
+          assert.equal(String(solicitud.data.clientId), String(s.pasajero.userId));
+          s.recorridoProgramado = { origen: solicitud.data.origin, destino: solicitud.data.destination };
+          return;
+        }
+      }
+      await esperar(1000);
+    }
+    assert.fail(`M9 no generó la oferta a tiempo: ${mostrar(consulta)}`);
+  });
 
   test('6. M5: el pasajero pide el viaje y el conductor acepta la oferta', async () => {
     const pasajero = s.pasajero;
     const conductor = s.conductor;
-    const solicitud = await pedir(M5, '/ride-requests', {
-      method: 'POST', token: pasajero.token, headers: { 'Idempotency-Key': randomUUID() },
-      body: { origin: ORIGEN, destination: DESTINO, vehicleType: 'AUTO' },
-    });
-    assert.equal(solicitud.status, 201, `M5 solicitud de viaje: ${mostrar(solicitud)}`);
-    assert.equal(solicitud.data.status, 'SEARCHING');
-    s.rideRequestId = solicitud.data.id;
+    let oferta = s.ofertaProgramada;
+    if (!RESERVA_PROGRAMADA) {
+      const solicitud = await pedir(M5, '/ride-requests', {
+        method: 'POST', token: pasajero.token, headers: { 'Idempotency-Key': randomUUID() },
+        body: { origin: ORIGEN, destination: DESTINO, vehicleType: TIPO_VEHICULO },
+      });
+      assert.equal(solicitud.status, 201, `M5 solicitud de viaje: ${mostrar(solicitud)}`);
+      assert.equal(solicitud.data.status, 'SEARCHING');
+      s.rideRequestId = solicitud.data.id;
 
-    const candidatos = await pedir(M5, `/ride-requests/${s.rideRequestId}/candidates`, {
-      method: 'POST', token: pasajero.token, headers: { 'X-User-Id': String(pasajero.userId) }, body: { radiusKm: 1, maxCandidates: 5 },
-    });
-    assert.equal(candidatos.status, 200, `M5 búsqueda de candidatos: ${mostrar(candidatos)}`);
-    assert.ok(candidatos.data.candidates.some((c) => String(c.driverId) === String(conductor.userId)), 'M5 debe encontrar al conductor publicado en M4');
+      const candidatos = await pedir(M5, `/ride-requests/${s.rideRequestId}/candidates`, {
+        method: 'POST', token: pasajero.token, headers: { 'X-User-Id': String(pasajero.userId) }, body: { radiusKm: 1, maxCandidates: 5 },
+      });
+      assert.equal(candidatos.status, 200, `M5 búsqueda de candidatos: ${mostrar(candidatos)}`);
+      assert.ok(candidatos.data.candidates.some((c) => String(c.driverId) === String(conductor.userId)), 'M5 debe encontrar al conductor publicado en M4');
 
-    const ofertas = await pedir(M5, `/ride-requests/${s.rideRequestId}/offers`, {
-      method: 'POST', token: pasajero.token, headers: { 'X-User-Id': String(pasajero.userId) },
-      body: { driverIds: [String(conductor.userId)], ttlSeconds: 45 },
-    });
-    assert.equal(ofertas.status, 201, `M5 envío de ofertas: ${mostrar(ofertas)}`);
-    const oferta = (ofertas.data.offers ?? ofertas.data)[0];
-    assert.ok(oferta?.id, `M5 debe devolver la oferta: ${mostrar(ofertas)}`);
+      const ofertas = await pedir(M5, `/ride-requests/${s.rideRequestId}/offers`, {
+        method: 'POST', token: pasajero.token,
+        body: { driverIds: [String(conductor.userId)], ttlSeconds: 45 },
+      });
+      assert.equal(ofertas.status, 201, `M5 envío de ofertas: ${mostrar(ofertas)}`);
+      oferta = (ofertas.data.offers ?? ofertas.data)[0];
+    }
+    assert.ok(oferta?.id, 'M5 debe devolver una oferta para el conductor de prueba');
+    assert.equal(oferta.vehicleType, TIPO_VEHICULO);
 
     const aceptada = await pedir(M5, `/offers/${oferta.id}/accept`, {
       method: 'POST', token: conductor.token, headers: { 'X-User-Id': String(conductor.userId) }, body: {},
     });
     assert.equal(aceptada.status, 200, `M5 aceptar oferta: ${mostrar(aceptada)}`);
     assert.equal(aceptada.data.requestStatus, 'ASSIGNED');
+    if (s.reservaProgramada) {
+      let estado;
+      const limite = Date.now() + 15_000;
+      do {
+        const actual = await pedir(M9, `/reservas/${s.reservaProgramada}`, { token: pasajero.token });
+        assert.equal(actual.status, 200, `M9 consultar asignación: ${mostrar(actual)}`);
+        estado = actual.data.estado;
+        if (estado === 'ACTIVADA') {
+          assert.equal(String(actual.data.assignedDriverId), String(conductor.userId));
+          break;
+        }
+        await esperar(500);
+      } while (Date.now() < limite);
+      assert.equal(estado, 'ACTIVADA');
+    }
   });
 
   test('7. M6: M5 creó y asignó el viaje', async () => {
     const r = await pedir(M6, `/api/viajes?clienteId=${s.pasajero.userId}`);
     assert.equal(r.status, 200, `M6 registro de viajes: ${mostrar(r)}`);
-    assert.equal(r.data.viajes.length, 1, 'M5 debe crear un único viaje para el pasajero');
-    const [viaje] = r.data.viajes;
+    const detalles = await Promise.all(r.data.viajes.map(({ id }) => pedir(M6, `/api/viajes/${id}`, { token: s.pasajero.token })));
+    const asignados = detalles.filter(({ status, data }) => status === 200 && data.rideRequestId === s.rideRequestId);
+    assert.equal(asignados.length, 1, 'M5 debe crear un único viaje para esta solicitud');
+    const [{ data: viaje }] = asignados;
     assert.equal(String(viaje.conductorId), String(s.conductor.userId));
     assert.equal(viaje.estado, 'CONDUCTOR_EN_CAMINO');
     s.tripId = viaje.id;
   });
 
   test('8. M6 + M8: arribo con QR e inicio validado; M4 marca al conductor ocupado', async () => {
-    const arribo = await pedir(M6, `/api/viajes/${s.tripId}/arribo`, { method: 'PUT', body: {} });
+    clearInterval(s.heartbeat);
+    const arribo = await pedir(M6, `/api/viajes/${s.tripId}/arribo`, { method: 'PUT', token: s.pasajero.token, body: {} });
     assert.equal(arribo.status, 200, `M6 arribo: ${mostrar(arribo)}`);
     assert.ok(arribo.data.qr?.token, 'M8 debe emitir el QR del viaje');
-    const inicio = await pedir(M6, `/api/viajes/${s.tripId}/iniciar`, { method: 'POST', body: { codigoVerificacion: arribo.data.qr.token } });
+    const inicio = await pedir(M6, `/api/viajes/${s.tripId}/iniciar`, { method: 'POST', token: s.conductor.token, body: { codigoVerificacion: arribo.data.qr.token } });
     assert.equal(inicio.status, 200, `M6 inicio: ${mostrar(inicio)}`);
-    const reuso = await pedir(M6, `/api/viajes/${s.tripId}/iniciar`, { method: 'POST', body: { codigoVerificacion: arribo.data.qr.token } });
+    const reuso = await pedir(M6, `/api/viajes/${s.tripId}/iniciar`, { method: 'POST', token: s.conductor.token, body: { codigoVerificacion: arribo.data.qr.token } });
     assert.notEqual(reuso.status, 200, 'El QR de M8 no debe servir dos veces');
-    await conductorDisponibleEnM4(s.conductor.userId, false);
+    await conductorDisponibleEnM4(s.conductor.userId, false, s.origenProgramado);
+  });
+
+  const solicitarOtroViaje = () => pedir(M5, '/ride-requests', {
+    method: 'POST', token: s.pasajero.token, headers: { 'Idempotency-Key': randomUUID() },
+    body: { origin: ORIGEN, destination: DESTINO, vehicleType: TIPO_VEHICULO },
+  });
+
+  test('8b. M5 impide una segunda solicitud mientras el viaje está en curso', async () => {
+    const intento = await solicitarOtroViaje();
+    assert.equal(intento.status, 409, mostrar(intento));
+    assert.equal(intento.data.code, 'ACTIVE_REQUEST_EXISTS');
   });
 
   test(`9. M6 + M4 + M7: finalización y pago (${METODO_PAGO}); M4 libera al conductor`, async () => {
-    const fin = await pedir(M6, `/api/viajes/${s.tripId}/finalizacion`, {
+    const destino = await pedir(M6, '/api/viajes/' + s.tripId + '/destino', { method: 'POST', token: s.conductor.token, body: {} });
+    assert.equal(destino.status, 200, 'M6 debe registrar la llegada antes del pago');
+    const ruta = `/api/viajes/${s.tripId}/finalizacion`;
+    const finalizacion = {
+      ...(s.recorridoProgramado ?? { origen: ORIGEN, destino: DESTINO }),
+      tipoVehiculo: TIPO_VEHICULO.toLowerCase(), horaFin: new Date().toISOString(), gestionarPago: true,
+    };
+    if (RECHAZAR_TARJETA_PRIMERO) {
+      assert.ok(['efectivo', 'transferencia'].includes(METODO_PAGO));
+      const rechazo = await pedir(M6, ruta, {
+        token: s.pasajero.token, method: 'POST',
+        body: { ...finalizacion, metodoPago: 'tarjeta', pago: await pagoConTarjeta('OTHE') },
+      });
+      assert.equal(rechazo.status, 402, mostrar(rechazo));
+      assert.match(rechazo.data.error, /tarjeta fue rechazada/i);
+    }
+    const fin = await pedir(M6, ruta, {
+      token: s.pasajero.token,
       method: 'POST',
       body: {
-        origen: ORIGEN, destino: DESTINO, tipoVehiculo: 'auto', horaFin: new Date().toISOString(), metodoPago: METODO_PAGO,
+        ...finalizacion, metodoPago: METODO_PAGO,
         ...(METODO_PAGO === 'tarjeta' ? { pago: await pagoConTarjeta() } : {}),
       },
     });
@@ -286,7 +423,7 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     // Tarjeta: M7 la autoriza en Mercado Pago. Efectivo y transferencia se cobran fuera de la
     // pasarela y M7 los deja pendientes.
     assert.equal(fin.data.estadoPago, METODO_PAGO === 'tarjeta' ? 'autorizado' : 'pendiente');
-    await conductorDisponibleEnM4(s.conductor.userId, true);
+    await conductorDisponibleEnM4(s.conductor.userId, true, s.origenProgramado);
   });
 
   test('10. M8: comprobante emitido a partir de TripCompleted', async () => {
@@ -305,6 +442,23 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
     assert.equal(datos.driver.vehicle.plate, s.patente, 'M8 debe tomar la patente de M3');
     assert.equal(datos.fare.total, s.total);
     assert.equal(datos.payment.method, METODO_PAGO.toUpperCase());
+    const pdf = await fetch(`${M8}/api/v1/receipts/${s.tripId}/pdf`, {
+      headers: { authorization: `Bearer ${s.pasajero.token}` },
+      signal: AbortSignal.timeout(15_000),
+    });
+    assert.equal(pdf.status, 200);
+    assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
+  });
+
+  test('10b. M5 permite pedir otro viaje al finalizar y sólo acepta uno en simultáneo', async () => {
+    const intentos = await Promise.all([solicitarOtroViaje(), solicitarOtroViaje()]);
+    assert.deepEqual(intentos.map(intento => intento.status).sort(), [201, 409], intentos.map(mostrar).join(' | '));
+    const nuevo = intentos.find(intento => intento.status === 201);
+    assert.notEqual(nuevo.data.id, s.rideRequestId);
+    const cancelado = await pedir(M5, `/ride-requests/${nuevo.data.id}/cancel`, {
+      method: 'POST', token: s.pasajero.token, body: { reason: 'Fin de la prueba de nueva solicitud.' },
+    });
+    assert.equal(cancelado.status, 200, mostrar(cancelado));
   });
 
   test('11. M6 + M2: historial de transiciones completo y viaje visible en M2', async () => {
@@ -318,7 +472,76 @@ describe('Flujo integral: login, pedido, viaje, pago y comprobante por los 9 mó
   });
 
   after(async () => {
+    clearInterval(s.heartbeat);
+    if (s.reservaProgramada) {
+      const path = `/reservas/${s.reservaProgramada}`;
+      const reserva = await pedir(M9, path, { token: s.pasajero.token }).catch(() => null);
+      if (reserva?.data?.estado === 'PROGRAMADA') {
+        await pedir(M9, path, { method: 'DELETE', token: s.pasajero.token }).catch(() => {});
+      }
+    }
     if (s.conductor) await pedir(M4, `/drivers/${s.conductor.userId}/location`, { method: 'DELETE', token: s.conductor.token }).catch(() => {});
+  });
+
+  test('11a. M8: cada participante consulta sus avisos sin suscripción PUSH', async () => {
+    const path = '/notifications/me';
+    assert.equal((await pedir(M8, path)).status, 401);
+    const limite = Date.now() + 15_000;
+    do {
+      const [pasajero, conductor] = await Promise.all([
+        pedir(M8, path, { token: s.pasajero.token }),
+        pedir(M8, path + '?userId=' + s.pasajero.userId, { token: s.conductor.token }),
+      ]);
+      assert.equal(pasajero.status, 200);
+      assert.equal(conductor.status, 200);
+      if (pasajero.data.data.some(aviso => aviso.title === 'Conductor asignado') &&
+          conductor.data.data.some(aviso => aviso.title === 'Viaje asignado')) {
+        const idsDelPasajero = new Set(pasajero.data.data.map(aviso => aviso.id));
+        assert.ok(conductor.data.data.every(aviso => !idsDelPasajero.has(aviso.id)));
+        return;
+      }
+      await esperar(300);
+    } while (Date.now() < limite);
+    assert.fail('No llegaron los avisos de asignación a ambas cuentas');
+  });
+
+  test('11b. M8: soporte lista únicamente los tickets del usuario autenticado', async () => {
+    const ticketsPath = '/tickets';
+    const propio = await pedir(M8, ticketsPath, {
+      method: 'POST', token: s.pasajero.token, body: { tripId: s.tripId, motivo: 'Consulta E2E del pasajero' },
+    });
+    const ajeno = await pedir(M8, ticketsPath, {
+      method: 'POST', token: s.conductor.token, body: { tripId: s.tripId, motivo: 'Consulta E2E del conductor' },
+    });
+    assert.equal(propio.status, 201, mostrar(propio));
+    assert.equal(ajeno.status, 201, mostrar(ajeno));
+    const consulta = await pedir(M8, `${ticketsPath}/mios?tripId=${s.tripId}`, { token: s.pasajero.token });
+    assert.equal(consulta.status, 200, mostrar(consulta));
+    assert.deepEqual(consulta.data.map(ticket => ticket.id), [propio.data.id]);
+    assert.equal((await pedir(M8, ticketsPath, { token: s.pasajero.token })).status, 403);
+    if (process.env.M1_OPERADOR_PASSWORD) {
+      const sesion = await pedir(M1, '/auth/iniciar-sesion', {
+        method: 'POST',
+        body: { email: process.env.M1_OPERADOR_EMAIL || 'operador@movilidad.com', password: process.env.M1_OPERADOR_PASSWORD },
+      });
+      assert.equal(sesion.status, 200, 'M1 debe iniciar sesión como operador');
+      const token = sesion.data.token;
+      const bandeja = await pedir(M8, `${ticketsPath}?tripId=${s.tripId}`, { token });
+      assert.equal(bandeja.status, 200, 'El operador debe ver los dos tickets');
+      assert.equal(bandeja.data.length, 2);
+      const motivo = 'Recibimos tu consulta y estamos revisando el viaje.';
+      const path = `${ticketsPath}/${propio.data.id}`;
+      const respuesta = await pedir(M8, path + '/estado', {
+        method: 'PATCH', token,
+        body: { estado: 'ABIERTO', motivo, expectedVersion: propio.data.version, registrarRespuesta: true },
+      });
+      assert.equal(respuesta.status, 200, mostrar(respuesta));
+      assert.equal(respuesta.data.estado, 'ABIERTO');
+      const historial = await pedir(M8, path + '/historial', { token: s.pasajero.token });
+      assert.equal(historial.status, 200);
+      assert.ok(historial.data.some(entrada => entrada.motivo === motivo));
+      assert.equal((await pedir(M8, path + '/historial', { token: s.conductor.token })).status, 403);
+    }
   });
 
   test('12. RabbitMQ: ninguna cola de mensajes muertos creció', async () => {

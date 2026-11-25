@@ -15,7 +15,6 @@ interface Proveedor {
 const NOMBRES: Record<string, string> = {
   GOOGLE: 'Google',
   AUTH0: 'Auth0',
-  MOCK: 'Proveedor de prueba',
 }
 
 const LOGOS: Record<string, string> = {
@@ -58,11 +57,7 @@ export async function completarOAuth2(
   return data.token as string
 }
 
-interface OAuth2LoginProps {
-  onLoginSuccess: (token: string) => void
-}
-
-export default function OAuth2Login({ onLoginSuccess }: OAuth2LoginProps) {
+export default function OAuth2Login() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [ingresando, setIngresando] = useState('')
   const [error, setError] = useState('')
@@ -70,7 +65,7 @@ export default function OAuth2Login({ onLoginSuccess }: OAuth2LoginProps) {
   useEffect(() => {
     axios
       .get<{ providers: Proveedor[] }>(`${API_URL}/auth/oauth2/providers`)
-      .then(({ data }) => setProveedores(data.providers))
+      .then(({ data }) => setProveedores(data.providers.filter(({ provider, configured }) => configured && (provider === 'GOOGLE' || provider === 'AUTH0'))))
       .catch(() => setProveedores([]))
   }, [])
 
@@ -78,14 +73,6 @@ export default function OAuth2Login({ onLoginSuccess }: OAuth2LoginProps) {
     setError('')
     setIngresando(provider)
     try {
-      if (provider === 'MOCK') {
-        // El proveedor de prueba no tiene pantalla propia: se pide el state a M1
-        // y se completa el callback con un code de prueba, igual que en los tests E2E.
-        const { data } = await axios.get(`${API_URL}/auth/oauth2/authorize`, { params: { provider } })
-        const token = await completarOAuth2(provider, `mock_code_${Date.now()}`, data.state)
-        onLoginSuccess(token)
-        return
-      }
       // Google y Auth0: M1 redirige al proveedor, que después vuelve a esta página con code y state.
       try {
         sessionStorage.setItem(CLAVE_PROVEEDOR, provider)

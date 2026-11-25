@@ -8,6 +8,7 @@ import { actorDeM1 } from './authentication.js';
 //
 // - Crear un ticket: cualquier usuario autenticado (cliente, conductor u operador).
 // - Listar todos y cambiar estados: sólo el Operador, el rol de soporte del escenario.
+// - Listar tickets propios: el repositorio filtra por el autor autenticado.
 // - Ver un ticket y su historial: el Operador o quien lo creó. El autor queda
 //   en la entrada inicial del historial como m1:<userId>.
 export type PermisoDeTicket = 'autenticado' | 'operador' | 'operadorOCreador';

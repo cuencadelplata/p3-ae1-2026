@@ -23,11 +23,21 @@ describe("RF-1.4 - Marca de revocación en Redis", () => {
     it("Guardar y devolver el momento de la revocación", async () => {
         await redis.flushall();
 
-        await guardarMomentoDeRevocacion(4, 1_800_000_000);
+        await guardarMomentoDeRevocacion(4, 1_800_000_000_123);
 
         const momento = await obtenerMomentoDeRevocacion(4);
 
-        expect(momento).toBe(1_800_000_000);
+        expect(momento).toBe(1_800_000_000_123);
+    });
+
+    it("Convertir a milisegundos una marca guardada en segundos por la versión anterior", async () => {
+        await redis.flushall();
+
+        await redis.set("revocacion:usuario:5", "1800000000", "EX", VIDA_JWT_SEGUNDOS);
+
+        const momento = await obtenerMomentoDeRevocacion(5);
+
+        expect(momento).toBe(1_800_000_000_000);
     });
 
     it("Guardar la marca con el mismo vencimiento que el JWT", async () => {

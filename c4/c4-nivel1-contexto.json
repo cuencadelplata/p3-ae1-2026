@@ -1,0 +1,226 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C4 · Nivel 1 — Contexto del sistema Movilidad Urbana",
+    "locale": "es",
+    "output": "c4/c4-nivel1-contexto.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
+      "provider": "github",
+      "revision": "687a636f0d66acc26bcde86dce442d4778e37dd8"
+    }
+  },
+  "layout": {
+    "mode": "auto"
+  },
+  "components": [
+    {
+      "id": "pasajero",
+      "type": "external",
+      "label": "Pasajero",
+      "sublabel": "Cliente de la plataforma",
+      "explanation": "Persona que se registra, gestiona su perfil y direcciones, pide y reserva viajes y califica al conductor.",
+      "sources": [
+        {
+          "path": "m2/docker-compose.app.yml",
+          "line": 127,
+          "end_line": 137,
+          "label": "m2-client (web del pasajero)"
+        }
+      ]
+    },
+    {
+      "id": "conductor",
+      "type": "external",
+      "label": "Conductor",
+      "sublabel": "Opera vehículos y viajes",
+      "explanation": "Persona que gestiona su perfil de conductor y sus vehículos y recibe valoraciones de los viajes finalizados.",
+      "sources": [
+        {
+          "path": "modulo-3/compose.integracion.yml",
+          "line": 94,
+          "end_line": 107,
+          "label": "m3-conductor-frontend"
+        }
+      ]
+    },
+    {
+      "id": "operador",
+      "type": "external",
+      "label": "Operador de soporte",
+      "sublabel": "Rol OPERADOR (usuario semilla de M1)",
+      "explanation": "Atiende tickets, confirma penalizaciones de viajes y revisa bloqueos de cuentas desde Soporte (M8). El rol no se obtiene por registro ni por OAuth2: M1 lo precarga.",
+      "sources": [
+        {
+          "path": "docker-compose.yml",
+          "line": 11,
+          "label": "M1 (usuario OPERADOR semilla)"
+        },
+        {
+          "path": "docker-compose.yml",
+          "line": 10,
+          "label": "M8 Soporte"
+        }
+      ]
+    },
+    {
+      "id": "plataforma",
+      "type": "backend",
+      "label": "Plataforma Movilidad Urbana",
+      "sublabel": "9 módulos (M1–M9) · Docker Compose",
+      "tag": "sistema en alcance",
+      "emphasis": true,
+      "explanation": "Stack movilidad-urbana: identidad, clientes, conductores y vehículos, ubicación, despacho, viajes, tarifas y pagos, notificaciones y soporte, y reservas programadas. Se integran solo por HTTP y RabbitMQ; cada módulo tiene su propia base. Abrí el nodo para ver el Nivel 2.",
+      "href": "c4-nivel2-contenedores.html",
+      "sources": [
+        {
+          "path": "docker-compose.yml",
+          "line": 1,
+          "end_line": 12,
+          "label": "compose raíz (include de módulos)"
+        }
+      ]
+    },
+    {
+      "id": "nominatim",
+      "type": "external",
+      "label": "Nominatim (OpenStreetMap)",
+      "sublabel": "Geocodificación pública",
+      "explanation": "Proveedor de geocodificación que usa M4 por defecto; se puede reemplazar por un mock con USE_MOCK_GEOCODING=true.",
+      "sources": [
+        {
+          "path": "modulo-4/compose.integration.yml",
+          "line": 23,
+          "label": "GEOCODING_PROVIDER_URL"
+        }
+      ]
+    },
+    {
+      "id": "supabase",
+      "type": "external",
+      "label": "Supabase",
+      "sublabel": "PostgreSQL en la nube",
+      "explanation": "Base de datos administrada que usa M7 Tarifas y pagos. Es la única base fuera del stack local.",
+      "sources": [
+        {
+          "path": "docker-compose.yml",
+          "line": 9,
+          "label": "M7 (DATABASE_URL)"
+        }
+      ]
+    },
+    {
+      "id": "oauth",
+      "type": "external",
+      "label": "Google / Auth0",
+      "sublabel": "login federado (OAuth2)",
+      "explanation": "Proveedores de identidad opcionales de M1; se activan si están cargadas sus credenciales.",
+      "sources": [
+        {
+          "path": "modulo-1-identidad-acceso/compose.integracion.yml",
+          "line": 45,
+          "end_line": 48,
+          "label": "GOOGLE / AUTH0"
+        }
+      ]
+    },
+    {
+      "id": "mp",
+      "type": "external",
+      "label": "Mercado Pago",
+      "sublabel": "pagos con tarjeta",
+      "explanation": "M7 tokeniza la tarjeta y cobra el viaje con la API de Mercado Pago.",
+      "sources": [
+        {
+          "path": "modulo7/src/config.ts",
+          "line": 14,
+          "label": "MP_BASE_URL"
+        }
+      ]
+    },
+    {
+      "id": "push",
+      "type": "external",
+      "label": "Web Push / SMTP",
+      "sublabel": "navegadores y correo",
+      "explanation": "M8 envía notificaciones push a los navegadores (VAPID) y correos, como la recuperación de contraseña de M1.",
+      "sources": [
+        {
+          "path": "modulo8/compose.integracion.yaml",
+          "line": 47,
+          "end_line": 49,
+          "label": "VAPID (Web Push)"
+        },
+        {
+          "path": "modulo8/compose.integracion.yaml",
+          "line": 53,
+          "label": "SMTP_HOST"
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "pasajero-usa",
+      "from": "pasajero",
+      "to": "plataforma",
+      "label": "perfil, direcciones, viajes y reservas (HTTPS)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "conductor-usa",
+      "from": "conductor",
+      "to": "plataforma",
+      "label": "perfil, vehículos y valoraciones (HTTPS)"
+    },
+    {
+      "id": "operador-usa",
+      "from": "operador",
+      "to": "plataforma",
+      "label": "tickets, penalizaciones y revisión de bloqueos (HTTP)"
+    },
+    {
+      "id": "geocodifica",
+      "from": "plataforma",
+      "to": "nominatim",
+      "label": "geocodifica direcciones (HTTPS)"
+    },
+    {
+      "id": "tarifas-db",
+      "from": "plataforma",
+      "to": "supabase",
+      "label": "tarifas y pagos de M7 (PostgreSQL)"
+    },
+    {
+      "id": "login-federado",
+      "from": "plataforma",
+      "to": "oauth",
+      "label": "login federado (HTTPS)"
+    },
+    {
+      "id": "cobros",
+      "from": "plataforma",
+      "to": "mp",
+      "label": "cobra viajes (HTTPS)"
+    },
+    {
+      "id": "avisos",
+      "from": "plataforma",
+      "to": "push",
+      "label": "push y correo"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Cómo leer este nivel",
+      "items": [
+        "Una sola caja para todo el sistema: el detalle está en el Nivel 2",
+        "Clic en la plataforma abre los contenedores (módulos)",
+        "Tres tipos de usuario: pasajero, conductor y operador de soporte"
+      ]
+    }
+  ]
+}

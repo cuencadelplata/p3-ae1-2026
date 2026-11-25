@@ -1,0 +1,406 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C4 · Nivel 3 — Componentes de M3 Conductores y vehículos",
+    "locale": "es",
+    "output": "c4/c4-nivel3-componentes-m3.html",
+    "quality_profile": "showcase",
+    "parentHref": "c4-nivel2-contenedores.html",
+    "repository": {
+      "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
+      "provider": "github",
+      "revision": "687a636f0d66acc26bcde86dce442d4778e37dd8"
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "cols": 3,
+    "cellW": 196,
+    "cellH": 64,
+    "gapX": 110,
+    "gapY": 92
+  },
+  "components": [
+    {
+      "id": "clientes",
+      "type": "external",
+      "label": "Web del conductor y módulos",
+      "sublabel": "M3 Web · M4, M6, M8",
+      "row": 0,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "rutas",
+      "type": "backend",
+      "label": "Rutas de conductor",
+      "sublabel": "conductor · valoraciones · valida en M1",
+      "sources": [
+        {
+          "path": "modulo-3/M3-Conductor/src/routes/conductorRoutes.js",
+          "line": 30,
+          "end_line": 61,
+          "label": "rutas"
+        },
+        {
+          "path": "modulo-3/M3-Conductor/src/infraestructure/m1Client.js",
+          "line": 4,
+          "label": "validación"
+        }
+      ],
+      "row": 0,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "ctrl",
+      "type": "backend",
+      "label": "Controllers",
+      "sublabel": "conductores · valoraciones · notificaciones",
+      "sources": [
+        {
+          "path": "modulo-3/M3-Conductor/src/controllers/conductoresController.js",
+          "line": 1,
+          "label": "conductores"
+        },
+        {
+          "path": "modulo-3/M3-Conductor/src/controllers/valoracionesController.js",
+          "line": 1,
+          "label": "valoraciones"
+        }
+      ],
+      "row": 1,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "Repositorios",
+      "sublabel": "conductores (Supabase) · caché (Redis)",
+      "sources": [
+        {
+          "path": "modulo-3/M3-Conductor/src/repositories/conductorDBRepository.js",
+          "line": 1,
+          "label": "conductores"
+        },
+        {
+          "path": "modulo-3/M3-Conductor/src/repositories/redisRepository.js",
+          "line": 1,
+          "label": "caché"
+        }
+      ],
+      "row": 2,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "gw",
+      "type": "backend",
+      "label": "Messaging gateway",
+      "sublabel": "circuit breaker · respaldo en Kafka",
+      "explanation": "Publica en RabbitMQ; si el circuito se abre, guarda el evento en Kafka y lo republica después.",
+      "sources": [
+        {
+          "path": "modulo-3/M3-Conductor/src/infraestructure/messagingGateway.js",
+          "line": 38,
+          "label": "publicación"
+        },
+        {
+          "path": "modulo-3/M3-Conductor/src/infraestructure/kafkaFallback.js",
+          "line": 23,
+          "label": "respaldo"
+        }
+      ],
+      "row": 3,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "consumer",
+      "type": "backend",
+      "label": "m3-conductor-consumer",
+      "sublabel": "eventos de conductor y viaje.finalizado",
+      "sources": [
+        {
+          "path": "modulo-3/M3-Conductor/src/consumers/driverEventsConsumer.js",
+          "line": 17,
+          "label": "cola"
+        },
+        {
+          "path": "modulo-3/M3-Conductor/src/infraestructure/rabbitmq.topology.js",
+          "line": 8,
+          "label": "viaje.finalizado"
+        }
+      ],
+      "row": 4,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "vrutas",
+      "type": "backend",
+      "label": "Rutas de vehículos",
+      "sublabel": "/vehiculos · /documentos · idempotencia",
+      "sources": [
+        {
+          "path": "modulo-3/m3-vehiculos/src/vehiculos/vehiculo-routes.ts",
+          "line": 16,
+          "label": "vehículos"
+        },
+        {
+          "path": "modulo-3/m3-vehiculos/src/documents/documents-routes.ts",
+          "line": 15,
+          "label": "documentos"
+        },
+        {
+          "path": "modulo-3/m3-vehiculos/src/middlewares/idempotencia.ts",
+          "line": 1,
+          "label": "idempotencia"
+        }
+      ],
+      "row": 1,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "vsvc",
+      "type": "backend",
+      "label": "Servicios de vehículos",
+      "sublabel": "vehículos y documentación",
+      "sources": [
+        {
+          "path": "modulo-3/m3-vehiculos/src/vehiculos/vehiculo-service.ts",
+          "line": 1,
+          "label": "vehículos"
+        },
+        {
+          "path": "modulo-3/m3-vehiculos/src/documents/documents-service.ts",
+          "line": 1,
+          "label": "documentos"
+        }
+      ],
+      "row": 2,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "vev",
+      "type": "backend",
+      "label": "Eventos de vehículos",
+      "sublabel": "publica y valida documentos",
+      "sources": [
+        {
+          "path": "modulo-3/m3-vehiculos/src/documents/documents.events.ts",
+          "line": 16,
+          "label": "publicación"
+        },
+        {
+          "path": "modulo-3/m3-vehiculos/src/documents/documents-consumers.ts",
+          "line": 7,
+          "label": "validación"
+        }
+      ],
+      "row": 3,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "supabase",
+      "type": "database",
+      "label": "Supabase",
+      "sublabel": "conductores y vehículos",
+      "sources": [
+        {
+          "path": "modulo-3/M3-Conductor/src/config/SupabaseClient.js",
+          "line": 4,
+          "label": "conductor"
+        },
+        {
+          "path": "modulo-3/m3-vehiculos/src/config/supabaseClient.ts",
+          "line": 1,
+          "label": "vehículos"
+        }
+      ],
+      "row": 2,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": "caché e idempotencia",
+      "sources": [
+        {
+          "path": "modulo-3/M3-Conductor/src/config/redisClient.js",
+          "line": 1,
+          "label": "conductor"
+        },
+        {
+          "path": "modulo-3/m3-vehiculos/src/config/redisClient.ts",
+          "line": 3,
+          "label": "vehículos"
+        }
+      ],
+      "row": 1,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "rabbit",
+      "type": "messagebus",
+      "label": "RabbitMQ",
+      "sublabel": "m3.conductores.events · m3.eventos · viajes.events",
+      "sources": [
+        {
+          "path": "modulo-3/M3-Conductor/src/config/rabbitmqClient.js",
+          "line": 8,
+          "label": "conductor"
+        },
+        {
+          "path": "modulo-3/m3-vehiculos/src/config/rabbitClient.ts",
+          "line": 6,
+          "label": "vehículos"
+        }
+      ],
+      "row": 3,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "clientes-rutas",
+      "from": "clientes",
+      "to": "rutas",
+      "label": "HTTP · estado del conductor",
+      "variant": "emphasis"
+    },
+    {
+      "id": "clientes-vrutas",
+      "from": "clientes",
+      "to": "vrutas",
+      "label": "vehículo activo"
+    },
+    {
+      "id": "rutas-ctrl",
+      "from": "rutas",
+      "to": "ctrl"
+    },
+    {
+      "id": "ctrl-repo",
+      "from": "ctrl",
+      "to": "repo"
+    },
+    {
+      "id": "ctrl-gw",
+      "from": "ctrl",
+      "to": "gw",
+      "label": "eventos de conductor"
+    },
+    {
+      "id": "repo-supabase",
+      "from": "repo",
+      "to": "supabase",
+      "label": "SQL"
+    },
+    {
+      "id": "repo-redis",
+      "from": "repo",
+      "to": "redis",
+      "label": "caché"
+    },
+    {
+      "id": "gw-rabbit",
+      "from": "gw",
+      "to": "rabbit",
+      "label": "publica",
+      "variant": "dashed"
+    },
+    {
+      "id": "rabbit-consumer",
+      "from": "rabbit",
+      "to": "consumer",
+      "label": "viaje.finalizado",
+      "variant": "dashed"
+    },
+    {
+      "id": "vrutas-vsvc",
+      "from": "vrutas",
+      "to": "vsvc"
+    },
+    {
+      "id": "vsvc-supabase",
+      "from": "vsvc",
+      "to": "supabase",
+      "label": "SQL"
+    },
+    {
+      "id": "vrutas-redis",
+      "from": "vrutas",
+      "to": "redis",
+      "label": "idempotencia"
+    },
+    {
+      "id": "vsvc-vev",
+      "from": "vsvc",
+      "to": "vev"
+    },
+    {
+      "id": "vev-rabbit",
+      "from": "vev",
+      "to": "rabbit",
+      "label": "documento registrado",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "Observaciones",
+      "items": [
+        "Sin SUPABASE_URL, el conductor opera sin base persistente",
+        "Kafka es solo respaldo cuando RabbitMQ no acepta mensajes",
+        "M8 consume los documentos registrados de m3.eventos"
+      ]
+    }
+  ]
+}

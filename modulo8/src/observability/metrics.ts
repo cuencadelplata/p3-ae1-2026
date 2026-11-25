@@ -71,6 +71,10 @@ export function classifyM8Route(method: string, rawPathname: string): RouteClass
     return { route: pathname, rf: 'M8-CORE', ignored: true };
   }
 
+  if (pathname === '/notifications/me') {
+    return { route: '/notifications/me', rf: 'RF8.1', ignored: false };
+  }
+
   // RF8.2 — QR de verificación
   if (pathname === '/qr') {
     return { route: '/qr', rf: 'RF8.2', ignored: false };
@@ -108,11 +112,17 @@ export function classifyM8Route(method: string, rawPathname: string): RouteClass
   if (pathname === '/tickets') {
     return { route: '/tickets', rf: 'RF8.5', ignored: false };
   }
+  if (pathname === '/tickets/mios') {
+    return { route: '/tickets/mios', rf: 'RF8.5', ignored: false };
+  }
   if (/^\/tickets\/[^/]+\/estado$/.test(pathname)) {
     return { route: '/tickets/:id/estado', rf: 'RF8.5', ignored: false };
   }
   if (/^\/tickets\/[^/]+\/historial$/.test(pathname)) {
     return { route: '/tickets/:id/historial', rf: 'RF8.5', ignored: false };
+  }
+  if (/^\/tickets\/[^/]+\/mensajes$/.test(pathname)) {
+    return { route: '/tickets/:id/mensajes', rf: 'RF8.5', ignored: false };
   }
   if (/^\/tickets\/[^/]+\/penalizacion$/.test(pathname)) {
     return { route: '/tickets/:id/penalizacion', rf: 'RF8.5', ignored: false };
@@ -130,6 +140,9 @@ export function classifyM8Route(method: string, rawPathname: string): RouteClass
   // RF8.7 — Entrega de notificaciones
   if (pathname === '/devices/tokens') {
     return { route: '/devices/tokens', rf: 'RF8.7', ignored: false };
+  }
+  if (pathname === '/devices/tokens/deactivate') {
+    return { route: '/devices/tokens/deactivate', rf: 'RF8.7', ignored: false };
   }
   if (/^\/devices\/tokens\/[^/]+$/.test(pathname)) {
     return { route: '/devices/tokens/:token', rf: 'RF8.7', ignored: false };
@@ -327,7 +340,10 @@ export function createM8MetricsTracker(serviceName: string = 'm8-app'): M8Metric
         operation: 'Registro de token Push',
         result: isSuccess ? 'Activo' : fallbackResult,
       });
-    } else if (rf === 'RF8.7' && method === 'DELETE' && route === '/devices/tokens/:token') {
+    } else if (rf === 'RF8.7' && (
+      (method === 'DELETE' && route === '/devices/tokens/:token') ||
+      (method === 'POST' && route === '/devices/tokens/deactivate')
+    )) {
       businessOperationsTotal.inc({
         rf,
         operation: 'Baja de token Push',

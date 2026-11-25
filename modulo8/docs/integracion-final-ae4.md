@@ -84,19 +84,21 @@ Remove-Item Env:SUPPORT_E2E_VERIFY_M2
 
 ## Dependencias de otros equipos
 
-- **M1.** Para reservas, acordar con M9 dónde emitir el token delegado del
-  cliente y qué autorización se necesita. Para incluir el nombre del
-  conductor en el aviso de asignación, acordar una consulta interna de
-  `userId`, `nombre` y `apellido` autenticada entre servicios. El consumidor
-  recibe el `driverUserId` en RabbitMQ. Para el frontend común, mantener el
-  flujo de identidad y recuperación accesible desde el origen final.
+- **M1.** Para reservas, M1 y M9 deben publicar el contrato de emisión del
+  token delegado del cliente. Configurar `M9_DISPATCH_AUTH_URL` y
+  `M9_DISPATCH_AUTH_TOKEN` en el entorno privado del Compose común cuando
+  esté disponible. Para que el aviso de asignación
+  incluya el nombre del conductor, configurar la misma `M1_INTERNAL_API_KEY`
+  en M1 y M8. M8 usa el `driverUserId` de RabbitMQ en
+  `GET /auth/usuarios/{driverUserId}/nombre`. Para el frontend común, mantener
+  el flujo de identidad y recuperación accesible desde el origen final.
 - **M2.** Usar el Compose con `M2_SOPORTE_SERVICE_URL=http://m8-app:3000`,
   `M2_STUBS_ENABLED=false` y la `M2_SOPORTE_SECRET_KEY` compartida. Aplicar
   la migración de revisión manual al desplegar M2 sobre un volumen existente.
 - **M3.** Asegurar la persistencia de vehículos y documentos para que M8
   pueda consultar el vehículo activo tras un reinicio del Compose común.
-- **M4 y M9.** Conectar el resolver de M9 a la geocodificación y estimación
-  de M4 en la red común. La prueba final debe usar la ruta real.
+- **M4 y M9.** El Compose de M9 usa el resolver de M4 en la red común.
+  Comprobar geocodificación y estimación dentro del recorrido de reserva.
 - **M5 y M9.** Confirmar que el despacho REST programado acepta el token
   delegado acordado con M1. Mantener documentado el límite de los eventos
   de M5 que no alcanzan a publicarse durante una caída del broker.

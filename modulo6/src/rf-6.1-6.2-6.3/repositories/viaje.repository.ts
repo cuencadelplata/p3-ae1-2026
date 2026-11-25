@@ -57,7 +57,7 @@ let extensionSchemaPromise: Promise<void> | undefined;
  * Versión del esquema que crea ESQUEMA_SQL. Subirla cada vez que se cambie ese SQL, para que
  * las bases existentes lo vuelvan a aplicar una vez.
  */
-const ESQUEMA_VERSION = 1;
+const ESQUEMA_VERSION = 4;
 
 async function ensureExtensionSchema(): Promise<void> {
     extensionSchemaPromise ??= aplicarEsquema().catch((error: unknown) => {
@@ -121,6 +121,13 @@ const ESQUEMA_SQL = `
         ALTER TABLE viajes ADD COLUMN IF NOT EXISTS driver_user_id BIGINT;
         ALTER TABLE viajes ADD COLUMN IF NOT EXISTS ride_request_id VARCHAR(100);
         ALTER TABLE viajes ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(255);
+        ALTER TABLE viajes ADD COLUMN IF NOT EXISTS destino_confirmado_at TIMESTAMPTZ;
+        ALTER TABLE viajes ADD COLUMN IF NOT EXISTS cancelado_por VARCHAR(20);
+        -- Recuperar el actor de cancelaciones anteriores desde el historial inmutable.
+        UPDATE viajes v SET cancelado_por = 'conductor'
+        WHERE v.estado = 'CANCELADO' AND v.cancelado_por IS NULL
+          AND EXISTS (SELECT 1 FROM viaje_transiciones t WHERE t.viaje_id = v.id
+            AND t.estado_nuevo = 'CANCELADO' AND t.detalle LIKE 'Cancelación de viaje por conductor%');
         -- RF-6.7: registro de viajes filtrado por conductor.
         CREATE INDEX IF NOT EXISTS viajes_conductor_id_fecha_idx
             ON viajes(conductor_id, fecha_creacion DESC, id DESC);
@@ -242,7 +249,9 @@ export async function buscarPorRideRequestId(rideRequestId?: string, idempotency
     if (filtros.length === 0) return null;
 
     const { rows } = await pool.query(
-        `SELECT * FROM viajes WHERE ${filtros.join(' OR ')} ORDER BY fecha_creacion DESC LIMIT 1`,
+        `SELECT * FROM viajes WHERE (${filtros.join(' OR ')})
+         AND NOT (estado = 'CANCELADO' AND COALESCE(cancelado_por, '') = 'conductor')
+         ORDER BY fecha_creacion DESC LIMIT 1`,
         params
     );
 
@@ -308,6 +317,28 @@ export async function buscarPorId(id: string): Promise<Viaje | null> {
 }
 
 /** RF-6.4: hora de fin registrada al finalizar el viaje (null si no fue finalizado). */
+export async function confirmarDestino(id: string, driverUserId: number): Promise<Date | null> {
+    await ensureExtensionSchema();
+    const { rows } = await pool.query(
+        `UPDATE viajes
+           SET destino_confirmado_at = COALESCE(destino_confirmado_at, now())
+         WHERE id = $1 AND estado = $2 AND driver_user_id = $3
+         RETURNING destino_confirmado_at`,
+        [id, EstadoViaje.EN_CURSO, driverUserId],
+    );
+    return rows[0]?.destino_confirmado_at ?? null;
+}
+
+export async function buscarInicioViaje(id: string, db: Pick<PoolClient, 'query'> = pool): Promise<Date | null> {
+    const { rows } = await db.query(
+        `SELECT timestamp FROM viaje_transiciones
+         WHERE viaje_id = $1 AND estado_nuevo = $2
+         ORDER BY id DESC LIMIT 1`,
+        [id, EstadoViaje.EN_CURSO],
+    );
+    return rows[0]?.timestamp ? new Date(rows[0].timestamp) : null;
+}
+
 export async function buscarHoraFin(id: string): Promise<Date | null> {
     await ensureExtensionSchema();
     const { rows } = await pool.query(
@@ -350,6 +381,7 @@ export async function estadisticasTripDb(): Promise<{
 export interface FiltrosRegistroViajes {
     clienteId?: string;
     conductorId?: string;
+    rideRequestId?: string;
     estado?: EstadoViaje;
     limit: number;
     offset: number;
@@ -371,6 +403,7 @@ export async function buscarRegistroViajes(
     };
     if (filtros.clienteId) agregar('viajes.cliente_id = ?', filtros.clienteId);
     if (filtros.conductorId) agregar('viajes.conductor_id = ?', filtros.conductorId);
+    if (filtros.rideRequestId) agregar('viajes.ride_request_id = ?', filtros.rideRequestId);
     if (filtros.estado) agregar('viajes.estado = ?', filtros.estado);
     const where = condiciones.length > 0 ? `WHERE ${condiciones.join(' AND ')}` : '';
 
@@ -395,6 +428,7 @@ async function conHistorial(rows: any[]): Promise<ViajeConHistorial[]> {
         return {
             id: viaje.id,
             clienteId: viaje.clienteId,
+            ...(viaje.rideRequestId ? { rideRequestId: viaje.rideRequestId } : {}),
             ...(viaje.conductorId ? { conductorId: viaje.conductorId } : {}),
             estado: viaje.estado,
             origen: viaje.origen,
@@ -466,8 +500,8 @@ export async function cancelarSiCancelable(
             return null;
         }
         const { rows } = await client.query(
-            `UPDATE viajes SET estado = $1 WHERE id = $2 RETURNING *`,
-            [EstadoViaje.CANCELADO, id]
+            `UPDATE viajes SET estado = $1, cancelado_por = $3 WHERE id = $2 RETURNING *`,
+            [EstadoViaje.CANCELADO, id, actor]
         );
         const detalle = [
             'Cancelación de viaje',
@@ -616,15 +650,7 @@ export async function finalizarSiEnCurso(
             return { kind: 'invalid-state', estado: viaje.estado };
         }
 
-        const inicioResult = await client.query(
-            `SELECT timestamp FROM viaje_transiciones
-             WHERE viaje_id = $1 AND estado_nuevo = $2
-             ORDER BY id DESC LIMIT 1`,
-            [id, EstadoViaje.EN_CURSO]
-        );
-        const inicio = inicioResult.rows[0]?.timestamp
-            ? new Date(inicioResult.rows[0].timestamp)
-            : viaje.fechaCreacion;
+        const inicio = (await buscarInicioViaje(id, client)) ?? viaje.fechaCreacion;
         const finalizacion = await ejecutarFinalizacion(viaje, inicio);
 
         const { rows } = await client.query(
@@ -767,6 +793,7 @@ function mapRow(row: any): Viaje {
         id: row.id,
         clienteId: row.cliente_id,
         clientUserId: toIntOrNull(row.client_user_id),
+        canceladoPor: row.cancelado_por ?? null,
         conductorId: row.conductor_id,
         driverUserId: toIntOrNull(row.driver_user_id),
         rideRequestId: row.ride_request_id ?? null,
@@ -777,6 +804,7 @@ function mapRow(row: any): Viaje {
         codigoVerificacion: row.codigo_verificacion,
         qrCode: row.qr_data_url,
         qrExpiresAt: row.qr_expires_at,
+        destinoConfirmadoAt: row.destino_confirmado_at ?? null,
         fechaCreacion: row.fecha_creacion,
     };
 }

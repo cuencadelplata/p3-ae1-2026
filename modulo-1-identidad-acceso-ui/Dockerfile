@@ -13,7 +13,10 @@ RUN npm ci
 COPY . .
 
 ARG VITE_API_URL=http://localhost:10000
+# Clave pública de Mercado Pago (la de M7) para tokenizar tarjetas en el navegador.
+ARG VITE_MP_PUBLIC_KEY=
 ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_MP_PUBLIC_KEY=${VITE_MP_PUBLIC_KEY}
 
 RUN npm run build
 

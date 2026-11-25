@@ -19,10 +19,12 @@ export interface Viaje {
     rideRequestId?: string | null;
     idempotencyKey?: string | null;
     estado: EstadoViaje;
+    canceladoPor?: 'cliente' | 'conductor' | null;
     origen: string;
     destino: string;
     codigoVerificacion: string | null;
     qrCode: string | null;
     qrExpiresAt: Date | null;
+    destinoConfirmadoAt?: Date | null;
     fechaCreacion: Date;
 }

@@ -17,7 +17,7 @@ import {
 } from "./normalized-trip-notification.service";
 import { mapTripEventEnvelope } from "./trip-event-envelope.mapper";
 import type { LogicalNotification, NotificationRequestedEnvelope } from "./notification.types";
-import type { DriverNameLookup } from "./m3-driver-profile.client";
+import type { DriverNameLookup } from "./m1-driver-name.client";
 import type { ActiveVehicleLookup } from "./m3-vehicle.client";
 
 export interface Rf81Application {

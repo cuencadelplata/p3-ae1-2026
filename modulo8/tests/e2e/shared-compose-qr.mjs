@@ -11,6 +11,7 @@ const m1 = process.env.M1_TEST_URL || `http://localhost:${process.env.M1_HOST_PO
 const m3 = process.env.M3_CONDUCTOR_TEST_URL || 'http://localhost:5000';
 const m6 = process.env.M6_TEST_URL || `http://localhost:${process.env.M6_VIAJES_HOST_PORT || 15000}`;
 const m8 = process.env.M8_TEST_URL || `http://localhost:${process.env.M8_HOST_PORT || 18000}`;
+const m4 = process.env.M4_TEST_URL || 'http://localhost:3004';
 const apiKey = process.env.QR_INTERNAL_API_KEY;
 assert.ok(apiKey && apiKey.length >= 16, 'Configurar QR_INTERNAL_API_KEY compartida con M6');
 
@@ -55,14 +56,42 @@ const assigned = await request(m6, `/api/viajes/${tripId}/asignar`, 'POST', {
   conductorId: String(driver.userId), driverUserId: driver.userId,
 });
 assert.equal(assigned.status, 200, JSON.stringify(assigned.data));
-const arrived = await request(m6, `/api/viajes/${tripId}/arribo`, 'PUT', {});
+const arriboPath = `/api/viajes/${tripId}/arribo`;
+const inicioPath = `/api/viajes/${tripId}/iniciar`;
+const passengerHeaders = { authorization: `Bearer ${client.token}` };
+const driverHeaders = { authorization: `Bearer ${driver.token}` };
+const stranger = await m1User('CLIENTE');
+const strangerHeaders = { authorization: `Bearer ${stranger.token}` };
+assert.equal((await request(m6, arriboPath, 'PUT', {})).status, 401);
+assert.equal((await request(m6, arriboPath, 'PUT', {}, strangerHeaders)).status, 403);
+assert.equal((await request(m6, arriboPath, 'PUT', {}, driverHeaders)).status, 403);
+const arrived = await request(m6, arriboPath, 'PUT', {}, passengerHeaders);
 assert.equal(arrived.status, 200, JSON.stringify(arrived.data));
 assert.ok(arrived.data.qr?.token, 'M6 debe recibir un QR generado por M8 real');
 assert.match(arrived.data.qr.qrDataUrl, /^data:image\/png;base64,/);
-const started = await request(m6, `/api/viajes/${tripId}/iniciar`, 'POST', { token: arrived.data.qr.token });
+const code = { token: arrived.data.qr.token };
+assert.equal((await request(m6, inicioPath, 'POST', code, passengerHeaders)).status, 403);
+const started = await request(m6, inicioPath, 'POST', code, driverHeaders);
 assert.equal(started.status, 200, JSON.stringify(started.data));
 const trip = await request(m6, `/api/viajes/${tripId}`);
 assert.equal(trip.data.estado, 'EN_CURSO');
+assert.ok(Number.isFinite(Date.parse(trip.data.iniciadoAt)), 'La hora de inicio debe venir del historial');
+assert.ok(Date.parse(trip.data.iniciadoAt) >= Date.parse(trip.data.fechaCreacion));
+assert.equal((await request(m6, `/api/viajes/${tripId}`)).data.iniciadoAt, trip.data.iniciadoAt);
+const location = { latitude: -27.4701, longitude: -58.8301, vehicleType: 'AUTO', available: false };
+const trackingPath = '/api/v1/trips/' + tripId + '/driver-location';
+const locationPath = '/api/v1/drivers/' + driver.userId + '/location';
+assert.equal((await request(m4, locationPath, 'PUT', location, driverHeaders)).status, 200);
+assert.equal((await request(m4, trackingPath, 'GET', undefined, strangerHeaders)).status, 403);
+const position = await request(m4, trackingPath, 'GET', undefined, passengerHeaders);
+assert.equal(position.status, 200);
+assert.equal(position.data.latitude, location.latitude);
+assert.equal(position.data.longitude, location.longitude);
+const moved = { ...location, longitude: -58.8291 };
+assert.equal((await request(m4, locationPath, 'PUT', moved, driverHeaders)).status, 200);
+assert.equal((await request(m4, trackingPath, 'GET', undefined, passengerHeaders)).data.longitude, moved.longitude);
+assert.equal((await request(m6, '/api/viajes/' + tripId + '/destino', 'POST', {}, driverHeaders)).status, 200);
+assert.equal((await request(m4, trackingPath, 'GET', undefined, passengerHeaders)).status, 404);
 const reused = await request(m8, '/qr/validate', 'POST', { tripId, token: arrived.data.qr.token }, {
   'x-api-key': apiKey, 'Idempotency-Key': randomUUID(),
 });

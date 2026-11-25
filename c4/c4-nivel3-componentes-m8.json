@@ -1,0 +1,349 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C4 · Nivel 3 — Componentes de M8 Notificaciones y soporte",
+    "locale": "es",
+    "output": "c4/c4-nivel3-componentes-m8.html",
+    "quality_profile": "showcase",
+    "parentHref": "c4-nivel2-contenedores.html",
+    "repository": {
+      "url": "https://github.com/cuencadelplata/p3-ae1-2026.git",
+      "provider": "github",
+      "revision": "687a636f0d66acc26bcde86dce442d4778e37dd8"
+    }
+  },
+  "layout": {
+    "mode": "auto"
+  },
+  "components": [
+    {
+      "id": "operador",
+      "type": "external",
+      "label": "Operador de soporte",
+      "sublabel": "rol OPERADOR"
+    },
+    {
+      "id": "m6",
+      "type": "external",
+      "label": "M6 Viajes",
+      "sublabel": "pide QR · valida viajes"
+    },
+    {
+      "id": "m2",
+      "type": "external",
+      "label": "M2 Clientes",
+      "sublabel": "penalizaciones · preferencias · desbloqueo"
+    },
+    {
+      "id": "qr",
+      "type": "backend",
+      "label": "QR",
+      "sublabel": "POST /qr · /qr/validate",
+      "sources": [
+        {
+          "path": "modulo8/services/qr/src/qr.controller.ts",
+          "line": 84,
+          "end_line": 85,
+          "label": "rutas"
+        },
+        {
+          "path": "modulo8/services/qr/src/qr.redis-store.ts",
+          "line": 1,
+          "label": "almacenamiento"
+        }
+      ]
+    },
+    {
+      "id": "receipts",
+      "type": "backend",
+      "label": "Comprobantes",
+      "sublabel": "/receipts · PDF · reenvío",
+      "explanation": "Arma el comprobante al consumir trip.completed: verifica el viaje en M6, el pago en M7 y los datos del conductor en M3.",
+      "sources": [
+        {
+          "path": "modulo8/services/receipts/src/routes/receipt.routes.ts",
+          "line": 23,
+          "end_line": 27,
+          "label": "rutas"
+        },
+        {
+          "path": "modulo8/services/receipts/src/messaging/trip-completed.ts",
+          "line": 15,
+          "label": "trip.completed"
+        }
+      ]
+    },
+    {
+      "id": "support",
+      "type": "backend",
+      "label": "Soporte",
+      "sublabel": "tickets · penalizaciones · desbloqueo",
+      "explanation": "Tickets por viaje; el operador confirma penalizaciones (vigentes 90 días) y pide el desbloqueo de cuentas a M2.",
+      "sources": [
+        {
+          "path": "modulo8/services/support/src/http/penalties.ts",
+          "line": 13,
+          "end_line": 15,
+          "label": "rutas"
+        },
+        {
+          "path": "modulo8/services/support/src/integrations/m2-account-review.ts",
+          "line": 17,
+          "label": "desbloqueo en M2"
+        }
+      ]
+    },
+    {
+      "id": "notif",
+      "type": "backend",
+      "label": "Notificaciones",
+      "sublabel": "consume eventos y arma el aviso",
+      "sources": [
+        {
+          "path": "modulo8/services/notifications/src/messaging/m5-trip-events.consumer.ts",
+          "line": 13,
+          "label": "eventos de M5"
+        },
+        {
+          "path": "modulo8/services/notifications/src/messaging/m3-driver-document-registered.consumer.ts",
+          "line": 12,
+          "label": "documentos de M3"
+        }
+      ]
+    },
+    {
+      "id": "delivery",
+      "type": "backend",
+      "label": "Entrega",
+      "sublabel": "push web · correo · tokens de dispositivo",
+      "sources": [
+        {
+          "path": "modulo8/services/notification-delivery/src/http/delivery.router.ts",
+          "line": 109,
+          "label": "tokens"
+        },
+        {
+          "path": "modulo8/services/notification-delivery/src/infrastructure/clients/m2-preferences.client.ts",
+          "line": 29,
+          "label": "preferencias en M2"
+        }
+      ]
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "m8-postgres",
+      "sublabel": "notificaciones · comprobantes · soporte · entrega",
+      "sources": [
+        {
+          "path": "modulo8/services/support/src/db/config.ts",
+          "line": 24,
+          "label": "soporte"
+        },
+        {
+          "path": "modulo8/services/receipts/src/config/env.ts",
+          "line": 70,
+          "label": "comprobantes"
+        }
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": "QR y caché"
+    },
+    {
+      "id": "rabbit",
+      "type": "messagebus",
+      "label": "RabbitMQ",
+      "sublabel": "mobility.events · m3.eventos · m1.eventos",
+      "sources": [
+        {
+          "path": "modulo8/services/shared/src/messaging/topology.ts",
+          "line": 3,
+          "label": "exchange principal"
+        }
+      ]
+    },
+    {
+      "id": "otros",
+      "type": "external",
+      "label": "M1, M3 y M7",
+      "sublabel": "identidad · conductor · pagos",
+      "sources": [
+        {
+          "path": "modulo8/services/notifications/src/notifications/m1-driver-name.client.ts",
+          "line": 3,
+          "label": "nombre del conductor"
+        },
+        {
+          "path": "modulo8/services/notifications/src/notifications/m3-vehicle.client.ts",
+          "line": 16,
+          "label": "vehículo activo"
+        },
+        {
+          "path": "modulo8/services/receipts/src/integrations/m7-payments.ts",
+          "line": 7,
+          "label": "consulta"
+        }
+      ]
+    },
+    {
+      "id": "push",
+      "type": "external",
+      "label": "Web Push / SMTP",
+      "sublabel": "navegadores y correo",
+      "sources": [
+        {
+          "path": "modulo8/services/notification-delivery/src/infrastructure/provider/web-push-provider.ts",
+          "line": 1,
+          "label": "Web Push"
+        },
+        {
+          "path": "modulo8/services/notification-delivery/src/infrastructure/provider/smtp-email-sender.ts",
+          "line": 1,
+          "label": "SMTP"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "m8-app (:18000)",
+      "wraps": [
+        "qr",
+        "receipts",
+        "support",
+        "notif",
+        "delivery",
+        "pg"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "operador-support",
+      "from": "operador",
+      "to": "support",
+      "label": "tickets y penalizaciones",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m6-qr",
+      "from": "m6",
+      "to": "qr",
+      "label": "genera y valida QR"
+    },
+    {
+      "id": "m6-receipts",
+      "from": "m6",
+      "to": "receipts",
+      "label": "comprobante"
+    },
+    {
+      "id": "m2-support",
+      "from": "m2",
+      "to": "support",
+      "label": "penalizaciones vigentes (X-Secret-Key)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "support-m2",
+      "from": "support",
+      "to": "m2",
+      "label": "desbloqueo por revisión",
+      "variant": "emphasis"
+    },
+    {
+      "id": "delivery-m2",
+      "from": "delivery",
+      "to": "m2",
+      "label": "preferencias"
+    },
+    {
+      "id": "qr-redis",
+      "from": "qr",
+      "to": "redis"
+    },
+    {
+      "id": "receipts-pg",
+      "from": "receipts",
+      "to": "pg"
+    },
+    {
+      "id": "support-pg",
+      "from": "support",
+      "to": "pg"
+    },
+    {
+      "id": "notif-pg",
+      "from": "notif",
+      "to": "pg",
+      "label": "outbox"
+    },
+    {
+      "id": "delivery-pg",
+      "from": "delivery",
+      "to": "pg"
+    },
+    {
+      "id": "rabbit-receipts",
+      "from": "rabbit",
+      "to": "receipts",
+      "label": "trip.completed",
+      "variant": "dashed"
+    },
+    {
+      "id": "rabbit-notif",
+      "from": "rabbit",
+      "to": "notif",
+      "label": "eventos de M5, M6 y M3",
+      "variant": "dashed"
+    },
+    {
+      "id": "rabbit-delivery",
+      "from": "rabbit",
+      "to": "delivery",
+      "label": "pedidos de notificación · recuperación (M1)",
+      "variant": "dashed"
+    },
+    {
+      "id": "receipts-otros",
+      "from": "receipts",
+      "to": "otros",
+      "label": "pago (M7) · conductor (M3)"
+    },
+    {
+      "id": "notif-otros",
+      "from": "notif",
+      "to": "otros",
+      "label": "nombre (M1) · vehículo (M3)"
+    },
+    {
+      "id": "support-otros",
+      "from": "support",
+      "to": "otros",
+      "label": "valida OPERADOR (M1)",
+      "variant": "security"
+    },
+    {
+      "id": "delivery-push",
+      "from": "delivery",
+      "to": "push",
+      "label": "envía"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Circuito de penalizaciones",
+      "items": [
+        "El operador confirma una penalización por viaje (una sola, vigente 90 días)",
+        "M2 las consulta y bloquea; Soporte revisa y llama al desbloqueo de M2"
+      ]
+    }
+  ]
+}

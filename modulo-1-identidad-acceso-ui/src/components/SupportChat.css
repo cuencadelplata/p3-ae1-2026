@@ -1,0 +1,61 @@
+.support-chat {
+  margin-top: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  overflow: hidden;
+  background: #141414;
+  min-width: 0;
+}
+
+.support-chat__header,
+.support-chat__composer {
+  padding: 0.85rem;
+  background: #1b1b1a;
+}
+
+.support-chat__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.support-chat__header h3 { font-weight: 600; }
+.support-chat__status { color: var(--accent); font-size: 0.8rem; }
+
+.support-chat__scroll { max-height: min(52vh, 26rem); min-height: 8rem; overflow-y: auto; padding: 0.85rem; }
+.support-chat__messages { display: grid; gap: 0.65rem; }
+.support-chat__messages li { display: flex; flex-direction: column; }
+.support-chat__event { margin: 0.1rem auto 0.5rem; color: #c0c2b8; font-size: 0.75rem; }
+
+.support-chat__bubble {
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 88%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #3d3d36;
+  border-radius: 0.25rem 0.85rem 0.85rem;
+  background: #222220;
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+
+.support-chat__bubble[data-own='true'] {
+  align-self: flex-end;
+  border-color: #555f29;
+  border-radius: 0.85rem 0.25rem 0.85rem 0.85rem;
+  background: #272e17;
+}
+
+.support-chat__bubble strong,
+.support-chat__bubble time { display: block; font-size: 0.72rem; color: #c0c2b8; }
+.support-chat__bubble[data-own='true'] strong { color: var(--accent); }
+.support-chat__bubble p { margin: 0.25rem 0; white-space: pre-wrap; }
+.support-chat__composer { display: grid; gap: 0.6rem; border-top: 1px solid var(--line); }
+.support-chat__state { display: grid; gap: 0.3rem; font-size: 0.8rem; }
+.support-chat__compose-row { display: flex; gap: 0.55rem; align-items: flex-end; flex-wrap: wrap; }
+.support-chat__compose-row textarea { flex: 1 1 12rem; min-width: 0; resize: vertical; }
+.support-chat__compose-row button { display: inline-flex; align-items: center; gap: 0.35rem; }
+.support-chat__notice { padding: 0.35rem 0.85rem; font-size: 0.83rem; }

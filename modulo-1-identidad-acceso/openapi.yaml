@@ -252,6 +252,7 @@ paths:
                   message: { type: string }
                   userId: { type: integer, example: 1 }
                   revocadasDesde: { type: integer, description: Momento de la revocacion en segundos (epoch), example: 1791157356 }
+                  revocadasDesdeMs: { type: integer, description: Momento exacto de la revocacion en milisegundos (epoch). Los JWT emitidos antes, aunque sea en el mismo segundo, quedan revocados, example: 1791157356421 }
         '401':
           $ref: '#/components/responses/Unauthorized'
         '503':
@@ -345,12 +346,63 @@ paths:
         '200':
           description: Perfil completo del usuario e identidades vinculadas
 
+  /auth/token-delegado:
+    post:
+      tags: [Identidad y acceso]
+      summary: Token delegado para M9 (reservas programadas)
+      description: >-
+        Lo usa M9 cuando llega la hora de una reserva y el pasajero no esta conectado. Se
+        autentica con su credencial de servicio (Bearer, variable M9_DISPATCH_AUTH_TOKEN) y
+        recibe un JWT de M1 de vida corta a nombre del cliente, que M5 acepta como el de un
+        pasajero. Solo para clientes activos. El token lleva sub (cliente), aud "m5",
+        scope "ride-requests:write", authMethod "delegated" y act.sub "m9-reservas-programadas".
+        Valida como cualquier JWT en /auth/validar-identidad-y-rol.
+      security: [{ credencialServicioM9: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientId, audience, scope]
+              properties:
+                clientId: { type: string, description: Id numerico del cliente en M1 (tambien se acepta number), example: '101' }
+                audience: { type: string, enum: [m5] }
+                scope: { type: string, enum: ['ride-requests:write'] }
+      responses:
+        '200':
+          description: Token emitido (Cache-Control no-store)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  token_type: { type: string, example: Bearer }
+                  expires_in: { type: integer, description: Vida en segundos (300 por defecto), example: 300 }
+                  audience: { type: string, example: m5 }
+                  scope: { type: string, example: 'ride-requests:write' }
+        '400':
+          description: clientId invalido (invalid_request) u otro audience o scope (invalid_scope)
+        '401':
+          description: Falta la credencial de servicio o no coincide (invalid_client)
+        '403':
+          description: El usuario no es un cliente activo (cliente_no_habilitado)
+        '404':
+          description: El cliente no existe (cliente_inexistente)
+        '503':
+          description: M1 no tiene configurada la credencial de M9 (delegacion_no_configurada)
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    credencialServicioM9:
+      type: http
+      scheme: bearer
+      description: Credencial de servicio compartida con M9 (no es un JWT)
   schemas:
     UserRole:
       type: string

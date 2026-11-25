@@ -190,6 +190,7 @@ export interface NotificationRequestedData {
   recipientId: number;
   eventType: DeliveryNotificationEventType;
   channel: NotificationChannel;
+  title?: string;
   message: string;
   createdAt: string;
 }

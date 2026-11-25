@@ -40,11 +40,10 @@ node scripts/check-real-routes.mjs
 Para el stack real (sin la demo), M9 usa `ROUTE_RESOLVER_MODE=m4` y
 `M4_BASE_URL=http://m4-api:3004` dentro de Docker. El emisor de autorización
 acordado con M1/M5 debe configurarse mediante `M9_DISPATCH_AUTH_URL` y
-`M9_DISPATCH_AUTH_TOKEN`, fuera de Git. La versión actual de M1 no publica
-ese endpoint: no reemplazarlo por el login del pasajero ni por una URL inventada.
-El adaptador preparado espera un POST con `{clientId, audience: "m5", scope:
-"ride-requests:write"}` y una respuesta `{access_token}` validable por M1.
-Confirmar ese contrato con los responsables antes de usarlo.
+`M9_DISPATCH_AUTH_TOKEN`, fuera de Git. En el Compose común, el emisor de M1
+está en `http://m1-identidad-acceso:3001/auth/token-delegado`. Recibe un POST con
+`{clientId, audience: "m5", scope: "ride-requests:write"}` y devuelve
+`{access_token}`. M9 lo usa para crear la solicitud y pedir el envío de ofertas a M5.
 
 Un error al resolver la ruta conserva la reserva `PROGRAMADA` y se reintenta;
 no se envía una solicitud sin coordenadas. Las reservas que ya terminaron
@@ -167,5 +166,5 @@ Sin observabilidad: `npm run integration:stop`. Si se inició M4, detener con `n
 - `test:e2e` usa stubs en un proyecto Docker aleatorio, puertos propios y volúmenes temporales. No baja el stack compartido ni demuestra integración real.
 - `npm run integration:check:activation` exige una aceptación real en M5 y confirma ACTIVADA y el mismo conductor en ambos módulos. Requiere candidatos elegibles y un conductor operando M5; no simula su aceptación.
 - M9 envía `assignmentCriteria: MEJOR_VALORACION`. El M5 actual ordena por distancia, puede crear varias ofertas pendientes e ignora ese criterio: RF-9.7 sigue pendiente en M5 y no debe aprobarse por los stubs.
-- Para varios clientes, el scheduler usa `M9_DISPATCH_AUTH_URL` con `M9_DISPATCH_AUTH_TOKEN`. Contrato propuesto: POST `{clientId, audience: "m5", scope: "ride-requests:write"}`, respuesta `{access_token}`. M9 valida el token contra M1 y comprueba cliente, rol, subject y vencimiento (más de 30 s), sin guardar JWT de pasajeros. El emisor debe autorizar creación, consulta y cancelación de solicitudes en M5. **El emisor todavía debe acordarse e implementarse en M1**; sin él el scheduler falla cerrado.
+- Para varios clientes, el scheduler obtiene de M1 un token delegado mediante `M9_DISPATCH_AUTH_URL` y `M9_DISPATCH_AUTH_TOKEN`. Valida cliente, rol, subject y vencimiento y usa ese token para operar en M5 sin guardar JWT de pasajeros.
 - Una activación REST abandonada sin solicitud se recupera tras `ACTIVATION_RECOVERY_TIMEOUT_MS` (120 s por defecto), conservando la clave de idempotencia. No se recuperan de esta forma activaciones recientes o con solicitud confirmada.

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { initTokenFromUrl, resolverMiPerfil, prepararPerfilDePrueba, getToken } from '../api';
+import { initTokenFromUrl, initVolverFromUrl, volverALaApp, resolverMiPerfil, prepararPerfilDePrueba, getToken } from '../api';
 
 /**
  * Index del front.
@@ -28,6 +28,7 @@ export default function Home() {
 
   // Al montar: si llegó un token (por URL o sesión previa), resolver el perfil del flujo real.
   useEffect(() => {
+    initVolverFromUrl();
     const vieneDeUrl = initTokenFromUrl();
     const hayToken = getToken() !== null;
 
@@ -40,6 +41,8 @@ export default function Home() {
     resolverMiPerfil()
       .then(({ profile }) => {
         if (profile) {
+          // Ya tiene perfil: si vino derivado desde la app, vuelve ahí.
+          if (volverALaApp()) return;
           navigate(`/customers/${profile.customerId}`, { replace: true });
         } else {
           navigate('/onboarding', { replace: true }); // 404 → completar perfil

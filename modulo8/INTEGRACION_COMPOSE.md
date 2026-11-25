@@ -21,6 +21,13 @@ de M8 leen esa misma variable. Las credenciales `RABBITMQ_USER` y
 Las contraseñas `M8_*` son exclusivas de la base de M8 y no cambian las de M9.
 `M1_JWT_SECRET` es la clave común de M1, M3, M5 y M8. Como alternativa
 se admite `JWT_SECRET`; si ambas existen, prevalece `M1_JWT_SECRET`.
+`M1_INTERNAL_API_KEY` es la clave compartida de M1 y M8 para consultar el
+nombre de un conductor. Definirla en el `.env` de la raíz o en el archivo
+privado que se pasa con `--env-file`, según cómo se levante el Compose común.
+El Compose usa `matsir/m1-identidad-acceso:ae4-v1.1`, que incluye esta ruta.
+M8 usa `http://m1-identidad-acceso:3001` como URL base del perfil. Si el
+nombre de servicio cambia, definir `M8_M1_PROFILES_BASE_URL` con la URL
+base interna de M1.
 `M2_INTERNAL_API_KEY` debe coincidir con el contrato privado
 de esos módulos cuando se prueben sus funcionalidades.
 

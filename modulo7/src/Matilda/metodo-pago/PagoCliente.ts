@@ -15,7 +15,24 @@ export interface ResultadoPagoMP {
   statusDetail?: string;
 }
 
-const ESTADOS_RECHAZADOS = ["rejected", "cancelled", "refunded", "charged_back"];
+const ESTADOS_RECHAZADOS = ["rejected", "cancelled"];
+
+export async function confirmarRechazoMercadoPago(idOrden: string): Promise<boolean> {
+  const params = new URLSearchParams({
+    external_reference: idOrden, sort: "date_created", criteria: "desc", limit: "1",
+  });
+  const response = await fetch(`${config.mpBaseUrl}/v1/payments/search?${params}`, {
+    headers: { authorization: `Bearer ${config.mpAccessToken}` },
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!response.ok) throw new Error("No se pudo verificar el rechazo en Mercado Pago");
+
+  const { paging, results } = await response.json();
+  // Un resultado vacío puede deberse a demora en la indexación. Hace falta un
+  // rechazo explícito de la única orden que usa M6 para el viaje.
+  return paging?.total === 1 && results?.length === 1 &&
+    results[0].external_reference === idOrden && ESTADOS_RECHAZADOS.includes(results[0].status);
+}
 
 export async function procesarPagoMercadoPago(datos: DatosPagoMP): Promise<ResultadoPagoMP> {
   const response = await fetch(`${config.mpBaseUrl}/v1/payments`, {

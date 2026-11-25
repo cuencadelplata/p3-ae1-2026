@@ -352,9 +352,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/Mensaje"
 
+    patch:
+      summary: Reemplaza una tarjeta rechazada por efectivo o transferencia
+      description: Verifica el rechazo en Mercado Pago y registra el nuevo medio como pendiente de cobro.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tipo]
+              properties:
+                tipo: { type: string, enum: [efectivo, transferencia] }
+      responses:
+        '200':
+          description: Medio registrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetodoPago"
+        '400':
+          description: Medio inválido
+        '404':
+          description: El viaje no tiene pago registrado
+        '409':
+          description: La tarjeta no se puede reemplazar o el rechazo aún no está confirmado
+        '503':
+          description: No se pudo verificar o registrar el cambio
+
   /metodo-pago/{viajeId}/autorizar:
     post:
-      summary: Autoriza el cobro de un método de pago pendiente vía Mercado Pago
+      summary: Autoriza el cobro con tarjeta vía Mercado Pago
       description: >
         RF-7.3. Procesa el cobro en Mercado Pago y cambia el estado de "pendiente" a "autorizado".
         Requiere los datos del token de pago generado en el frontend con el SDK de MP.
@@ -395,7 +430,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Mensaje"
         '402':
-          description: El pago no fue aprobado por Mercado Pago
+          description: Mercado Pago rechazó el pago
           content:
             application/json:
               schema:
@@ -404,6 +439,8 @@ paths:
                   mensaje: { type: string, example: "El pago no fue aprobado por Mercado Pago" }
                   estadoMP: { type: string, example: "rejected" }
                   detalle: { type: string, example: "cc_rejected_insufficient_amount" }
+        '409':
+          description: El pago continúa en verificación o ya tiene otra orden registrada
 
   /metodo-pago/{viajeId}/rechazar:
     post:

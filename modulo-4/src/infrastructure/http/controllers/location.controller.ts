@@ -85,6 +85,47 @@ export class LocationController {
     }
   };
 
+  public getTripDriverLocation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const authorization = req.get('authorization');
+      if (!authorization || !/^Bearer [^ ]+$/i.test(authorization)) {
+        res.status(401).json({ error: { message: 'Iniciá sesión para ver la ubicación del conductor.' } });
+        return;
+      }
+      const m6 = process.env.M6_TRACKING_BASE_URL;
+      if (!m6) {
+        res.status(503).json({ error: { message: 'Seguimiento temporalmente no disponible.' } });
+        return;
+      }
+      const tripId = encodeURIComponent(String(req.params.tripId));
+      const cleanBase = m6.replace(/\/+$/, '');
+      const lookup = await fetch(cleanBase + '/api/viajes/' + tripId + '/seguimiento', {
+        headers: { Authorization: authorization },
+        signal: AbortSignal.timeout(3000),
+        redirect: 'error',
+      });
+      if (!lookup.ok) {
+        const status = [401, 403, 404].includes(lookup.status) ? lookup.status : 503;
+        res.status(status).json({ error: { message: 'No se pudo consultar el seguimiento de este viaje.' } });
+        return;
+      }
+      const { driverUserId } = await lookup.json() as { driverUserId: unknown };
+      if (typeof driverUserId !== 'number' || !Number.isSafeInteger(driverUserId) || driverUserId < 1) {
+        res.status(503).json({ error: { message: 'No se pudo obtener el conductor asignado.' } });
+        return;
+      }
+      const location = await this.locationRepository.get(driverUserId);
+      if (!location) {
+        res.status(404).json({ error: { message: 'El conductor aún no compartió su ubicación.' } });
+        return;
+      }
+      res.set('Cache-Control', 'private, no-store');
+      res.json({ latitude: location.latitude, longitude: location.longitude, updatedAt: location.updatedAt });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   public getLocationHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const driverId = this.parseDriverIdParam(req.params.driverId);

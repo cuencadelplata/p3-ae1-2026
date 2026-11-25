@@ -16,6 +16,7 @@ vi.mock("../infraestructura/redis", () => {
       get: vi.fn(),
       set: vi.fn(),
       del: vi.fn(),
+      eval: vi.fn().mockResolvedValue(1),
     },
     redisBreaker: {
       ejecutar: vi.fn(async (fn: any) => await fn()),
@@ -168,7 +169,7 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
     });
 
     builder.maybeSingle.mockResolvedValueOnce({
-      data: filaPago({ viaje_Id: "viaje-http-3" }),
+      data: filaPago({ viaje_Id: "viaje-http-3", tipo: "tarjeta" }),
       error: null,
     });
     builder.single.mockResolvedValueOnce({
@@ -201,7 +202,7 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
     });
 
     builder.maybeSingle.mockResolvedValueOnce({
-      data: filaPago({ viaje_Id: "viaje-sin-moneda" }),
+      data: filaPago({ viaje_Id: "viaje-sin-moneda", tipo: "tarjeta" }),
       error: null,
     });
     builder.single.mockResolvedValueOnce({
@@ -240,6 +241,7 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
   });
 
   it("devuelve 402 si Mercado Pago rechaza el pago", async () => {
+    builder.maybeSingle.mockResolvedValueOnce({ data: filaPago({ tipo: "tarjeta" }), error: null });
     (fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ id: "mp-mock-rejected", status: "rejected", transaction_amount: 1500 }),
@@ -265,6 +267,44 @@ describe("POST /metodo-pago/:viajeId/autorizar", () => {
       .send({ idOrden: "orden-x", total: 1000, token: "tok", paymentMethodId: "visa", email: "a@b.com" });
 
     expect(respuesta.status).toBe(400);
+  });
+});
+
+describe("PATCH /metodo-pago/:viajeId", () => {
+  it.each(["efectivo", "transferencia"])("permite %s después de un rechazo confirmado", async (tipo) => {
+    builder.maybeSingle.mockResolvedValueOnce({ data: filaPago({ tipo: "tarjeta" }), error: null });
+    builder.single.mockResolvedValueOnce({ data: filaPago({ tipo }), error: null });
+    const gateway = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ paging: { total: 1 }, results: [{ external_reference: "ORD-viaje-test", status: "rejected" }] }),
+    });
+    vi.stubGlobal("fetch", gateway);
+    try {
+      const response = await request(app).patch("/metodo-pago/viaje-test").send({ tipo });
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ tipo, estado: "pendiente" });
+      expect(new URL(gateway.mock.calls[0][0]).searchParams.get("external_reference")).toBe("ORD-viaje-test");
+      expect(redis.del).toHaveBeenCalledWith("m7:metodo-pago:viaje-test");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each(["approved", "in_process", undefined])("conserva tarjeta si Mercado Pago devuelve %s", async (status) => {
+    builder.maybeSingle.mockResolvedValueOnce({ data: filaPago({ tipo: "tarjeta" }), error: null });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => status
+        ? { paging: { total: 1 }, results: [{ external_reference: "ORD-viaje-test", status }] }
+        : { paging: { total: 0 }, results: [] },
+    }));
+    try {
+      const response = await request(app).patch("/metodo-pago/viaje-test").send({ tipo: "efectivo" });
+      expect(response.status).toBe(409);
+      expect(builder.update).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

@@ -4,7 +4,7 @@ import axios from 'axios'
 import { API_URL } from '../api'
 
 interface RegisterProps {
-  onRegisterSuccess: (token: string, user: any) => void
+  onRegisterSuccess: (token: string) => void
   onSwitchToLogin: () => void
 }
 
@@ -51,10 +51,7 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin }: Registe
       })
 
       const { token } = loginResponse.data
-      const parts = token.split('.')
-      const decoded = JSON.parse(atob(parts[1]))
-
-      onRegisterSuccess(token, { ...decoded, ...loginResponse.data.usuario })
+      onRegisterSuccess(token)
     } catch (err: any) {
       setError(err.response?.data?.error || err.response?.data?.message || 'Error al registrarse')
     } finally {
