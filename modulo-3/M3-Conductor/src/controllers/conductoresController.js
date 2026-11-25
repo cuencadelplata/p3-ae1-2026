@@ -129,7 +129,8 @@ const crearConductor = async (req, res) => {
       tipovehiculo: nuevoConductorModel.tipovehiculo || req.body.tipovehiculo,
       licenciaId: nuevoConductorModel.licenciaId || req.body.licenciaId,
       vehiculoId: nuevoConductorModel.vehiculoId || req.body.vehiculoId,
-      habilitado: (req.body && req.body.habilitado) || 'activo',
+      // El alta publica no debe permitir autoaprobacion del conductor.
+      habilitado: 'pendiente',
       estado_conexion: nuevoConductorModel.estado_conexion || 'desconectado'
     };
 
