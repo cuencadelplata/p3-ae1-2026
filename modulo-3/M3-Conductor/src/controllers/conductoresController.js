@@ -129,11 +129,12 @@ const crearConductor = async (req, res) => {
       tipovehiculo: nuevoConductorModel.tipovehiculo || req.body.tipovehiculo,
       licenciaId: nuevoConductorModel.licenciaId || req.body.licenciaId,
       vehiculoId: nuevoConductorModel.vehiculoId || req.body.vehiculoId,
-      habilitado: nuevoConductorModel.habilitado || 'pendiente',
+      habilitado: (req.body && req.body.habilitado) || 'activo',
       estado_conexion: nuevoConductorModel.estado_conexion || 'desconectado'
     };
 
     const conductorCreado = await redisRepository.crearConductor(datos);
+    await redisRepository.actualizarHabilitado(conductorCreado.usuarioID, datos.habilitado);
     return res.status(201).json(conductorCreado);
   } catch (error) {
     return res.status(400).json({ error: 'Solicitud inválida al crear conductor', detalle: error.message });

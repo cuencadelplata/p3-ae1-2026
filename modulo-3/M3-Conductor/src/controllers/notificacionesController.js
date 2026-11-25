@@ -23,7 +23,9 @@ async function obtenerPendientes(_req, res) {
  */
 async function demoViajeFinalizado(req, res) {
   try {
-    const resultado = await ejecutarDemoViajeFinalizado(req.body || {});
+    const resultado = await ejecutarDemoViajeFinalizado(req.body || {}, {
+      authorization: req.headers && req.headers.authorization
+    });
     return res.status(200).json(resultado);
   } catch (error) {
     const status = error.status || 500;
