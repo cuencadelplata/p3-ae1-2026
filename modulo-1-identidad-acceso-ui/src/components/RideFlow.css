@@ -214,6 +214,10 @@
 .ride-estimate small { display: block; font-size: .7rem; color: var(--text-soft); text-transform: uppercase; letter-spacing: .04em; }
 .ride-estimate strong { font-size: 1.15rem; color: var(--accent); }
 .ride-estimate p { grid-column: 1 / -1; font-size: .74rem; }
+/* RF-7.1: tarifa estimada antes de confirmar, a lo ancho y separada de distancia y tiempo. */
+.ride-estimate-fare { grid-column: 1 / -1; padding-top: .55rem; border-top: 1px solid var(--line); }
+.ride-estimate-fare strong { font-size: 1.35rem; }
+.ride-estimate-fare .ride-muted { display: block; font-size: .8rem; }
 
 /* Medios de pago y datos de la tarjeta. */
 .ride-pay-methods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; width: 100%; border: 0; padding: 0; margin: 0; }

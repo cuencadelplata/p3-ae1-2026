@@ -3,6 +3,13 @@ import { Bike, CarFront, Crosshair, LoaderCircle, MapPin, Navigation, Search } f
 import type { LucideIcon } from 'lucide-react'
 import { searchPlaces } from '../places'
 import type { Place, RouteInfo, Suggestion, VehicleType } from '../places'
+import { estimarTarifa } from '../rideFlowApi'
+import type { FareQuote } from '../rideFlowApi'
+
+type EstadoTarifa = { estado: 'calculando' } | { estado: 'ok'; tarifa: FareQuote } | { estado: 'no-disponible' }
+
+const money = (amount: number, currency: string) =>
+  new Intl.NumberFormat('es-AR', { style: 'currency', currency }).format(amount)
 
 export interface Draft {
   origin: Place
@@ -122,6 +129,27 @@ export default function TripPlanner({ draft, onChange, route, routeLoading, pick
     { type: 'MOTO', label: 'Moto', detail: 'Una persona', icon: Bike },
   ]
 
+  // RF-7.1: tarifa estimada por M7, se recalcula al cambiar origen, destino o vehículo.
+  const [tarifa, setTarifa] = useState<EstadoTarifa>({ estado: 'calculando' })
+  const { origin, destination, vehicleType } = draft
+
+  useEffect(() => {
+    const abort = new AbortController()
+    setTarifa({ estado: 'calculando' })
+    // Pequeña espera para no consultar a M7 en cada clic mientras se elige en el mapa.
+    const timer = window.setTimeout(() => {
+      estimarTarifa(origin, destination, vehicleType, abort.signal)
+        .then((resultado) => {
+          if (!abort.signal.aborted) setTarifa(resultado ? { estado: 'ok', tarifa: resultado } : { estado: 'no-disponible' })
+        })
+        .catch(() => { if (!abort.signal.aborted) setTarifa({ estado: 'no-disponible' }) })
+    }, 350)
+    return () => {
+      window.clearTimeout(timer)
+      abort.abort()
+    }
+  }, [origin.latitude, origin.longitude, origin.address, destination.latitude, destination.longitude, destination.address, vehicleType])
+
   return (
     <div className="ride-planner">
       <AddressField id="viaje-origen" label="Origen" icon={MapPin} place={draft.origin} disabled={disabled}
@@ -147,7 +175,13 @@ export default function TripPlanner({ draft, onChange, route, routeLoading, pick
         {routeLoading || !route ? <span className="ride-muted">Calculando el recorrido…</span> : <>
           <div><small>Distancia</small><strong>{route.distanceKm.toLocaleString('es-AR', { maximumFractionDigits: 1 })} km</strong></div>
           <div><small>Tiempo estimado</small><strong>~{route.durationMin} min</strong></div>
-          <p className="ride-muted">{route.byStreets ? 'Recorrido por calles.' : 'Distancia en línea recta (no se pudo calcular la ruta por calles).'} La tarifa la calcula M7 al confirmar el pedido.</p>
+          <div className="ride-estimate-fare">
+            <small>Tarifa estimada</small>
+            {tarifa.estado === 'ok' && <strong>{money(tarifa.tarifa.amount, tarifa.tarifa.currency)}</strong>}
+            {tarifa.estado === 'calculando' && <span className="ride-muted">Consultando a M7…</span>}
+            {tarifa.estado === 'no-disponible' && <span className="ride-muted">No disponible ahora: se calcula al confirmar.</span>}
+          </div>
+          <p className="ride-muted">{route.byStreets ? 'Recorrido por calles.' : 'Distancia en línea recta (no se pudo calcular la ruta por calles).'} Tarifa estimada por M7; el total final se calcula al terminar el viaje.</p>
         </>}
       </div>
       {warning && <p className="alert-error" role="alert">{warning}</p>}
