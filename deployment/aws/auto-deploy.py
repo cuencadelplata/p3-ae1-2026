@@ -14,7 +14,8 @@ try:
     fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
 except BlockingIOError:
     raise SystemExit('Otro despliegue esta en curso')
-API='https://api.github.com/repos/cuencadelplata/p3-ae1-2026'
+REPOSITORY='IgnacioParra20/p3-ae1-2026-'
+API='https://api.github.com/repos/'+REPOSITORY
 def get(path):
     req=urllib.request.Request(API+path,headers={'Accept':'application/vnd.github+json','User-Agent':'movilidad-cloudtest-cd'})
     with urllib.request.urlopen(req,timeout=30) as response:
@@ -31,7 +32,7 @@ if not matching or matching[0]['status']!='completed' or matching[0]['conclusion
 release=ROOT/'releases'/sha
 release.parent.mkdir(exist_ok=True)
 if not release.exists():
-    subprocess.run(['git','clone','--depth','1','--branch','AWS-CloudTest','https://github.com/cuencadelplata/p3-ae1-2026.git',str(release)],check=True)
+    subprocess.run(['git','clone','--depth','1','--branch','AWS-CloudTest','https://github.com/'+REPOSITORY+'.git',str(release)],check=True)
 actual=subprocess.check_output(['git','-C',str(release),'rev-parse','HEAD'],text=True).strip()
 if actual!=sha:
     raise SystemExit('La rama cambio durante la descarga; se reintentara')

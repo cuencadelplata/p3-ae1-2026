@@ -2,6 +2,10 @@
 
 ## CI/CD automatico
 
+Repositorio de despliegue: `IgnacioParra20/p3-ae1-2026-` (remoto `personal`).
+Publicar cambios con `git push personal AWS-CloudTest`. El remoto `origin`
+conserva el repositorio de la universidad; sus Actions no controlan este despliegue.
+
 Cada push a `AWS-CloudTest` ejecuta `AWS CloudTest CI` (M9, frontend y M3).
 EC2 consulta su resultado cada cinco minutos y despliega solo el HEAD exacto con
 CI aprobado. Un CI pendiente o fallido no cambia los contenedores. No despliega
