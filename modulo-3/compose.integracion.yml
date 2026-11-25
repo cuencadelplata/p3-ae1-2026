@@ -44,13 +44,12 @@ services:
     container_name: m3-conductor-api
     restart: unless-stopped
     environment:
-      SUPABASE_URL: ${SUPABASE_URL:-${M3_SUPABASE_URL:-}}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-${M3_SUPABASE_SERVICE_ROLE_KEY:-}}
       PORT: 3000
-      SUPABASE_URL: "${SUPABASE_URL:?Configurar SUPABASE_URL en el .env de la raiz}"
-      SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:?Configurar SUPABASE_SERVICE_ROLE_KEY en el .env de la raiz}"
+      SUPABASE_URL: "${SUPABASE_URL:-${M3_SUPABASE_URL:?Configurar SUPABASE_URL o M3_SUPABASE_URL en el .env de la raiz}}"
+      SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:-${M3_SUPABASE_SERVICE_ROLE_KEY:?Configurar SUPABASE_SERVICE_ROLE_KEY o M3_SUPABASE_SERVICE_ROLE_KEY en el .env de la raiz}}"
       M1_URL: "${M1_URL:-http://m1-identidad-acceso:3001}"
       M6_VIAJES_URL: "${M6_VIAJES_URL:-http://m6-viajes:3000}"
+      M3_VEHICULOS_URL: "${M3_VEHICULOS_URL:-http://m3-vehiculos:8083}"
       JWT_SECRET: "${M1_JWT_SECRET:-${JWT_SECRET:?Configurar M1_JWT_SECRET o JWT_SECRET con la misma clave privada para todos los modulos}}"
       REDIS_HOST: redis
       REDIS_PORT: 6379

@@ -19,7 +19,7 @@ const app: Express = express();
 const PORT = process.env.PORT || 8083;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
 // Log de cada request (para Grafana/Loki). Se omite /health porque el
 // healthcheck de Docker lo llama cada 15 s y llenaría los logs de ruido.

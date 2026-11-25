@@ -2,6 +2,7 @@ const redisRepository = require('../repositories/redisRepository');
 const Conductor = require('../models/Conductor');
 const eventPublisher = require('../events/eventPublisher');
 const m1Client = require('../infraestructure/m1Client');
+const vehiculosClient = require('../infraestructure/vehiculosClient');
 
 // Valores válidos según el CHECK de la tabla `conductores` (src/schema/conductores.sql)
 const ESTADOS_HABILITACION = ['pendiente', 'activo', 'suspendido', 'rechazado'];
@@ -19,12 +20,24 @@ const obtenerConductores = async (req, res) => {
   }
 };
 
+async function documentacionParaSoporte(usuarioID) {
+  try {
+    return await vehiculosClient.obtenerDocumentacionVehiculo(usuarioID);
+  } catch (error) {
+    console.warn(`[M3] No se pudo leer la documentación del vehículo de '${usuarioID}': ${error.message}`);
+    return { vehiculo: null, documentacion: [] };
+  }
+}
+
 const obtenerPendientesDeHabilitacion = async (_req, res) => {
   try {
     const perfiles = await redisRepository.obtenerPendientesDeHabilitacion();
-    return res.status(200).json(perfiles
-      .filter(({ usuarioID }) => /^[1-9][0-9]*$/.test(usuarioID))
-      .map(({ usuarioID, createdAt }) => ({ usuarioID, createdAt })));
+    const candidatos = perfiles.filter(({ usuarioID }) => /^[1-9][0-9]*$/.test(usuarioID));
+    const solicitudes = await Promise.all(candidatos.map(async ({ usuarioID, createdAt }) => {
+      const { vehiculo, documentacion } = await documentacionParaSoporte(usuarioID);
+      return { usuarioID, createdAt, vehiculo, documentacionVehiculo: documentacion };
+    }));
+    return res.status(200).json(solicitudes);
   } catch (error) {
     return res.status(503).json({ error: 'No se pudieron consultar las habilitaciones pendientes.' });
   }

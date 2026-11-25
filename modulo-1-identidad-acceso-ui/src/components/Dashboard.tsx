@@ -6,6 +6,7 @@ import OperatorSupport from './OperatorSupport'
 import OperatorDriverApprovals from './OperatorDriverApprovals'
 import OperatorTripLog from './OperatorTripLog'
 import DriverProfileStatus from './DriverProfileStatus'
+import DriverOnboarding from './DriverOnboarding'
 import TripHistory from './TripHistory'
 import {
   LogOut,
@@ -96,6 +97,7 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   const [verSoporte, setVerSoporte] = useState(false)
   const [verHabilitaciones, setVerHabilitaciones] = useState(false)
   const [verRegistroViajes, setVerRegistroViajes] = useState(false)
+  const [verAltaConductor, setVerAltaConductor] = useState(false)
   const [cuentaM2, setCuentaM2] = useState<CuentaM2>({ estado: 'consultando' })
   const [intentoCuenta, setIntentoCuenta] = useState(0)
   const esCliente = perfil?.rol === 'CLIENTE'
@@ -215,6 +217,9 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
   if (verViaje && perfil?.rol === 'CONDUCTOR') {
     return <DriverDispatch key={perfil.userId} driver={{ ...perfil, token }} onSessionExpired={() => onLogout('Tu sesión terminó. Iniciá sesión de nuevo para compartir tu ubicación.')} onBack={() => setVerViaje(false)} />
   }
+  if (verAltaConductor && perfil?.rol === 'CONDUCTOR') {
+    return <DriverOnboarding driver={{ ...perfil, token }} onBack={() => setVerAltaConductor(false)} />
+  }
 
   return (
     <div className="w-full max-w-3xl">
@@ -289,6 +294,8 @@ export default function Dashboard({ token, onLogout }: DashboardProps) {
               <button className="btn-secondary mt-3" onClick={() => setVerHistorial(true)}>Historial de viajes</button>}
 
             {perfil.rol === 'CONDUCTOR' && <DriverProfileStatus key={perfil.userId} token={token} />}
+            {perfil.rol === 'CONDUCTOR' &&
+              <button className="btn-secondary mt-3" onClick={() => setVerAltaConductor(true)}>Completar alta de conductor</button>}
             {perfil.rol === 'OPERADOR' && <div className="mt-6 grid gap-3 sm:grid-cols-2">
               <button className="btn-primary" onClick={() => setVerSoporte(true)}>Bandeja de soporte</button>
               <button className="btn-secondary" onClick={() => setVerHabilitaciones(true)}>Habilitar conductores</button>

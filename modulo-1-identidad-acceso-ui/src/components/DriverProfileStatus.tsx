@@ -27,7 +27,7 @@ export default function DriverProfileStatus({ token }: { token: string }) {
   return <section className="detail-card mt-4" aria-busy={cargando} aria-label="Estado del perfil de conductor">
     <p className="font-semibold" role="status">{cargando ? 'Consultando tu perfil de conductor…' : estadoVisible}</p>
     {!cargando && !error && estado === 'pendiente' && <p className="mt-1 text-sm text-[var(--text-soft)]">
-      Ya podés registrar tu vehículo. Cuando un operador te habilite, vas a poder conectarte.
+      Completá el alta con el vehículo y la documentación. Cuando un operador la revise en M1, vas a poder conectarte.
     </p>}
     {error && <p className="alert-error mt-2" role="alert">{error}</p>}
     {!cargando && <button type="button" className="btn-ghost mt-3" onClick={() => {
