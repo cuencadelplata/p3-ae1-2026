@@ -31,7 +31,8 @@ export async function iniciarConsumidores(): Promise<void> {
         evento.documentId,
       );
       if (documento && documento.estado === "PENDIENTE") {
-        const nuevoEstado = Math.random() > 0.2 ? "APROBADO" : "RECHAZADO"; // simulación
+        const nuevoEstado =
+          process.env.VALIDACION_RECHAZA === "true" ? "RECHAZADO" : "APROBADO";
         await actualizarEstadoDocumento(evento.documentId, nuevoEstado);
         console.log(
           `[validación simulada] Documento ${evento.documentId} → ${nuevoEstado}`,
